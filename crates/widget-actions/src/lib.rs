@@ -33,6 +33,7 @@ pub use actions::widget::matrix_context::MatrixContextResponse;
 pub use actions::widget::read_events::{ReadEventsRequest, ReadEventsResponse};
 pub use actions::widget::request_capabilities::RequestCapabilitiesRequest;
 pub use actions::widget::send_event::{SendEventRequest, SendEventResponse};
+pub use actions::widget::update_delayed_event::{UpdateDelayedEventAction, UpdateDelayedEventRequest};
 pub use actions::widget::{WidgetRequest, WidgetResponse};
 pub use actions::Action;
 pub use capabilities::{Capability, CapabilitySet};

@@ -5,7 +5,19 @@
  */
 import { WidgetApi, type IWidgetApiRequest } from "matrix-widget-api";
 
-import { DEFAULT_CAPABILITIES, button, capabilityList, input, log, mount, showState, valueOf } from "../shared/ui";
+import {
+  DEFAULT_CAPABILITIES,
+  DELAYED_CAPABILITIES,
+  button,
+  capabilityList,
+  input,
+  lastDelay,
+  log,
+  mount,
+  rememberDelay,
+  showState,
+  valueOf,
+} from "../shared/ui";
 
 const params = new URLSearchParams(location.search);
 const widgetId = params.get("widgetId");
@@ -32,7 +44,7 @@ for (const action of ["send_event", "update_state"]) {
 }
 
 mount("Legacy test widget (matrix-widget-api)", [
-  input("caps", DEFAULT_CAPABILITIES, "capabilities"),
+  input("caps", `${DEFAULT_CAPABILITIES},${DELAYED_CAPABILITIES}`, "capabilities"),
   button("start (requests capabilities above)", () => {
     api.requestCapabilities(capabilityList());
     api.start();
@@ -45,6 +57,13 @@ mount("Legacy test widget (matrix-widget-api)", [
   input("body", "hello from the legacy widget", "message body"),
   button("send m.room.message", () => api.sendRoomEvent("m.room.message", { msgtype: "m.text", body: valueOf("body") })),
   button("send state m.room.topic", () => api.sendStateEvent("m.room.topic", "", { topic: valueOf("body") })),
+  button("send delayed m.room.message (5s)", () =>
+    api.sendRoomEvent("m.room.message", { msgtype: "m.text", body: valueOf("body") }, undefined, 5000).then(rememberDelay),
+  ),
+  button("delayed: restart", () => api.restartScheduledDelayedEvent(lastDelay.id)),
+  button("delayed: send now", () => api.sendScheduledDelayedEvent(lastDelay.id)),
+  button("delayed: cancel", () => api.cancelScheduledDelayedEvent(lastDelay.id)),
+  button("send sticky m.rtc.member (30s)", () => api.sendRoomEvent("m.rtc.member", { from: "legacy widget" }, undefined, undefined, 30000)),
   button("read m.room.message (limit 10)", () => api.readRoomEvents("m.room.message", 10)),
   button("read state m.room.topic", () => api.readStateEvents("m.room.topic", undefined, "")),
   button("custom action org.example.custom", () => api.transport.send("org.example.custom" as never, { hello: "world" })),

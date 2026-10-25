@@ -31,8 +31,26 @@ struct Inner {
     timeline: Vec<MatrixEvent>,
     /// (event type, state key) -> event
     state: BTreeMap<(String, String), MatrixEvent>,
+    /// Scheduled (MSC4140) events by delay id. Nothing fires them automatically; a test fires
+    /// them through `send_delayed_event_now` or [`InMemoryBackend::fire_delayed_event`].
+    delayed: BTreeMap<String, DelayedEvent>,
     /// When set, every send fails with this error. Handy for tests.
     fail_sends: Option<BackendError>,
+}
+
+/// A scheduled event as [`InMemoryBackend`] keeps it (MSC4140).
+#[derive(Debug, Clone, PartialEq)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+pub struct DelayedEvent {
+    pub delay_id: String,
+    pub delay_ms: u64,
+    /// `Some` for a sticky event.
+    pub sticky_duration_ms: Option<u64>,
+    /// How often the timer was restarted. For tests.
+    pub restarts: u32,
+    /// The event as it will be stored when it fires (`event_id` / `origin_server_ts` are
+    /// assigned then).
+    pub event: MatrixEvent,
 }
 
 /// One live `subscribe_room` call. Cancelling flips `active`; the backend drops cancelled
@@ -105,6 +123,24 @@ impl InMemoryBackend {
         self.inner().state.values().cloned().collect()
     }
 
+    /// Scheduled events that have not fired or been cancelled, oldest first.
+    pub fn delayed_events(&self) -> Vec<DelayedEvent> {
+        self.inner().delayed.values().cloned().collect()
+    }
+
+    /// Fire a scheduled event as if its delay had elapsed. The host side of
+    /// `send_delayed_event_now`; for test hosts that want a "time passes" button.
+    pub fn fire_delayed_event(&self, delay_id: String) -> Result<MatrixEvent, BackendError> {
+        let delayed = self
+            .inner()
+            .delayed
+            .remove(&delay_id)
+            .ok_or_else(|| BackendError::not_found(format!("no delayed event {delay_id}")))?;
+        let event = self.next_event(delayed.event.event_type, delayed.event.state_key, delayed.event.content);
+        self.send(event.clone())?;
+        Ok(event)
+    }
+
     /// Forget all stored events. Room and user id stay. Subscribers learn that every state type
     /// they follow is now empty.
     pub fn clear(&self) {
@@ -112,6 +148,7 @@ impl InMemoryBackend {
             let mut inner = self.inner();
             inner.timeline.clear();
             inner.state.clear();
+            inner.delayed.clear();
         }
         for sub in self.live_subscriptions() {
             for event_type in &sub.subjects.state_event_types {
@@ -198,6 +235,37 @@ impl InMemoryBackend {
         }
     }
 
+    fn schedule(
+        &self,
+        event_type: String,
+        state_key: Option<String>,
+        content: JsonValue,
+        delay_ms: u64,
+        sticky_duration_ms: Option<u64>,
+    ) -> Result<String, BackendError> {
+        let mut inner = self.inner();
+        if let Some(err) = &inner.fail_sends {
+            return Err(err.clone());
+        }
+        let n = self.counter.fetch_add(1, Ordering::Relaxed);
+        let delay_id = format!("delay{n}");
+        let event = MatrixEvent {
+            event_type,
+            sender: self.user_id.clone(),
+            event_id: String::new(),
+            room_id: self.room_id.clone(),
+            origin_server_ts: 0,
+            state_key,
+            content,
+            unsigned: None,
+        };
+        inner.delayed.insert(
+            delay_id.clone(),
+            DelayedEvent { delay_id: delay_id.clone(), delay_ms, sticky_duration_ms, restarts: 0, event },
+        );
+        Ok(delay_id)
+    }
+
     /// Store and announce `event`; returns its event id.
     fn send(&self, event: MatrixEvent) -> Result<String, BackendError> {
         {
@@ -267,6 +335,67 @@ impl MatrixBackend for InMemoryBackend {
     ) -> Result<String, BackendError> {
         self.check_room(&room_id)?;
         self.send(self.next_event(event_type, Some(state_key), content))
+    }
+
+    /// Stored like a plain timeline event: this store does not model sticky expiry.
+    async fn send_sticky_event(
+        &self,
+        room_id: String,
+        event_type: String,
+        content: JsonValue,
+        _duration_ms: u64,
+    ) -> Result<String, BackendError> {
+        self.check_room(&room_id)?;
+        self.send(self.next_event(event_type, None, content))
+    }
+
+    async fn send_delayed_event(
+        &self,
+        room_id: String,
+        event_type: String,
+        state_key: Option<String>,
+        content: JsonValue,
+        delay_ms: u64,
+    ) -> Result<String, BackendError> {
+        self.check_room(&room_id)?;
+        self.schedule(event_type, state_key, content, delay_ms, None)
+    }
+
+    async fn send_delayed_sticky_event(
+        &self,
+        room_id: String,
+        event_type: String,
+        content: JsonValue,
+        delay_ms: u64,
+        duration_ms: u64,
+    ) -> Result<String, BackendError> {
+        self.check_room(&room_id)?;
+        self.schedule(event_type, None, content, delay_ms, Some(duration_ms))
+    }
+
+    async fn restart_delayed_event(&self, room_id: String, delay_id: String) -> Result<(), BackendError> {
+        self.check_room(&room_id)?;
+        let mut inner = self.inner();
+        let delayed = inner
+            .delayed
+            .get_mut(&delay_id)
+            .ok_or_else(|| BackendError::not_found(format!("no delayed event {delay_id}")))?;
+        delayed.restarts += 1;
+        Ok(())
+    }
+
+    async fn cancel_delayed_event(&self, room_id: String, delay_id: String) -> Result<(), BackendError> {
+        self.check_room(&room_id)?;
+        self.inner()
+            .delayed
+            .remove(&delay_id)
+            .map(|_| ())
+            .ok_or_else(|| BackendError::not_found(format!("no delayed event {delay_id}")))
+    }
+
+    async fn send_delayed_event_now(&self, room_id: String, delay_id: String) -> Result<(), BackendError> {
+        self.check_room(&room_id)?;
+        self.fire_delayed_event(delay_id).map(|_| ())
     }
 
     /// `since` is ignored: this store has no pagination tokens.
@@ -429,6 +558,52 @@ mod tests {
             let other = "!other:x".to_string();
             assert!(b.send_room_event(other.clone(), "m.x".into(), json!({}).into()).await.is_err());
             assert!(b.read_room_events(other, "m.x".into(), None, 1, None).await.is_err());
+        });
+    }
+
+    #[test]
+    fn delayed_events() {
+        futures::executor::block_on(async {
+            let b = InMemoryBackend::new(room(), "@me:x".into());
+            let sink = Arc::new(RecordingSink::default());
+            let _sub =
+                b.subscribe_room(room(), subjects(&["m.room.message"], &["m.room.topic"]), sink.clone()).unwrap();
+            sink.drain();
+
+            let d1 = b
+                .send_delayed_event(room(), "m.room.message".into(), None, json!({"body": "later"}).into(), 5000)
+                .await
+                .unwrap();
+            let d2 = b
+                .send_delayed_event(room(), "m.room.topic".into(), Some("".into()), json!({"topic": "t"}).into(), 1)
+                .await
+                .unwrap();
+            let d3 = b.send_delayed_sticky_event(room(), "m.rtc.member".into(), json!({}).into(), 1, 2).await.unwrap();
+            assert_eq!(b.delayed_events().len(), 3);
+            assert_eq!(b.delayed_events()[2].sticky_duration_ms, Some(2));
+            // Nothing happened yet.
+            assert!(b.timeline().is_empty());
+            assert!(sink.drain().is_empty());
+
+            b.restart_delayed_event(room(), d1.clone()).await.unwrap();
+            assert_eq!(b.delayed_events()[0].restarts, 1);
+            b.cancel_delayed_event(room(), d3.clone()).await.unwrap();
+            assert!(b.cancel_delayed_event(room(), d3).await.is_err());
+
+            // Firing stores and announces like a normal send.
+            b.send_delayed_event_now(room(), d1.clone()).await.unwrap();
+            assert_eq!(b.timeline().len(), 1);
+            assert_eq!(b.timeline()[0].content["body"], "later");
+            assert_eq!(sink.drain().len(), 1);
+            assert!(b.restart_delayed_event(room(), d1).await.is_err());
+
+            let fired = b.fire_delayed_event(d2).unwrap();
+            assert_eq!(fired.state_key.as_deref(), Some(""));
+            assert_eq!(b.state().len(), 1);
+            assert!(b.delayed_events().is_empty());
+
+            let id = b.send_sticky_event(room(), "m.rtc.member".into(), json!({}).into(), 100).await.unwrap();
+            assert_eq!(b.timeline().last().unwrap().event_id, id);
         });
     }
 

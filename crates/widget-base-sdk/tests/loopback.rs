@@ -142,9 +142,10 @@ fn full_widget_lifecycle() {
         l.pump().await;
         let sent = send.await.unwrap();
         assert_eq!(sent.room_id, "!room:example");
-        assert_eq!(l.backend.timeline()[0].event_id, sent.event_id);
+        let event_id = sent.event_id.clone().expect("an immediate send has an event id");
+        assert_eq!(l.backend.timeline()[0].event_id, event_id);
         assert_eq!(l.widget_side.events.borrow().len(), 1);
-        assert_eq!(l.widget_side.events.borrow()[0].event_id, sent.event_id);
+        assert_eq!(l.widget_side.events.borrow()[0].event_id, event_id);
         l.widget_side.events.borrow_mut().clear();
 
         // 5. Denied write is reported as a host error.

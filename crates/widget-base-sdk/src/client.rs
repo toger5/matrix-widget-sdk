@@ -9,8 +9,9 @@ use serde_json::Value;
 // TODO consider splitting those into widget_actions::widget and widget_actions::host so that they are more explicit here.
 use widget_actions::{
     ActionError, Capability, ClientContextResponse, HostRequest, MatrixContextResponse, MatrixEvent, MessageKind,
-    ReadEventsRequest, RequestCapabilitiesRequest, SendEventRequest, SendEventResponse, StateKeySelector, WidgetError,
-    WidgetRequest, WidgetResponse, WireMessage, API_VERSION_V1,
+    ReadEventsRequest, RequestCapabilitiesRequest, SendEventRequest, SendEventResponse, StateKeySelector,
+    UpdateDelayedEventAction, UpdateDelayedEventRequest, WidgetError, WidgetRequest, WidgetResponse, WireMessage,
+    API_VERSION_V1,
 };
 
 use crate::WidgetClientError;
@@ -162,11 +163,7 @@ impl WidgetClient {
         event_type: impl Into<String>,
         content: Value,
     ) -> impl Future<Output = Result<SendEventResponse, WidgetClientError>> + 'static {
-        self.send_event_request(SendEventRequest {
-            event_type: event_type.into(),
-            state_key: None,
-            content: content.into(),
-        })
+        self.send_event_request(SendEventRequest::room_event(event_type, content.into()))
     }
 
     /// Send a state event. Needs an approved `send.state_event:<type>[#<state_key>]` capability.
@@ -176,14 +173,58 @@ impl WidgetClient {
         state_key: impl Into<String>,
         content: Value,
     ) -> impl Future<Output = Result<SendEventResponse, WidgetClientError>> + 'static {
-        self.send_event_request(SendEventRequest {
-            event_type: event_type.into(),
-            state_key: Some(state_key.into()),
-            content: content.into(),
-        })
+        self.send_event_request(SendEventRequest::state_event(event_type, state_key, content.into()))
     }
 
-    fn send_event_request(
+    /// Send a sticky event (MSC4407) that the homeserver keeps for `duration_ms`. Needs the
+    /// matching `send.event` capability and `org.matrix.msc4407.send.sticky_event`.
+    pub fn send_sticky_event(
+        &self,
+        event_type: impl Into<String>,
+        content: Value,
+        duration_ms: u64,
+    ) -> impl Future<Output = Result<SendEventResponse, WidgetClientError>> + 'static {
+        let mut request = SendEventRequest::room_event(event_type, content.into());
+        request.sticky_duration_ms = Some(duration_ms);
+        self.send_event_request(request)
+    }
+
+    /// Schedule an event (MSC4157): a state event with `state_key`, a timeline event without.
+    /// Resolves with the **delay id** for [`update_delayed_event`](Self::update_delayed_event).
+    /// Needs the matching `send.*` capability and `org.matrix.msc4157.send.delayed_event`.
+    pub fn send_delayed_event(
+        &self,
+        event_type: impl Into<String>,
+        state_key: Option<String>,
+        content: Value,
+        delay_ms: u64,
+    ) -> impl Future<Output = Result<String, WidgetClientError>> + 'static {
+        let mut request = SendEventRequest::room_event(event_type, content.into());
+        request.state_key = state_key;
+        request.delay = Some(delay_ms);
+        let fut = self.send_event_request(request);
+        async move { fut.await?.delay_id.ok_or(WidgetClientError::UnexpectedResponse { action: "send_event".into() }) }
+    }
+
+    /// Cancel, restart or fire a delayed event. Needs `org.matrix.msc4157.update_delayed_event`.
+    pub fn update_delayed_event(
+        &self,
+        delay_id: impl Into<String>,
+        action: UpdateDelayedEventAction,
+    ) -> impl Future<Output = Result<(), WidgetClientError>> + 'static {
+        let fut = self.request(WidgetRequest::UpdateDelayedEvent {
+            request: UpdateDelayedEventRequest { delay_id: delay_id.into(), action },
+        });
+        async move {
+            match fut.await? {
+                WidgetResponse::UpdateDelayedEvent => Ok(()),
+                _ => Err(WidgetClientError::UnexpectedResponse { action: "update_delayed_event".into() }),
+            }
+        }
+    }
+
+    /// Send any `send_event` request as is (every MSC2762 / MSC4157 / MSC4407 field).
+    pub fn send_event_request(
         &self,
         request: SendEventRequest,
     ) -> impl Future<Output = Result<SendEventResponse, WidgetClientError>> + 'static {
@@ -384,13 +425,28 @@ mod tests {
         client
             .handle_message_from_host(&sent[0].response_to(json!({"room_id": "!r", "event_id": "$e"})).to_json())
             .unwrap();
-        assert_eq!(block(fut).unwrap(), SendEventResponse { room_id: "!r".into(), event_id: "$e".into() });
+        assert_eq!(block(fut).unwrap(), SendEventResponse::sent("!r", "$e"));
 
         let fut = client.send_state_event("m.room.topic", "", json!({"topic": "t"}));
         let sent = rec.drain();
         assert_eq!(sent[0].request_body()["state_key"], "");
         client.handle_message_from_host(&sent[0].error_response_to(WidgetError::new("denied")).to_json()).unwrap();
         assert_eq!(block(fut), Err(WidgetClientError::Host(WidgetError::new("denied"))));
+
+        // Delayed: the delay id is the result.
+        let fut = client.send_delayed_event("m.room.message", None, json!({}), 5000);
+        let sent = rec.drain();
+        assert_eq!(sent[0].request_body()["delay"], 5000);
+        client
+            .handle_message_from_host(&sent[0].response_to(json!({"room_id": "!r", "delay_id": "d"})).to_json())
+            .unwrap();
+        assert_eq!(block(fut).unwrap(), "d");
+        let fut = client.update_delayed_event("d", UpdateDelayedEventAction::Cancel);
+        let sent = rec.drain();
+        assert_eq!(sent[0].action, "org.matrix.msc4157.update_delayed_event");
+        assert_eq!(sent[0].request_body()["action"], "cancel");
+        client.handle_message_from_host(&sent[0].ack().to_json()).unwrap();
+        block(fut).unwrap();
 
         // Wrong shaped success body
         let fut = client.read_events("m.room.message", Some(3));

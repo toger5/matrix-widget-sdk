@@ -3,8 +3,9 @@ use std::sync::{Arc, Mutex, MutexGuard, Weak};
 
 use widget_actions::{
     Action, ActionError, Capability, CapabilitySet, ClientContextResponse, HostRequest, MatrixContextResponse,
-    MatrixEvent, MessageKind, NotifyCapabilitiesRequest, ReadEventsResponse, SendEventResponse, UpdateStateRequest,
-    WidgetError, WidgetRequest, WidgetResponse, WireMessage, API_VERSION_V1,
+    MatrixEvent, MessageKind, NotifyCapabilitiesRequest, ReadEventsResponse, SendEventRequest, SendEventResponse,
+    UpdateDelayedEventAction, UpdateStateRequest, WidgetError, WidgetRequest, WidgetResponse, WireMessage,
+    API_VERSION_V1,
 };
 use widget_matrix_backend::{BackendError, MatrixBackend, RoomSink, RoomSubjects, Subscription};
 
@@ -310,37 +311,26 @@ impl WidgetHostDriver {
                 }
                 return Ok(());
             }
-            WidgetRequest::SendEvent { request } => {
-                let msgtype = request.content.get("msgtype").and_then(|m| m.as_str()).map(str::to_owned);
-                let allowed = self.lock().approved.allows_send(
-                    &request.event_type,
-                    request.state_key.as_deref(),
-                    msgtype.as_deref(),
-                );
-                if !allowed {
-                    let needed = match &request.state_key {
-                        Some(k) => Capability::send_state_event(&request.event_type, Some(k.as_str())),
-                        None => Capability::send_event(&request.event_type),
-                    };
-                    error(format!("Not allowed to send this event (missing capability {needed})"))
+            WidgetRequest::SendEvent { request } => self.send_event(request).await,
+            WidgetRequest::UpdateDelayedEvent { request } => {
+                if !self.lock().approved.has(&Capability::UpdateDelayedEvent) {
+                    error(format!("Missing capability for {}", Capability::UpdateDelayedEvent))
                 } else {
                     let room_id = self.backend.room_id();
-                    let result = match request.state_key {
-                        Some(state_key) => {
-                            self.backend
-                                .send_state_event(room_id.clone(), request.event_type, state_key, request.content)
-                                .await
+                    let result = match request.action {
+                        UpdateDelayedEventAction::Cancel => {
+                            self.backend.cancel_delayed_event(room_id, request.delay_id).await
                         }
-                        None => {
-                            self.backend.send_room_event(room_id.clone(), request.event_type, request.content).await
+                        UpdateDelayedEventAction::Restart => {
+                            self.backend.restart_delayed_event(room_id, request.delay_id).await
+                        }
+                        UpdateDelayedEventAction::Send => {
+                            self.backend.send_delayed_event_now(room_id, request.delay_id).await
                         }
                     };
-                    match result {
-                        Ok(event_id) => {
-                            Ok(WidgetResponse::SendEvent { response: SendEventResponse { room_id, event_id } })
-                        }
-                        Err(e) => Err(backend_error("Failed to send event", e)),
-                    }
+                    result
+                        .map(|_| WidgetResponse::UpdateDelayedEvent)
+                        .map_err(|e| backend_error("Failed to update delayed event", e))
                 }
             }
             WidgetRequest::ReadEvents { request } => {
@@ -412,6 +402,70 @@ impl WidgetHostDriver {
             Err(error) => msg.error_response_to(error),
         });
         Ok(())
+    }
+
+    /// `send_event` from the widget: capability checks for every variant (plain, state, other
+    /// room, delayed, sticky), then the matching backend call.
+    async fn send_event(&self, request: SendEventRequest) -> Result<WidgetResponse, WidgetError> {
+        let room_id = self.backend.room_id();
+        let msgtype = request.content.get("msgtype").and_then(|m| m.as_str()).map(str::to_owned);
+        {
+            let approved = self.lock().approved.clone();
+            if let Some(requested) = &request.room_id {
+                // Like matrix-widget-api: an explicit room needs the timeline capability even
+                // when it is the widget's own room, and this host only serves that one.
+                if !(approved.has(&Capability::timeline(requested)) || approved.has(&Capability::timeline("*"))) {
+                    return error(format!("Unable to access room timeline: {requested}"));
+                }
+                if *requested != room_id {
+                    return error(format!("Unable to access room timeline: {requested} (this host serves {room_id})"));
+                }
+            }
+            if request.is_delayed() && !approved.has(&Capability::SendDelayedEvent) {
+                return error(format!("Missing capability for {}", Capability::SendDelayedEvent));
+            }
+            if request.is_sticky() && !approved.has(&Capability::SendStickyEvent) {
+                return error(format!("Missing capability for {}", Capability::SendStickyEvent));
+            }
+            if request.is_sticky() && request.is_state() {
+                return error("Cannot send a state event with a sticky duration".into());
+            }
+            if !approved.allows_send(&request.event_type, request.state_key.as_deref(), msgtype.as_deref()) {
+                let needed = match &request.state_key {
+                    Some(k) => Capability::send_state_event(&request.event_type, Some(k.as_str())),
+                    None => Capability::send_event(&request.event_type),
+                };
+                return error(format!("Not allowed to send this event (missing capability {needed})"));
+            }
+        }
+        let SendEventRequest { event_type, state_key, content, delay, sticky_duration_ms, .. } = request;
+        let backend = &self.backend;
+        let result = match (state_key, delay, sticky_duration_ms) {
+            (Some(key), None, _) => backend
+                .send_state_event(room_id.clone(), event_type, key, content)
+                .await
+                .map(|id| SendEventResponse::sent(&room_id, id)),
+            (state_key, Some(delay), None) => backend
+                .send_delayed_event(room_id.clone(), event_type, state_key, content, delay)
+                .await
+                .map(|id| SendEventResponse::delayed(&room_id, id)),
+            (None, Some(delay), Some(duration)) => backend
+                .send_delayed_sticky_event(room_id.clone(), event_type, content, delay, duration)
+                .await
+                .map(|id| SendEventResponse::delayed(&room_id, id)),
+            (None, None, Some(duration)) => backend
+                .send_sticky_event(room_id.clone(), event_type, content, duration)
+                .await
+                .map(|id| SendEventResponse::sent(&room_id, id)),
+            (None, None, None) => backend
+                .send_room_event(room_id.clone(), event_type, content)
+                .await
+                .map(|id| SendEventResponse::sent(&room_id, id)),
+            (Some(_), Some(_), Some(_)) => return error("Cannot send a state event with a sticky duration".into()),
+        };
+        result
+            .map(|response| WidgetResponse::SendEvent { response })
+            .map_err(|e| backend_error("Failed to send event", e))
     }
 
     fn handle_response(&self, msg: WireMessage) -> Result<(), DriverError> {
@@ -598,6 +652,44 @@ mod tests {
         ) -> Result<String, BackendError> {
             self.inner.send_state_event(room_id, event_type, state_key, content).await
         }
+        async fn send_sticky_event(
+            &self,
+            room_id: String,
+            event_type: String,
+            content: JsonValue,
+            duration_ms: u64,
+        ) -> Result<String, BackendError> {
+            self.inner.send_sticky_event(room_id, event_type, content, duration_ms).await
+        }
+        async fn send_delayed_event(
+            &self,
+            room_id: String,
+            event_type: String,
+            state_key: Option<String>,
+            content: JsonValue,
+            delay_ms: u64,
+        ) -> Result<String, BackendError> {
+            self.inner.send_delayed_event(room_id, event_type, state_key, content, delay_ms).await
+        }
+        async fn send_delayed_sticky_event(
+            &self,
+            room_id: String,
+            event_type: String,
+            content: JsonValue,
+            delay_ms: u64,
+            duration_ms: u64,
+        ) -> Result<String, BackendError> {
+            self.inner.send_delayed_sticky_event(room_id, event_type, content, delay_ms, duration_ms).await
+        }
+        async fn restart_delayed_event(&self, room_id: String, delay_id: String) -> Result<(), BackendError> {
+            self.inner.restart_delayed_event(room_id, delay_id).await
+        }
+        async fn cancel_delayed_event(&self, room_id: String, delay_id: String) -> Result<(), BackendError> {
+            self.inner.cancel_delayed_event(room_id, delay_id).await
+        }
+        async fn send_delayed_event_now(&self, room_id: String, delay_id: String) -> Result<(), BackendError> {
+            self.inner.send_delayed_event_now(room_id, delay_id).await
+        }
         async fn read_room_events(
             &self,
             room_id: String,
@@ -749,11 +841,7 @@ mod tests {
     fn send_event_requires_capability() {
         let (driver, backend, platform) = setup();
         let req = WidgetRequest::SendEvent {
-            request: SendEventRequest {
-                event_type: "m.room.message".into(),
-                state_key: None,
-                content: json!({"body": "hi"}).into(),
-            },
+            request: SendEventRequest::room_event("m.room.message", json!({"body": "hi"}).into()),
         };
 
         block(feed(&driver, req.clone(), "s1")).unwrap();
@@ -768,7 +856,8 @@ mod tests {
         match WidgetResponse::from_wire(&sent[0]).unwrap() {
             WidgetResponse::SendEvent { response } => {
                 assert_eq!(response.room_id, "!room:x");
-                assert_eq!(backend.timeline()[0].event_id, response.event_id);
+                assert_eq!(Some(&backend.timeline()[0].event_id), response.event_id.as_ref());
+                assert!(response.delay_id.is_none());
             }
             other => panic!("{other:?}"),
         }
@@ -777,13 +866,7 @@ mod tests {
         // state event with a timeline-only capability -> denied
         block(feed(
             &driver,
-            WidgetRequest::SendEvent {
-                request: SendEventRequest {
-                    event_type: "m.room.message".into(),
-                    state_key: Some("".into()),
-                    content: json!({}).into(),
-                },
-            },
+            WidgetRequest::SendEvent { request: SendEventRequest::state_event("m.room.message", "", json!({}).into()) },
             "s3",
         ))
         .unwrap();
@@ -793,13 +876,7 @@ mod tests {
         backend.set_fail_sends(Some(BackendError::forbidden("power level")));
         block(feed(
             &driver,
-            WidgetRequest::SendEvent {
-                request: SendEventRequest {
-                    event_type: "m.room.message".into(),
-                    state_key: None,
-                    content: json!({}).into(),
-                },
-            },
+            WidgetRequest::SendEvent { request: SendEventRequest::room_event("m.room.message", json!({}).into()) },
             "s4",
         ))
         .unwrap();
@@ -819,11 +896,10 @@ mod tests {
             block(feed(
                 &driver,
                 WidgetRequest::SendEvent {
-                    request: SendEventRequest {
-                        event_type: "m.room.message".into(),
-                        state_key: None,
-                        content: json!({"msgtype": msgtype, "body": "x"}).into(),
-                    },
+                    request: SendEventRequest::room_event(
+                        "m.room.message",
+                        json!({"msgtype": msgtype, "body": "x"}).into(),
+                    ),
                 },
                 id,
             ))
@@ -856,6 +932,114 @@ mod tests {
         };
         assert_eq!(response.events.len(), 1);
         assert_eq!(response.events[0].content["msgtype"], "m.text");
+    }
+
+    /// Feed a `send_event` and return the host's reply.
+    fn send(driver: &WidgetHostDriver, platform: &RecordingPlatform, request: SendEventRequest) -> WireMessage {
+        block(feed(driver, WidgetRequest::SendEvent { request }, "send")).unwrap();
+        platform.drain().pop().unwrap()
+    }
+
+    #[test]
+    fn delayed_and_sticky_sends() {
+        let (driver, backend, platform) = setup();
+        let mut delayed = SendEventRequest::room_event("m.room.message", json!({"body": "later"}).into());
+        delayed.delay = Some(5000);
+        let mut sticky = SendEventRequest::room_event("m.rtc.member", json!({}).into());
+        sticky.sticky_duration_ms = Some(30000);
+
+        // Without the MSC4157 / MSC4407 capabilities both are refused, even with send.event.
+        grant(
+            &driver,
+            &platform,
+            vec![Capability::send_event("m.room.message"), Capability::send_event("m.rtc.member")],
+        );
+        assert!(send(&driver, &platform, delayed.clone()).error().unwrap().message.contains("send.delayed_event"));
+        assert!(send(&driver, &platform, sticky.clone()).error().unwrap().message.contains("send.sticky_event"));
+
+        grant(
+            &driver,
+            &platform,
+            vec![Capability::SendDelayedEvent, Capability::SendStickyEvent, Capability::UpdateDelayedEvent],
+        );
+        let WidgetResponse::SendEvent { response } =
+            WidgetResponse::from_wire(&send(&driver, &platform, delayed)).unwrap()
+        else {
+            panic!()
+        };
+        assert!(response.event_id.is_none());
+        let delay_id = response.delay_id.unwrap();
+        assert_eq!(backend.delayed_events()[0].delay_id, delay_id);
+        assert!(backend.timeline().is_empty());
+
+        // A sticky state event is nonsense.
+        let mut sticky_state = SendEventRequest::state_event("m.room.topic", "", json!({}).into());
+        sticky_state.sticky_duration_ms = Some(1);
+        assert!(send(&driver, &platform, sticky_state).error().unwrap().message.contains("sticky"));
+
+        // Sticky send goes through the sticky method.
+        let WidgetResponse::SendEvent { response } =
+            WidgetResponse::from_wire(&send(&driver, &platform, sticky)).unwrap()
+        else {
+            panic!()
+        };
+        assert_eq!(backend.timeline()[0].event_id, response.event_id.unwrap());
+
+        // update_delayed_event: restart, then fire.
+        for (action, id) in [(UpdateDelayedEventAction::Restart, "u1"), (UpdateDelayedEventAction::Send, "u2")] {
+            block(feed(
+                &driver,
+                WidgetRequest::UpdateDelayedEvent {
+                    request: widget_actions::UpdateDelayedEventRequest { delay_id: delay_id.clone(), action },
+                },
+                id,
+            ))
+            .unwrap();
+            assert_eq!(
+                WidgetResponse::from_wire(&platform.drain().pop().unwrap()).unwrap(),
+                WidgetResponse::UpdateDelayedEvent
+            );
+        }
+        assert!(backend.delayed_events().is_empty());
+        assert_eq!(backend.timeline()[1].content["body"], "later");
+
+        // Cancelling an unknown id is a backend error with Matrix details.
+        block(feed(
+            &driver,
+            WidgetRequest::UpdateDelayedEvent {
+                request: widget_actions::UpdateDelayedEventRequest {
+                    delay_id: "nope".into(),
+                    action: UpdateDelayedEventAction::Cancel,
+                },
+            },
+            "u3",
+        ))
+        .unwrap();
+        let err = platform.drain().pop().unwrap().error().unwrap();
+        assert_eq!(err.matrix_api_error.unwrap().response.errcode, "M_NOT_FOUND");
+    }
+
+    #[test]
+    fn explicit_room_id_needs_the_timeline_capability_and_the_own_room() {
+        let (driver, backend, platform) = setup();
+        grant(&driver, &platform, vec![Capability::send_event("m.room.message")]);
+        let mut req = SendEventRequest::room_event("m.room.message", json!({}).into());
+        req.room_id = Some("!room:x".into());
+        assert!(send(&driver, &platform, req.clone())
+            .error()
+            .unwrap()
+            .message
+            .contains("Unable to access room timeline"));
+
+        grant(&driver, &platform, vec![Capability::timeline("!room:x")]);
+        assert!(send(&driver, &platform, req.clone()).error().is_none());
+        assert_eq!(backend.timeline().len(), 1);
+
+        req.room_id = Some("!other:x".into());
+        assert!(send(&driver, &platform, req.clone()).error().is_some());
+        grant(&driver, &platform, vec![Capability::timeline("*")]);
+        // Even with the wildcard: this host serves one room.
+        assert!(send(&driver, &platform, req).error().unwrap().message.contains("this host serves"));
     }
 
     #[test]

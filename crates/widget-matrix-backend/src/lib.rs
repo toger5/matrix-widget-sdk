@@ -25,7 +25,7 @@ mod in_memory;
 use std::sync::Arc;
 
 pub use error::BackendError;
-pub use in_memory::InMemoryBackend;
+pub use in_memory::{DelayedEvent, InMemoryBackend};
 pub use widget_actions::{JsonValue, MatrixEvent, StateKeySelector};
 
 /// What a subscriber wants delivered for a room, by event type.
@@ -118,6 +118,48 @@ pub trait MatrixBackend: Send + Sync {
         state_key: String,
         content: JsonValue,
     ) -> Result<String, BackendError>;
+
+    /// Send a sticky event (MSC4354): `duration_ms` is how long the homeserver keeps it in the
+    /// room's sticky map; pass it through verbatim. Returns the event id.
+    async fn send_sticky_event(
+        &self,
+        room_id: String,
+        event_type: String,
+        content: JsonValue,
+        duration_ms: u64,
+    ) -> Result<String, BackendError>;
+
+    /// Schedule an event (MSC4140): with `state_key` a state event, otherwise message-like, sent
+    /// `delay_ms` from now. Returns the **delay id**, the handle for
+    /// [`restart_delayed_event`](Self::restart_delayed_event) & co., not an event id.
+    async fn send_delayed_event(
+        &self,
+        room_id: String,
+        event_type: String,
+        state_key: Option<String>,
+        content: JsonValue,
+        delay_ms: u64,
+    ) -> Result<String, BackendError>;
+
+    /// Schedule a sticky event: [`send_delayed_event`](Self::send_delayed_event) and
+    /// [`send_sticky_event`](Self::send_sticky_event) combined. Returns the delay id.
+    async fn send_delayed_sticky_event(
+        &self,
+        room_id: String,
+        event_type: String,
+        content: JsonValue,
+        delay_ms: u64,
+        duration_ms: u64,
+    ) -> Result<String, BackendError>;
+
+    /// MSC4140 `restart`: reset the timer of a delayed event to its original delay from now.
+    async fn restart_delayed_event(&self, room_id: String, delay_id: String) -> Result<(), BackendError>;
+
+    /// MSC4140 `cancel`: drop a delayed event.
+    async fn cancel_delayed_event(&self, room_id: String, delay_id: String) -> Result<(), BackendError>;
+
+    /// MSC4140 `send`: send a delayed event right now.
+    async fn send_delayed_event_now(&self, room_id: String, delay_id: String) -> Result<(), BackendError>;
 
     // ---- Read half ----
 

@@ -21,7 +21,7 @@ use serde::{Deserialize, Serialize};
 use super::{expect, parse_tagged, split_tagged};
 use crate::{
     ActionError, ClientContextResponse, MatrixContextResponse, ReadEventsRequest, ReadEventsResponse,
-    RequestCapabilitiesRequest, SendEventRequest, SendEventResponse, Source, WireMessage,
+    RequestCapabilitiesRequest, SendEventRequest, SendEventResponse, Source, UpdateDelayedEventRequest, WireMessage,
 };
 
 pub(crate) mod client_context;
@@ -30,6 +30,7 @@ pub(crate) mod matrix_context;
 pub(crate) mod read_events;
 pub(crate) mod request_capabilities;
 pub(crate) mod send_event;
+pub(crate) mod update_delayed_event;
 
 /// A request sent by the widget (`source: widget`, has `request`).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -48,6 +49,9 @@ pub enum WidgetRequest {
     /// Read events from the room. Requires a `receive.*` capability.
     #[serde(rename = "org.matrix.msc2876.read_events", alias = "read_events")]
     ReadEvents { request: ReadEventsRequest },
+    /// Cancel / restart / fire a delayed event. Requires `org.matrix.msc4157.update_delayed_event`.
+    #[serde(rename = "org.matrix.msc4157.update_delayed_event", alias = "update_delayed_event")]
+    UpdateDelayedEvent { request: UpdateDelayedEventRequest },
     /// Who and where the widget is on Matrix. Requires `m.matrix_context`.
     #[serde(rename = "org.matrix.msc4412.matrix_context", alias = "matrix_context")]
     MatrixContext,
@@ -75,6 +79,9 @@ pub enum WidgetResponse {
     SendEvent { response: SendEventResponse },
     #[serde(rename = "org.matrix.msc2876.read_events", alias = "read_events")]
     ReadEvents { response: ReadEventsResponse },
+    /// `{}`
+    #[serde(rename = "org.matrix.msc4157.update_delayed_event", alias = "update_delayed_event")]
+    UpdateDelayedEvent,
     #[serde(rename = "org.matrix.msc4412.matrix_context", alias = "matrix_context")]
     MatrixContext { response: MatrixContextResponse },
     #[serde(rename = "org.matrix.msc4412.client_context", alias = "client_context")]

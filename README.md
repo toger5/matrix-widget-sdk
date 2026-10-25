@@ -69,7 +69,8 @@ Actions implemented here:
 | `content_loaded` | widget | widget may be shown | none |
 | `request_capabilities` | widget | ask for capabilities (acked at once, decision comes later) | none |
 | `notify_capabilities` | host | `{ requested, approved }` after the user decided | – |
-| `send_event` | widget | send a timeline/state event | `send.event:<type>` / `send.state_event:<type>[#<key>]` |
+| `send_event` | widget | send a timeline/state event; `room_id` (own room only, needs `timeline:<room>`), `delay` (MSC4157, answers with `delay_id`), `sticky_duration_ms` (MSC4407) | `send.event:<type>[#<msgtype>]` / `send.state_event:<type>[#<key>]`, plus `org.matrix.msc4157.send.delayed_event` / `org.matrix.msc4407.send.sticky_event` |
+| `org.matrix.msc4157.update_delayed_event` | widget | `{ delay_id, action: cancel \| restart \| send }` | `org.matrix.msc4157.update_delayed_event` |
 | `send_event` | host | an event from sync (the driver's backend subscription) | `receive.event:<type>` / `receive.state_event:<type>[#<key>]` |
 | `org.matrix.msc2876.read_events` | widget | read timeline (`limit`) or state (`state_key`: string or `true`) | `receive.*` |
 | `update_state` | host | `{ state: [...] }` the current permitted state, on approval and after changes | `receive.state_event:*` |

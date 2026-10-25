@@ -53,4 +53,19 @@ export const DEFAULT_CAPABILITIES = [
   "org.matrix.msc2762.receive.state_event:m.room.topic",
 ].join(",");
 
+/** Delayed (MSC4157) and sticky (MSC4407) sends, exercised by both widgets' extra buttons. */
+export const DELAYED_CAPABILITIES = [
+  "org.matrix.msc4157.send.delayed_event",
+  "org.matrix.msc4157.update_delayed_event",
+  "org.matrix.msc4407.send.sticky_event",
+  "org.matrix.msc2762.send.event:m.rtc.member",
+].join(",");
+
 export const capabilityList = (): string[] => valueOf("caps").split(",").map((c) => c.trim()).filter(Boolean);
+
+/** Remembers the delay id of the last scheduled event so the update buttons have a target. */
+export const lastDelay = { id: "" };
+export const rememberDelay = <T extends { delay_id?: string } | string>(result: T): T => {
+  lastDelay.id = typeof result === "string" ? result : (result.delay_id ?? lastDelay.id);
+  return result;
+};

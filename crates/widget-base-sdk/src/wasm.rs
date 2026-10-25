@@ -26,7 +26,7 @@ use js_sys::{Function, Promise};
 use serde::Serialize;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::future_to_promise;
-use widget_actions::{Capability, MatrixEvent, StateKeySelector};
+use widget_actions::{Capability, MatrixEvent, StateKeySelector, UpdateDelayedEventAction};
 
 use crate::{WidgetClient, WidgetClientError, WidgetDelegate};
 
@@ -235,6 +235,43 @@ impl WidgetApi {
             Ok(content) => promise(self.client.send_state_event(event_type, state_key, content)),
             Err(e) => Promise::reject(&js_error(e)),
         }
+    }
+
+    /// Send a sticky event (MSC4407) kept for `durationMs`. Resolves with `{ room_id, event_id }`.
+    #[wasm_bindgen(js_name = sendStickyEvent)]
+    pub fn send_sticky_event(&self, event_type: String, content: JsValue, duration_ms: u32) -> Promise {
+        match serde_wasm_bindgen::from_value(content) {
+            Ok(content) => promise(self.client.send_sticky_event(event_type, content, duration_ms.into())),
+            Err(e) => Promise::reject(&js_error(e)),
+        }
+    }
+
+    /// Schedule an event (MSC4157), a state event when `stateKey` is a string. Resolves with
+    /// the delay id for `updateDelayedEvent`.
+    #[wasm_bindgen(js_name = sendDelayedEvent)]
+    pub fn send_delayed_event(
+        &self,
+        event_type: String,
+        state_key: Option<String>,
+        content: JsValue,
+        delay_ms: u32,
+    ) -> Promise {
+        match serde_wasm_bindgen::from_value(content) {
+            Ok(content) => promise(self.client.send_delayed_event(event_type, state_key, content, delay_ms.into())),
+            Err(e) => Promise::reject(&js_error(e)),
+        }
+    }
+
+    /// `action` is `"cancel"`, `"restart"` or `"send"` (MSC4157).
+    #[wasm_bindgen(js_name = updateDelayedEvent)]
+    pub fn update_delayed_event(&self, delay_id: String, action: String) -> Promise {
+        let action = match action.as_str() {
+            "cancel" => UpdateDelayedEventAction::Cancel,
+            "restart" => UpdateDelayedEventAction::Restart,
+            "send" => UpdateDelayedEventAction::Send,
+            other => return Promise::reject(&js_error(format!("unknown delayed event action `{other}`"))),
+        };
+        promise(self.client.update_delayed_event(delay_id, action))
     }
 
     /// Resolves with an array of timeline events.

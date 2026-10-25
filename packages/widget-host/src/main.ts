@@ -88,6 +88,7 @@ function refresh() {
   if (!driver || !backend) return;
   show("snapshot", driver.snapshot());
   show("timeline", backend.timeline());
+  show("delayed", backend.delayedEvents());
   show("state", backend.state());
 }
 
@@ -180,6 +181,17 @@ $("injectBtn").onclick = () => {
   refresh();
 };
 $("clear").onclick = () => (backend?.clear(), refresh());
+$("fireDelayed").onclick = () => {
+  const next = backend?.delayedEvents()[0];
+  if (!next) return log("info", "no delayed event scheduled");
+  try {
+    const event = backend?.fireDelayedEvent(next.delayId);
+    log("info", `fired ${next.delayId} as ${event?.eventId}`);
+  } catch (e) {
+    log("err", String(e));
+  }
+  refresh();
+};
 $("fail").onchange = () => backend?.failSends(checked("fail") ? "simulated failure (fail sends is on)" : undefined);
 $("clearLog").onclick = () => $("log").replaceChildren();
 
