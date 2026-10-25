@@ -26,7 +26,7 @@ The same core is meant to be used on both ends of the wire and from several lang
 | [`widget-actions`](crates/widget-actions) | everywhere, optional UniFFI | Plain data types: the wire envelope, typed `Action` tree (`WidgetRequest`, `HostRequest`, ...), capability strings, `MatrixEvent`. No I/O, no state. |
 | [`widget-base-sdk`](crates/widget-base-sdk) | widget side, wasm + JS | `WidgetClient`: tracks the session (capabilities, `content_loaded`), turns actions into async functions, answers host requests. On `wasm32` also exports the `WidgetApi` JS class wired to `window.parent.postMessage`. |
 | [`widget-host-driver`](crates/widget-host-driver) | host side, optional UniFFI | `WidgetHostDriver`: one instance per rendered widget. Feed it widget messages, it performs the handshake, checks capabilities, calls the backend, subscribes to the room for the approved `receive.*` capabilities and answers. One callback (`send_to_widget`) carries JSON to the iframe. Also defines the `m.widget` state event content (MSC4411). Its `cdylib` carries the UniFFI scaffolding of all three host crates. |
-| [`widget-matrix-backend`](crates/widget-matrix-backend) | host side, optional UniFFI | `MatrixBackend`: the trait a host implements once per Matrix SDK (send event, send state, read events, read state, subscribe to a room). Ships `InMemoryBackend` for tests and the browser test host. |
+| [`widget-matrix-backend`](crates/widget-matrix-backend) | host side, optional UniFFI | `MatrixBackend`: the trait a host implements once per Matrix SDK, shaped after matrix-rust-rtc's (send room / state / sticky / delayed / to-device, read events / state / relations / account data, OpenID, TURN, RTC transports, user directory, media config, LiveKit; subscribe to the room, to-device messages and TURN credentials). Ships `InMemoryBackend` for tests and the browser test host. See [`docs/parity.md`](docs/parity.md). |
 | [`uniffi-bindgen`](crates/uniffi-bindgen) | tooling | Binary that generates Kotlin / Swift / Python bindings for the crates above. |
 
 Web packages (npm workspaces under `packages/`, see each README):
@@ -156,6 +156,10 @@ impl WidgetHostPlatform for Platform {
     fn send_to_widget(&self, json: String) { /* iframe.postMessage(JSON.parse(json), widgetOrigin) */ }
     fn on_capabilities_requested(&self, requested: Vec<Capability>) { /* prompt user, then driver.approve_capabilities(..) */ }
     fn on_content_loaded(&self) { /* hide spinner */ }
+    fn on_openid_requested(&self) { /* prompt user, then driver.resolve_openid(allowed).await */ }
+    fn navigate(&self, uri: String) -> Result<(), PlatformError> { /* open the matrix.to link */ Ok(()) }
+    fn send_sticker(&self, sticker: StickerRequest) -> Result<(), PlatformError> { /* send m.sticker */ Ok(()) }
+    fn set_always_on_screen(&self, value: bool) -> bool { value }
     // reported to widgets through `client_context`
     fn client_id(&self) -> Option<String> { Some("io.example.client".into()) }
     fn client_theme(&self) -> Option<String> { None }
@@ -191,6 +195,10 @@ const driver = new WidgetHostDriver(new InMemoryBackend(roomId, userId).asBacken
   sendToWidget: (json) => iframe.contentWindow.postMessage(JSON.parse(json), widgetOrigin),
   onCapabilitiesRequested: (caps) => queueMicrotask(() => driver.approveCapabilities(caps)),
   onContentLoaded: () => (iframe.hidden = false),
+  onOpenidRequested: () => queueMicrotask(() => driver.resolveOpenid(true)),
+  navigate: (uri) => { location.href = uri; },
+  sendSticker: (sticker) => { /* send m.sticker */ },
+  setAlwaysOnScreen: (value) => value,
   clientId: () => "io.example.client", clientTheme: () => "light", clientLanguage: () => "en",
 });
 window.addEventListener("message", (ev) => {
@@ -210,8 +218,9 @@ cargo run -p uniffi-bindgen -- generate --library target/release/libwidget_host_
 ```
 
 The foreign side implements `MatrixBackend` (async operations, the synchronous identity getters
-`room_id`, `user_id`, `device_id`, `display_name`, `avatar_url`, `base_url` that feed
-`matrix_context`, and `subscribe_room`) and `WidgetHostPlatform`, then uses `WidgetHostDriver`
+`room_id`, `own_user_id`, `own_device_id`, `display_name`, `avatar_url`, `base_url` that feed
+`matrix_context`, and the synchronous `subscribe_room` / `subscribe_to_device` /
+`subscribe_turn_servers`) and `WidgetHostPlatform`, then uses `WidgetHostDriver`
 exactly like the Rust API above. Event payloads cross the FFI as JSON strings (`JsonValue`),
 capabilities as their strings.
 
@@ -232,8 +241,11 @@ receive → read → state update). It is the best place to see the whole protoc
 
 * Legacy (`im.vector.modular.widgets`, versionless) widgets. The driver detects them and hands
   back `DriverError::LegacyWidgetApi`.
-* Capabilities beyond MSC2762 event send/receive (TURN servers, room creation, ...). Unknown
-  capability strings and actions are preserved as `Other` / `Unknown` so they can be layered on.
+* The actions matrix-widget-api has that carry binary payloads (`upload_file`, `download_file`,
+  `screenshot`) and the modal widget actions; why, and the full comparison with matrix-widget-api
+  and matrix-rust-rtc, is in [`docs/parity.md`](docs/parity.md). Unknown capability strings and
+  actions are preserved as `Other` / `Unknown` so they can be layered on.
+* Multi-room access: `room_id` / `room_ids` are accepted but must name the widget's own room.
 * A concrete `MatrixBackend` for matrix-rust-sdk or matrix-js-sdk. The trait is small on
   purpose; an implementation is a thin adapter around `Room::send_raw`,
   `Room::get_state_events`, a room event handler for `subscribe_room`, ...

@@ -56,6 +56,10 @@ const platform: WidgetHostPlatform = {
   sendToWidget: (json) => iframe.contentWindow!.postMessage(JSON.parse(json), widgetOrigin),
   onCapabilitiesRequested: (requested) => queueMicrotask(() => driver.approveCapabilities(requested)),
   onContentLoaded: () => (iframe.hidden = false),
+  onOpenidRequested: () => queueMicrotask(() => driver.resolveOpenid(true)),   // or prompt first
+  navigate: (uri) => { location.href = uri; },
+  sendSticker: (sticker) => { /* send the m.sticker event */ },
+  setAlwaysOnScreen: (value) => value,
   clientId: () => "io.example.client", clientTheme: () => "light", clientLanguage: () => "en",
 };
 const backend = new InMemoryBackend("!room:example.org", "@alice:example.org");
@@ -69,13 +73,22 @@ backend.inject(matrixEventFromJson(JSON.stringify(eventFromSync)));   // reaches
 
 ### Implementing `MatrixBackend` (e.g. on matrix-js-sdk)
 
-`MatrixBackend` is a plain interface: identity getters, async `sendEvent` / `sendStateEvent` /
-`readEvents` / `readState` (return a `Promise`, throw a `BackendError.*` to fail), and the
-subscription half:
+`MatrixBackend` is a plain interface shaped after matrix-rust-rtc's: identity getters, async
+operations (`sendRoomEvent` / `sendStateEvent` / `sendStickyEvent` / `sendDelayedEvent` & co.,
+`readRoomEvents` / `readRoomState` / `relations` / `readRoomAccountData`, `openidToken`,
+`rtcTransports`, `searchUserDirectory`, `mediaConfig`, `sendToDeviceMessage`, the LiveKit pair;
+each returns a `Promise` and throws `new BackendError.Failed({ errcode, status, reason })` to
+fail, which the widget sees as `error.matrix_api_error`), and the subscription half:
 
 ```ts
 subscribeRoom(roomId: string, subjects: RoomSubjects, sink: RoomSink): Subscription
+subscribeToDevice(eventTypes: string[], sink: ToDeviceSink): Subscription
+subscribeTurnServers(sink: TurnServerSink): Subscription
 ```
+
+Every method is required (UniFFI traits have no defaults); an operation the client cannot offer
+throws `BackendError.Failed` with a reason. The methods are listed with their semantics in
+`docs/parity.md` and in the Rust docs of `widget-matrix-backend`.
 
 Register listeners for `subjects.timelineEventTypes` and `subjects.stateEventTypes` on the room,
 deliver the **current set** of every requested state type right away (`sink.onStateEvents(type,

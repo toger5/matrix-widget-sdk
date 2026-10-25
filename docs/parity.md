@@ -22,8 +22,8 @@ templating that MSC4412 removes. Both the action and the capability accept the p
 
 ## 2. Action inventory
 
-Legend: ✅ implemented before this branch · 🔨 built on this branch · ⛔ raised, not built ·
-➖ dropped by MSC4412.
+Legend: ✅ implemented before this branch · 🔨 built on this branch (all of these are in; the
+marker shows what changed) · ⛔ raised, not built · ➖ dropped by MSC4412.
 
 ### Widget → host (`source: widget`, legacy `fromWidget`)
 
@@ -37,7 +37,7 @@ Legend: ✅ implemented before this branch · 🔨 built on this branch · ⛔ r
 | `send_event` + `delay` (MSC4157) | – | `org.matrix.msc4157.send.delayed_event` | 🔨 response carries `delay_id` | `backend.send_delayed_event` |
 | `send_event` + `sticky_duration_ms` (MSC4407 / MSC4354) | – | `org.matrix.msc4407.send.sticky_event` | 🔨 | `backend.send_sticky_event` |
 | `org.matrix.msc4157.update_delayed_event` | `org.matrix.msc4157.update_delayed_event` (alias `update_delayed_event`) | `org.matrix.msc4157.update_delayed_event` | 🔨 | `backend.restart_delayed_event` / `cancel_delayed_event` / `send_delayed_event_now` |
-| `org.matrix.msc2876.read_events` | `org.matrix.msc2876.read_events` (alias `read_events`) | `receive.event:<type>` / `receive.state_event:<type>[#key]` | ✅ (+ 🔨 `msgtype`, `since`, `room_ids`) | `backend.read_room_events` / `read_state` |
+| `org.matrix.msc2876.read_events` | `org.matrix.msc2876.read_events` (alias `read_events`) | `receive.event:<type>` / `receive.state_event:<type>[#key]` | ✅ (+ 🔨 `msgtype`, `since`, `room_ids`) | `backend.read_room_events` / `read_room_state` |
 | `org.matrix.msc3869.read_relations` | `org.matrix.msc3869.read_relations` (alias `read_relations`) | results filtered by `receive.*` | 🔨 | `backend.relations` |
 | `send_to_device` (MSC3819) | `send_to_device` | `org.matrix.msc3819.send.to_device:<type>` | 🔨 | `backend.send_to_device_message` |
 | `get_openid` (MSC1960) | `get_openid` | none (user prompt) | 🔨 two-phase, see §5 | `platform.on_openid_requested`, `backend.openid_token` |
@@ -48,7 +48,9 @@ Legend: ✅ implemented before this branch · 🔨 built on this branch · ⛔ r
 | `org.matrix.msc4039.upload_file` / `download_file` | – | `org.matrix.msc4039.upload_file` / `download_file` | ⛔ binary payload, see §6 | – |
 | `com.beeper.read_room_account_data` | `com.beeper.read_room_account_data` (alias `read_room_account_data`) | `com.beeper.capabilities.receive.room_account_data:<type>` | 🔨 | `backend.read_room_account_data` |
 | `org.matrix.msc2931.navigate` | `org.matrix.msc2931.navigate` (alias `navigate`) | `org.matrix.msc2931.navigate` | 🔨 | `platform.navigate` |
-| `m.sticker` | `m.sticker` | `m.sticker` | 🔨 | `platform.on_sticker` |
+| `m.sticker` | `m.sticker` | `m.sticker` | 🔨 | `platform.send_sticker` |
+| `org.matrix.msc4533.rtc_livekit_get_token` | same (alias `rtc_livekit_get_token`) | `org.matrix.msc4533.rtc_livekit_get_token` | 🔨 | `backend.rtc_livekit_get_token` |
+| `org.matrix.msc4533.rtc_livekit_delegate_delayed_leave` | same (alias `rtc_livekit_delegate_delayed_leave`) | `org.matrix.msc4533.rtc_livekit_delegate_delayed_leave` | 🔨 | `backend.rtc_livekit_delegate_delayed_leave` |
 | `set_always_on_screen` | `set_always_on_screen` | `m.always_on_screen` | 🔨 | `platform.set_always_on_screen` |
 | `open_modal` / `close_modal` / `set_button_enabled` | – | – | ⛔ modal widgets, see §6 | – |
 | *(new)* `matrix_context` | `org.matrix.msc4412.matrix_context` (alias `matrix_context`) | `org.matrix.msc4412.matrix_context` (alias `m.matrix_context`) | ✅ (prefix 🔨) | backend identity getters |
@@ -95,6 +97,7 @@ All of these parse into a `Capability` variant (unknown ones stay `Capability::O
 | `org.matrix.msc3973.user_directory_search` | `UserDirectorySearch` |
 | `org.matrix.msc4039.upload_file` / `download_file` | `UploadFile` / `DownloadFile` |
 | `org.matrix.msc2931.navigate` | `Navigate` |
+| `org.matrix.msc4533.rtc_livekit_get_token` / `rtc_livekit_delegate_delayed_leave` | `RtcLivekitGetToken` / `RtcLivekitDelegateDelayedLeave` |
 | `m.sticker` | `Sticker` |
 | `m.always_on_screen` | `AlwaysOnScreen` |
 | `m.capability.screenshot` | `Screenshot` |
@@ -117,6 +120,7 @@ the method here has the same name and parameter order, so one adapter per Matrix
 | `send_state_event(room_id, type, state_key, content) -> event_id` | same | gained `room_id` |
 | `send_sticky_event(room_id, type, content, duration_ms) -> event_id` | same | |
 | `send_delayed_event(room_id, type, state_key?, content, delay_ms) -> delay_id` | same | |
+| – | `send_delayed_sticky_event(room_id, type, content, delay_ms, duration_ms) -> delay_id` | matrix-widget-api allows `delay` + `sticky_duration_ms` together; kept out of `send_delayed_event` so that one stays identical to rtc's |
 | `restart_delayed_event(room_id, delay_id)` / `cancel_delayed_event(room_id, delay_id)` | same | |
 | – | `send_delayed_event_now(room_id, delay_id)` | MSC4140 `send` action; rtc never needs it |
 | `send_to_device_message(recipients, type, content) -> Vec<ToDeviceDelivery>` | `send_to_device_message(encrypted, type, messages: Vec<ToDeviceMessage>) -> Vec<ToDeviceDelivery>` | **raised**, see §4 |
@@ -127,10 +131,11 @@ the method here has the same name and parameter order, so one adapter per Matrix
 | `relations(room_id, event_id, rel_type, event_type) -> Vec<EventIn>` | `relations(room_id, event_id, rel_type?, event_type?, from?, to?, limit?, direction?) -> RelationsChunk` | **raised**, see §4 |
 | `openid_token() -> OpenIdToken` | same | |
 | `rtc_transports() -> Value` | `rtc_transports() -> JsonValue` | |
-| – | `read_room_events(room_id, type, msgtype?, limit, since?)`, `read_state(room_id, type, selector)` | widgets read on demand; rtc only subscribes |
+| – | `read_room_events(room_id, type, msgtype?, limit, since?)`, `read_room_state(room_id, type, selector)` | widgets read on demand; rtc only subscribes |
+| – | `rtc_livekit_get_token(server_name, url, room_id, slot_id, member_id) -> jwt`, `rtc_livekit_delegate_delayed_leave(url, room_id, slot_id, member_id, delay_id)` | MSC4533 (added to matrix-widget-api in October 2026); rtc may grow the same when it hosts a LiveKit integration |
 | – | `read_room_account_data(room_id, type)` | beeper extension |
 | – | `search_user_directory(term, limit?)`, `media_config()` | MSC3973 / MSC4039 |
-| `BackendError { errcode?, status?, message }` | same shape | replaces the `Forbidden / NotFound / Network / Other` enum; `errcode` and `status` are forwarded to the widget as `matrix_api_error` |
+| `BackendError { errcode?, status?, message }` | `BackendError::Failed { errcode?, status?, reason }` | one uniffi error variant like rtc's ffi layer (`reason`, because Kotlin exceptions own `message`); replaces the old four-variant enum; `errcode` and `status` are forwarded to the widget as `matrix_api_error` |
 | `EventIn { ..., encryption }` | `MatrixEvent` (client-server JSON incl. `room_id`, `unsigned`) | widgets get the event as the C-S API has it; decryption facts are not part of the widget API |
 | content as `content_json: String` | `JsonValue` (string over FFI, plain value in TS) | same thing, nicer in TypeScript |
 | async `subscribe_room` in core, sync over uniffi | sync everywhere | this crate is the uniffi surface, there is no separate core |
@@ -164,6 +169,14 @@ the method here has the same name and parameter order, so one adapter per Matrix
    it stays sync. No change.
 6. **Delayed events: `send` action.** MSC4140 has `restart`, `cancel` and `send`; rtc implements
    the first two only. Added here as `send_delayed_event_now`; rtc may want the same name.
+7. **Platform actions have results.** `navigate` and `m.sticker` can fail on the client side, so
+   the platform methods return `Result<(), PlatformError>` (one uniffi error variant with a
+   `reason`); `set_always_on_screen` returns the `success` flag the response needs. The other
+   platform callbacks stay fire-and-forget.
+8. **TURN watch acknowledgement.** matrix-widget-api waits for the first TURN server before
+   acknowledging `watch_turn_servers` (and errors if none comes). `subscribe_turn_servers` is
+   synchronous here, so the driver acknowledges first and the credentials follow as
+   `update_turn_servers`; a widget written against matrix-widget-api handles both orders.
 
 ## 5. OpenID flow
 
@@ -193,3 +206,8 @@ the method here has the same name and parameter order, so one adapter per Matrix
   `RoomSink::on_sticky_events` and a `sticky` field on `MatrixEvent`. Sending is built; receiving
   follows when the MSC4354 shape settles.
 * **`redact_event`**: widgets redact via `send_event` of `m.room.redaction`.
+* **`parent_delay_id`** on `send_event`: deprecated in matrix-widget-api and ignored by its
+  driver; not modelled (unknown body fields are accepted and dropped).
+* **msgtype `#` escaping**: matrix-widget-api un-escapes `\#` inside
+  `m.room.message#<msgtype>` capabilities; this parser splits at the first `#` after
+  `m.room.message` without escapes, which covers every msgtype in use.
