@@ -18,6 +18,9 @@
 //!
 //! The client is single threaded (`!Send`), which is what browsers offer anyway.
 
+// See widget-actions: `WidgetClientError` wraps the full `WidgetError`.
+#![allow(clippy::result_large_err)]
+
 mod client;
 mod error;
 

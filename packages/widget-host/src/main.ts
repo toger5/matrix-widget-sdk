@@ -57,7 +57,7 @@ const EXAMPLE_EVENT = {
 };
 
 /** Capabilities the compat wrapper needs to template a legacy widget's URL. */
-const CONTEXT_CAPABILITIES = ["m.matrix_context", "m.client_context"];
+const CONTEXT_CAPABILITIES = ["org.matrix.msc4412.matrix_context", "org.matrix.msc4412.client_context"];
 
 let driver: WidgetHostDriver | undefined;
 let backend: InMemoryBackend | undefined;

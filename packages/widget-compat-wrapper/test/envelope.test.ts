@@ -33,8 +33,8 @@ describe("envelope translation", () => {
 
   it("renames the prefixed legacy actions in both directions and passes others through", () => {
     expect(toNewAction("org.matrix.msc2974.request_capabilities")).toBe("request_capabilities");
-    expect(toNewAction("org.matrix.msc2876.read_events")).toBe("read_events");
-    expect(toLegacyAction("read_events")).toBe("org.matrix.msc2876.read_events");
+    expect(toLegacyAction("request_capabilities")).toBe("org.matrix.msc2974.request_capabilities");
+    expect(toNewAction("org.matrix.msc2876.read_events")).toBe("org.matrix.msc2876.read_events");
     expect(toNewAction("org.example.custom")).toBe("org.example.custom");
     expect(toLegacyAction("send_event")).toBe("send_event");
   });

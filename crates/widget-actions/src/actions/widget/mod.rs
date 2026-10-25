@@ -7,7 +7,11 @@
 //!
 //! Conventions that keep this file free of per-action logic:
 //!
-//! * one variant per action, `#[serde(rename = "<action>")]`, a unit variant when the body is `{}`;
+//! * one variant per action, `#[serde(rename = "<action>")]`, a unit variant when the body is `{}`.
+//!   The `rename` is the name **emitted** on the wire: the MSC's unstable spelling where the
+//!   action has one (`org.matrix.msc2876.read_events`), so that a wrongly designed action can be
+//!   renamed later. Other spellings (the prefix-less future stable name, a legacy name) are
+//!   accepted on input through `alias`;
 //! * a trailing `#[serde(other)] Unknown` unit variant catches unknown *tags* only, so a known
 //!   action with a malformed body is still an [`ActionError::InvalidBody`];
 //! * no `#[serde(untagged)]` anywhere: it would swallow body errors.
@@ -36,19 +40,19 @@ pub enum WidgetRequest {
     #[serde(rename = "content_loaded")]
     ContentLoaded,
     /// Ask the host for capabilities. (always allowed)
-    #[serde(rename = "request_capabilities")]
+    #[serde(rename = "request_capabilities", alias = "org.matrix.msc2974.request_capabilities")]
     RequestCapabilities { request: RequestCapabilitiesRequest },
     /// Send an event to the room. Requires a `send.*` capability.
     #[serde(rename = "send_event")]
     SendEvent { request: SendEventRequest },
     /// Read events from the room. Requires a `receive.*` capability.
-    #[serde(rename = "read_events")]
+    #[serde(rename = "org.matrix.msc2876.read_events", alias = "read_events")]
     ReadEvents { request: ReadEventsRequest },
     /// Who and where the widget is on Matrix. Requires `m.matrix_context`.
-    #[serde(rename = "matrix_context")]
+    #[serde(rename = "org.matrix.msc4412.matrix_context", alias = "matrix_context")]
     MatrixContext,
     /// Facts about the embedding client. Requires `m.client_context`.
-    #[serde(rename = "client_context")]
+    #[serde(rename = "org.matrix.msc4412.client_context", alias = "client_context")]
     ClientContext,
     /// An action this crate does not know. The [`WireMessage`] it was parsed from carries the
     /// action string and the raw body. Serializing it yields the placeholder action `Unknown`.
@@ -65,15 +69,15 @@ pub enum WidgetResponse {
     #[serde(rename = "content_loaded")]
     ContentLoaded,
     /// `{}`; the decision arrives later as [`HostRequest::NotifyCapabilities`](crate::HostRequest::NotifyCapabilities).
-    #[serde(rename = "request_capabilities")]
+    #[serde(rename = "request_capabilities", alias = "org.matrix.msc2974.request_capabilities")]
     RequestCapabilities,
     #[serde(rename = "send_event")]
     SendEvent { response: SendEventResponse },
-    #[serde(rename = "read_events")]
+    #[serde(rename = "org.matrix.msc2876.read_events", alias = "read_events")]
     ReadEvents { response: ReadEventsResponse },
-    #[serde(rename = "matrix_context")]
+    #[serde(rename = "org.matrix.msc4412.matrix_context", alias = "matrix_context")]
     MatrixContext { response: MatrixContextResponse },
-    #[serde(rename = "client_context")]
+    #[serde(rename = "org.matrix.msc4412.client_context", alias = "client_context")]
     ClientContext { response: ClientContextResponse },
     /// A response to an action this crate does not know; the raw body is in the [`WireMessage`].
     #[serde(other)]

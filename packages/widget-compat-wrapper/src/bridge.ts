@@ -4,7 +4,7 @@
  * Everything is forwarded 1:1 (see envelope.ts) except two things the wrapper does itself:
  *
  * 1. **Bootstrap**: before the legacy widget can be loaded its URL has to be templated. The
- *    wrapper requests the `m.matrix_context` / `m.client_context` capabilities, asks the host
+ *    wrapper requests the `matrix_context` / `client_context` capabilities, asks the host
  *    for both contexts, renders the URL (template.ts) and only then loads the inner iframe.
  *    A missing capability or an unsupported action just leaves the variables empty.
  * 2. **Startup handshake**: legacy capabilities are host-initiated (`toWidget capabilities`),
@@ -32,7 +32,10 @@ import {
 } from "./envelope";
 import { renderLegacyUrl, type ClientContext, type MatrixContext } from "./template";
 
-export const CONTEXT_CAPABILITIES = ["m.matrix_context", "m.client_context"];
+/** Unstable spellings, as the host emits them (`docs/parity.md`). */
+export const MATRIX_CONTEXT_ACTION = "org.matrix.msc4412.matrix_context";
+export const CLIENT_CONTEXT_ACTION = "org.matrix.msc4412.client_context";
+export const CONTEXT_CAPABILITIES = [MATRIX_CONTEXT_ACTION, CLIENT_CONTEXT_ACTION];
 
 export interface BridgeOptions {
   /** `widgetId` the legacy widget expects on every message (the legacy state event's `state_key`). */
@@ -121,8 +124,8 @@ export class CompatBridge {
       );
     };
     // Errors (capability denied, action unknown to the host) leave the variables empty.
-    this.requestHost("matrix_context", {}, (r) => (isError(r) || Object.assign(matrix, r), done()));
-    this.requestHost("client_context", {}, (r) => (isError(r) || Object.assign(client, r), done()));
+    this.requestHost(MATRIX_CONTEXT_ACTION, {}, (r) => (isError(r) || Object.assign(matrix, r), done()));
+    this.requestHost(CLIENT_CONTEXT_ACTION, {}, (r) => (isError(r) || Object.assign(client, r), done()));
   }
 
   // ---- widget -> host ------------------------------------------------------------------------

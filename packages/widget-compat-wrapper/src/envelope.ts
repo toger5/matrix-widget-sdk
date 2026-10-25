@@ -30,10 +30,13 @@ export interface NewMessage {
 
 export const API_VERSION = "v1";
 
-/** Legacy action names that MSC4412 spells differently. Everything else passes through. */
+/**
+ * Legacy action names that MSC4412 spells differently. Everything else passes through: the host
+ * emits the unstable MSC spelling itself (`org.matrix.msc2876.read_events`) and accepts the plain
+ * one, so only the capability actions, which MSC4412 defines under new names, are mapped.
+ */
 const LEGACY_TO_NEW: Record<string, string> = {
   "org.matrix.msc2974.request_capabilities": "request_capabilities",
-  "org.matrix.msc2876.read_events": "read_events",
 };
 const NEW_TO_LEGACY = Object.fromEntries(Object.entries(LEGACY_TO_NEW).map(([legacy, next]) => [next, legacy]));
 

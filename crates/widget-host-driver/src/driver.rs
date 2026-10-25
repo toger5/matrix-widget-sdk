@@ -6,7 +6,7 @@ use widget_actions::{
     MatrixEvent, MessageKind, NotifyCapabilitiesRequest, ReadEventsResponse, SendEventResponse, UpdateStateRequest,
     WidgetError, WidgetRequest, WidgetResponse, WireMessage, API_VERSION_V1,
 };
-use widget_matrix_backend::{MatrixBackend, RoomSink, RoomSubjects, Subscription};
+use widget_matrix_backend::{BackendError, MatrixBackend, RoomSink, RoomSubjects, Subscription};
 
 use crate::DriverError;
 
@@ -248,7 +248,8 @@ impl WidgetHostDriver {
     /// widget holds a matching `receive.*` capability.
     fn on_timeline_events(&self, events: Vec<MatrixEvent>) {
         for event in events {
-            let allowed = self.lock().approved.allows_receive(&event.event_type, event.state_key.as_deref());
+            let allowed =
+                self.lock().approved.allows_receive(&event.event_type, event.state_key.as_deref(), msgtype_of(&event));
             if allowed {
                 self.send_request(HostRequest::SendEvent { event });
             }
@@ -265,7 +266,7 @@ impl WidgetHostDriver {
                 .filter(|e| {
                     e.is_state()
                         && e.event_type == event_type
-                        && s.approved.allows_receive(&e.event_type, e.state_key.as_deref())
+                        && s.approved.allows_receive(&e.event_type, e.state_key.as_deref(), None)
                 })
                 .collect()
         };
@@ -310,7 +311,12 @@ impl WidgetHostDriver {
                 return Ok(());
             }
             WidgetRequest::SendEvent { request } => {
-                let allowed = self.lock().approved.allows_send(&request.event_type, request.state_key.as_deref());
+                let msgtype = request.content.get("msgtype").and_then(|m| m.as_str()).map(str::to_owned);
+                let allowed = self.lock().approved.allows_send(
+                    &request.event_type,
+                    request.state_key.as_deref(),
+                    msgtype.as_deref(),
+                );
                 if !allowed {
                     let needed = match &request.state_key {
                         Some(k) => Capability::send_state_event(&request.event_type, Some(k.as_str())),
@@ -318,17 +324,22 @@ impl WidgetHostDriver {
                     };
                     error(format!("Not allowed to send this event (missing capability {needed})"))
                 } else {
+                    let room_id = self.backend.room_id();
                     let result = match request.state_key {
                         Some(state_key) => {
-                            self.backend.send_state_event(request.event_type, state_key, request.content).await
+                            self.backend
+                                .send_state_event(room_id.clone(), request.event_type, state_key, request.content)
+                                .await
                         }
-                        None => self.backend.send_event(request.event_type, request.content).await,
+                        None => {
+                            self.backend.send_room_event(room_id.clone(), request.event_type, request.content).await
+                        }
                     };
                     match result {
-                        Ok(sent) => Ok(WidgetResponse::SendEvent {
-                            response: SendEventResponse { room_id: sent.room_id, event_id: sent.event_id },
-                        }),
-                        Err(e) => error(format!("Failed to send event: {e}")),
+                        Ok(event_id) => {
+                            Ok(WidgetResponse::SendEvent { response: SendEventResponse { room_id, event_id } })
+                        }
+                        Err(e) => Err(backend_error("Failed to send event", e)),
                     }
                 }
             }
@@ -343,21 +354,24 @@ impl WidgetHostDriver {
                     ))
                 } else {
                     let limit = request.limit.unwrap_or(DEFAULT_READ_LIMIT).clamp(1, MAX_READ_LIMIT);
+                    let room_id = self.backend.room_id();
                     let result = match request.state_key {
-                        Some(selector) => self.backend.read_state(request.event_type, selector).await,
-                        None => self.backend.read_events(request.event_type, limit).await,
+                        Some(selector) => self.backend.read_room_state(room_id, request.event_type, selector).await,
+                        None => self.backend.read_room_events(room_id, request.event_type, None, limit, None).await,
                     };
                     match result {
                         Ok(events) => {
                             let approved = self.lock().approved.clone();
                             let mut events: Vec<MatrixEvent> = events
                                 .into_iter()
-                                .filter(|e| approved.allows_receive(&e.event_type, e.state_key.as_deref()))
+                                .filter(|e| {
+                                    approved.allows_receive(&e.event_type, e.state_key.as_deref(), msgtype_of(e))
+                                })
                                 .collect();
                             events.truncate(limit as usize);
                             Ok(WidgetResponse::ReadEvents { response: ReadEventsResponse { events } })
                         }
-                        Err(e) => error(format!("Failed to read events: {e}")),
+                        Err(e) => Err(backend_error("Failed to read events", e)),
                     }
                 }
             }
@@ -367,8 +381,8 @@ impl WidgetHostDriver {
                 } else {
                     Ok(WidgetResponse::MatrixContext {
                         response: MatrixContextResponse {
-                            user_id: self.backend.user_id(),
-                            device_id: self.backend.device_id(),
+                            user_id: self.backend.own_user_id(),
+                            device_id: self.backend.own_device_id(),
                             room_id: self.backend.room_id(),
                             display_name: self.backend.display_name(),
                             avatar_url: self.backend.avatar_url(),
@@ -430,7 +444,7 @@ fn subjects_for(approved: &[Capability]) -> RoomSubjects {
     };
     for cap in approved {
         match cap {
-            Capability::ReceiveEvent { event_type } => push(&mut subjects.timeline_event_types, event_type),
+            Capability::ReceiveEvent { event_type, .. } => push(&mut subjects.timeline_event_types, event_type),
             Capability::ReceiveStateEvent { event_type, .. } => {
                 push(&mut subjects.timeline_event_types, event_type);
                 push(&mut subjects.state_event_types, event_type);
@@ -445,13 +459,29 @@ fn error<T>(message: String) -> Result<T, WidgetError> {
     Err(WidgetError::new(message))
 }
 
+/// The widget error for a failed backend call: `context` plus the reason as the message, and the
+/// Matrix error details (if the backend had any) as `matrix_api_error`.
+fn backend_error(context: &str, err: BackendError) -> WidgetError {
+    WidgetError::with_matrix_error(
+        format!("{context}: {}", err.reason()),
+        err.errcode().map(str::to_owned),
+        err.status(),
+        err.reason(),
+    )
+}
+
+/// The `msgtype` of a message-like event, for the `m.room.message#<msgtype>` capabilities.
+fn msgtype_of(event: &MatrixEvent) -> Option<&str> {
+    event.content.get("msgtype").and_then(|m| m.as_str())
+}
+
 #[cfg(test)]
 mod tests {
     use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
     use serde_json::{json, Value};
     use widget_actions::{ReadEventsRequest, RequestCapabilitiesRequest, SendEventRequest, Source, StateKeySelector};
-    use widget_matrix_backend::{BackendError, InMemoryBackend, JsonValue, SentEvent};
+    use widget_matrix_backend::{InMemoryBackend, JsonValue};
 
     use super::*;
 
@@ -536,11 +566,11 @@ mod tests {
         fn room_id(&self) -> String {
             self.inner.room_id()
         }
-        fn user_id(&self) -> String {
-            self.inner.user_id()
+        fn own_user_id(&self) -> String {
+            self.inner.own_user_id()
         }
-        fn device_id(&self) -> String {
-            self.inner.device_id()
+        fn own_device_id(&self) -> String {
+            self.inner.own_device_id()
         }
         fn display_name(&self) -> String {
             self.inner.display_name()
@@ -551,26 +581,40 @@ mod tests {
         fn base_url(&self) -> String {
             self.inner.base_url()
         }
-        async fn send_event(&self, event_type: String, content: JsonValue) -> Result<SentEvent, BackendError> {
-            self.inner.send_event(event_type, content).await
+        async fn send_room_event(
+            &self,
+            room_id: String,
+            event_type: String,
+            content: JsonValue,
+        ) -> Result<String, BackendError> {
+            self.inner.send_room_event(room_id, event_type, content).await
         }
         async fn send_state_event(
             &self,
+            room_id: String,
             event_type: String,
             state_key: String,
             content: JsonValue,
-        ) -> Result<SentEvent, BackendError> {
-            self.inner.send_state_event(event_type, state_key, content).await
+        ) -> Result<String, BackendError> {
+            self.inner.send_state_event(room_id, event_type, state_key, content).await
         }
-        async fn read_events(&self, event_type: String, limit: u32) -> Result<Vec<MatrixEvent>, BackendError> {
-            self.inner.read_events(event_type, limit).await
-        }
-        async fn read_state(
+        async fn read_room_events(
             &self,
+            room_id: String,
+            event_type: String,
+            msgtype: Option<String>,
+            limit: u32,
+            since: Option<String>,
+        ) -> Result<Vec<MatrixEvent>, BackendError> {
+            self.inner.read_room_events(room_id, event_type, msgtype, limit, since).await
+        }
+        async fn read_room_state(
+            &self,
+            room_id: String,
             event_type: String,
             state_key: StateKeySelector,
         ) -> Result<Vec<MatrixEvent>, BackendError> {
-            self.inner.read_state(event_type, state_key).await
+            self.inner.read_room_state(room_id, event_type, state_key).await
         }
         fn subscribe_room(
             &self,
@@ -746,7 +790,7 @@ mod tests {
         assert!(platform.drain()[0].error().is_some());
 
         // backend failure is relayed as an error response
-        backend.set_fail_sends(Some(widget_matrix_backend::BackendError::forbidden("power level")));
+        backend.set_fail_sends(Some(BackendError::forbidden("power level")));
         block(feed(
             &driver,
             WidgetRequest::SendEvent {
@@ -759,7 +803,59 @@ mod tests {
             "s4",
         ))
         .unwrap();
-        assert!(platform.drain()[0].error().unwrap().message.contains("power level"));
+        let err = platform.drain()[0].error().unwrap();
+        assert!(err.message.contains("power level"));
+        let matrix = err.matrix_api_error.unwrap();
+        assert_eq!(matrix.http_status, 403);
+        assert_eq!(matrix.response.errcode, "M_FORBIDDEN");
+        assert_eq!(matrix.response.error, "power level");
+    }
+
+    #[test]
+    fn msgtype_capabilities_narrow_sends_and_reads() {
+        let (driver, backend, platform) = setup();
+        grant(&driver, &platform, vec![Capability::send_message("m.text"), Capability::receive_message("m.text")]);
+        let send = |msgtype: &str, id: &str| {
+            block(feed(
+                &driver,
+                WidgetRequest::SendEvent {
+                    request: SendEventRequest {
+                        event_type: "m.room.message".into(),
+                        state_key: None,
+                        content: json!({"msgtype": msgtype, "body": "x"}).into(),
+                    },
+                },
+                id,
+            ))
+            .unwrap();
+        };
+        send("m.text", "t1");
+        send("m.image", "t2");
+        let sent = platform.drain();
+        // The text message is echoed through the subscription (send_event) and answered; the
+        // image is refused.
+        assert_eq!(
+            sent.iter().map(|m| m.action.as_str()).collect::<Vec<_>>(),
+            ["send_event", "send_event", "send_event"]
+        );
+        assert!(sent[1].error().is_none());
+        assert!(sent[2].error().unwrap().message.contains("m.room.message"));
+        backend.inject(event("m.room.message", None, json!({"msgtype": "m.image", "body": "pic"})));
+        assert!(platform.drain().is_empty());
+
+        block(feed(
+            &driver,
+            WidgetRequest::ReadEvents {
+                request: ReadEventsRequest { event_type: "m.room.message".into(), state_key: None, limit: None },
+            },
+            "r",
+        ))
+        .unwrap();
+        let WidgetResponse::ReadEvents { response } = WidgetResponse::from_wire(&platform.drain()[0]).unwrap() else {
+            panic!()
+        };
+        assert_eq!(response.events.len(), 1);
+        assert_eq!(response.events[0].content["msgtype"], "m.text");
     }
 
     #[test]

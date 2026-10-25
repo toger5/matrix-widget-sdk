@@ -22,8 +22,8 @@ page.
   message from the driver goes to the iframe. Both directions are shown in the **Messages** log.
 - **Capability prompt**: when the widget requests capabilities you get a checklist and an
   **Approve selected** button, or tick **auto-approve capabilities** to grant everything.
-  For legacy widgets the host calls the driver's `setAutoApproved` with `m.matrix_context` and
-  `m.client_context`, which the compat wrapper needs to template the URL (a legacy client handed
+  For legacy widgets the host calls the driver's `setAutoApproved` with the `matrix_context` and
+  `client_context` capabilities, which the compat wrapper needs to template the URL (a legacy client handed
   the same facts over as URL parameters). The driver grants those without consulting the host;
   the legacy widget's own capabilities are still prompted for, so a wrapped widget prompts once,
   like a new widget. The **Driver snapshot** lists the auto-approved set.

@@ -1,7 +1,8 @@
 //! `client_context`, widget -> host: ask for the basic facts about the embedding client.
 //!
 //! Not part of an MSC yet; needed because the new API no longer passes these as URL template
-//! parameters. Empty request body. Requires the `m.client_context` capability.
+//! parameters. Empty request body. Requires the `org.matrix.msc4412.client_context` capability
+//! (`m.client_context` once stable); see `matrix_context` for the prefix.
 //!
 //! Response:
 //!
@@ -34,7 +35,7 @@ mod tests {
     #[test]
     fn roundtrip() {
         let wire = WidgetRequest::ClientContext.into_wire("x");
-        assert_eq!(wire.action, "client_context");
+        assert_eq!(wire.action, "org.matrix.msc4412.client_context");
         assert_eq!(wire.to_value()["request"], json!({}));
         assert_eq!(WidgetRequest::from_wire(&wire).unwrap(), WidgetRequest::ClientContext);
 

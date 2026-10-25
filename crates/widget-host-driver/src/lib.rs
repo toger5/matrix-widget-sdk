@@ -28,6 +28,9 @@
 //! the web bindings (`packages/widget-host-bindings`, via uniffi-bindgen-react-native) are
 //! generated from.
 
+// See widget-actions: request handlers return the full `WidgetError`.
+#![allow(clippy::result_large_err)]
+
 mod driver;
 mod error;
 mod widget_event;

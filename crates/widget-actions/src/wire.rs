@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -172,11 +174,43 @@ impl WireMessage {
 /// An error returned instead of a regular response body.
 ///
 /// MSC4412 does not (yet) define an error shape; this uses the one established by the existing
-/// widget implementations: `{ "error": { "message": "..." } }`.
+/// widget implementations (matrix-widget-api `IWidgetApiErrorResponseData`):
+///
+/// ```json5
+/// { "error": { "message": "...", "matrix_api_error": { /* optional, see MatrixApiError */ } } }
+/// ```
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct WidgetError {
+    /// A user-friendly description.
     pub message: String,
+    /// Set when the error came from a Matrix API request the host made on the widget's behalf.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub matrix_api_error: Option<MatrixApiError>,
+}
+
+/// The Matrix API failure behind a [`WidgetError`], as matrix-widget-api defines it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+pub struct MatrixApiError {
+    /// HTTP status of the failed request; `0` when unknown.
+    pub http_status: u16,
+    /// Response headers relevant to the error (e.g. `Retry-After`).
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub http_headers: HashMap<String, String>,
+    /// URL of the failed request; empty when unknown.
+    #[serde(default)]
+    pub url: String,
+    /// The standard Matrix error response.
+    pub response: MatrixErrorResponse,
+}
+
+/// A [standard error response](https://spec.matrix.org/latest/client-server-api/#standard-error-response).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+pub struct MatrixErrorResponse {
+    pub errcode: String,
+    pub error: String,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -186,7 +220,33 @@ struct ErrorEnvelope {
 
 impl WidgetError {
     pub fn new(message: impl Into<String>) -> Self {
-        Self { message: message.into() }
+        Self { message: message.into(), matrix_api_error: None }
+    }
+
+    /// An error caused by a Matrix API failure. `errcode` / `status` may be unknown; when both
+    /// are, this is the same as [`new`](Self::new).
+    pub fn with_matrix_error(
+        message: impl Into<String>,
+        errcode: Option<String>,
+        status: Option<u16>,
+        error: impl Into<String>,
+    ) -> Self {
+        let message = message.into();
+        if errcode.is_none() && status.is_none() {
+            return Self::new(message);
+        }
+        Self {
+            message,
+            matrix_api_error: Some(MatrixApiError {
+                http_status: status.unwrap_or(0),
+                http_headers: HashMap::new(),
+                url: String::new(),
+                response: MatrixErrorResponse {
+                    errcode: errcode.unwrap_or_else(|| "M_UNKNOWN".to_owned()),
+                    error: error.into(),
+                },
+            }),
+        }
     }
 
     pub fn into_response_body(self) -> Value {
@@ -255,6 +315,17 @@ mod tests {
         let res = req.error_response_to(WidgetError::new("nope"));
         assert_eq!(res.error(), Some(WidgetError::new("nope")));
         assert_eq!(res.to_value()["response"]["error"]["message"], "nope");
+        assert!(res.to_value()["response"]["error"].get("matrix_api_error").is_none());
         assert!(req.error().is_none());
+
+        let matrix =
+            WidgetError::with_matrix_error("Failed to send", Some("M_FORBIDDEN".into()), Some(403), "no power");
+        let res = req.error_response_to(matrix.clone());
+        assert_eq!(res.error(), Some(matrix));
+        let body = res.to_value()["response"]["error"].clone();
+        assert_eq!(body["matrix_api_error"]["http_status"], 403);
+        assert_eq!(body["matrix_api_error"]["response"]["errcode"], "M_FORBIDDEN");
+        assert!(body["matrix_api_error"].get("http_headers").is_none());
+        assert_eq!(WidgetError::with_matrix_error("x", None, None, "y"), WidgetError::new("x"));
     }
 }

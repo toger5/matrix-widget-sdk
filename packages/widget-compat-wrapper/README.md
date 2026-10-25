@@ -41,8 +41,9 @@ gone, delete it and the wrapper. The host keeps no template engine at all.
 
 ### Bootstrap: templating the legacy URL
 
-Before the inner iframe exists the wrapper sends `request_capabilities` for `m.matrix_context`
-and `m.client_context`, waits for the host's `notify_capabilities`, requests both contexts and
+Before the inner iframe exists the wrapper sends `request_capabilities` for
+`org.matrix.msc4412.matrix_context` and `org.matrix.msc4412.client_context`, waits for the host's
+`notify_capabilities`, requests both contexts and
 renders the URL:
 
 | variable | source |
@@ -73,8 +74,9 @@ grant the context capabilities without prompting.
 | `requestId` | unchanged, so responses correlate without extra state |
 | `response.error.message` | unchanged |
 
-Action names: `org.matrix.msc2974.request_capabilities` ↔ `request_capabilities`,
-`org.matrix.msc2876.read_events` ↔ `read_events`. Everything else passes through unchanged, so an
+Action names: `org.matrix.msc2974.request_capabilities` ↔ `request_capabilities`. Everything else
+passes through unchanged (the host emits and accepts the unstable MSC spellings such as
+`org.matrix.msc2876.read_events` itself, see `docs/parity.md`), so an
 action the host does not implement is answered by the host's own error response, which is
 forwarded to the widget as is.
 

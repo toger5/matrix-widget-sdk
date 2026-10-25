@@ -14,6 +14,10 @@
 //! Everything is plain data so it can be shared with other languages through UniFFI
 //! (enable the `uniffi` feature) and compiled to WebAssembly.
 
+// `ActionError` carries a full `WidgetError` (message plus Matrix error details); every parse
+// result would have to box it to satisfy this lint, for no gain on the hot path (there is none).
+#![allow(clippy::result_large_err)]
+
 pub mod actions;
 mod capabilities;
 mod error;
@@ -35,7 +39,7 @@ pub use capabilities::{Capability, CapabilitySet};
 pub use error::ActionError;
 pub use json::JsonValue;
 pub use matrix::{matrix_event_from_json, matrix_event_to_json, MatrixEvent, StateKeySelector};
-pub use wire::{MessageKind, Source, WidgetError, WireMessage, API_VERSION_V1};
+pub use wire::{MatrixApiError, MatrixErrorResponse, MessageKind, Source, WidgetError, WireMessage, API_VERSION_V1};
 
 #[cfg(feature = "uniffi")]
 uniffi::setup_scaffolding!();

@@ -2,7 +2,8 @@
 //!
 //! Not part of an MSC yet; needed because the new API no longer passes these as URL template
 //! parameters (`$matrix_user_id`, `$matrix_room_id`, ...). Empty request body. Requires the
-//! `m.matrix_context` capability.
+//! `org.matrix.msc4412.matrix_context` capability (`m.matrix_context` once stable). Both the
+//! action and the capability carry the MSC4412 prefix until they get an MSC of their own.
 //!
 //! Response:
 //!
@@ -33,14 +34,16 @@ mod tests {
     use serde_json::json;
 
     use super::*;
-    use crate::{WidgetRequest, WidgetResponse};
+    use crate::{Source, WidgetRequest, WidgetResponse, WireMessage};
 
     #[test]
     fn roundtrip() {
         let wire = WidgetRequest::MatrixContext.into_wire("x");
-        assert_eq!(wire.action, "matrix_context");
+        assert_eq!(wire.action, "org.matrix.msc4412.matrix_context");
         assert_eq!(wire.to_value()["request"], json!({}));
         assert_eq!(WidgetRequest::from_wire(&wire).unwrap(), WidgetRequest::MatrixContext);
+        let plain = WireMessage::request(Source::Widget, "matrix_context", "x", json!({}));
+        assert_eq!(WidgetRequest::from_wire(&plain).unwrap(), WidgetRequest::MatrixContext);
 
         let response = wire.response_to(json!({
             "user_id": "@user:test.org", "device_id": "DEVICEID", "room_id": "!room:test.org",

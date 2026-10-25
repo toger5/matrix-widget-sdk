@@ -44,9 +44,10 @@ mod tests {
 
     #[test]
     fn state_key_selector() {
+        // The legacy / unstable spelling and the plain one are both accepted.
         let wire = WireMessage::request(
             Source::Widget,
-            "read_events",
+            "org.matrix.msc2876.read_events",
             "r",
             json!({"type": "m.room.member", "state_key": true, "limit": 5}),
         );
@@ -78,6 +79,7 @@ mod tests {
             request: ReadEventsRequest { event_type: "m.room.message".into(), state_key: None, limit: Some(1) },
         };
         let wire = req.into_wire("r");
+        assert_eq!(wire.action, "org.matrix.msc2876.read_events");
         let res = wire.response_to(json!({"events": [test_event()]}));
         assert_eq!(
             WidgetResponse::from_wire(&res).unwrap(),

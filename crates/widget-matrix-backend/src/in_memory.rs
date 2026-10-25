@@ -3,8 +3,7 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard};
 
 use crate::{
-    BackendError, JsonValue, MatrixBackend, MatrixEvent, RoomSink, RoomSubjects, SentEvent, StateKeySelector,
-    Subscription,
+    BackendError, JsonValue, MatrixBackend, MatrixEvent, RoomSink, RoomSubjects, StateKeySelector, Subscription,
 };
 
 /// A [`MatrixBackend`] backed by plain vectors. Intended for tests and prototypes.
@@ -124,7 +123,7 @@ impl InMemoryBackend {
     /// Make every subsequent send from the widget fail with `message`, or succeed again when
     /// `None`. Foreign-friendly form of [`set_fail_sends`](Self::set_fail_sends).
     pub fn fail_sends(&self, message: Option<String>) {
-        self.set_fail_sends(message.map(BackendError::other));
+        self.set_fail_sends(message.map(BackendError::new));
     }
 
     /// Store an event as if it had arrived from sync and notify subscribers. Returns the stored
@@ -150,6 +149,15 @@ impl InMemoryBackend {
 
     fn inner(&self) -> MutexGuard<'_, Inner> {
         self.inner.lock().unwrap_or_else(|p| p.into_inner())
+    }
+
+    /// Every method takes a `room_id` for symmetry with multi-room backends; this one serves
+    /// exactly one room.
+    fn check_room(&self, room_id: &str) -> Result<(), BackendError> {
+        if room_id != self.room_id {
+            return Err(BackendError::not_found(format!("this backend serves {}, not {room_id}", self.room_id)));
+        }
+        Ok(())
     }
 
     /// Snapshot of the subscriptions that are still active; cancelled ones are dropped here.
@@ -190,7 +198,8 @@ impl InMemoryBackend {
         }
     }
 
-    fn send(&self, event: MatrixEvent) -> Result<SentEvent, BackendError> {
+    /// Store and announce `event`; returns its event id.
+    fn send(&self, event: MatrixEvent) -> Result<String, BackendError> {
         {
             let mut inner = self.inner();
             if let Some(err) = &inner.fail_sends {
@@ -199,7 +208,7 @@ impl InMemoryBackend {
             inner.store(event.clone());
         }
         self.notify(&event);
-        Ok(SentEvent { room_id: event.room_id, event_id: event.event_id })
+        Ok(event.event_id)
     }
 }
 
@@ -219,11 +228,11 @@ impl MatrixBackend for InMemoryBackend {
         self.room_id.clone()
     }
 
-    fn user_id(&self) -> String {
+    fn own_user_id(&self) -> String {
         self.user_id.clone()
     }
 
-    fn device_id(&self) -> String {
+    fn own_device_id(&self) -> String {
         self.device_id.clone()
     }
 
@@ -239,26 +248,44 @@ impl MatrixBackend for InMemoryBackend {
         self.base_url.clone()
     }
 
-    async fn send_event(&self, event_type: String, content: JsonValue) -> Result<SentEvent, BackendError> {
+    async fn send_room_event(
+        &self,
+        room_id: String,
+        event_type: String,
+        content: JsonValue,
+    ) -> Result<String, BackendError> {
+        self.check_room(&room_id)?;
         self.send(self.next_event(event_type, None, content))
     }
 
     async fn send_state_event(
         &self,
+        room_id: String,
         event_type: String,
         state_key: String,
         content: JsonValue,
-    ) -> Result<SentEvent, BackendError> {
+    ) -> Result<String, BackendError> {
+        self.check_room(&room_id)?;
         self.send(self.next_event(event_type, Some(state_key), content))
     }
 
-    async fn read_events(&self, event_type: String, limit: u32) -> Result<Vec<MatrixEvent>, BackendError> {
+    /// `since` is ignored: this store has no pagination tokens.
+    async fn read_room_events(
+        &self,
+        room_id: String,
+        event_type: String,
+        msgtype: Option<String>,
+        limit: u32,
+        _since: Option<String>,
+    ) -> Result<Vec<MatrixEvent>, BackendError> {
+        self.check_room(&room_id)?;
         let inner = self.inner();
         let mut events: Vec<MatrixEvent> = inner
             .timeline
             .iter()
             .rev()
             .filter(|e| e.event_type == event_type && e.state_key.is_none())
+            .filter(|e| msgtype.as_deref().is_none_or(|m| e.content.get("msgtype").and_then(|v| v.as_str()) == Some(m)))
             .take(limit as usize)
             .cloned()
             .collect();
@@ -266,11 +293,13 @@ impl MatrixBackend for InMemoryBackend {
         Ok(events)
     }
 
-    async fn read_state(
+    async fn read_room_state(
         &self,
+        room_id: String,
         event_type: String,
         state_key: StateKeySelector,
     ) -> Result<Vec<MatrixEvent>, BackendError> {
+        self.check_room(&room_id)?;
         let inner = self.inner();
         Ok(inner
             .state
@@ -286,9 +315,7 @@ impl MatrixBackend for InMemoryBackend {
         subjects: RoomSubjects,
         sink: Arc<dyn RoomSink>,
     ) -> Result<Arc<dyn Subscription>, BackendError> {
-        if room_id != self.room_id {
-            return Err(BackendError::not_found(format!("this backend serves {}, not {room_id}", self.room_id)));
-        }
+        self.check_room(&room_id)?;
         let subscription = Arc::new(InMemorySubscription { subjects, sink, active: AtomicBool::new(true) });
         self.subscriptions.lock().unwrap_or_else(|p| p.into_inner()).push(subscription.clone());
         // Initial sets, delivered with no lock held.
@@ -303,6 +330,8 @@ impl MatrixBackend for InMemoryBackend {
 mod tests {
     use super::*;
     use serde_json::json;
+
+    const ROOM: &str = "!r:x";
 
     /// Records every sink call as `(kind, event type, events)`.
     #[derive(Default)]
@@ -330,7 +359,7 @@ mod tests {
             event_type: event_type.into(),
             sender: "@other:x".into(),
             event_id: format!("${body}"),
-            room_id: "!r:x".into(),
+            room_id: ROOM.into(),
             origin_server_ts: 7,
             state_key: state_key.map(Into::into),
             content: json!({ "body": body }).into(),
@@ -345,49 +374,72 @@ mod tests {
         }
     }
 
+    fn room() -> String {
+        ROOM.into()
+    }
+
     #[test]
     fn send_and_read() {
         futures::executor::block_on(async {
-            let b = InMemoryBackend::new("!r:x".into(), "@me:x".into());
-            let sent = b.send_event("m.room.message".into(), json!({"body": "1"}).into()).await.unwrap();
-            assert_eq!(sent.room_id, "!r:x");
-            b.send_event("m.room.message".into(), json!({"body": "2"}).into()).await.unwrap();
-            b.send_event("m.other".into(), json!({}).into()).await.unwrap();
-            b.send_state_event("m.room.topic".into(), "".into(), json!({"topic": "a"}).into()).await.unwrap();
-            b.send_state_event("m.room.topic".into(), "".into(), json!({"topic": "b"}).into()).await.unwrap();
-            b.send_state_event("m.room.member".into(), "@me:x".into(), json!({}).into()).await.unwrap();
+            let b = InMemoryBackend::new(room(), "@me:x".into());
+            let id = b.send_room_event(room(), "m.room.message".into(), json!({"body": "1"}).into()).await.unwrap();
+            assert_eq!(id, "$event1");
+            b.send_room_event(room(), "m.room.message".into(), json!({"body": "2", "msgtype": "m.text"}).into())
+                .await
+                .unwrap();
+            b.send_room_event(room(), "m.other".into(), json!({}).into()).await.unwrap();
+            b.send_state_event(room(), "m.room.topic".into(), "".into(), json!({"topic": "a"}).into()).await.unwrap();
+            b.send_state_event(room(), "m.room.topic".into(), "".into(), json!({"topic": "b"}).into()).await.unwrap();
+            b.send_state_event(room(), "m.room.member".into(), "@me:x".into(), json!({}).into()).await.unwrap();
 
-            let msgs = b.read_events("m.room.message".into(), 1).await.unwrap();
+            let msgs = b.read_room_events(room(), "m.room.message".into(), None, 1, None).await.unwrap();
             assert_eq!(msgs.len(), 1);
             assert_eq!(msgs[0].content["body"], "2");
-            assert_eq!(b.read_events("m.room.message".into(), 10).await.unwrap().len(), 2);
+            assert_eq!(b.read_room_events(room(), "m.room.message".into(), None, 10, None).await.unwrap().len(), 2);
+            // msgtype narrows
+            let text =
+                b.read_room_events(room(), "m.room.message".into(), Some("m.text".into()), 10, None).await.unwrap();
+            assert_eq!(text.len(), 1);
+            assert!(b
+                .read_room_events(room(), "m.room.message".into(), Some("m.image".into()), 10, None)
+                .await
+                .unwrap()
+                .is_empty());
 
-            let topic = b.read_state("m.room.topic".into(), StateKeySelector::Any).await.unwrap();
+            let topic = b.read_room_state(room(), "m.room.topic".into(), StateKeySelector::Any).await.unwrap();
             assert_eq!(topic.len(), 1);
             assert_eq!(topic[0].content["topic"], "b");
-            assert!(b.read_state("m.room.member".into(), StateKeySelector::key("@x:x")).await.unwrap().is_empty());
-            assert_eq!(b.read_state("m.room.member".into(), StateKeySelector::key("@me:x")).await.unwrap().len(), 1);
+            assert!(b
+                .read_room_state(room(), "m.room.member".into(), StateKeySelector::key("@x:x"))
+                .await
+                .unwrap()
+                .is_empty());
+            assert_eq!(
+                b.read_room_state(room(), "m.room.member".into(), StateKeySelector::key("@me:x")).await.unwrap().len(),
+                1
+            );
 
             b.set_fail_sends(Some(BackendError::forbidden("no")));
-            assert_eq!(
-                b.send_event("m.x".into(), json!({}).into()).await,
-                Err(BackendError::Forbidden { message: "no".into() })
-            );
+            let err = b.send_room_event(room(), "m.x".into(), json!({}).into()).await.unwrap_err();
+            assert_eq!(err.errcode(), Some("M_FORBIDDEN"));
+            assert_eq!(err.status(), Some(403));
+            assert_eq!(err.reason(), "no");
+
+            // Any other room is refused everywhere.
+            let other = "!other:x".to_string();
+            assert!(b.send_room_event(other.clone(), "m.x".into(), json!({}).into()).await.is_err());
+            assert!(b.read_room_events(other, "m.x".into(), None, 1, None).await.is_err());
         });
     }
 
     #[test]
     fn subscription_emits_initial_sets_then_changes() {
         futures::executor::block_on(async {
-            let b = InMemoryBackend::new("!r:x".into(), "@me:x".into());
+            let b = InMemoryBackend::new(room(), "@me:x".into());
             b.inject(event("m.room.topic", Some(""), "old topic"));
             let sink = Arc::new(RecordingSink::default());
             let _sub = b
-                .subscribe_room(
-                    "!r:x".into(),
-                    subjects(&["m.room.message"], &["m.room.topic", "m.room.name"]),
-                    sink.clone(),
-                )
+                .subscribe_room(room(), subjects(&["m.room.message"], &["m.room.topic", "m.room.name"]), sink.clone())
                 .unwrap();
 
             // One call per requested state type, in order, the missing one empty.
@@ -410,7 +462,9 @@ mod tests {
             assert!(sink.drain().is_empty());
 
             // Own state send: state set of that type (topic is not a timeline subject here).
-            b.send_state_event("m.room.topic".into(), "".into(), json!({"body": "new topic"}).into()).await.unwrap();
+            b.send_state_event(room(), "m.room.topic".into(), "".into(), json!({"body": "new topic"}).into())
+                .await
+                .unwrap();
             let calls = sink.drain();
             assert_eq!(calls.len(), 1);
             assert_eq!(calls[0].0, "state");
@@ -419,8 +473,7 @@ mod tests {
 
             // A type that is both a timeline and a state subject gets both.
             let sink2 = Arc::new(RecordingSink::default());
-            let _sub2 =
-                b.subscribe_room("!r:x".into(), subjects(&["m.room.name"], &["m.room.name"]), sink2.clone()).unwrap();
+            let _sub2 = b.subscribe_room(room(), subjects(&["m.room.name"], &["m.room.name"]), sink2.clone()).unwrap();
             sink2.drain();
             b.inject(event("m.room.name", Some(""), "name"));
             let calls = sink2.drain();
@@ -433,9 +486,9 @@ mod tests {
 
     #[test]
     fn cancel_stops_delivery_and_is_idempotent() {
-        let b = InMemoryBackend::new("!r:x".into(), "@me:x".into());
+        let b = InMemoryBackend::new(room(), "@me:x".into());
         let sink = Arc::new(RecordingSink::default());
-        let sub = b.subscribe_room("!r:x".into(), subjects(&["m.room.message"], &[]), sink.clone()).unwrap();
+        let sub = b.subscribe_room(room(), subjects(&["m.room.message"], &[]), sink.clone()).unwrap();
         b.inject(event("m.room.message", None, "1"));
         assert_eq!(sink.drain().len(), 1);
         sub.cancel();
@@ -447,11 +500,10 @@ mod tests {
 
     #[test]
     fn clear_emits_empty_sets() {
-        let b = InMemoryBackend::new("!r:x".into(), "@me:x".into());
+        let b = InMemoryBackend::new(room(), "@me:x".into());
         b.inject(event("m.room.topic", Some(""), "t"));
         let sink = Arc::new(RecordingSink::default());
-        let _sub =
-            b.subscribe_room("!r:x".into(), subjects(&["m.room.message"], &["m.room.topic"]), sink.clone()).unwrap();
+        let _sub = b.subscribe_room(room(), subjects(&["m.room.message"], &["m.room.topic"]), sink.clone()).unwrap();
         sink.drain();
         b.clear();
         assert_eq!(sink.drain(), vec![("state", "m.room.topic".into(), vec![])]);
@@ -461,11 +513,9 @@ mod tests {
 
     #[test]
     fn other_room_is_not_found() {
-        let b = InMemoryBackend::new("!r:x".into(), "@me:x".into());
+        let b = InMemoryBackend::new(room(), "@me:x".into());
         let sink = Arc::new(RecordingSink::default());
-        assert!(matches!(
-            b.subscribe_room("!other:x".into(), RoomSubjects::default(), sink),
-            Err(BackendError::NotFound { .. })
-        ));
+        let err = b.subscribe_room("!other:x".into(), RoomSubjects::default(), sink).err().unwrap();
+        assert_eq!(err.errcode(), Some("M_NOT_FOUND"));
     }
 }

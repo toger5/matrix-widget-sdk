@@ -25,8 +25,8 @@ to the console once on load, so headless runs can read it.
 
 New (`/new/`): `request_capabilities`, `content_loaded`, send `m.room.message`, send state
 `m.room.topic`, read `m.room.message`, read state `m.room.topic`, `matrix_context`,
-`client_context` (the default capability list includes `m.matrix_context` and
-`m.client_context`). Incoming `send_event`,
+`client_context` (the default capability list includes `org.matrix.msc4412.matrix_context` and
+`org.matrix.msc4412.client_context`). Incoming `send_event`,
 `update_state` and `notify_capabilities` are logged and the state panel shows the SDK's state.
 
 ## URL parameters

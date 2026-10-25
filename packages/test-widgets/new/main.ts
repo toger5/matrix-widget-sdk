@@ -16,7 +16,7 @@ api.onCapabilitiesChanged((requested: string[], approved: string[]) => (log("not
 
 const content = () => ({ msgtype: "m.text", body: valueOf("body") });
 mount("MSC4412 test widget (widget-base-sdk)", [
-  input("caps", `${DEFAULT_CAPABILITIES},m.matrix_context,m.client_context`, "capabilities"),
+  input("caps", `${DEFAULT_CAPABILITIES},org.matrix.msc4412.matrix_context,org.matrix.msc4412.client_context`, "capabilities"),
   button("request_capabilities", () => api.requestCapabilities(capabilityList()).finally(refresh)),
   button("content_loaded", () => api.contentLoaded().finally(refresh)),
   input("body", "hello from the new widget", "message body"),

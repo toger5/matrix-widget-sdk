@@ -44,7 +44,7 @@ function boot(s: S, contexts: { matrix?: unknown; client?: unknown } = { matrix:
   s.bridge.onHostMessage(fromHost("notify_capabilities", "n1", { requested: CONTEXT_CAPABILITIES, approved: CONTEXT_CAPABILITIES }));
   const [ack, matrix, client] = s.take(s.toHost);
   expect(ack).toEqual({ source: "host", version: "v1", requestId: "n1", action: "notify_capabilities", response: {} });
-  expect([matrix.action, client.action]).toEqual(["matrix_context", "client_context"]);
+  expect([matrix.action, client.action]).toEqual(["org.matrix.msc4412.matrix_context", "org.matrix.msc4412.client_context"]);
   expect(s.loaded).toEqual([]);
   s.bridge.onHostMessage(hostResponse(matrix, contexts.matrix ?? { error: { message: "denied" } }));
   s.bridge.onHostMessage(hostResponse(client, contexts.client ?? { error: { message: "denied" } }));
@@ -153,9 +153,9 @@ describe("steady state forwarding", () => {
   it("forwards widget requests with renamed actions and echoes the host response", () => {
     s.bridge.onWidgetMessage(fromWidget("org.matrix.msc2876.read_events", "r1", { type: "m.room.message", limit: 2 }));
     expect(s.take(s.toHost)).toEqual([
-      { source: "widget", version: "v1", requestId: "r1", action: "read_events", request: { type: "m.room.message", limit: 2 } },
+      { source: "widget", version: "v1", requestId: "r1", action: "org.matrix.msc2876.read_events", request: { type: "m.room.message", limit: 2 } },
     ]);
-    s.bridge.onHostMessage({ source: "widget", version: "v1", requestId: "r1", action: "read_events", response: { events: [] } });
+    s.bridge.onHostMessage({ source: "widget", version: "v1", requestId: "r1", action: "org.matrix.msc2876.read_events", response: { events: [] } });
     expect(s.take(s.toWidget)).toEqual([
       { api: "fromWidget", widgetId: "w", requestId: "r1", action: "org.matrix.msc2876.read_events", data: { type: "m.room.message", limit: 2 }, response: { events: [] } },
     ]);

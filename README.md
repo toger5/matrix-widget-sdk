@@ -71,10 +71,10 @@ Actions implemented here:
 | `notify_capabilities` | host | `{ requested, approved }` after the user decided | – |
 | `send_event` | widget | send a timeline/state event | `send.event:<type>` / `send.state_event:<type>[#<key>]` |
 | `send_event` | host | an event from sync (the driver's backend subscription) | `receive.event:<type>` / `receive.state_event:<type>[#<key>]` |
-| `read_events` | widget | read timeline (`limit`) or state (`state_key`: string or `true`) | `receive.*` |
+| `org.matrix.msc2876.read_events` | widget | read timeline (`limit`) or state (`state_key`: string or `true`) | `receive.*` |
 | `update_state` | host | `{ state: [...] }` the current permitted state, on approval and after changes | `receive.state_event:*` |
-| `matrix_context` | widget | `{ user_id, device_id, room_id, display_name, avatar_url, matrix_base_url }`, replaces the legacy URL template parameters | `m.matrix_context` |
-| `client_context` | widget | `{ client_id?, client_theme?, client_language? }` about the embedding client | `m.client_context` |
+| `org.matrix.msc4412.matrix_context` | widget | `{ user_id, device_id, room_id, display_name, avatar_url, matrix_base_url }`, replaces the legacy URL template parameters | `org.matrix.msc4412.matrix_context` |
+| `org.matrix.msc4412.client_context` | widget | `{ client_id?, client_theme?, client_language? }` about the embedding client | `org.matrix.msc4412.client_context` |
 
 Capability strings are parsed with both the stable `m.` and the unstable `org.matrix.msc2762.`
 prefix and emitted with the unstable one (what deployed hosts understand). MSC4412 spells the
@@ -104,7 +104,7 @@ await api.requestCapabilities([
 await api.contentLoaded();                          // host removes its spinner
 const { event_id } = await api.sendEvent("m.room.message", { msgtype: "m.text", body: "hi" });
 const history = await api.readEvents("m.room.message", 20);
-const { user_id, room_id } = await api.getMatrixContext();   // needs m.matrix_context
+const { user_id, room_id } = await api.getMatrixContext();   // needs org.matrix.msc4412.matrix_context
 ```
 
 `new WidgetApi(sendToHost)` + `api.handleMessageFromHost(event.data)` is available when you want
