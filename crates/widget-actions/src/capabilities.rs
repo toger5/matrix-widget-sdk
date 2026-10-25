@@ -18,6 +18,7 @@ const MSC4515_PREFIX: &str = "org.matrix.msc4515.";
 const MSC3973_PREFIX: &str = "org.matrix.msc3973.";
 const MSC4039_PREFIX: &str = "org.matrix.msc4039.";
 const MSC2931_PREFIX: &str = "org.matrix.msc2931.";
+const MSC4533_PREFIX: &str = "org.matrix.msc4533.";
 /// `matrix_context` / `client_context` are not in an MSC yet; they replace the URL templating
 /// MSC4412 removes, so they live under its prefix until they get their own.
 const MSC4412_PREFIX: &str = "org.matrix.msc4412.";
@@ -34,6 +35,7 @@ const ALL_PREFIXES: &[&str] = &[
     MSC3973_PREFIX,
     MSC4039_PREFIX,
     MSC2931_PREFIX,
+    MSC4533_PREFIX,
     MSC4412_PREFIX,
     STABLE_PREFIX,
 ];
@@ -57,6 +59,8 @@ const USER_DIRECTORY_SEARCH: &str = "user_directory_search";
 const UPLOAD_FILE: &str = "upload_file";
 const DOWNLOAD_FILE: &str = "download_file";
 const NAVIGATE: &str = "navigate";
+const RTC_LIVEKIT_GET_TOKEN: &str = "rtc_livekit_get_token";
+const RTC_LIVEKIT_DELEGATE_DELAYED_LEAVE: &str = "rtc_livekit_delegate_delayed_leave";
 const STICKER: &str = "sticker";
 const ALWAYS_ON_SCREEN: &str = "always_on_screen";
 const SCREENSHOT: &str = "capability.screenshot";
@@ -139,6 +143,10 @@ pub enum Capability {
     DownloadFile,
     /// May ask the client to navigate to a `matrix.to` URI (MSC2931).
     Navigate,
+    /// May obtain LiveKit tokens through the client (MSC4533).
+    RtcLivekitGetToken,
+    /// May hand delayed leave events to the client's LiveKit service (MSC4533).
+    RtcLivekitDelegateDelayedLeave,
     /// May send stickers (`m.sticker`).
     Sticker,
     /// May ask to stay on screen (`m.always_on_screen`).
@@ -254,6 +262,8 @@ impl Capability {
             UPLOAD_FILE => Self::UploadFile,
             DOWNLOAD_FILE => Self::DownloadFile,
             NAVIGATE => Self::Navigate,
+            RTC_LIVEKIT_GET_TOKEN => Self::RtcLivekitGetToken,
+            RTC_LIVEKIT_DELEGATE_DELAYED_LEAVE => Self::RtcLivekitDelegateDelayedLeave,
             STICKER => Self::Sticker,
             ALWAYS_ON_SCREEN => Self::AlwaysOnScreen,
             SCREENSHOT => Self::Screenshot,
@@ -291,6 +301,8 @@ impl Capability {
             Capability::UploadFile => UPLOAD_FILE.to_owned(),
             Capability::DownloadFile => DOWNLOAD_FILE.to_owned(),
             Capability::Navigate => NAVIGATE.to_owned(),
+            Capability::RtcLivekitGetToken => RTC_LIVEKIT_GET_TOKEN.to_owned(),
+            Capability::RtcLivekitDelegateDelayedLeave => RTC_LIVEKIT_DELEGATE_DELAYED_LEAVE.to_owned(),
             Capability::Sticker => STICKER.to_owned(),
             Capability::AlwaysOnScreen => ALWAYS_ON_SCREEN.to_owned(),
             Capability::Screenshot => SCREENSHOT.to_owned(),
@@ -318,6 +330,7 @@ impl Capability {
             Capability::UserDirectorySearch => MSC3973_PREFIX,
             Capability::UploadFile | Capability::DownloadFile => MSC4039_PREFIX,
             Capability::Navigate => MSC2931_PREFIX,
+            Capability::RtcLivekitGetToken | Capability::RtcLivekitDelegateDelayedLeave => MSC4533_PREFIX,
             Capability::ClientContext | Capability::MatrixContext => MSC4412_PREFIX,
             Capability::Sticker | Capability::AlwaysOnScreen | Capability::Screenshot | Capability::Other { .. } => {
                 STABLE_PREFIX
@@ -529,6 +542,8 @@ mod tests {
             ("org.matrix.msc4039.upload_file", Capability::UploadFile),
             ("org.matrix.msc4039.download_file", Capability::DownloadFile),
             ("org.matrix.msc2931.navigate", Capability::Navigate),
+            ("org.matrix.msc4533.rtc_livekit_get_token", Capability::RtcLivekitGetToken),
+            ("org.matrix.msc4533.rtc_livekit_delegate_delayed_leave", Capability::RtcLivekitDelegateDelayedLeave),
             ("m.sticker", Capability::Sticker),
             ("m.always_on_screen", Capability::AlwaysOnScreen),
             ("m.capability.screenshot", Capability::Screenshot),

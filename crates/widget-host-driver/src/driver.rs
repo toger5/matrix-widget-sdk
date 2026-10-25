@@ -4,12 +4,13 @@ use std::sync::{Arc, Mutex, MutexGuard, Weak};
 use widget_actions::{
     Action, ActionError, Capability, CapabilitySet, ClientContextResponse, GetOpenIdResponse, HostRequest,
     MatrixContextResponse, MatrixEvent, MessageKind, NotifyCapabilitiesRequest, OpenIdCredentialsRequest,
-    ReadEventsRequest, ReadEventsResponse, ReadRelationsRequest, ReadRelationsResponse, RoomSelector, SendEventRequest,
-    SendEventResponse, SendToDeviceRequest, ToDeviceEvent, UpdateDelayedEventAction, UpdateStateRequest, WidgetError,
-    WidgetRequest, WidgetResponse, WireMessage, API_VERSION_V1,
+    ReadEventsRequest, ReadEventsResponse, ReadRelationsRequest, ReadRelationsResponse, ReadRoomAccountDataRequest,
+    ReadRoomAccountDataResponse, RoomSelector, RtcLivekitGetTokenResponse, RtcTransportsResponse, SendEventRequest,
+    SendEventResponse, SendToDeviceRequest, ToDeviceEvent, TurnServer, UpdateDelayedEventAction, UpdateStateRequest,
+    WidgetError, WidgetRequest, WidgetResponse, WireMessage, API_VERSION_V1,
 };
 use widget_matrix_backend::{
-    BackendError, MatrixBackend, RoomSink, RoomSubjects, Subscription, ToDeviceMessage, ToDeviceSink,
+    BackendError, MatrixBackend, RoomSink, RoomSubjects, Subscription, ToDeviceMessage, ToDeviceSink, TurnServerSink,
 };
 
 use crate::DriverError;
@@ -100,6 +101,8 @@ pub struct WidgetHostDriver {
     subscription: Mutex<Option<Arc<dyn Subscription>>>,
     /// The backend subscription matching the approved `receive.to_device:*` capabilities.
     to_device_subscription: Mutex<Option<Arc<dyn Subscription>>>,
+    /// The TURN credentials subscription while the widget is watching them (MSC3846).
+    turn_subscription: Mutex<Option<Arc<dyn Subscription>>>,
     /// For handing a (weak) reference to the sink the backend calls back on.
     this: Weak<WidgetHostDriver>,
 }
@@ -130,6 +133,14 @@ impl ToDeviceSink for DriverSink {
     }
 }
 
+impl TurnServerSink for DriverSink {
+    fn on_turn_server(&self, server: TurnServer) {
+        if let Some(driver) = self.0.upgrade() {
+            driver.send_request(HostRequest::UpdateTurnServers { server });
+        }
+    }
+}
+
 #[cfg_attr(feature = "uniffi", uniffi::export)]
 impl WidgetHostDriver {
     /// Create a driver for one widget. `backend` must be bound to the room the widget lives in.
@@ -141,6 +152,7 @@ impl WidgetHostDriver {
             state: Mutex::new(State::default()),
             subscription: Mutex::new(None),
             to_device_subscription: Mutex::new(None),
+            turn_subscription: Mutex::new(None),
             this: this.clone(),
         })
     }
@@ -279,6 +291,10 @@ impl WidgetHostDriver {
 
     fn take_to_device_subscription(&self) -> Option<Arc<dyn Subscription>> {
         self.to_device_subscription.lock().unwrap_or_else(|p| p.into_inner()).take()
+    }
+
+    fn take_turn_subscription(&self) -> Option<Arc<dyn Subscription>> {
+        self.turn_subscription.lock().unwrap_or_else(|p| p.into_inner()).take()
     }
 
     /// Replace the backend subscription with one matching the approved capabilities. The
@@ -428,6 +444,114 @@ impl WidgetHostDriver {
                 }
             }
             WidgetRequest::SendToDevice { request } => self.send_to_device(request).await,
+            WidgetRequest::WatchTurnServers => {
+                if !self.lock().approved.has(&Capability::TurnServers) {
+                    error(format!("Missing capability for {}", Capability::TurnServers))
+                } else if self.turn_subscription.lock().unwrap_or_else(|p| p.into_inner()).is_some() {
+                    Ok(WidgetResponse::WatchTurnServers)
+                } else {
+                    let Some(this) = self.this.upgrade() else {
+                        return Ok(());
+                    };
+                    let sink: Arc<dyn TurnServerSink> = Arc::new(DriverSink(Arc::downgrade(&this)));
+                    // The backend may deliver the current credentials from inside the call; the
+                    // ack goes out first so the widget sees it in the legacy order.
+                    self.send(&msg.ack());
+                    // A refused subscription: nothing to tell the widget beyond "no credentials
+                    // arrive".
+                    if let Ok(subscription) = self.backend.subscribe_turn_servers(sink) {
+                        *self.turn_subscription.lock().unwrap_or_else(|p| p.into_inner()) = Some(subscription);
+                    }
+                    return Ok(());
+                }
+            }
+            WidgetRequest::UnwatchTurnServers => {
+                if !self.lock().approved.has(&Capability::TurnServers) {
+                    error(format!("Missing capability for {}", Capability::TurnServers))
+                } else {
+                    if let Some(subscription) = self.take_turn_subscription() {
+                        subscription.cancel();
+                    }
+                    Ok(WidgetResponse::UnwatchTurnServers)
+                }
+            }
+            WidgetRequest::GetRtcTransports => {
+                if !self.lock().approved.has(&Capability::RtcTransports) {
+                    error(format!("Missing capability for {}", Capability::RtcTransports))
+                } else {
+                    match self.backend.rtc_transports().await {
+                        Ok(value) => match value.into_inner() {
+                            serde_json::Value::Array(items) => Ok(WidgetResponse::GetRtcTransports {
+                                response: RtcTransportsResponse {
+                                    rtc_transports: items.into_iter().map(Into::into).collect(),
+                                },
+                            }),
+                            serde_json::Value::Null => {
+                                Ok(WidgetResponse::GetRtcTransports { response: RtcTransportsResponse::default() })
+                            }
+                            other => error(format!("The backend returned no transport list: {other}")),
+                        },
+                        Err(e) => Err(backend_error("Failed to get the RTC transports", e)),
+                    }
+                }
+            }
+            WidgetRequest::UserDirectorySearch { request } => {
+                if !self.lock().approved.has(&Capability::UserDirectorySearch) {
+                    error(format!("Missing capability for {}", Capability::UserDirectorySearch))
+                } else {
+                    self.backend
+                        .search_user_directory(request.search_term, request.limit)
+                        .await
+                        .map(|response| WidgetResponse::UserDirectorySearch { response })
+                        .map_err(|e| backend_error("Failed to search the user directory", e))
+                }
+            }
+            WidgetRequest::GetMediaConfig => {
+                if !self.lock().approved.has(&Capability::UploadFile) {
+                    error(format!("Missing capability for {}", Capability::UploadFile))
+                } else {
+                    self.backend
+                        .media_config()
+                        .await
+                        .map(|response| WidgetResponse::GetMediaConfig { response })
+                        .map_err(|e| backend_error("Failed to get the media config", e))
+                }
+            }
+            WidgetRequest::ReadRoomAccountData { request } => self.read_room_account_data(request).await,
+            WidgetRequest::RtcLivekitGetToken { request } => {
+                if !self.lock().approved.has(&Capability::RtcLivekitGetToken) {
+                    error(format!("Missing capability for {}", Capability::RtcLivekitGetToken))
+                } else {
+                    self.backend
+                        .rtc_livekit_get_token(
+                            request.server_name,
+                            request.url,
+                            request.room_id,
+                            request.slot_id,
+                            request.member_id,
+                        )
+                        .await
+                        .map(|jwt| WidgetResponse::RtcLivekitGetToken { response: RtcLivekitGetTokenResponse { jwt } })
+                        .map_err(|e| backend_error("Failed to get a LiveKit token", e))
+                }
+            }
+            WidgetRequest::RtcLivekitDelegateDelayedLeave { request } => {
+                if !self.lock().approved.has(&Capability::RtcLivekitDelegateDelayedLeave) {
+                    error(format!("Missing capability for {}", Capability::RtcLivekitDelegateDelayedLeave))
+                } else {
+                    self.backend
+                        .rtc_livekit_delegate_delayed_leave(
+                            request.url,
+                            request.room_id,
+                            request.slot_id,
+                            request.member_id,
+                            request.delay_id,
+                        )
+                        .await
+                        .map(|_| WidgetResponse::RtcLivekitDelegateDelayedLeave)
+                        .map_err(|e| backend_error("Failed to delegate the delayed leave", e))
+                }
+            }
             WidgetRequest::ReadEvents { request } => self.read_events(request).await,
             WidgetRequest::ReadRelations { request } => self.read_relations(request).await,
             WidgetRequest::MatrixContext => {
@@ -563,6 +687,38 @@ impl WidgetHostDriver {
         Ok(WidgetResponse::ReadEvents { response: ReadEventsResponse { events } })
     }
 
+    /// `read_room_account_data` from the widget: the room rules of `read_events`, then the
+    /// per-type capability.
+    async fn read_room_account_data(&self, request: ReadRoomAccountDataRequest) -> Result<WidgetResponse, WidgetError> {
+        let approved = self.lock().approved.clone();
+        let own = self.backend.room_id();
+        let may_read_own = approved.has(&Capability::timeline(&own)) || approved.has(&Capability::timeline("*"));
+        match &request.room_ids {
+            None => {}
+            // `*` means every room the widget may read; here that is at most the own room.
+            Some(RoomSelector::Any) if !may_read_own => {
+                return Ok(WidgetResponse::ReadRoomAccountData { response: ReadRoomAccountDataResponse::default() });
+            }
+            Some(RoomSelector::Any) => {}
+            Some(RoomSelector::Rooms { room_ids }) => {
+                for room_id in room_ids {
+                    self.check_explicit_room(&approved, room_id)?;
+                }
+            }
+        }
+        if !approved.allows_receive_room_account_data(&request.event_type) {
+            return error(format!(
+                "Cannot read room account data of this type (missing capability {})",
+                Capability::receive_room_account_data(&request.event_type)
+            ));
+        }
+        self.backend
+            .read_room_account_data(own, request.event_type)
+            .await
+            .map(|events| WidgetResponse::ReadRoomAccountData { response: ReadRoomAccountDataResponse { events } })
+            .map_err(|e| backend_error("Failed to read room account data", e))
+    }
+
     /// `read_relations` from the widget: no capability of its own, the page is filtered to what
     /// the widget may receive (as matrix-widget-api does).
     async fn read_relations(&self, request: ReadRelationsRequest) -> Result<WidgetResponse, WidgetError> {
@@ -658,6 +814,9 @@ impl Drop for WidgetHostDriver {
             subscription.cancel();
         }
         if let Some(subscription) = self.take_to_device_subscription() {
+            subscription.cancel();
+        }
+        if let Some(subscription) = self.take_turn_subscription() {
             subscription.cancel();
         }
     }
@@ -920,6 +1079,49 @@ mod tests {
         }
         async fn openid_token(&self) -> Result<widget_matrix_backend::OpenIdToken, BackendError> {
             self.inner.openid_token().await
+        }
+        async fn rtc_transports(&self) -> Result<JsonValue, BackendError> {
+            self.inner.rtc_transports().await
+        }
+        async fn search_user_directory(
+            &self,
+            search_term: String,
+            limit: Option<u32>,
+        ) -> Result<widget_matrix_backend::UserDirectorySearchResult, BackendError> {
+            self.inner.search_user_directory(search_term, limit).await
+        }
+        async fn media_config(&self) -> Result<widget_matrix_backend::MediaConfig, BackendError> {
+            self.inner.media_config().await
+        }
+        async fn read_room_account_data(
+            &self,
+            room_id: String,
+            event_type: String,
+        ) -> Result<Vec<widget_matrix_backend::RoomAccountData>, BackendError> {
+            self.inner.read_room_account_data(room_id, event_type).await
+        }
+        async fn rtc_livekit_get_token(
+            &self,
+            server_name: String,
+            url: String,
+            room_id: String,
+            slot_id: String,
+            member_id: String,
+        ) -> Result<String, BackendError> {
+            self.inner.rtc_livekit_get_token(server_name, url, room_id, slot_id, member_id).await
+        }
+        async fn rtc_livekit_delegate_delayed_leave(
+            &self,
+            url: String,
+            room_id: String,
+            slot_id: String,
+            member_id: String,
+            delay_id: String,
+        ) -> Result<(), BackendError> {
+            self.inner.rtc_livekit_delegate_delayed_leave(url, room_id, slot_id, member_id, delay_id).await
+        }
+        fn subscribe_turn_servers(&self, sink: Arc<dyn TurnServerSink>) -> Result<Arc<dyn Subscription>, BackendError> {
+            self.inner.subscribe_turn_servers(sink)
         }
         async fn send_to_device_message(
             &self,
@@ -1502,6 +1704,122 @@ mod tests {
         assert!(response.token().unwrap().access_token.starts_with("openid-token-"));
         assert_eq!(platform.openid_requests.load(Ordering::SeqCst), 3);
         let _ = backend;
+    }
+
+    #[test]
+    fn turn_servers() {
+        let (driver, backend, platform) = setup();
+        let turn = |u: &str| TurnServer { uris: vec!["turn:x".into()], username: u.into(), password: "p".into() };
+        backend.set_turn_server(turn("first"));
+        block(feed(&driver, WidgetRequest::WatchTurnServers, "w0")).unwrap();
+        assert!(platform.drain()[0].error().unwrap().message.contains("turn_servers"));
+
+        grant(&driver, &platform, vec![Capability::TurnServers]);
+        block(feed(&driver, WidgetRequest::WatchTurnServers, "w1")).unwrap();
+        let sent = platform.drain();
+        // The ack, then the current credentials.
+        assert_eq!(sent.len(), 2);
+        assert_eq!(WidgetResponse::from_wire(&sent[0]).unwrap(), WidgetResponse::WatchTurnServers);
+        assert_eq!(HostRequest::from_wire(&sent[1]).unwrap(), HostRequest::UpdateTurnServers { server: turn("first") });
+        // Watching twice is a plain ack.
+        block(feed(&driver, WidgetRequest::WatchTurnServers, "w2")).unwrap();
+        assert_eq!(platform.drain().len(), 1);
+        backend.set_turn_server(turn("second"));
+        assert_eq!(platform.drain()[0].request_body()["username"], "second");
+
+        block(feed(&driver, WidgetRequest::UnwatchTurnServers, "u1")).unwrap();
+        assert_eq!(WidgetResponse::from_wire(&platform.drain()[0]).unwrap(), WidgetResponse::UnwatchTurnServers);
+        backend.set_turn_server(turn("third"));
+        assert!(platform.drain().is_empty());
+    }
+
+    #[test]
+    fn read_style_actions_need_their_capabilities() {
+        let (driver, backend, platform) = setup();
+        backend.set_rtc_transports(json!([{"type": "livekit"}]).into());
+        backend.set_room_account_data("m.tag".into(), json!({"tags": {}}).into());
+        backend.inject(event("m.room.member", Some("@alice:x"), json!({"membership": "join"})));
+        let requests = |id: &str| {
+            vec![
+                (WidgetRequest::GetRtcTransports, format!("{id}-rtc")),
+                (
+                    WidgetRequest::UserDirectorySearch {
+                        request: widget_actions::UserDirectorySearchRequest { search_term: "ali".into(), limit: None },
+                    },
+                    format!("{id}-dir"),
+                ),
+                (WidgetRequest::GetMediaConfig, format!("{id}-media")),
+                (
+                    WidgetRequest::ReadRoomAccountData {
+                        request: ReadRoomAccountDataRequest { event_type: "m.tag".into(), room_ids: None },
+                    },
+                    format!("{id}-acc"),
+                ),
+                (
+                    WidgetRequest::RtcLivekitGetToken {
+                        request: widget_actions::RtcLivekitGetTokenRequest {
+                            server_name: "x".into(),
+                            url: "u".into(),
+                            room_id: "!room:x".into(),
+                            slot_id: "s".into(),
+                            member_id: "m".into(),
+                        },
+                    },
+                    format!("{id}-lk"),
+                ),
+            ]
+        };
+        for (request, id) in requests("a") {
+            block(feed(&driver, request, &id)).unwrap();
+        }
+        let sent = platform.drain();
+        assert_eq!(sent.len(), 5);
+        assert!(sent.iter().all(|m| m.error().is_some()));
+
+        grant(
+            &driver,
+            &platform,
+            vec![
+                Capability::RtcTransports,
+                Capability::UserDirectorySearch,
+                Capability::UploadFile,
+                Capability::receive_room_account_data("m.tag"),
+                Capability::RtcLivekitGetToken,
+            ],
+        );
+        for (request, id) in requests("b") {
+            block(feed(&driver, request, &id)).unwrap();
+        }
+        let sent = platform.drain();
+        let responses: Vec<WidgetResponse> = sent.iter().map(|m| WidgetResponse::from_wire(m).unwrap()).collect();
+        assert_eq!(
+            responses[0],
+            WidgetResponse::GetRtcTransports {
+                response: RtcTransportsResponse { rtc_transports: vec![json!({"type": "livekit"}).into()] }
+            }
+        );
+        let WidgetResponse::UserDirectorySearch { response } = &responses[1] else { panic!() };
+        assert_eq!(response.results[0].user_id, "@alice:x");
+        assert!(matches!(&responses[2], WidgetResponse::GetMediaConfig { response } if response.upload_size.is_some()));
+        let WidgetResponse::ReadRoomAccountData { response } = &responses[3] else { panic!() };
+        assert_eq!(response.events[0].event_type, "m.tag");
+        assert_eq!(
+            responses[4],
+            WidgetResponse::RtcLivekitGetToken {
+                response: RtcLivekitGetTokenResponse { jwt: "livekit-jwt-s-m".into() }
+            }
+        );
+
+        // Account data of another type is still refused.
+        block(feed(
+            &driver,
+            WidgetRequest::ReadRoomAccountData {
+                request: ReadRoomAccountDataRequest { event_type: "m.other".into(), room_ids: None },
+            },
+            "c",
+        ))
+        .unwrap();
+        assert!(platform.drain()[0].error().is_some());
     }
 
     #[test]

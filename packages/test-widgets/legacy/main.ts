@@ -8,6 +8,7 @@ import { WidgetApi, type IWidgetApiRequest } from "matrix-widget-api";
 import {
   DEFAULT_CAPABILITIES,
   DELAYED_CAPABILITIES,
+  EXTRA_CAPABILITIES,
   RELATION_CAPABILITIES,
   TO_DEVICE_CAPABILITIES,
   TO_DEVICE_MESSAGES,
@@ -42,7 +43,7 @@ api.on("action:notify_capabilities", (ev: CustomEvent<IWidgetApiRequest>) => {
   state.approved = (ev.detail.data as { approved: string[] }).approved;
   refresh();
 });
-for (const action of ["send_event", "update_state", "send_to_device"]) {
+for (const action of ["send_event", "update_state", "send_to_device", "update_turn_servers"]) {
   api.on(`action:${action}`, (ev: CustomEvent<IWidgetApiRequest>) => {
     ev.preventDefault();
     api.transport.reply(ev.detail, {});
@@ -50,7 +51,11 @@ for (const action of ["send_event", "update_state", "send_to_device"]) {
 }
 
 mount("Legacy test widget (matrix-widget-api)", [
-  input("caps", `${DEFAULT_CAPABILITIES},${DELAYED_CAPABILITIES},${RELATION_CAPABILITIES},${TO_DEVICE_CAPABILITIES}`, "capabilities"),
+  input(
+    "caps",
+    `${DEFAULT_CAPABILITIES},${DELAYED_CAPABILITIES},${RELATION_CAPABILITIES},${TO_DEVICE_CAPABILITIES},${EXTRA_CAPABILITIES}`,
+    "capabilities",
+  ),
   button("start (requests capabilities above)", () => {
     api.requestCapabilities(capabilityList());
     api.start();
@@ -76,6 +81,16 @@ mount("Legacy test widget (matrix-widget-api)", [
   button("read m.room.message (limit 10)", () => api.readRoomEvents("m.room.message", 10)),
   button("read state m.room.topic", () => api.readStateEvents("m.room.topic", undefined, "")),
   button("get_openid", () => api.requestOpenIDConnectToken()),
+  button("watch_turn_servers (logs the first)", async () => {
+    for await (const server of api.getTurnServers()) return server;
+  }),
+  button("get_rtc_transports", () => api.getRtcTransports()),
+  button("user_directory_search 'ali'", () => api.searchUserDirectory("ali", 10)),
+  button("get_media_config", () => api.getMediaConfig()),
+  button("read_room_account_data m.tag", () => api.readRoomAccountData("m.tag")),
+  button("rtc_livekit_get_token", () =>
+    api.getRtcLivekitToken({ server_name: "example.org", url: "https://livekit.example.org", room_id: "!room:example.org", slot_id: "slot", member_id: "member" }),
+  ),
   button("custom action org.example.custom", () => api.transport.send("org.example.custom" as never, { hello: "world" })),
 ]);
 refresh();

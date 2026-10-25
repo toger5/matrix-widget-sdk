@@ -79,6 +79,14 @@ Actions implemented here:
 | `send_to_device` | host | `{ type, sender, content, encrypted }` from the backend's to-device subscription | `org.matrix.msc3819.receive.to_device:<type>` |
 | `get_openid` | widget | `{}` → `{ state: allowed \| blocked \| request, ...token }`; `request` means the user is being asked (`WidgetHostPlatform::on_openid_requested`, then `driver.resolve_openid`) | none (user consent) |
 | `openid_credentials` | host | `{ state, original_request_id, ...token }` after the user decided | – |
+| `watch_turn_servers` / `unwatch_turn_servers` | widget | start / stop `update_turn_servers` pushes | `town.robin.msc3846.turn_servers` |
+| `update_turn_servers` | host | `{ uris, username, password }` from the backend's TURN subscription | `town.robin.msc3846.turn_servers` |
+| `org.matrix.msc4515.get_rtc_transports` | widget | `{}` → `{ rtc_transports: [...] }` | `org.matrix.msc4515.rtc_transports` |
+| `org.matrix.msc3973.user_directory_search` | widget | `{ search_term, limit? }` → `{ limited, results }` | `org.matrix.msc3973.user_directory_search` |
+| `org.matrix.msc4039.get_media_config` | widget | `{}` → `{ "m.upload.size"? }` | `org.matrix.msc4039.upload_file` |
+| `com.beeper.read_room_account_data` | widget | `{ type, room_ids? }` → `{ events }` | `com.beeper.capabilities.receive.room_account_data:<type>` |
+| `org.matrix.msc4533.rtc_livekit_get_token` | widget | `{ server_name, url, room_id, slot_id, member_id }` → `{ jwt }` | `org.matrix.msc4533.rtc_livekit_get_token` |
+| `org.matrix.msc4533.rtc_livekit_delegate_delayed_leave` | widget | `{ url, room_id, slot_id, member_id, delay_id }` → `{}` | `org.matrix.msc4533.rtc_livekit_delegate_delayed_leave` |
 | `org.matrix.msc4412.matrix_context` | widget | `{ user_id, device_id, room_id, display_name, avatar_url, matrix_base_url }`, replaces the legacy URL template parameters | `org.matrix.msc4412.matrix_context` |
 | `org.matrix.msc4412.client_context` | widget | `{ client_id?, client_theme?, client_language? }` about the embedding client | `org.matrix.msc4412.client_context` |
 

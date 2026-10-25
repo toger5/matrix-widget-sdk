@@ -20,21 +20,30 @@ use serde::{Deserialize, Serialize};
 
 use super::{expect, parse_tagged, split_tagged};
 use crate::{
-    ActionError, ClientContextResponse, GetOpenIdResponse, MatrixContextResponse, ReadEventsRequest,
-    ReadEventsResponse, ReadRelationsRequest, ReadRelationsResponse, RequestCapabilitiesRequest, SendEventRequest,
-    SendEventResponse, SendToDeviceRequest, Source, UpdateDelayedEventRequest, WireMessage,
+    ActionError, ClientContextResponse, GetOpenIdResponse, MatrixContextResponse, MediaConfigResponse,
+    ReadEventsRequest, ReadEventsResponse, ReadRelationsRequest, ReadRelationsResponse, ReadRoomAccountDataRequest,
+    ReadRoomAccountDataResponse, RequestCapabilitiesRequest, RtcLivekitDelegateDelayedLeaveRequest,
+    RtcLivekitGetTokenRequest, RtcLivekitGetTokenResponse, RtcTransportsResponse, SendEventRequest, SendEventResponse,
+    SendToDeviceRequest, Source, UpdateDelayedEventRequest, UserDirectorySearchRequest, UserDirectorySearchResponse,
+    WireMessage,
 };
 
 pub(crate) mod client_context;
 pub(crate) mod content_loaded;
+pub(crate) mod get_media_config;
 pub(crate) mod get_openid;
+pub(crate) mod get_rtc_transports;
 pub(crate) mod matrix_context;
 pub(crate) mod read_events;
 pub(crate) mod read_relations;
+pub(crate) mod read_room_account_data;
 pub(crate) mod request_capabilities;
+pub(crate) mod rtc_livekit;
 pub(crate) mod send_event;
 pub(crate) mod send_to_device;
+pub(crate) mod turn_servers;
 pub(crate) mod update_delayed_event;
+pub(crate) mod user_directory_search;
 
 /// A request sent by the widget (`source: widget`, has `request`).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -65,6 +74,34 @@ pub enum WidgetRequest {
     /// Ask for an OpenID token (MSC1960). No capability; the user may be asked.
     #[serde(rename = "get_openid")]
     GetOpenId,
+    /// Start receiving TURN credentials (`update_turn_servers`). Requires `town.robin.msc3846.turn_servers`.
+    #[serde(rename = "watch_turn_servers")]
+    WatchTurnServers,
+    /// Stop receiving TURN credentials.
+    #[serde(rename = "unwatch_turn_servers")]
+    UnwatchTurnServers,
+    /// The homeserver's MatrixRTC transports. Requires `org.matrix.msc4515.rtc_transports`.
+    #[serde(rename = "org.matrix.msc4515.get_rtc_transports", alias = "get_rtc_transports")]
+    GetRtcTransports,
+    /// Search the user directory. Requires `org.matrix.msc3973.user_directory_search`.
+    #[serde(rename = "org.matrix.msc3973.user_directory_search", alias = "user_directory_search")]
+    UserDirectorySearch { request: UserDirectorySearchRequest },
+    /// The homeserver's media config. Requires `org.matrix.msc4039.upload_file`.
+    #[serde(rename = "org.matrix.msc4039.get_media_config", alias = "get_media_config")]
+    GetMediaConfig,
+    /// Read room account data. Requires `com.beeper.capabilities.receive.room_account_data:<type>`.
+    #[serde(rename = "com.beeper.read_room_account_data", alias = "read_room_account_data")]
+    ReadRoomAccountData { request: ReadRoomAccountDataRequest },
+    /// A LiveKit token for a MatrixRTC session. Requires `org.matrix.msc4533.rtc_livekit_get_token`.
+    #[serde(rename = "org.matrix.msc4533.rtc_livekit_get_token", alias = "rtc_livekit_get_token")]
+    RtcLivekitGetToken { request: RtcLivekitGetTokenRequest },
+    /// Hand a delayed leave over to the LiveKit service. Requires
+    /// `org.matrix.msc4533.rtc_livekit_delegate_delayed_leave`.
+    #[serde(
+        rename = "org.matrix.msc4533.rtc_livekit_delegate_delayed_leave",
+        alias = "rtc_livekit_delegate_delayed_leave"
+    )]
+    RtcLivekitDelegateDelayedLeave { request: RtcLivekitDelegateDelayedLeaveRequest },
     /// Who and where the widget is on Matrix. Requires `m.matrix_context`.
     #[serde(rename = "org.matrix.msc4412.matrix_context", alias = "matrix_context")]
     MatrixContext,
@@ -102,6 +139,28 @@ pub enum WidgetResponse {
     UpdateDelayedEvent,
     #[serde(rename = "get_openid")]
     GetOpenId { response: GetOpenIdResponse },
+    /// `{}`
+    #[serde(rename = "watch_turn_servers")]
+    WatchTurnServers,
+    /// `{}`
+    #[serde(rename = "unwatch_turn_servers")]
+    UnwatchTurnServers,
+    #[serde(rename = "org.matrix.msc4515.get_rtc_transports", alias = "get_rtc_transports")]
+    GetRtcTransports { response: RtcTransportsResponse },
+    #[serde(rename = "org.matrix.msc3973.user_directory_search", alias = "user_directory_search")]
+    UserDirectorySearch { response: UserDirectorySearchResponse },
+    #[serde(rename = "org.matrix.msc4039.get_media_config", alias = "get_media_config")]
+    GetMediaConfig { response: MediaConfigResponse },
+    #[serde(rename = "com.beeper.read_room_account_data", alias = "read_room_account_data")]
+    ReadRoomAccountData { response: ReadRoomAccountDataResponse },
+    #[serde(rename = "org.matrix.msc4533.rtc_livekit_get_token", alias = "rtc_livekit_get_token")]
+    RtcLivekitGetToken { response: RtcLivekitGetTokenResponse },
+    /// `{}`
+    #[serde(
+        rename = "org.matrix.msc4533.rtc_livekit_delegate_delayed_leave",
+        alias = "rtc_livekit_delegate_delayed_leave"
+    )]
+    RtcLivekitDelegateDelayedLeave,
     #[serde(rename = "org.matrix.msc4412.matrix_context", alias = "matrix_context")]
     MatrixContext { response: MatrixContextResponse },
     #[serde(rename = "org.matrix.msc4412.client_context", alias = "client_context")]

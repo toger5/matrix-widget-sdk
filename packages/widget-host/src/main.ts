@@ -217,6 +217,20 @@ $("injectToDeviceBtn").onclick = () => {
   refresh();
 };
 $("clear").onclick = () => (backend?.clear(), refresh());
+let turnCounter = 0;
+$("pushTurn").onclick = () => {
+  turnCounter += 1;
+  backend?.setTurnServer({ uris: ["turn:turn.example.org:3478?transport=udp"], username: `user${turnCounter}`, password: "secret" });
+  log("info", `TURN credentials #${turnCounter} pushed; watching widgets receive update_turn_servers`);
+};
+$("setAccountData").onclick = () => {
+  backend?.setRoomAccountData("m.tag", { tags: { "u.widgets": { order: 0.5 } } });
+  log("info", "room account data m.tag set");
+};
+$("setTransports").onclick = () => {
+  backend?.setRtcTransports([{ type: "livekit", livekit_service_url: "https://livekit.example.org" }]);
+  log("info", "rtc transports set");
+};
 $("fireDelayed").onclick = () => {
   const next = backend?.delayedEvents()[0];
   if (!next) return log("info", "no delayed event scheduled");

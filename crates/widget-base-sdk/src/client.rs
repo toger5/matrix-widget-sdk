@@ -9,9 +9,11 @@ use serde_json::Value;
 // TODO consider splitting those into widget_actions::widget and widget_actions::host so that they are more explicit here.
 use widget_actions::{
     ActionError, Capability, ClientContextResponse, HostRequest, JsonValue, MatrixContextResponse, MatrixEvent,
-    MessageKind, OpenIdCredentialsRequest, OpenIdState, OpenIdToken, ReadEventsRequest, ReadRelationsRequest,
-    ReadRelationsResponse, RequestCapabilitiesRequest, SendEventRequest, SendEventResponse, SendToDeviceRequest,
-    StateKeySelector, ToDeviceEvent, UpdateDelayedEventAction, UpdateDelayedEventRequest, WidgetError, WidgetRequest,
+    MediaConfigResponse, MessageKind, OpenIdCredentialsRequest, OpenIdState, OpenIdToken, ReadEventsRequest,
+    ReadRelationsRequest, ReadRelationsResponse, ReadRoomAccountDataRequest, RequestCapabilitiesRequest,
+    RoomAccountData, RtcLivekitDelegateDelayedLeaveRequest, RtcLivekitGetTokenRequest, SendEventRequest,
+    SendEventResponse, SendToDeviceRequest, StateKeySelector, ToDeviceEvent, TurnServer, UpdateDelayedEventAction,
+    UpdateDelayedEventRequest, UserDirectorySearchRequest, UserDirectorySearchResponse, WidgetError, WidgetRequest,
     WidgetResponse, WireMessage, API_VERSION_V1,
 };
 
@@ -33,6 +35,9 @@ pub trait WidgetDelegate {
 
     /// A to-device message the host forwarded to this widget (`send_to_device` from the host).
     fn on_to_device_message(&self, _message: ToDeviceEvent) {}
+
+    /// New TURN credentials while watching them (`update_turn_servers`).
+    fn on_turn_server(&self, _server: TurnServer) {}
 
     /// A capability negotiation finished. `approved` is the complete set now held.
     fn on_capabilities_changed(&self, _requested: Vec<Capability>, _approved: Vec<Capability>) {}
@@ -326,6 +331,117 @@ impl WidgetClient {
         }
     }
 
+    /// Start receiving TURN credentials through [`WidgetDelegate::on_turn_server`] (MSC3846).
+    /// Needs `town.robin.msc3846.turn_servers`.
+    pub fn watch_turn_servers(&self) -> impl Future<Output = Result<(), WidgetClientError>> + 'static {
+        self.unit_request(WidgetRequest::WatchTurnServers, "watch_turn_servers")
+    }
+
+    /// Stop receiving TURN credentials.
+    pub fn unwatch_turn_servers(&self) -> impl Future<Output = Result<(), WidgetClientError>> + 'static {
+        self.unit_request(WidgetRequest::UnwatchTurnServers, "unwatch_turn_servers")
+    }
+
+    /// The homeserver's MatrixRTC transports (MSC4515), each `{ "type": ..., ... }`. Needs
+    /// `org.matrix.msc4515.rtc_transports`.
+    pub fn get_rtc_transports(&self) -> impl Future<Output = Result<Vec<Value>, WidgetClientError>> + 'static {
+        let fut = self.request(WidgetRequest::GetRtcTransports);
+        async move {
+            match fut.await? {
+                WidgetResponse::GetRtcTransports { response } => {
+                    Ok(response.rtc_transports.into_iter().map(JsonValue::into_inner).collect())
+                }
+                _ => Err(WidgetClientError::UnexpectedResponse { action: "get_rtc_transports".into() }),
+            }
+        }
+    }
+
+    /// Search the user directory (MSC3973). Needs `org.matrix.msc3973.user_directory_search`.
+    pub fn search_user_directory(
+        &self,
+        search_term: impl Into<String>,
+        limit: Option<u32>,
+    ) -> impl Future<Output = Result<UserDirectorySearchResponse, WidgetClientError>> + 'static {
+        let fut = self.request(WidgetRequest::UserDirectorySearch {
+            request: UserDirectorySearchRequest { search_term: search_term.into(), limit },
+        });
+        async move {
+            match fut.await? {
+                WidgetResponse::UserDirectorySearch { response } => Ok(response),
+                _ => Err(WidgetClientError::UnexpectedResponse { action: "user_directory_search".into() }),
+            }
+        }
+    }
+
+    /// The homeserver's media config (MSC4039). Needs `org.matrix.msc4039.upload_file`.
+    pub fn get_media_config(&self) -> impl Future<Output = Result<MediaConfigResponse, WidgetClientError>> + 'static {
+        let fut = self.request(WidgetRequest::GetMediaConfig);
+        async move {
+            match fut.await? {
+                WidgetResponse::GetMediaConfig { response } => Ok(response),
+                _ => Err(WidgetClientError::UnexpectedResponse { action: "get_media_config".into() }),
+            }
+        }
+    }
+
+    /// Read room account data of `event_type`. Needs
+    /// `com.beeper.capabilities.receive.room_account_data:<type>`.
+    pub fn read_room_account_data(
+        &self,
+        event_type: impl Into<String>,
+    ) -> impl Future<Output = Result<Vec<RoomAccountData>, WidgetClientError>> + 'static {
+        let fut = self.request(WidgetRequest::ReadRoomAccountData {
+            request: ReadRoomAccountDataRequest { event_type: event_type.into(), room_ids: None },
+        });
+        async move {
+            match fut.await? {
+                WidgetResponse::ReadRoomAccountData { response } => Ok(response.events),
+                _ => Err(WidgetClientError::UnexpectedResponse { action: "read_room_account_data".into() }),
+            }
+        }
+    }
+
+    /// A LiveKit JWT from the client (MSC4533). Needs `org.matrix.msc4533.rtc_livekit_get_token`.
+    pub fn rtc_livekit_get_token(
+        &self,
+        request: RtcLivekitGetTokenRequest,
+    ) -> impl Future<Output = Result<String, WidgetClientError>> + 'static {
+        let fut = self.request(WidgetRequest::RtcLivekitGetToken { request });
+        async move {
+            match fut.await? {
+                WidgetResponse::RtcLivekitGetToken { response } => Ok(response.jwt),
+                _ => Err(WidgetClientError::UnexpectedResponse { action: "rtc_livekit_get_token".into() }),
+            }
+        }
+    }
+
+    /// Hand a delayed leave to the client's LiveKit service (MSC4533). Needs
+    /// `org.matrix.msc4533.rtc_livekit_delegate_delayed_leave`.
+    pub fn rtc_livekit_delegate_delayed_leave(
+        &self,
+        request: RtcLivekitDelegateDelayedLeaveRequest,
+    ) -> impl Future<Output = Result<(), WidgetClientError>> + 'static {
+        self.unit_request(
+            WidgetRequest::RtcLivekitDelegateDelayedLeave { request },
+            "rtc_livekit_delegate_delayed_leave",
+        )
+    }
+
+    /// A request whose success response is `{}`.
+    fn unit_request(
+        &self,
+        request: WidgetRequest,
+        action: &'static str,
+    ) -> impl Future<Output = Result<(), WidgetClientError>> + 'static {
+        let fut = self.request(request);
+        async move {
+            match fut.await? {
+                WidgetResponse::Unknown => Err(WidgetClientError::UnexpectedResponse { action: action.into() }),
+                _ => Ok(()),
+            }
+        }
+    }
+
     /// Read the events relating to `request.event_id` (MSC3869). The host filters the page by
     /// the `receive.*` capabilities.
     pub fn read_relations(
@@ -425,6 +541,10 @@ impl WidgetClient {
             HostRequest::SendToDevice { message } => {
                 self.send(msg.ack());
                 self.delegate.on_to_device_message(message);
+            }
+            HostRequest::UpdateTurnServers { server } => {
+                self.send(msg.ack());
+                self.delegate.on_turn_server(server);
             }
             HostRequest::OpenIdCredentials { request } => {
                 self.send(msg.ack());

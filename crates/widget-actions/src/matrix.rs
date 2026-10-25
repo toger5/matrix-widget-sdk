@@ -66,6 +66,25 @@ pub struct ToDeviceEvent {
     pub encrypted: bool,
 }
 
+/// TURN server credentials (MSC3846 `update_turn_servers`), the shape of `GET /voip/turnServer`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+pub struct TurnServer {
+    pub uris: Vec<String>,
+    pub username: String,
+    pub password: String,
+}
+
+/// One room account data event (`com.beeper.read_room_account_data`).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+pub struct RoomAccountData {
+    #[serde(rename = "type")]
+    pub event_type: String,
+    pub room_id: String,
+    pub content: JsonValue,
+}
+
 /// A Matrix OpenID token (MSC1960), as returned by
 /// `POST /_matrix/client/v3/user/{userId}/openid/request_token`. Same shape as matrix-rust-rtc's.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

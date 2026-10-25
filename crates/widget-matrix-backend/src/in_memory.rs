@@ -3,8 +3,9 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard};
 
 use crate::{
-    BackendError, JsonValue, MatrixBackend, MatrixEvent, OpenIdToken, RelationDirection, RelationsChunk, RoomSink,
-    RoomSubjects, StateKeySelector, Subscription, ToDeviceDelivery, ToDeviceEvent, ToDeviceMessage, ToDeviceSink,
+    BackendError, JsonValue, MatrixBackend, MatrixEvent, MediaConfig, OpenIdToken, RelationDirection, RelationsChunk,
+    RoomAccountData, RoomSink, RoomSubjects, StateKeySelector, Subscription, ToDeviceDelivery, ToDeviceEvent,
+    ToDeviceMessage, ToDeviceSink, TurnServer, TurnServerSink, UserDirectorySearchResult, UserDirectoryUser,
 };
 
 /// A [`MatrixBackend`] backed by plain vectors. Intended for tests and prototypes.
@@ -26,6 +27,37 @@ pub struct InMemoryBackend {
     inner: Mutex<Inner>,
     subscriptions: Mutex<Vec<Arc<InMemorySubscription>>>,
     to_device_subscriptions: Mutex<Vec<Arc<InMemoryToDeviceSubscription>>>,
+    turn_subscriptions: Mutex<Vec<Arc<InMemoryTurnSubscription>>>,
+}
+
+/// One live `subscribe_turn_servers` call.
+#[derive(Debug)]
+struct InMemoryTurnSubscription {
+    sink: Arc<dyn TurnServerSink>,
+    active: AtomicBool,
+}
+
+impl std::fmt::Debug for dyn TurnServerSink {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("TurnServerSink")
+    }
+}
+
+impl Subscription for InMemoryTurnSubscription {
+    fn cancel(&self) {
+        self.active.store(false, Ordering::SeqCst);
+    }
+}
+
+/// A delayed leave handed to a (pretend) LiveKit service (MSC4533), for inspection.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+pub struct DelegatedDelayedLeave {
+    pub url: String,
+    pub room_id: String,
+    pub slot_id: String,
+    pub member_id: String,
+    pub delay_id: String,
 }
 
 /// A to-device message "sent" through [`InMemoryBackend`], for inspection.
@@ -49,6 +81,14 @@ struct Inner {
     delayed: BTreeMap<String, DelayedEvent>,
     /// To-device messages sent so far, oldest first.
     to_device_sent: Vec<SentToDeviceMessage>,
+    /// The current TURN credentials, if the test host set any.
+    turn_server: Option<TurnServer>,
+    /// What `rtc_transports` answers.
+    rtc_transports: JsonValue,
+    /// Room account data by event type.
+    room_account_data: BTreeMap<String, JsonValue>,
+    /// Delayed leaves delegated through `rtc_livekit_delegate_delayed_leave`.
+    delegated_leaves: Vec<DelegatedDelayedLeave>,
     /// When set, every send fails with this error. Handy for tests.
     fail_sends: Option<BackendError>,
 }
@@ -146,6 +186,7 @@ impl InMemoryBackend {
             inner: Default::default(),
             subscriptions: Default::default(),
             to_device_subscriptions: Default::default(),
+            turn_subscriptions: Default::default(),
         })
     }
 
@@ -167,6 +208,34 @@ impl InMemoryBackend {
     /// To-device messages sent through this backend, oldest first (one entry per recipient).
     pub fn to_device_sent(&self) -> Vec<SentToDeviceMessage> {
         self.inner().to_device_sent.clone()
+    }
+
+    /// Set the TURN credentials and push them to every widget watching them.
+    pub fn set_turn_server(&self, server: TurnServer) {
+        self.inner().turn_server = Some(server.clone());
+        let subs = {
+            let mut subs = self.turn_subscriptions.lock().unwrap_or_else(|p| p.into_inner());
+            subs.retain(|s| s.active.load(Ordering::SeqCst));
+            subs.clone()
+        };
+        for sub in subs {
+            sub.sink.on_turn_server(server.clone());
+        }
+    }
+
+    /// What `get_rtc_transports` answers (a JSON array). Default: `[]`.
+    pub fn set_rtc_transports(&self, transports: JsonValue) {
+        self.inner().rtc_transports = transports;
+    }
+
+    /// Set room account data of `event_type` (the room is this backend's).
+    pub fn set_room_account_data(&self, event_type: String, content: JsonValue) {
+        self.inner().room_account_data.insert(event_type, content);
+    }
+
+    /// Delayed leaves handed over through `rtc_livekit_delegate_delayed_leave`, oldest first.
+    pub fn delegated_delayed_leaves(&self) -> Vec<DelegatedDelayedLeave> {
+        self.inner().delegated_leaves.clone()
     }
 
     /// Deliver a to-device message as if it had arrived from sync: every live to-device
@@ -206,6 +275,8 @@ impl InMemoryBackend {
             inner.state.clear();
             inner.delayed.clear();
             inner.to_device_sent.clear();
+            inner.room_account_data.clear();
+            inner.delegated_leaves.clear();
         }
         for sub in self.live_subscriptions() {
             for event_type in &sub.subjects.state_event_types {
@@ -540,6 +611,88 @@ impl MatrixBackend for InMemoryBackend {
         })
     }
 
+    async fn rtc_transports(&self) -> Result<JsonValue, BackendError> {
+        Ok(self.inner().rtc_transports.clone())
+    }
+
+    /// Searches the members known from `m.room.member` state (user id and `displayname`),
+    /// case-insensitively.
+    async fn search_user_directory(
+        &self,
+        search_term: String,
+        limit: Option<u32>,
+    ) -> Result<UserDirectorySearchResult, BackendError> {
+        let term = search_term.to_lowercase();
+        let inner = self.inner();
+        let mut results: Vec<UserDirectoryUser> = inner
+            .state
+            .iter()
+            .filter(|((t, _), _)| t == "m.room.member")
+            .map(|((_, user_id), e)| UserDirectoryUser {
+                user_id: user_id.clone(),
+                display_name: e.content.get("displayname").and_then(|v| v.as_str()).map(str::to_owned),
+                avatar_url: e.content.get("avatar_url").and_then(|v| v.as_str()).map(str::to_owned),
+            })
+            .filter(|u| {
+                u.user_id.to_lowercase().contains(&term)
+                    || u.display_name.as_deref().is_some_and(|d| d.to_lowercase().contains(&term))
+            })
+            .collect();
+        let limited = limit.is_some_and(|l| results.len() > l as usize);
+        if let Some(limit) = limit {
+            results.truncate(limit as usize);
+        }
+        Ok(UserDirectorySearchResult { limited, results })
+    }
+
+    async fn media_config(&self) -> Result<MediaConfig, BackendError> {
+        Ok(MediaConfig { upload_size: Some(50 * 1024 * 1024) })
+    }
+
+    async fn read_room_account_data(
+        &self,
+        room_id: String,
+        event_type: String,
+    ) -> Result<Vec<RoomAccountData>, BackendError> {
+        self.check_room(&room_id)?;
+        Ok(self
+            .inner()
+            .room_account_data
+            .get(&event_type)
+            .map(|content| vec![RoomAccountData { event_type, room_id, content: content.clone() }])
+            .unwrap_or_default())
+    }
+
+    /// A placeholder JWT naming the slot and member.
+    async fn rtc_livekit_get_token(
+        &self,
+        _server_name: String,
+        _url: String,
+        room_id: String,
+        slot_id: String,
+        member_id: String,
+    ) -> Result<String, BackendError> {
+        self.check_room(&room_id)?;
+        Ok(format!("livekit-jwt-{slot_id}-{member_id}"))
+    }
+
+    async fn rtc_livekit_delegate_delayed_leave(
+        &self,
+        url: String,
+        room_id: String,
+        slot_id: String,
+        member_id: String,
+        delay_id: String,
+    ) -> Result<(), BackendError> {
+        self.check_room(&room_id)?;
+        let mut inner = self.inner();
+        if !inner.delayed.contains_key(&delay_id) {
+            return Err(BackendError::not_found(format!("no delayed event {delay_id}")));
+        }
+        inner.delegated_leaves.push(DelegatedDelayedLeave { url, room_id, slot_id, member_id, delay_id });
+        Ok(())
+    }
+
     async fn send_to_device_message(
         &self,
         encrypted: bool,
@@ -571,6 +724,16 @@ impl MatrixBackend for InMemoryBackend {
     ) -> Result<Arc<dyn Subscription>, BackendError> {
         let subscription = Arc::new(InMemoryToDeviceSubscription { event_types, sink, active: AtomicBool::new(true) });
         self.to_device_subscriptions.lock().unwrap_or_else(|p| p.into_inner()).push(subscription.clone());
+        Ok(subscription)
+    }
+
+    fn subscribe_turn_servers(&self, sink: Arc<dyn TurnServerSink>) -> Result<Arc<dyn Subscription>, BackendError> {
+        let subscription = Arc::new(InMemoryTurnSubscription { sink, active: AtomicBool::new(true) });
+        self.turn_subscriptions.lock().unwrap_or_else(|p| p.into_inner()).push(subscription.clone());
+        let current = self.inner().turn_server.clone();
+        if let Some(server) = current {
+            subscription.sink.on_turn_server(server);
+        }
         Ok(subscription)
     }
 
@@ -806,6 +969,67 @@ mod tests {
             assert_eq!(sent[1].device_id, "*");
             assert_eq!(sent[1].content["b"], 1);
             assert!(!sent[0].encrypted);
+        });
+    }
+
+    #[test]
+    fn read_style_extras() {
+        futures::executor::block_on(async {
+            let b = InMemoryBackend::new(room(), "@me:x".into());
+            // TURN: current credentials on subscribe, then pushes, until cancelled.
+            #[derive(Default)]
+            struct Sink(Mutex<Vec<TurnServer>>);
+            impl TurnServerSink for Sink {
+                fn on_turn_server(&self, server: TurnServer) {
+                    self.0.lock().unwrap().push(server);
+                }
+            }
+            let turn = |u: &str| TurnServer { uris: vec!["turn:x".into()], username: u.into(), password: "p".into() };
+            let sink = Arc::new(Sink::default());
+            let sub = b.subscribe_turn_servers(sink.clone()).unwrap();
+            assert!(sink.0.lock().unwrap().is_empty());
+            b.set_turn_server(turn("a"));
+            let sink2 = Arc::new(Sink::default());
+            let _sub2 = b.subscribe_turn_servers(sink2.clone()).unwrap();
+            assert_eq!(sink2.0.lock().unwrap().len(), 1);
+            sub.cancel();
+            b.set_turn_server(turn("b"));
+            assert_eq!(sink.0.lock().unwrap().len(), 1);
+            assert_eq!(sink2.0.lock().unwrap().len(), 2);
+
+            assert_eq!(b.rtc_transports().await.unwrap(), JsonValue::from(json!(null)));
+            b.set_rtc_transports(json!([{"type": "livekit"}]).into());
+            assert_eq!(b.rtc_transports().await.unwrap()[0]["type"], "livekit");
+
+            b.inject(MatrixEvent {
+                content: json!({"membership": "join", "displayname": "Alice"}).into(),
+                ..event("m.room.member", Some("@alice:x"), "m1")
+            });
+            b.inject(event("m.room.member", Some("@bob:x"), "m2"));
+            let hits = b.search_user_directory("ALI".into(), None).await.unwrap();
+            assert_eq!(hits.results.len(), 1);
+            assert_eq!(hits.results[0].display_name.as_deref(), Some("Alice"));
+            let hits = b.search_user_directory(":x".into(), Some(1)).await.unwrap();
+            assert!(hits.limited);
+            assert_eq!(hits.results.len(), 1);
+
+            assert!(b.media_config().await.unwrap().upload_size.is_some());
+
+            assert!(b.read_room_account_data(room(), "m.tag".into()).await.unwrap().is_empty());
+            b.set_room_account_data("m.tag".into(), json!({"tags": {"u.work": {}}}).into());
+            let data = b.read_room_account_data(room(), "m.tag".into()).await.unwrap();
+            assert_eq!(data.len(), 1);
+            assert_eq!(data[0].room_id, ROOM);
+
+            let jwt = b.rtc_livekit_get_token("x".into(), "u".into(), room(), "s".into(), "m".into()).await.unwrap();
+            assert_eq!(jwt, "livekit-jwt-s-m");
+            assert!(b
+                .rtc_livekit_delegate_delayed_leave("u".into(), room(), "s".into(), "m".into(), "nope".into())
+                .await
+                .is_err());
+            let d = b.send_delayed_event(room(), "m.rtc.member".into(), None, json!({}).into(), 1).await.unwrap();
+            b.rtc_livekit_delegate_delayed_leave("u".into(), room(), "s".into(), "m".into(), d.clone()).await.unwrap();
+            assert_eq!(b.delegated_delayed_leaves()[0].delay_id, d);
         });
     }
 

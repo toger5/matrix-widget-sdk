@@ -25,8 +25,12 @@ mod in_memory;
 use std::sync::Arc;
 
 pub use error::BackendError;
-pub use in_memory::{DelayedEvent, InMemoryBackend, SentToDeviceMessage};
-pub use widget_actions::{JsonValue, MatrixEvent, OpenIdToken, RelationDirection, StateKeySelector, ToDeviceEvent};
+pub use in_memory::{DelayedEvent, DelegatedDelayedLeave, InMemoryBackend, SentToDeviceMessage};
+pub use widget_actions::{
+    JsonValue, MatrixEvent, MediaConfigResponse as MediaConfig, OpenIdToken, RelationDirection, RoomAccountData,
+    StateKeySelector, ToDeviceEvent, TurnServer, UserDirectorySearchResponse as UserDirectorySearchResult,
+    UserDirectoryUser,
+};
 
 /// One to-device message to send: its recipient device and the content for that device
 /// ([`MatrixBackend::send_to_device_message`]).
@@ -99,6 +103,15 @@ pub trait RoomSink: Send + Sync {
 pub trait ToDeviceSink: Send + Sync {
     /// A decrypted (or cleartext) to-device message of a subscribed type.
     fn on_to_device_message(&self, message: ToDeviceEvent);
+}
+
+/// Where a backend delivers TURN credentials (MSC3846). Implemented by the driver; every call
+/// returns at once.
+#[cfg_attr(feature = "uniffi", uniffi::export)]
+pub trait TurnServerSink: Send + Sync {
+    /// Current credentials: the ones known at subscription time (if any) right away, then every
+    /// refresh.
+    fn on_turn_server(&self, server: TurnServer);
 }
 
 /// A live subscription. The driver ends it with [`cancel`](Subscription::cancel); cancelling
@@ -251,6 +264,50 @@ pub trait MatrixBackend: Send + Sync {
     /// a widget whose `get_openid` the user allowed.
     async fn openid_token(&self) -> Result<OpenIdToken, BackendError>;
 
+    /// The `rtc_transports` array of `GET /_matrix/client/v1/rtc/transports` (MSC4515), raw;
+    /// `[]` when the homeserver lacks the endpoint. Same as matrix-rust-rtc's.
+    async fn rtc_transports(&self) -> Result<JsonValue, BackendError>;
+
+    /// `POST /_matrix/client/v3/user_directory/search` (MSC3973).
+    async fn search_user_directory(
+        &self,
+        search_term: String,
+        limit: Option<u32>,
+    ) -> Result<UserDirectorySearchResult, BackendError>;
+
+    /// `GET /_matrix/client/v1/media/config` (MSC4039).
+    async fn media_config(&self) -> Result<MediaConfig, BackendError>;
+
+    /// The room account data of `event_type` in `room_id` (`com.beeper.read_room_account_data`);
+    /// empty when there is none.
+    async fn read_room_account_data(
+        &self,
+        room_id: String,
+        event_type: String,
+    ) -> Result<Vec<RoomAccountData>, BackendError>;
+
+    /// MSC4533: a LiveKit JWT for the given SFU, MatrixRTC session and member, obtained through
+    /// the client's own LiveKit integration (`server_name` names the homeserver hosting it).
+    async fn rtc_livekit_get_token(
+        &self,
+        server_name: String,
+        url: String,
+        room_id: String,
+        slot_id: String,
+        member_id: String,
+    ) -> Result<String, BackendError>;
+
+    /// MSC4533: hand the delayed leave event `delay_id` over to the LiveKit service at `url`, so
+    /// it keeps it alive while the user is connected.
+    async fn rtc_livekit_delegate_delayed_leave(
+        &self,
+        url: String,
+        room_id: String,
+        slot_id: String,
+        member_id: String,
+        delay_id: String,
+    ) -> Result<(), BackendError>;
+
     /// Deliver `subjects` of `room_id` to `sink` until the returned subscription is cancelled.
     ///
     /// Synchronous on purpose: register the client's listeners and return the handle; deliver
@@ -271,6 +328,10 @@ pub trait MatrixBackend: Send + Sync {
         event_types: Vec<String>,
         sink: Arc<dyn ToDeviceSink>,
     ) -> Result<Arc<dyn Subscription>, BackendError>;
+
+    /// Deliver the client's TURN credentials (`GET /voip/turnServer`, refreshed before they
+    /// expire) to `sink` until the returned subscription is cancelled (MSC3846). Synchronous.
+    fn subscribe_turn_servers(&self, sink: Arc<dyn TurnServerSink>) -> Result<Arc<dyn Subscription>, BackendError>;
 }
 
 #[cfg(feature = "uniffi")]

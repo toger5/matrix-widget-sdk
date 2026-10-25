@@ -76,6 +76,16 @@ export const TO_DEVICE_CAPABILITIES = [
 ].join(",");
 export const TO_DEVICE_MESSAGES = { "@bob:example.org": { "*": { hello: "from the widget" } } };
 
+/** The read-style extras: TURN, RTC transports, user directory, media config, room account data, LiveKit. */
+export const EXTRA_CAPABILITIES = [
+  "town.robin.msc3846.turn_servers",
+  "org.matrix.msc4515.rtc_transports",
+  "org.matrix.msc3973.user_directory_search",
+  "org.matrix.msc4039.upload_file",
+  "com.beeper.capabilities.receive.room_account_data:m.tag",
+  "org.matrix.msc4533.rtc_livekit_get_token",
+].join(",");
+
 /** Remembers the delay id of the last scheduled event so the update buttons have a target. */
 export const lastDelay = { id: "" };
 export const rememberDelay = <T extends { delay_id?: string } | string>(result: T): T => {

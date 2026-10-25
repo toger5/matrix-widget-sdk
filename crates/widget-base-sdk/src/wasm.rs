@@ -27,8 +27,8 @@ use serde::Serialize;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::future_to_promise;
 use widget_actions::{
-    Capability, MatrixEvent, ReadEventsRequest, ReadRelationsRequest, StateKeySelector, ToDeviceEvent,
-    UpdateDelayedEventAction,
+    Capability, MatrixEvent, ReadEventsRequest, ReadRelationsRequest, RtcLivekitDelegateDelayedLeaveRequest,
+    RtcLivekitGetTokenRequest, StateKeySelector, ToDeviceEvent, TurnServer, UpdateDelayedEventAction,
 };
 
 use crate::{WidgetClient, WidgetClientError, WidgetDelegate};
@@ -38,6 +38,7 @@ struct Callbacks {
     on_event: Option<Function>,
     on_state_update: Option<Function>,
     on_to_device_message: Option<Function>,
+    on_turn_server: Option<Function>,
     on_capabilities_changed: Option<Function>,
 }
 
@@ -95,6 +96,10 @@ impl WidgetDelegate for JsDelegate {
 
     fn on_to_device_message(&self, message: ToDeviceEvent) {
         call(&self.callbacks.borrow().on_to_device_message, to_js(&message));
+    }
+
+    fn on_turn_server(&self, server: TurnServer) {
+        call(&self.callbacks.borrow().on_turn_server, to_js(&server));
     }
 
     fn on_capabilities_changed(&self, requested: Vec<Capability>, approved: Vec<Capability>) {
@@ -200,6 +205,13 @@ impl WidgetApi {
     #[wasm_bindgen(js_name = onToDeviceMessage)]
     pub fn on_to_device_message(&self, callback: Option<Function>) {
         self.delegate.callbacks.borrow_mut().on_to_device_message = callback;
+    }
+
+    /// Register a callback for TURN credentials (`{ uris, username, password }`) while watching
+    /// them (`watchTurnServers`).
+    #[wasm_bindgen(js_name = onTurnServer)]
+    pub fn on_turn_server(&self, callback: Option<Function>) {
+        self.delegate.callbacks.borrow_mut().on_turn_server = callback;
     }
 
     /// Register a callback `(requested: string[], approved: string[]) => void` invoked when a
@@ -320,6 +332,62 @@ impl WidgetApi {
         request.event_type = event_type;
         request.limit = limit;
         promise(self.client.read_relations(request))
+    }
+
+    /// Start receiving TURN credentials through `onTurnServer` (MSC3846).
+    #[wasm_bindgen(js_name = watchTurnServers)]
+    pub fn watch_turn_servers(&self) -> Promise {
+        promise(self.client.watch_turn_servers())
+    }
+
+    /// Stop receiving TURN credentials.
+    #[wasm_bindgen(js_name = unwatchTurnServers)]
+    pub fn unwatch_turn_servers(&self) -> Promise {
+        promise(self.client.unwatch_turn_servers())
+    }
+
+    /// Resolves with the homeserver's MatrixRTC transports (MSC4515), an array of objects.
+    #[wasm_bindgen(js_name = getRtcTransports)]
+    pub fn get_rtc_transports(&self) -> Promise {
+        promise(self.client.get_rtc_transports())
+    }
+
+    /// Resolves with `{ limited, results: [{ user_id, display_name?, avatar_url? }] }` (MSC3973).
+    #[wasm_bindgen(js_name = searchUserDirectory)]
+    pub fn search_user_directory(&self, search_term: String, limit: Option<u32>) -> Promise {
+        promise(self.client.search_user_directory(search_term, limit))
+    }
+
+    /// Resolves with the media config, e.g. `{ "m.upload.size": 52428800 }` (MSC4039).
+    #[wasm_bindgen(js_name = getMediaConfig)]
+    pub fn get_media_config(&self) -> Promise {
+        promise(self.client.get_media_config())
+    }
+
+    /// Resolves with the room account data events of `eventType` (`[{ type, room_id, content }]`).
+    #[wasm_bindgen(js_name = readRoomAccountData)]
+    pub fn read_room_account_data(&self, event_type: String) -> Promise {
+        promise(self.client.read_room_account_data(event_type))
+    }
+
+    /// Resolves with the LiveKit JWT (MSC4533). `request` is
+    /// `{ server_name, url, room_id, slot_id, member_id }`.
+    #[wasm_bindgen(js_name = rtcLivekitGetToken)]
+    pub fn rtc_livekit_get_token(&self, request: JsValue) -> Promise {
+        match serde_wasm_bindgen::from_value::<RtcLivekitGetTokenRequest>(request) {
+            Ok(request) => promise(self.client.rtc_livekit_get_token(request)),
+            Err(e) => Promise::reject(&js_error(e)),
+        }
+    }
+
+    /// Hand a delayed leave to the client's LiveKit service (MSC4533). `request` is
+    /// `{ url, room_id, slot_id, member_id, delay_id }`.
+    #[wasm_bindgen(js_name = rtcLivekitDelegateDelayedLeave)]
+    pub fn rtc_livekit_delegate_delayed_leave(&self, request: JsValue) -> Promise {
+        match serde_wasm_bindgen::from_value::<RtcLivekitDelegateDelayedLeaveRequest>(request) {
+            Ok(request) => promise(self.client.rtc_livekit_delegate_delayed_leave(request)),
+            Err(e) => Promise::reject(&js_error(e)),
+        }
     }
 
     /// Resolves with `{ access_token, token_type, matrix_server_name, expires_in }` once the host

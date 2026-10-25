@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 
 use super::{expect, parse_tagged, split_tagged};
 use crate::{
-    ActionError, MatrixEvent, NotifyCapabilitiesRequest, OpenIdCredentialsRequest, Source, ToDeviceEvent,
+    ActionError, MatrixEvent, NotifyCapabilitiesRequest, OpenIdCredentialsRequest, Source, ToDeviceEvent, TurnServer,
     UpdateStateRequest, WireMessage,
 };
 
@@ -14,6 +14,7 @@ pub(crate) mod openid_credentials;
 pub(crate) mod send_event;
 pub(crate) mod send_to_device;
 pub(crate) mod update_state;
+pub(crate) mod update_turn_servers;
 
 // ----- Enums -----
 // The two enums are the source of truth for all host actions (actions where: `source: "host"`)
@@ -45,6 +46,12 @@ pub enum HostRequest {
     /// The late outcome of a `get_openid` (MSC1960).
     #[serde(rename = "openid_credentials")]
     OpenIdCredentials { request: OpenIdCredentialsRequest },
+    /// TURN credentials for a widget that is watching them (MSC3846).
+    #[serde(rename = "update_turn_servers")]
+    UpdateTurnServers {
+        #[serde(rename = "request")]
+        server: TurnServer,
+    },
     /// An action this crate does not know; see [`WidgetRequest::Unknown`](crate::WidgetRequest::Unknown).
     #[serde(other)]
     Unknown,
@@ -67,6 +74,8 @@ pub enum HostResponse {
     SendToDevice,
     #[serde(rename = "openid_credentials")]
     OpenIdCredentials,
+    #[serde(rename = "update_turn_servers")]
+    UpdateTurnServers,
     /// A response to an action this crate does not know; the raw body is in the [`WireMessage`].
     #[serde(other)]
     Unknown,
