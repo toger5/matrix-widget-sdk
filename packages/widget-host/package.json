@@ -1,0 +1,19 @@
+{
+  "name": "@matrix-widget-tools/widget-host",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Minimal MSC4412 widget host webapp: widget-host-driver (wasm) on an in-memory room, for manual and e2e testing",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "widget-host-driver": "file:../../crates/widget-host-driver/pkg"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.0",
+    "vite": "^8.0.0"
+  }
+}

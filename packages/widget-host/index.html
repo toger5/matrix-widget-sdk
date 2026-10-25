@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Widget test host</title>
+    <style>
+      :root { --line: #ddd; --muted: #666; }
+      body { margin: 0; font: 13px/1.4 system-ui, sans-serif; display: grid; grid-template-columns: 340px 1fr 360px; height: 100vh; }
+      section { padding: 10px; overflow: auto; border-right: 1px solid var(--line); }
+      section:last-child { border-right: 0; }
+      h2 { font-size: 13px; margin: 12px 0 4px; text-transform: uppercase; color: var(--muted); }
+      label { display: block; margin: 4px 0; }
+      input, textarea { width: 100%; box-sizing: border-box; font: 12px ui-monospace, monospace; }
+      textarea { height: 110px; }
+      button { margin: 2px 2px 2px 0; }
+      pre { margin: 0; font: 11px ui-monospace, monospace; white-space: pre-wrap; word-break: break-all; }
+      #frame iframe { width: 100%; height: 100%; border: 0; }
+      #frame { display: flex; flex-direction: column; }
+      #frame .fill { flex: 1; position: relative; }
+      #spinner { position: absolute; inset: 0; padding-top: 1em; text-align: center; color: var(--muted); background: #fafafa; }
+      #decision { color: var(--muted); padding: 4px 0; white-space: pre-wrap; word-break: break-all; }
+      #log pre { border-bottom: 1px solid var(--line); padding: 3px 0; }
+      #log .in { color: #0a6; } #log .out { color: #06c; } #log .err { color: #b00020; }
+      #caps { background: #fff8e1; padding: 6px; margin: 6px 0; }
+      #caps:empty { display: none; }
+    </style>
+  </head>
+  <body>
+    <section>
+      <h2>Room</h2>
+      <label>room id <input id="room" value="!room:example.org" /></label>
+      <label>user id <input id="user" value="@alice:example.org" /></label>
+      <label>compat wrapper url <input id="wrapper" value="http://localhost:5174/" /></label>
+      <label><input id="autoApprove" type="checkbox" style="width:auto" /> auto-approve capabilities</label>
+
+      <h2>Widget state event</h2>
+      <button id="exampleNew">example: new widget</button>
+      <button id="exampleLegacy">example: legacy widget</button>
+      <textarea id="event"></textarea>
+      <button id="load">Load widget</button>
+      <div id="decision"></div>
+      <div id="caps"></div>
+
+      <h2>Driver snapshot</h2>
+      <pre id="snapshot"></pre>
+
+      <h2>Memory store</h2>
+      <textarea id="inject"></textarea>
+      <button id="injectBtn">Inject event (store + forward)</button>
+      <button id="pushState">Push state</button>
+      <button id="clear">Clear store</button>
+      <label><input id="fail" type="checkbox" style="width:auto" /> fail sends</label>
+      <h2>Timeline</h2>
+      <pre id="timeline"></pre>
+      <h2>State</h2>
+      <pre id="state"></pre>
+    </section>
+    <section id="frame">
+      <div class="fill"><div id="spinner" hidden>waiting for content_loaded…</div></div>
+    </section>
+    <section>
+      <h2>Messages</h2>
+      <button id="clearLog">clear</button>
+      <div id="log"></div>
+    </section>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

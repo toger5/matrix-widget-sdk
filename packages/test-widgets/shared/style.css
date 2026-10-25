@@ -1,0 +1,10 @@
+body { margin: 0; padding: 10px; font: 13px/1.4 system-ui, sans-serif; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; height: 100vh; box-sizing: border-box; }
+h1 { grid-column: 1 / -1; font-size: 15px; margin: 0; }
+h2 { font-size: 12px; text-transform: uppercase; color: #666; margin: 8px 0 4px; }
+#controls { display: flex; flex-direction: column; gap: 4px; }
+#controls label { display: flex; gap: 6px; align-items: center; }
+#controls input { flex: 1; font: 12px ui-monospace, monospace; }
+pre { margin: 0; font: 11px ui-monospace, monospace; white-space: pre-wrap; word-break: break-all; }
+#log { overflow: auto; }
+#log pre { border-bottom: 1px solid #ddd; padding: 3px 0; }
+#log .error { color: #b00020; }

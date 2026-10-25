@@ -1,0 +1,16 @@
+{
+  "name": "matrix-widget-tools-sdk",
+  "private": true,
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "wasm": "wasm-pack build crates/widget-base-sdk --target web --release && wasm-pack build crates/widget-host-driver --target web --release",
+    "build": "npm run build --workspaces",
+    "test": "npm test --workspaces --if-present",
+    "dev": "concurrently -k -n host,wrapper,widgets -c blue,magenta,green \"npm:dev -w packages/widget-host\" \"npm:dev -w packages/widget-compat-wrapper\" \"npm:dev -w packages/test-widgets\""
+  },
+  "devDependencies": {
+    "concurrently": "^9.0.0"
+  }
+}

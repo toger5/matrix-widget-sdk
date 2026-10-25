@@ -1,0 +1,21 @@
+{
+  "name": "@matrix-widget-tools/compat-wrapper",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Widget that wraps a legacy (matrix-widget-api) widget and speaks MSC4412 to the host",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "matrix-widget-api": "^1.20.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.0",
+    "vite": "^8.0.0",
+    "vitest": "^5.0.0"
+  }
+}

@@ -1,0 +1,22 @@
+{
+  "name": "@matrix-widget-tools/test-widgets",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Two minimal test widgets: one on the legacy matrix-widget-api, one on widget-base-sdk (MSC4412)",
+  "scripts": {
+    "dev": "vite",
+    "dev:legacy": "vite --open /legacy/",
+    "dev:new": "vite --open /new/",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "matrix-widget-api": "^1.20.0",
+    "widget-base-sdk": "file:../../crates/widget-base-sdk/pkg"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.0",
+    "vite": "^8.0.0"
+  }
+}
