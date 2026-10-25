@@ -5,8 +5,10 @@ look like an **MSC4412 widget** to its host. The host embeds the wrapper; the wr
 widget in an inner iframe and translates between the two protocols.
 
 It contains **no action logic**. It translates envelopes and two action names, forwards every body
-untouched (including error responses in both directions), and implements only the startup
-handshake, where the two protocols are structurally different.
+untouched (including error responses in both directions), and implements only two things itself:
+the legacy **URL templating** (`$matrix_user_id` & co., fed by the `matrix_context` /
+`client_context` actions) and the startup handshake, where the two protocols are structurally
+different.
 
 ## How a client uses it during the transition
 
@@ -14,27 +16,50 @@ The client speaks MSC4412 only (for example through `widget-host-driver`) and ke
 transition code: a check on the widget state event.
 
 1. The client reads the widget state event of the room.
-2. **Legacy event** (`im.vector.modular.widgets`): run the usual legacy URL templating
-   (`$matrix_user_id`, `$matrix_widget_id`, ..., plus the `widgetId` / `parentUrl` query
-   parameters legacy clients append), then embed
-   `https://example.org/myHostedCompatWidget?legacy_widget_url=<urlencoded completed legacy url>`
-   as a new-style widget with `usesWidgetAPI: true`. The wrapper loads and uses
-   `legacy_widget_url` as the `src` of its inner iframe.
+2. **Legacy event** (`im.vector.modular.widgets`): embed
+   `https://example.org/myHostedCompatWidget?legacy_widget_url=<urlencoded content.url>&legacy_widget_id=<state_key>`
+   as a new-style widget with `usesWidgetAPI: true`. The URL is passed **untemplated**; the host
+   knows nothing about template variables. The wrapper resolves them (it asks the host for
+   `matrix_context` and `client_context`), appends the `widgetId` / `parentUrl` query parameters
+   legacy clients used to add, and loads the result in its inner iframe.
 3. **New event** (`m.widget`): embed `content.url` directly.
 
 That URL construction is the only client code specific to the transition. Once legacy widgets are
-gone, delete it and the wrapper.
+gone, delete it and the wrapper. The host keeps no template engine at all.
 
 ## Query parameters
 
 | parameter | required | from the legacy state event | meaning |
 |---|---|---|---|
-| `legacy_widget_url` | yes | `content.url`, templated by the client | Loaded verbatim in the inner iframe. If it has a `parentUrl` query parameter, the wrapper rewrites it to its own URL, because the widget's parent is now the wrapper. |
-| `legacy_widget_id` | no | `state_key` | `widgetId` put on every legacy message. Default: the `widgetId` query parameter of `legacy_widget_url`. One of the two must exist. |
+| `legacy_widget_url` | yes | `content.url`, **untemplated** | Template variables are resolved by the wrapper. `widgetId` is added if missing and `parentUrl` is always set to the wrapper's own URL, because the widget's parent is now the wrapper. |
+| `legacy_widget_id` | no | `state_key` | `widgetId` put on every legacy message and value of `$matrix_widget_id`. Default: the `widgetId` query parameter of `legacy_widget_url`. One of the two must exist. |
 | `legacy_wait_for_iframe_load` | no | `content.waitForIframeLoad` (default `true`) | Decides when the legacy capability round starts, see below. |
+| `legacy_widget_data` | no | `content.data` as JSON | Extra `$key` template variables, as in legacy clients. |
 | `client_origin` | no | | Target origin for `postMessage` to the host. Default `*`. Set it in production. |
 
 ## What the wrapper does
+
+### Bootstrap: templating the legacy URL
+
+Before the inner iframe exists the wrapper sends `request_capabilities` for `m.matrix_context`
+and `m.client_context`, waits for the host's `notify_capabilities`, requests both contexts and
+renders the URL:
+
+| variable | source |
+|---|---|
+| `$matrix_user_id`, `$matrix_room_id`, `$matrix_display_name`, `$matrix_avatar_url` | `matrix_context` |
+| `$org.matrix.msc3819.matrix_device_id`, `$org.matrix.msc4039.matrix_base_url` | `matrix_context` |
+| `$org.matrix.msc2873.client_id`, `$org.matrix.msc2873.client_theme`, `$org.matrix.msc2873.client_language` | `client_context` |
+| `$matrix_widget_id` | `legacy_widget_id` |
+| `$<key>` | `legacy_widget_data` |
+
+Values are URI-encoded, unknown variables stay as they are, and if the host denies a capability
+or does not implement an action the corresponding variables are empty (the widget still loads).
+Any other host request during this phase is answered with an error, since there is no widget yet.
+
+This means a host prompts twice for a wrapped widget: once for the wrapper's context
+capabilities, once for the capabilities the legacy widget itself asks for. A host may of course
+grant the context capabilities without prompting.
 
 ### Envelope translation (both directions, stateless)
 
@@ -53,11 +78,12 @@ Action names: `org.matrix.msc2974.request_capabilities` ↔ `request_capabilitie
 action the host does not implement is answered by the host's own error response, which is
 forwarded to the widget as is.
 
-### Startup handshake (the only logic)
+### Startup handshake
 
-Legacy capabilities are **host-initiated** (`toWidget capabilities` → the widget answers with its
-list), MSC4412 capabilities are **widget-initiated** (`request_capabilities`). The wrapper plays the
-legacy host towards the inner iframe:
+After the bootstrap above has loaded the inner iframe. Legacy capabilities are **host-initiated**
+(`toWidget capabilities` → the widget answers with its list), MSC4412 capabilities are
+**widget-initiated** (`request_capabilities`). The wrapper plays the legacy host towards the
+inner iframe:
 
 `waitForIframeLoad = true` (legacy default)
 
@@ -99,8 +125,8 @@ Always:
 - `notify_capabilities.approved` must be the **cumulative** set, as legacy hosts send it and
   legacy widgets overwrite their approved list with it. `widget-host-driver` does this.
 - Legacy widgets built with `new WidgetApi(widgetId, clientOrigin)` only accept a parent at
-  `clientOrigin`; widgets derive it from `parentUrl`, which the wrapper rewrites. A widget that
-  passes `null` cannot talk to any parent, wrapper or not.
+  `clientOrigin`; widgets derive it from `parentUrl`, which the wrapper sets to itself. A widget
+  that passes `null` cannot talk to any parent, wrapper or not.
 - The legacy 10 s request timeout still applies between widget and host.
 
 ## Development
@@ -112,8 +138,9 @@ npm run dev              # http://localhost:5174/ (only useful when embedded by 
 npm run build            # static output in dist/, serve it under its own origin
 ```
 
-Source layout: `src/envelope.ts` (translation tables), `src/bridge.ts` (handshake state machine,
-transport free), `src/wrapper.ts` (URL config, iframe, `postMessage` routing), `src/main.ts`.
+Source layout: `src/envelope.ts` (translation tables), `src/template.ts` (legacy URL
+templating), `src/bridge.ts` (bootstrap and handshake state machine, transport free),
+`src/wrapper.ts` (URL config, iframe, `postMessage` routing), `src/main.ts`.
 
 For an end-to-end run use the test host in `../widget-host` with the legacy test widget from
 `../test-widgets`.

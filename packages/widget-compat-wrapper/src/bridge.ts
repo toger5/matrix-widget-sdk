@@ -1,17 +1,20 @@
 /**
  * The protocol bridge: legacy widget on one side, MSC4412 host on the other.
  *
- * Everything is forwarded 1:1 (see envelope.ts) except the startup handshake, where the two
- * protocols differ structurally:
+ * Everything is forwarded 1:1 (see envelope.ts) except two things the wrapper does itself:
  *
- * - legacy capabilities are host-initiated (`toWidget capabilities` -> widget answers with its
- *   list), MSC4412 capabilities are widget-initiated (`request_capabilities`);
- * - a legacy host starts that round on the iframe `load` event (waitForIframeLoad=true) or on the
- *   widget's `content_loaded` (waitForIframeLoad=false);
- * - the legacy widget asks `supported_api_versions`, which an MSC4412 host does not know.
+ * 1. **Bootstrap**: before the legacy widget can be loaded its URL has to be templated. The
+ *    wrapper requests the `m.matrix_context` / `m.client_context` capabilities, asks the host
+ *    for both contexts, renders the URL (template.ts) and only then loads the inner iframe.
+ *    A missing capability or an unsupported action just leaves the variables empty.
+ * 2. **Startup handshake**: legacy capabilities are host-initiated (`toWidget capabilities`),
+ *    MSC4412 capabilities are widget-initiated (`request_capabilities`); a legacy host starts
+ *    that round on the iframe `load` event (waitForIframeLoad=true) or on the widget's
+ *    `content_loaded` (waitForIframeLoad=false); and the legacy widget asks
+ *    `supported_api_versions`, which an MSC4412 host does not know.
  *
- * This class is transport free: it is driven by `onIframeLoad`, `onWidgetMessage` and
- * `onHostMessage` and talks back through the two `send*` callbacks.
+ * This class is transport free: it is driven by `start`, `onIframeLoad`, `onWidgetMessage`
+ * and `onHostMessage` and talks back through the callbacks in `BridgeOptions`.
  */
 import { CurrentApiVersions } from "matrix-widget-api";
 
@@ -27,14 +30,25 @@ import {
   type LegacyMessage,
   type NewMessage,
 } from "./envelope";
+import { renderLegacyUrl, type ClientContext, type MatrixContext } from "./template";
+
+export const CONTEXT_CAPABILITIES = ["m.matrix_context", "m.client_context"];
 
 export interface BridgeOptions {
-  /** `widgetId` the legacy widget expects on every message (usually its `?widgetId=` parameter). */
+  /** `widgetId` the legacy widget expects on every message (the legacy state event's `state_key`). */
   widgetId: string;
   /** The legacy widget's `waitForIframeLoad` setting (legacy default: true). */
   waitForIframeLoad: boolean;
+  /** The untemplated legacy widget URL (`content.url` of the legacy state event). */
+  legacyWidgetUrl: string;
+  /** `content.data` of the legacy state event: extra `$key` template variables. */
+  widgetData?: Record<string, unknown>;
+  /** URL of the wrapper page, handed to the legacy widget as `parentUrl`. */
+  wrapperUrl: string;
   sendToHost(message: NewMessage): void;
   sendToWidget(message: LegacyMessage): void;
+  /** Load the (templated) legacy widget URL in the inner iframe. Called exactly once. */
+  loadWidget(url: string): void;
   /** Versions announced to the widget. Default: matrix-widget-api's `CurrentApiVersions`. */
   supportedVersions?: string[];
   /** Request id generator for the bridge's own requests. Default: `crypto.randomUUID`. */
@@ -42,6 +56,8 @@ export interface BridgeOptions {
 }
 
 type Responder = (response: unknown) => void;
+const isError = (response: unknown): boolean =>
+  typeof response === "object" && response !== null && "error" in response;
 
 export class CompatBridge {
   /** Legacy requests forwarded to the host, kept to build the echoed legacy response. */
@@ -50,10 +66,16 @@ export class CompatBridge {
   private readonly fromHost = new Map<string, NewMessage>();
   /** Requests the bridge itself sent (either direction). */
   private readonly own = new Map<string, Responder>();
+  private phase: "bootstrap" | "running" = "bootstrap";
   private contentLoadedSentToHost = false;
   private contentLoadedSeen = false;
 
   constructor(private readonly o: BridgeOptions) {}
+
+  /** Begin: ask for the context capabilities. The host answers with `notify_capabilities`. */
+  start(): void {
+    this.requestHost("request_capabilities", { capabilities: CONTEXT_CAPABILITIES });
+  }
 
   /** The inner iframe fired `load` (also on reloads). */
   onIframeLoad(): void {
@@ -76,6 +98,31 @@ export class CompatBridge {
     if (!isNewMessage(data)) return;
     if (data.response !== undefined) return this.onHostResponse(data);
     if (data.source === "host") this.onHostRequest(data);
+  }
+
+  // ---- bootstrap -----------------------------------------------------------------------------
+
+  /** First `notify_capabilities`: fetch both contexts, template the URL, load the widget. */
+  private bootstrap(): void {
+    const matrix: Partial<MatrixContext> = {};
+    const client: ClientContext = {};
+    let pending = 2;
+    const done = () => {
+      if (--pending > 0) return;
+      this.phase = "running";
+      this.o.loadWidget(
+        renderLegacyUrl(this.o.legacyWidgetUrl, {
+          widgetId: this.o.widgetId,
+          wrapperUrl: this.o.wrapperUrl,
+          matrix,
+          client,
+          data: this.o.widgetData,
+        }),
+      );
+    };
+    // Errors (capability denied, action unknown to the host) leave the variables empty.
+    this.requestHost("matrix_context", {}, (r) => (isError(r) || Object.assign(matrix, r), done()));
+    this.requestHost("client_context", {}, (r) => (isError(r) || Object.assign(client, r), done()));
   }
 
   // ---- widget -> host ------------------------------------------------------------------------
@@ -129,6 +176,14 @@ export class CompatBridge {
   private onHostRequest(m: NewMessage): void {
     if (m.version !== API_VERSION) {
       return this.o.sendToHost(newResponse(m, errorBody(`Unsupported widget api version \`${m.version}\``)));
+    }
+    if (this.phase === "bootstrap") {
+      // The only host request expected now is the answer to our own capability request.
+      if (m.action !== "notify_capabilities") {
+        return this.o.sendToHost(newResponse(m, errorBody("The wrapped widget is not loaded yet")));
+      }
+      this.o.sendToHost(newResponse(m, {}));
+      return this.bootstrap();
     }
     this.fromHost.set(m.requestId, m);
     this.o.sendToWidget(newRequestToLegacy(m, this.o.widgetId));

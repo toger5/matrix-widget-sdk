@@ -1,50 +1,100 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
-import { CompatBridge } from "../src/bridge";
+import { CompatBridge, CONTEXT_CAPABILITIES } from "../src/bridge";
 import type { LegacyMessage, NewMessage } from "../src/envelope";
+
+const MATRIX = { user_id: "@alice:example.org", device_id: "DEV", room_id: "!r:example.org", display_name: "Alice", avatar_url: "", matrix_base_url: "https://hs.example" };
+const CLIENT = { client_id: "test-client", client_theme: "dark" };
 
 function setup(waitForIframeLoad: boolean) {
   const toHost: NewMessage[] = [];
   const toWidget: LegacyMessage[] = [];
+  const loaded: string[] = [];
   let n = 0;
   const bridge = new CompatBridge({
     widgetId: "w",
     waitForIframeLoad,
+    legacyWidgetUrl: "https://widget.example/?u=$matrix_user_id&t=$title",
+    widgetData: { title: "Notes" },
+    wrapperUrl: "https://compat.example/",
     sendToHost: (m) => toHost.push(m),
     sendToWidget: (m) => toWidget.push(m),
+    loadWidget: (url) => loaded.push(url),
     supportedVersions: ["org.matrix.msc2871", "org.matrix.msc2974"],
     nextId: () => `own-${++n}`,
   });
   const take = <T>(arr: T[]) => arr.splice(0, arr.length);
-  return { bridge, toHost, toWidget, take };
+  return { bridge, toHost, toWidget, loaded, take };
 }
+type S = ReturnType<typeof setup>;
 
 const fromWidget = (action: string, requestId: string, data: unknown = {}): LegacyMessage =>
   ({ api: "fromWidget", widgetId: "w", requestId, action, data });
 const fromHost = (action: string, requestId: string, request: unknown = {}): NewMessage =>
   ({ source: "host", version: "v1", requestId, action, request });
+const hostResponse = (request: NewMessage, response: unknown): NewMessage =>
+  ({ source: request.source, version: "v1", requestId: request.requestId, action: request.action, response });
+
+/** Drive the bootstrap: capability request, notify, both contexts. Returns the loaded URL. */
+function boot(s: S, contexts: { matrix?: unknown; client?: unknown } = { matrix: MATRIX, client: CLIENT }): string {
+  s.bridge.start();
+  const [caps] = s.take(s.toHost);
+  expect(caps).toMatchObject({ source: "widget", action: "request_capabilities", request: { capabilities: CONTEXT_CAPABILITIES } });
+  s.bridge.onHostMessage(hostResponse(caps, {}));
+  s.bridge.onHostMessage(fromHost("notify_capabilities", "n1", { requested: CONTEXT_CAPABILITIES, approved: CONTEXT_CAPABILITIES }));
+  const [ack, matrix, client] = s.take(s.toHost);
+  expect(ack).toEqual({ source: "host", version: "v1", requestId: "n1", action: "notify_capabilities", response: {} });
+  expect([matrix.action, client.action]).toEqual(["matrix_context", "client_context"]);
+  expect(s.loaded).toEqual([]);
+  s.bridge.onHostMessage(hostResponse(matrix, contexts.matrix ?? { error: { message: "denied" } }));
+  s.bridge.onHostMessage(hostResponse(client, contexts.client ?? { error: { message: "denied" } }));
+  expect(s.loaded).toHaveLength(1);
+  return s.loaded[0];
+}
+
+describe("bootstrap", () => {
+  it("templates the legacy url from both contexts and only then loads the widget", () => {
+    const url = new URL(boot(setup(true)));
+    expect(Object.fromEntries(url.searchParams)).toEqual({ u: "@alice:example.org", t: "Notes", widgetId: "w", parentUrl: "https://compat.example/" });
+  });
+
+  it("loads the widget with empty variables when the host denies or does not know the actions", () => {
+    const url = new URL(boot(setup(true), {}));
+    expect(url.searchParams.get("u")).toBe("");
+  });
+
+  it("rejects other host requests until the widget is loaded", () => {
+    const s = setup(true);
+    s.bridge.start();
+    s.take(s.toHost);
+    s.bridge.onHostMessage(fromHost("send_event", "h0", {}));
+    expect(s.take(s.toHost)[0].response).toEqual({ error: { message: "The wrapped widget is not loaded yet" } });
+    expect(s.toWidget).toEqual([]);
+  });
+});
 
 describe("startup with waitForIframeLoad = true", () => {
   const s = setup(true);
+  boot(s);
   beforeEach(() => { s.take(s.toHost); s.take(s.toWidget); });
 
   it("on iframe load sends content_loaded to the host and asks the widget for capabilities", () => {
     s.bridge.onIframeLoad();
     expect(s.take(s.toHost)).toEqual([
-      { source: "widget", version: "v1", requestId: "own-1", action: "content_loaded", request: {} },
+      { source: "widget", version: "v1", requestId: "own-4", action: "content_loaded", request: {} },
     ]);
     expect(s.take(s.toWidget)).toEqual([
-      { api: "toWidget", widgetId: "w", requestId: "own-2", action: "capabilities", data: {} },
+      { api: "toWidget", widgetId: "w", requestId: "own-5", action: "capabilities", data: {} },
     ]);
   });
 
   it("turns the widget's capability list into request_capabilities", () => {
-    s.bridge.onWidgetMessage({ ...fromWidget("capabilities", "own-2"), api: "toWidget", response: { capabilities: ["a", "b"] } });
+    s.bridge.onWidgetMessage({ ...fromWidget("capabilities", "own-5"), api: "toWidget", response: { capabilities: ["a", "b"] } });
     expect(s.take(s.toHost)).toEqual([
-      { source: "widget", version: "v1", requestId: "own-3", action: "request_capabilities", request: { capabilities: ["a", "b"] } },
+      { source: "widget", version: "v1", requestId: "own-6", action: "request_capabilities", request: { capabilities: ["a", "b"] } },
     ]);
     // the host's ack is swallowed
-    s.bridge.onHostMessage({ source: "widget", version: "v1", requestId: "own-3", action: "request_capabilities", response: {} });
+    s.bridge.onHostMessage({ source: "widget", version: "v1", requestId: "own-6", action: "request_capabilities", response: {} });
     expect(s.toHost).toEqual([]);
     expect(s.toWidget).toEqual([]);
   });
@@ -79,6 +129,7 @@ describe("startup with waitForIframeLoad = true", () => {
 describe("startup with waitForIframeLoad = false", () => {
   it("waits for the widget's content_loaded, acks it, then does the handshake", () => {
     const s = setup(false);
+    boot(s);
     s.bridge.onIframeLoad();
     expect(s.toHost).toEqual([]);
     expect(s.toWidget).toEqual([]);
@@ -97,6 +148,7 @@ describe("startup with waitForIframeLoad = false", () => {
 
 describe("steady state forwarding", () => {
   const s = setup(true);
+  boot(s);
 
   it("forwards widget requests with renamed actions and echoes the host response", () => {
     s.bridge.onWidgetMessage(fromWidget("org.matrix.msc2876.read_events", "r1", { type: "m.room.message", limit: 2 }));

@@ -18,10 +18,15 @@ Legacy (`/legacy/`): start (requests the listed capabilities, calls `start()`, f
 supported versions), `content_loaded`, renegotiate capabilities (MSC2974), send `m.room.message`,
 send state `m.room.topic`, read `m.room.message`, read state `m.room.topic`, and a custom action
 `org.example.custom` to see the host's unknown-action error. Incoming `send_event` and
-`update_state` are acknowledged and logged.
+`update_state` are acknowledged and logged. The state panel shows `urlParams`, the query
+parameters the page was loaded with: when embedded through the compat wrapper that is the
+wrapper's templating result (`userId`, `baseUrl`, `parentUrl`, ...). The same object is written
+to the console once on load, so headless runs can read it.
 
 New (`/new/`): `request_capabilities`, `content_loaded`, send `m.room.message`, send state
-`m.room.topic`, read `m.room.message`, read state `m.room.topic`. Incoming `send_event`,
+`m.room.topic`, read `m.room.message`, read state `m.room.topic`, `matrix_context`,
+`client_context` (the default capability list includes `m.matrix_context` and
+`m.client_context`). Incoming `send_event`,
 `update_state` and `notify_capabilities` are logged and the state panel shows the SDK's state.
 
 ## URL parameters
@@ -30,7 +35,7 @@ New (`/new/`): `request_capabilities`, `content_loaded`, send `m.room.message`, 
 |---|---|---|
 | both | `autostart=0` | Do nothing on load. Default: the legacy widget requests capabilities and starts; the new widget sends `request_capabilities` and `content_loaded`. |
 | legacy | `widgetId` | The widget id, as legacy clients pass it. Required for the legacy transport. |
-| legacy | `parentUrl` | The widget only posts to this origin (as Element widgets do). Without it, `*`. The compat wrapper rewrites it to itself. |
+| legacy | `parentUrl` | The widget only posts to this origin (as Element widgets do). Without it, `*`. The compat wrapper always sets it to itself. |
 
 ## Running
 

@@ -19,10 +19,12 @@ const EXAMPLE_LEGACY: StateEvent = {
   content: {
     type: "m.custom",
     name: "Legacy test widget",
-    url: "http://localhost:5175/legacy/?widgetId=$matrix_widget_id&userId=$matrix_user_id",
+    // Template variables are resolved by the compat wrapper, not by this host. The base url
+    // variable produces a nested `https://` inside the already nested legacy url.
+    url: "http://localhost:5175/legacy/?title=$title&widgetId=$matrix_widget_id&userId=$matrix_user_id&baseUrl=$org.matrix.msc4039.matrix_base_url&theme=$org.matrix.msc2873.client_theme",
     waitForIframeLoad: true,
     creatorUserId: "@alice:example.org",
-    data: {},
+    data: { title: "Notes & more" },
   },
 };
 const EXAMPLE_EVENT = {
@@ -73,13 +75,13 @@ function askCapabilities(requested: string[]) {
 }
 
 function loadWidget() {
-  const config = { roomId: value("room"), userId: value("user"), wrapperUrl: value("wrapper") };
-  const widget = resolveWidget(JSON.parse(value("event")) as StateEvent, config);
+  const widget = resolveWidget(JSON.parse(value("event")) as StateEvent, value("wrapper"));
   $("decision").textContent = `${widget.legacy ? "legacy event → compat wrapper" : "MSC4411 event → direct"}\n${widget.url}`;
 
   iframe?.remove();
   $("caps").replaceChildren();
-  host = new WidgetHost(config.roomId, config.userId);
+  host = new WidgetHost(value("room"), value("user"));
+  host.setClientContext("widget-test-host", "light", "en");
   widgetOrigin = new URL(widget.url).origin;
   iframe = Object.assign(document.createElement("iframe"), { src: widget.url, hidden: widget.usesWidgetApi });
   $("spinner").hidden = !widget.usesWidgetApi;

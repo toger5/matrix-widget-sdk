@@ -10,16 +10,18 @@ embedding the driver. It is not a Matrix client: nothing leaves the page.
 - **Loads a widget from a widget state event** you paste in. The event decides how it is embedded:
   - `m.widget` / `org.matrix.msc4411.widget` → `content.url` is loaded directly; the iframe is
     hidden until `content_loaded` when `usesWidgetAPI` is `true`.
-  - `im.vector.modular.widgets` (legacy) → the URL is templated (`$matrix_user_id`,
-    `$matrix_room_id`, `$matrix_widget_id`, `$matrix_display_name`, `$matrix_avatar_url`, keys of
-    `content.data`), `widgetId` and `parentUrl` query parameters are appended, and the result is
-    handed to the compat wrapper: `<wrapper url>?legacy_widget_url=...&legacy_widget_id=...&legacy_wait_for_iframe_load=...`.
+  - `im.vector.modular.widgets` (legacy) → `content.url` is handed **untemplated** to the compat
+    wrapper: `<wrapper url>?legacy_widget_url=...&legacy_widget_id=...&legacy_wait_for_iframe_load=...[&legacy_widget_data=...]`.
+    The wrapper resolves `$matrix_user_id` & co. itself through the `matrix_context` /
+    `client_context` actions; this host has no template engine.
   The decision and the final URL are shown under the **Load widget** button. This is the logic a
   real client needs during the transition, in `src/widgets.ts`.
 - **Drives the protocol**: every message from the widget iframe goes into the driver, every
   message from the driver goes to the iframe. Both directions are shown in the **Messages** log.
 - **Capability prompt**: when the widget requests capabilities you get a checklist and an
-  **Approve selected** button, or tick **auto-approve capabilities** to grant everything.
+  **Approve selected** button, or tick **auto-approve capabilities** to grant everything. A
+  wrapped legacy widget prompts twice: first the wrapper asks for `m.matrix_context` and
+  `m.client_context` to template the URL, then the legacy widget's own capabilities follow.
 - **Memory store menu**: shows the room's timeline and state as the backend holds them.
   - **Inject event**: stores the JSON event in the room and offers it to the widget
     (`send_event` if it has a matching `receive.*` capability).
@@ -32,7 +34,7 @@ embedding the driver. It is not a Matrix client: nothing leaves the page.
 
 | field | default | meaning |
 |---|---|---|
-| room id / user id | `!room:example.org` / `@alice:example.org` | Identity of the in-memory room and of the sending user. Used for templating and as `room_id` / `sender` of events the widget sends. |
+| room id / user id | `!room:example.org` / `@alice:example.org` | Identity of the in-memory room and of the sending user, reported by `matrix_context` and used as `room_id` / `sender` of events the widget sends. `client_context` reports `widget-test-host` / `light` / `en`. |
 | compat wrapper url | `http://localhost:5174/` | Base URL of `../widget-compat-wrapper`, used for legacy events only. |
 | widget state event | example new widget | Any `m.widget` or `im.vector.modular.widgets` state event (`type`, `state_key`, `content`). Two example buttons fill it in. |
 

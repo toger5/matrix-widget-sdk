@@ -102,6 +102,7 @@ await api.requestCapabilities([
 await api.contentLoaded();                          // host removes its spinner
 const { event_id } = await api.sendEvent("m.room.message", { msgtype: "m.text", body: "hi" });
 const history = await api.readEvents("m.room.message", 20);
+const { user_id, room_id } = await api.getMatrixContext();   // needs m.matrix_context
 ```
 
 `new WidgetApi(sendToHost)` + `api.handleMessageFromHost(event.data)` is available when you want
@@ -135,6 +136,10 @@ impl WidgetHostPlatform for Platform {
     fn send_to_widget(&self, json: String) { /* iframe.postMessage(JSON.parse(json), widgetOrigin) */ }
     fn on_capabilities_requested(&self, requested: Vec<Capability>) { /* prompt user, then driver.approve_capabilities(..) */ }
     fn on_content_loaded(&self) { /* hide spinner */ }
+    // reported to widgets through `client_context`
+    fn client_id(&self) -> Option<String> { Some("io.example.client".into()) }
+    fn client_theme(&self) -> Option<String> { None }
+    fn client_language(&self) -> Option<String> { None }
 }
 
 let backend: Arc<dyn MatrixBackend> = Arc::new(MyRustSdkBackend::new(room));
@@ -154,8 +159,10 @@ cargo run -p uniffi-bindgen -- generate --library target/release/libwidget_host_
     --language kotlin --out-dir bindings/kotlin
 ```
 
-The foreign side implements `MatrixBackend` (async) and `WidgetHostPlatform`, then uses
-`WidgetHostDriver` exactly like the Rust API above. All event payloads cross the FFI as JSON
+The foreign side implements `MatrixBackend` (async operations plus the synchronous identity
+getters `room_id`, `user_id`, `device_id`, `display_name`, `avatar_url`, `base_url` that feed
+`matrix_context`) and `WidgetHostPlatform`, then uses `WidgetHostDriver` exactly like the Rust
+API above. All event payloads cross the FFI as JSON
 strings (`JsonValue`).
 
 ## Development

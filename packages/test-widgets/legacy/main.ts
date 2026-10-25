@@ -13,7 +13,9 @@ const parentUrl = params.get("parentUrl");
 // Like Element widgets: postMessage only to the origin named by `parentUrl` (the host, or the
 // compat wrapper, which rewrites the parameter to itself).
 const api = new WidgetApi(widgetId, parentUrl ? new URL(parentUrl).origin : "*");
-const state = { widgetId, parentUrl, started: false, ready: false, approved: [] as string[], clientVersions: [] as string[] };
+// `urlParams` shows what the (wrapper's) templating produced, e.g. `baseUrl`, `userId`.
+const state = { urlParams: Object.fromEntries(params), started: false, ready: false, approved: [] as string[], clientVersions: [] as string[] };
+console.log("[legacy test widget] url params", JSON.stringify(state.urlParams));
 const refresh = () => showState(state);
 
 api.transport.on("message", (ev: CustomEvent<IWidgetApiRequest>) => log("toWidget", ev.detail));
