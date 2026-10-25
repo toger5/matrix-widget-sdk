@@ -36,7 +36,7 @@ mod error;
 mod widget_event;
 
 pub use driver::{DriverSnapshot, WidgetHostDriver, WidgetHostPlatform};
-pub use error::DriverError;
+pub use error::{DriverError, PlatformError};
 pub use widget_actions;
 pub use widget_event::{
     WidgetStateEventContent, WIDGET_EVENT_TYPE, WIDGET_EVENT_TYPE_LEGACY, WIDGET_EVENT_TYPE_UNSTABLE,

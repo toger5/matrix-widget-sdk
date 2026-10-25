@@ -26,6 +26,36 @@ pub enum DriverError {
     WrongDirection { message: String },
 }
 
+/// A failure reported by the [`WidgetHostPlatform`](crate::WidgetHostPlatform) for an action it
+/// performs on the widget's behalf (navigation, sending a sticker). The driver answers the widget
+/// with `reason`.
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Error))]
+pub enum PlatformError {
+    #[error("{reason}")]
+    Failed { reason: String },
+}
+
+impl PlatformError {
+    pub fn new(reason: impl Into<String>) -> Self {
+        Self::Failed { reason: reason.into() }
+    }
+
+    pub fn reason(&self) -> &str {
+        let Self::Failed { reason } = self;
+        reason
+    }
+}
+
+/// A foreign platform threw something that is not a `PlatformError`: answer the widget with an
+/// error instead of panicking.
+#[cfg(feature = "uniffi")]
+impl From<uniffi::UnexpectedUniFFICallbackError> for PlatformError {
+    fn from(err: uniffi::UnexpectedUniFFICallbackError) -> Self {
+        Self::new(format!("unexpected platform error: {}", err.reason))
+    }
+}
+
 impl From<ActionError> for DriverError {
     fn from(err: ActionError) -> Self {
         match err {

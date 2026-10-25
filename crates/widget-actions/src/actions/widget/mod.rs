@@ -20,12 +20,12 @@ use serde::{Deserialize, Serialize};
 
 use super::{expect, parse_tagged, split_tagged};
 use crate::{
-    ActionError, ClientContextResponse, GetOpenIdResponse, MatrixContextResponse, MediaConfigResponse,
+    ActionError, ClientContextResponse, GetOpenIdResponse, MatrixContextResponse, MediaConfigResponse, NavigateRequest,
     ReadEventsRequest, ReadEventsResponse, ReadRelationsRequest, ReadRelationsResponse, ReadRoomAccountDataRequest,
     ReadRoomAccountDataResponse, RequestCapabilitiesRequest, RtcLivekitDelegateDelayedLeaveRequest,
     RtcLivekitGetTokenRequest, RtcLivekitGetTokenResponse, RtcTransportsResponse, SendEventRequest, SendEventResponse,
-    SendToDeviceRequest, Source, UpdateDelayedEventRequest, UserDirectorySearchRequest, UserDirectorySearchResponse,
-    WireMessage,
+    SendToDeviceRequest, SetAlwaysOnScreenRequest, SetAlwaysOnScreenResponse, Source, StickerRequest,
+    UpdateDelayedEventRequest, UserDirectorySearchRequest, UserDirectorySearchResponse, WireMessage,
 };
 
 pub(crate) mod client_context;
@@ -34,6 +34,7 @@ pub(crate) mod get_media_config;
 pub(crate) mod get_openid;
 pub(crate) mod get_rtc_transports;
 pub(crate) mod matrix_context;
+pub(crate) mod navigate;
 pub(crate) mod read_events;
 pub(crate) mod read_relations;
 pub(crate) mod read_room_account_data;
@@ -41,6 +42,8 @@ pub(crate) mod request_capabilities;
 pub(crate) mod rtc_livekit;
 pub(crate) mod send_event;
 pub(crate) mod send_to_device;
+pub(crate) mod set_always_on_screen;
+pub(crate) mod sticker;
 pub(crate) mod turn_servers;
 pub(crate) mod update_delayed_event;
 pub(crate) mod user_directory_search;
@@ -102,6 +105,15 @@ pub enum WidgetRequest {
         alias = "rtc_livekit_delegate_delayed_leave"
     )]
     RtcLivekitDelegateDelayedLeave { request: RtcLivekitDelegateDelayedLeaveRequest },
+    /// Ask the client to open a `matrix.to` permalink. Requires `org.matrix.msc2931.navigate`.
+    #[serde(rename = "org.matrix.msc2931.navigate", alias = "navigate")]
+    Navigate { request: NavigateRequest },
+    /// Ask the client to send a sticker. Requires `m.sticker`.
+    #[serde(rename = "m.sticker")]
+    SendSticker { request: StickerRequest },
+    /// Ask the client to keep the widget on screen. Requires `m.always_on_screen`.
+    #[serde(rename = "set_always_on_screen")]
+    SetAlwaysOnScreen { request: SetAlwaysOnScreenRequest },
     /// Who and where the widget is on Matrix. Requires `m.matrix_context`.
     #[serde(rename = "org.matrix.msc4412.matrix_context", alias = "matrix_context")]
     MatrixContext,
@@ -161,6 +173,14 @@ pub enum WidgetResponse {
         alias = "rtc_livekit_delegate_delayed_leave"
     )]
     RtcLivekitDelegateDelayedLeave,
+    /// `{}`
+    #[serde(rename = "org.matrix.msc2931.navigate", alias = "navigate")]
+    Navigate,
+    /// `{}`
+    #[serde(rename = "m.sticker")]
+    SendSticker,
+    #[serde(rename = "set_always_on_screen")]
+    SetAlwaysOnScreen { response: SetAlwaysOnScreenResponse },
     #[serde(rename = "org.matrix.msc4412.matrix_context", alias = "matrix_context")]
     MatrixContext { response: MatrixContextResponse },
     #[serde(rename = "org.matrix.msc4412.client_context", alias = "client_context")]

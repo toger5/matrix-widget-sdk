@@ -24,11 +24,12 @@ use std::rc::Rc;
 
 use js_sys::{Function, Promise};
 use serde::Serialize;
+use serde_json::Value;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::future_to_promise;
 use widget_actions::{
     Capability, MatrixEvent, ReadEventsRequest, ReadRelationsRequest, RtcLivekitDelegateDelayedLeaveRequest,
-    RtcLivekitGetTokenRequest, StateKeySelector, ToDeviceEvent, TurnServer, UpdateDelayedEventAction,
+    RtcLivekitGetTokenRequest, StateKeySelector, StickerRequest, ToDeviceEvent, TurnServer, UpdateDelayedEventAction,
 };
 
 use crate::{WidgetClient, WidgetClientError, WidgetDelegate};
@@ -39,6 +40,9 @@ struct Callbacks {
     on_state_update: Option<Function>,
     on_to_device_message: Option<Function>,
     on_turn_server: Option<Function>,
+    on_theme_change: Option<Function>,
+    on_language_change: Option<Function>,
+    on_visibility_change: Option<Function>,
     on_capabilities_changed: Option<Function>,
 }
 
@@ -100,6 +104,18 @@ impl WidgetDelegate for JsDelegate {
 
     fn on_turn_server(&self, server: TurnServer) {
         call(&self.callbacks.borrow().on_turn_server, to_js(&server));
+    }
+
+    fn on_theme_change(&self, theme: Value) {
+        call(&self.callbacks.borrow().on_theme_change, to_js(&theme));
+    }
+
+    fn on_language_change(&self, lang: String) {
+        call(&self.callbacks.borrow().on_language_change, JsValue::from_str(&lang));
+    }
+
+    fn on_visibility_change(&self, visible: bool) {
+        call(&self.callbacks.borrow().on_visibility_change, JsValue::from_bool(visible));
     }
 
     fn on_capabilities_changed(&self, requested: Vec<Capability>, approved: Vec<Capability>) {
@@ -212,6 +228,24 @@ impl WidgetApi {
     #[wasm_bindgen(js_name = onTurnServer)]
     pub fn on_turn_server(&self, callback: Option<Function>) {
         self.delegate.callbacks.borrow_mut().on_turn_server = callback;
+    }
+
+    /// Register a callback for `theme_change` (receives the client's theme object).
+    #[wasm_bindgen(js_name = onThemeChange)]
+    pub fn on_theme_change(&self, callback: Option<Function>) {
+        self.delegate.callbacks.borrow_mut().on_theme_change = callback;
+    }
+
+    /// Register a callback for `language_change` (receives the BCP 47 tag).
+    #[wasm_bindgen(js_name = onLanguageChange)]
+    pub fn on_language_change(&self, callback: Option<Function>) {
+        self.delegate.callbacks.borrow_mut().on_language_change = callback;
+    }
+
+    /// Register a callback for `visibility` (receives a boolean).
+    #[wasm_bindgen(js_name = onVisibilityChange)]
+    pub fn on_visibility_change(&self, callback: Option<Function>) {
+        self.delegate.callbacks.borrow_mut().on_visibility_change = callback;
     }
 
     /// Register a callback `(requested: string[], approved: string[]) => void` invoked when a
@@ -332,6 +366,27 @@ impl WidgetApi {
         request.event_type = event_type;
         request.limit = limit;
         promise(self.client.read_relations(request))
+    }
+
+    /// Ask the client to open a `https://matrix.to/#/` permalink (MSC2931).
+    #[wasm_bindgen(js_name = navigate)]
+    pub fn navigate(&self, uri: String) -> Promise {
+        promise(self.client.navigate(uri))
+    }
+
+    /// Ask the client to send a sticker: `{ name, description?, content: { url, info? } }`.
+    #[wasm_bindgen(js_name = sendSticker)]
+    pub fn send_sticker(&self, sticker: JsValue) -> Promise {
+        match serde_wasm_bindgen::from_value::<StickerRequest>(sticker) {
+            Ok(sticker) => promise(self.client.send_sticker(sticker)),
+            Err(e) => Promise::reject(&js_error(e)),
+        }
+    }
+
+    /// Ask the client to keep the widget on screen. Resolves with whether it will.
+    #[wasm_bindgen(js_name = setAlwaysOnScreen)]
+    pub fn set_always_on_screen(&self, value: bool) -> Promise {
+        promise(self.client.set_always_on_screen(value))
     }
 
     /// Start receiving TURN credentials through `onTurnServer` (MSC3846).

@@ -7,9 +7,9 @@ use std::rc::Rc;
 use std::sync::{Arc, Mutex};
 
 use serde_json::json;
-use widget_actions::{Capability, MatrixEvent, StateKeySelector};
+use widget_actions::{Capability, MatrixEvent, StateKeySelector, StickerRequest};
 use widget_base_sdk::{WidgetClient, WidgetDelegate};
-use widget_host_driver::{WidgetHostDriver, WidgetHostPlatform};
+use widget_host_driver::{PlatformError, WidgetHostDriver, WidgetHostPlatform};
 use widget_matrix_backend::InMemoryBackend;
 
 /// Widget -> host queue plus what the widget app observed.
@@ -55,6 +55,15 @@ impl WidgetHostPlatform for HostSide {
         *self.content_loaded.lock().unwrap() = true;
     }
     fn on_openid_requested(&self) {}
+    fn navigate(&self, _uri: String) -> Result<(), PlatformError> {
+        Ok(())
+    }
+    fn send_sticker(&self, _sticker: StickerRequest) -> Result<(), PlatformError> {
+        Ok(())
+    }
+    fn set_always_on_screen(&self, value: bool) -> bool {
+        value
+    }
     fn client_id(&self) -> Option<String> {
         Some("loopback".into())
     }

@@ -9,6 +9,7 @@ import {
   DELAYED_CAPABILITIES,
   EXTRA_CAPABILITIES,
   RELATION_CAPABILITIES,
+  STICKER,
   TO_DEVICE_CAPABILITIES,
   TO_DEVICE_MESSAGES,
   button,
@@ -33,6 +34,9 @@ api.onEvent((event: unknown) => (log("send_event", event), refresh()));
 api.onStateUpdate((state: unknown) => (log("update_state", state), refresh()));
 api.onToDeviceMessage((message: unknown) => log("send_to_device", message));
 api.onTurnServer((server: unknown) => log("update_turn_servers", server));
+api.onThemeChange((theme: unknown) => log("theme_change", theme));
+api.onLanguageChange((lang: string) => log("language_change", lang));
+api.onVisibilityChange((visible: boolean) => log("visibility", visible));
 api.onCapabilitiesChanged((requested: string[], approved: string[]) => (log("notify_capabilities", { requested, approved }), refresh()));
 
 const content = () => ({ msgtype: "m.text", body: valueOf("body") });
@@ -58,6 +62,9 @@ mount("MSC4412 test widget (widget-base-sdk)", [
   button("read m.room.message (limit 10)", () => api.readEvents("m.room.message", 10)),
   button("read state m.room.topic", () => api.readState("m.room.topic", undefined)),
   button("get_openid", () => api.requestOpenIdToken()),
+  button("navigate to matrix.to", () => api.navigate("https://matrix.to/#/#matrix:matrix.org")),
+  button("send sticker", () => api.sendSticker(STICKER)),
+  button("set_always_on_screen true", () => api.setAlwaysOnScreen(true)),
   button("watch_turn_servers", () => api.watchTurnServers()),
   button("unwatch_turn_servers", () => api.unwatchTurnServers()),
   button("get_rtc_transports", () => api.getRtcTransports()),

@@ -151,6 +151,16 @@ const platform: WidgetHostPlatform = {
   onOpenidRequested() {
     queueMicrotask(() => (askOpenId(), refresh()));
   },
+  navigate(uri) {
+    log("info", `widget asks to navigate to ${uri} (a real client would open it)`);
+  },
+  sendSticker(sticker) {
+    log("info", `widget asks to send sticker ${stringify(sticker)} (a real client would send m.sticker)`);
+  },
+  setAlwaysOnScreen(value) {
+    log("info", `widget asks always-on-screen = ${value}; honoured`);
+    return true;
+  },
   clientId: () => "widget-test-host",
   clientTheme: () => "light",
   clientLanguage: () => "en",
@@ -217,6 +227,10 @@ $("injectToDeviceBtn").onclick = () => {
   refresh();
 };
 $("clear").onclick = () => (backend?.clear(), refresh());
+let visible = true;
+$("themeChange").onclick = () => driver?.notifyThemeChange({ name: "dark", is_dark: true });
+$("languageChange").onclick = () => driver?.notifyLanguageChange("de");
+$("visibility").onclick = () => ((visible = !visible), driver?.notifyVisibility(visible));
 let turnCounter = 0;
 $("pushTurn").onclick = () => {
   turnCounter += 1;

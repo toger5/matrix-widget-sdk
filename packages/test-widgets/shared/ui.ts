@@ -84,7 +84,11 @@ export const EXTRA_CAPABILITIES = [
   "org.matrix.msc4039.upload_file",
   "com.beeper.capabilities.receive.room_account_data:m.tag",
   "org.matrix.msc4533.rtc_livekit_get_token",
+  "org.matrix.msc2931.navigate",
+  "m.sticker",
+  "m.always_on_screen",
 ].join(",");
+export const STICKER = { name: "cat", content: { url: "mxc://example.org/cat", info: { w: 64, h: 64, mimetype: "image/png" } } };
 
 /** Remembers the delay id of the last scheduled event so the update buttons have a target. */
 export const lastDelay = { id: "" };

@@ -5,16 +5,19 @@ use serde::{Deserialize, Serialize};
 
 use super::{expect, parse_tagged, split_tagged};
 use crate::{
-    ActionError, MatrixEvent, NotifyCapabilitiesRequest, OpenIdCredentialsRequest, Source, ToDeviceEvent, TurnServer,
-    UpdateStateRequest, WireMessage,
+    ActionError, JsonValue, LanguageChangeRequest, MatrixEvent, NotifyCapabilitiesRequest, OpenIdCredentialsRequest,
+    Source, ToDeviceEvent, TurnServer, UpdateStateRequest, VisibilityRequest, WireMessage,
 };
 
+pub(crate) mod language_change;
 pub(crate) mod notify_capabilities;
 pub(crate) mod openid_credentials;
 pub(crate) mod send_event;
 pub(crate) mod send_to_device;
+pub(crate) mod theme_change;
 pub(crate) mod update_state;
 pub(crate) mod update_turn_servers;
+pub(crate) mod visibility;
 
 // ----- Enums -----
 // The two enums are the source of truth for all host actions (actions where: `source: "host"`)
@@ -52,6 +55,18 @@ pub enum HostRequest {
         #[serde(rename = "request")]
         server: TurnServer,
     },
+    /// The client's theme changed (MSC2873); the body shape is up to the client.
+    #[serde(rename = "theme_change")]
+    ThemeChange {
+        #[serde(rename = "request")]
+        theme: JsonValue,
+    },
+    /// The client's UI language changed.
+    #[serde(rename = "language_change")]
+    LanguageChange { request: LanguageChangeRequest },
+    /// The client started or stopped showing the widget.
+    #[serde(rename = "visibility")]
+    Visibility { request: VisibilityRequest },
     /// An action this crate does not know; see [`WidgetRequest::Unknown`](crate::WidgetRequest::Unknown).
     #[serde(other)]
     Unknown,
@@ -76,6 +91,12 @@ pub enum HostResponse {
     OpenIdCredentials,
     #[serde(rename = "update_turn_servers")]
     UpdateTurnServers,
+    #[serde(rename = "theme_change")]
+    ThemeChange,
+    #[serde(rename = "language_change")]
+    LanguageChange,
+    #[serde(rename = "visibility")]
+    Visibility,
     /// A response to an action this crate does not know; the raw body is in the [`WireMessage`].
     #[serde(other)]
     Unknown,

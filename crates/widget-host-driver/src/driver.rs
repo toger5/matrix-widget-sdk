@@ -2,18 +2,19 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex, MutexGuard, Weak};
 
 use widget_actions::{
-    Action, ActionError, Capability, CapabilitySet, ClientContextResponse, GetOpenIdResponse, HostRequest,
-    MatrixContextResponse, MatrixEvent, MessageKind, NotifyCapabilitiesRequest, OpenIdCredentialsRequest,
-    ReadEventsRequest, ReadEventsResponse, ReadRelationsRequest, ReadRelationsResponse, ReadRoomAccountDataRequest,
-    ReadRoomAccountDataResponse, RoomSelector, RtcLivekitGetTokenResponse, RtcTransportsResponse, SendEventRequest,
-    SendEventResponse, SendToDeviceRequest, ToDeviceEvent, TurnServer, UpdateDelayedEventAction, UpdateStateRequest,
+    Action, ActionError, Capability, CapabilitySet, ClientContextResponse, GetOpenIdResponse, HostRequest, JsonValue,
+    LanguageChangeRequest, MatrixContextResponse, MatrixEvent, MessageKind, NotifyCapabilitiesRequest,
+    OpenIdCredentialsRequest, ReadEventsRequest, ReadEventsResponse, ReadRelationsRequest, ReadRelationsResponse,
+    ReadRoomAccountDataRequest, ReadRoomAccountDataResponse, RoomSelector, RtcLivekitGetTokenResponse,
+    RtcTransportsResponse, SendEventRequest, SendEventResponse, SendToDeviceRequest, SetAlwaysOnScreenResponse,
+    StickerRequest, ToDeviceEvent, TurnServer, UpdateDelayedEventAction, UpdateStateRequest, VisibilityRequest,
     WidgetError, WidgetRequest, WidgetResponse, WireMessage, API_VERSION_V1,
 };
 use widget_matrix_backend::{
     BackendError, MatrixBackend, RoomSink, RoomSubjects, Subscription, ToDeviceMessage, ToDeviceSink, TurnServerSink,
 };
 
-use crate::DriverError;
+use crate::{DriverError, PlatformError};
 
 /// Default number of events returned by `read_events` when the widget gives no limit.
 pub const DEFAULT_READ_LIMIT: u32 = 50;
@@ -46,6 +47,18 @@ pub trait WidgetHostPlatform: Send + Sync {
     /// is being asked. Prompt the user and call [`WidgetHostDriver::resolve_openid`]. Not called
     /// when [`WidgetHostDriver::set_openid_auto_approved`] is on.
     fn on_openid_requested(&self);
+
+    /// The widget asked to open `uri`, a `https://matrix.to/#/` permalink the driver already
+    /// validated (`org.matrix.msc2931.navigate`). Navigate, or fail with a reason for the widget.
+    fn navigate(&self, uri: String) -> Result<(), PlatformError>;
+
+    /// A sticker picker widget asked to send `sticker` to the room (`m.sticker`). Build and send
+    /// the `m.sticker` event, or fail with a reason for the widget.
+    fn send_sticker(&self, sticker: StickerRequest) -> Result<(), PlatformError>;
+
+    /// The widget asked to be kept on screen (`set_always_on_screen`). Return whether the request
+    /// is honoured.
+    fn set_always_on_screen(&self, value: bool) -> bool;
 
     /// Identifier of the embedding client, reported by `client_context` (e.g. `io.element.web`).
     fn client_id(&self) -> Option<String>;
@@ -266,6 +279,22 @@ impl WidgetHostDriver {
         }
     }
 
+    /// Tell the widget the client's theme changed (`theme_change`, MSC2873). `theme` is a
+    /// free-form object; what `client_context` reports as `client_theme` should be its `name`.
+    pub fn notify_theme_change(&self, theme: JsonValue) {
+        self.send_request(HostRequest::ThemeChange { theme });
+    }
+
+    /// Tell the widget the client's UI language changed (`language_change`); `lang` is a BCP 47 tag.
+    pub fn notify_language_change(&self, lang: String) {
+        self.send_request(HostRequest::LanguageChange { request: LanguageChangeRequest { lang } });
+    }
+
+    /// Tell the widget it became visible or hidden (`visibility`).
+    pub fn notify_visibility(&self, visible: bool) {
+        self.send_request(HostRequest::Visibility { request: VisibilityRequest { visible } });
+    }
+
     /// Current state of the driver.
     pub fn snapshot(&self) -> DriverSnapshot {
         let s = self.lock();
@@ -441,6 +470,36 @@ impl WidgetHostDriver {
                     );
                     self.platform.on_openid_requested();
                     return Ok(());
+                }
+            }
+            WidgetRequest::Navigate { request } => {
+                if !self.lock().approved.has(&Capability::Navigate) {
+                    error(format!("Missing capability for {}", Capability::Navigate))
+                } else if !request.uri.starts_with("https://matrix.to/#") {
+                    error("Invalid matrix.to URI".into())
+                } else {
+                    self.platform
+                        .navigate(request.uri)
+                        .map(|_| WidgetResponse::Navigate)
+                        .map_err(|e| WidgetError::new(format!("Error handling navigation: {}", e.reason())))
+                }
+            }
+            WidgetRequest::SendSticker { request } => {
+                if !self.lock().approved.has(&Capability::Sticker) {
+                    error(format!("Missing capability for {}", Capability::Sticker))
+                } else {
+                    self.platform
+                        .send_sticker(request)
+                        .map(|_| WidgetResponse::SendSticker)
+                        .map_err(|e| WidgetError::new(format!("Error sending sticker: {}", e.reason())))
+                }
+            }
+            WidgetRequest::SetAlwaysOnScreen { request } => {
+                if !self.lock().approved.has(&Capability::AlwaysOnScreen) {
+                    error(format!("Missing capability for {}", Capability::AlwaysOnScreen))
+                } else {
+                    let success = self.platform.set_always_on_screen(request.value);
+                    Ok(WidgetResponse::SetAlwaysOnScreen { response: SetAlwaysOnScreenResponse { success } })
                 }
             }
             WidgetRequest::SendToDevice { request } => self.send_to_device(request).await,
@@ -895,6 +954,9 @@ mod tests {
         requested: Mutex<Vec<Vec<Capability>>>,
         loaded: AtomicBool,
         openid_requests: AtomicUsize,
+        navigated: Mutex<Vec<String>>,
+        stickers: Mutex<Vec<StickerRequest>>,
+        always_on_screen: Mutex<Option<bool>>,
     }
 
     impl RecordingPlatform {
@@ -915,6 +977,21 @@ mod tests {
         }
         fn on_openid_requested(&self) {
             self.openid_requests.fetch_add(1, Ordering::SeqCst);
+        }
+        fn navigate(&self, uri: String) -> Result<(), PlatformError> {
+            if uri.contains("broken") {
+                return Err(PlatformError::new("no such room"));
+            }
+            self.navigated.lock().unwrap().push(uri);
+            Ok(())
+        }
+        fn send_sticker(&self, sticker: StickerRequest) -> Result<(), PlatformError> {
+            self.stickers.lock().unwrap().push(sticker);
+            Ok(())
+        }
+        fn set_always_on_screen(&self, value: bool) -> bool {
+            *self.always_on_screen.lock().unwrap() = Some(value);
+            value
         }
         fn client_id(&self) -> Option<String> {
             Some("test-client".into())
@@ -1820,6 +1897,63 @@ mod tests {
         ))
         .unwrap();
         assert!(platform.drain()[0].error().is_some());
+    }
+
+    #[test]
+    fn platform_actions_and_pushes() {
+        let (driver, _, platform) = setup();
+        let navigate = |uri: &str, id: &str| {
+            block(feed(
+                &driver,
+                WidgetRequest::Navigate { request: widget_actions::NavigateRequest { uri: uri.into() } },
+                id,
+            ))
+            .unwrap();
+            platform.drain().pop().unwrap()
+        };
+        assert!(navigate("https://matrix.to/#/#a:x", "n0").error().unwrap().message.contains("msc2931.navigate"));
+        grant(&driver, &platform, vec![Capability::Navigate, Capability::Sticker, Capability::AlwaysOnScreen]);
+        assert!(navigate("https://example.org", "n1").error().unwrap().message.contains("Invalid matrix.to URI"));
+        assert!(navigate("https://matrix.to/#/broken", "n2").error().unwrap().message.contains("no such room"));
+        assert_eq!(
+            WidgetResponse::from_wire(&navigate("https://matrix.to/#/#a:x", "n3")).unwrap(),
+            WidgetResponse::Navigate
+        );
+        assert_eq!(platform.navigated.lock().unwrap().as_slice(), &["https://matrix.to/#/#a:x".to_string()]);
+
+        let sticker =
+            StickerRequest { name: "cat".into(), description: None, content: json!({"url": "mxc://x/c"}).into() };
+        block(feed(&driver, WidgetRequest::SendSticker { request: sticker.clone() }, "s1")).unwrap();
+        assert_eq!(WidgetResponse::from_wire(&platform.drain()[0]).unwrap(), WidgetResponse::SendSticker);
+        assert_eq!(platform.stickers.lock().unwrap().as_slice(), std::slice::from_ref(&sticker));
+
+        block(feed(
+            &driver,
+            WidgetRequest::SetAlwaysOnScreen { request: widget_actions::SetAlwaysOnScreenRequest { value: true } },
+            "a1",
+        ))
+        .unwrap();
+        assert_eq!(
+            WidgetResponse::from_wire(&platform.drain()[0]).unwrap(),
+            WidgetResponse::SetAlwaysOnScreen { response: SetAlwaysOnScreenResponse { success: true } }
+        );
+        assert_eq!(*platform.always_on_screen.lock().unwrap(), Some(true));
+
+        // Pushes from the client need no capability and are acknowledged by the widget.
+        driver.notify_theme_change(json!({"name": "dark"}).into());
+        driver.notify_language_change("de".into());
+        driver.notify_visibility(false);
+        let sent = platform.drain();
+        assert_eq!(
+            sent.iter().map(|m| m.action.as_str()).collect::<Vec<_>>(),
+            ["theme_change", "language_change", "visibility"]
+        );
+        assert_eq!(sent[0].request_body()["name"], "dark");
+        assert_eq!(sent[1].request_body()["lang"], "de");
+        assert_eq!(sent[2].request_body()["visible"], false);
+        for m in &sent {
+            block(driver.handle_message_from_widget(m.ack().to_json())).unwrap();
+        }
     }
 
     #[test]

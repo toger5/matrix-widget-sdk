@@ -87,6 +87,10 @@ Actions implemented here:
 | `com.beeper.read_room_account_data` | widget | `{ type, room_ids? }` → `{ events }` | `com.beeper.capabilities.receive.room_account_data:<type>` |
 | `org.matrix.msc4533.rtc_livekit_get_token` | widget | `{ server_name, url, room_id, slot_id, member_id }` → `{ jwt }` | `org.matrix.msc4533.rtc_livekit_get_token` |
 | `org.matrix.msc4533.rtc_livekit_delegate_delayed_leave` | widget | `{ url, room_id, slot_id, member_id, delay_id }` → `{}` | `org.matrix.msc4533.rtc_livekit_delegate_delayed_leave` |
+| `org.matrix.msc2931.navigate` | widget | `{ uri }` (a `matrix.to` permalink) → `WidgetHostPlatform::navigate` | `org.matrix.msc2931.navigate` |
+| `m.sticker` | widget | `{ name, description?, content }` → `WidgetHostPlatform::send_sticker` | `m.sticker` |
+| `set_always_on_screen` | widget | `{ value }` → `{ success }` via `WidgetHostPlatform::set_always_on_screen` | `m.always_on_screen` |
+| `theme_change` / `language_change` / `visibility` | host | pushed by `driver.notify_theme_change / notify_language_change / notify_visibility` | – |
 | `org.matrix.msc4412.matrix_context` | widget | `{ user_id, device_id, room_id, display_name, avatar_url, matrix_base_url }`, replaces the legacy URL template parameters | `org.matrix.msc4412.matrix_context` |
 | `org.matrix.msc4412.client_context` | widget | `{ client_id?, client_theme?, client_language? }` about the embedding client | `org.matrix.msc4412.client_context` |
 

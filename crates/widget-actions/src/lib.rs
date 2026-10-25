@@ -25,15 +25,18 @@ mod json;
 mod matrix;
 mod wire;
 
+pub use actions::host::language_change::LanguageChangeRequest;
 pub use actions::host::notify_capabilities::NotifyCapabilitiesRequest;
 pub use actions::host::openid_credentials::OpenIdCredentialsRequest;
 pub use actions::host::update_state::UpdateStateRequest;
+pub use actions::host::visibility::VisibilityRequest;
 pub use actions::host::{HostRequest, HostResponse};
 pub use actions::widget::client_context::ClientContextResponse;
 pub use actions::widget::get_media_config::MediaConfigResponse;
 pub use actions::widget::get_openid::{GetOpenIdResponse, OpenIdState};
 pub use actions::widget::get_rtc_transports::RtcTransportsResponse;
 pub use actions::widget::matrix_context::MatrixContextResponse;
+pub use actions::widget::navigate::NavigateRequest;
 pub use actions::widget::read_events::{ReadEventsRequest, ReadEventsResponse, RoomSelector};
 pub use actions::widget::read_relations::{ReadRelationsRequest, ReadRelationsResponse, RelationDirection};
 pub use actions::widget::read_room_account_data::{ReadRoomAccountDataRequest, ReadRoomAccountDataResponse};
@@ -43,6 +46,8 @@ pub use actions::widget::rtc_livekit::{
 };
 pub use actions::widget::send_event::{SendEventRequest, SendEventResponse};
 pub use actions::widget::send_to_device::SendToDeviceRequest;
+pub use actions::widget::set_always_on_screen::{SetAlwaysOnScreenRequest, SetAlwaysOnScreenResponse};
+pub use actions::widget::sticker::StickerRequest;
 pub use actions::widget::update_delayed_event::{UpdateDelayedEventAction, UpdateDelayedEventRequest};
 pub use actions::widget::user_directory_search::{
     UserDirectorySearchRequest, UserDirectorySearchResponse, UserDirectoryUser,

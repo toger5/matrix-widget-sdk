@@ -10,6 +10,7 @@ import {
   DELAYED_CAPABILITIES,
   EXTRA_CAPABILITIES,
   RELATION_CAPABILITIES,
+  STICKER,
   TO_DEVICE_CAPABILITIES,
   TO_DEVICE_MESSAGES,
   button,
@@ -43,7 +44,7 @@ api.on("action:notify_capabilities", (ev: CustomEvent<IWidgetApiRequest>) => {
   state.approved = (ev.detail.data as { approved: string[] }).approved;
   refresh();
 });
-for (const action of ["send_event", "update_state", "send_to_device", "update_turn_servers"]) {
+for (const action of ["send_event", "update_state", "send_to_device", "update_turn_servers", "theme_change", "language_change", "visibility"]) {
   api.on(`action:${action}`, (ev: CustomEvent<IWidgetApiRequest>) => {
     ev.preventDefault();
     api.transport.reply(ev.detail, {});
@@ -81,6 +82,9 @@ mount("Legacy test widget (matrix-widget-api)", [
   button("read m.room.message (limit 10)", () => api.readRoomEvents("m.room.message", 10)),
   button("read state m.room.topic", () => api.readStateEvents("m.room.topic", undefined, "")),
   button("get_openid", () => api.requestOpenIDConnectToken()),
+  button("navigate to matrix.to", () => api.navigateTo("https://matrix.to/#/#matrix:matrix.org")),
+  button("send sticker", () => api.sendSticker(STICKER)),
+  button("set_always_on_screen true", () => api.setAlwaysOnScreen(true)),
   button("watch_turn_servers (logs the first)", async () => {
     for await (const server of api.getTurnServers()) return server;
   }),

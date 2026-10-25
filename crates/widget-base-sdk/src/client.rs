@@ -9,12 +9,13 @@ use serde_json::Value;
 // TODO consider splitting those into widget_actions::widget and widget_actions::host so that they are more explicit here.
 use widget_actions::{
     ActionError, Capability, ClientContextResponse, HostRequest, JsonValue, MatrixContextResponse, MatrixEvent,
-    MediaConfigResponse, MessageKind, OpenIdCredentialsRequest, OpenIdState, OpenIdToken, ReadEventsRequest,
-    ReadRelationsRequest, ReadRelationsResponse, ReadRoomAccountDataRequest, RequestCapabilitiesRequest,
-    RoomAccountData, RtcLivekitDelegateDelayedLeaveRequest, RtcLivekitGetTokenRequest, SendEventRequest,
-    SendEventResponse, SendToDeviceRequest, StateKeySelector, ToDeviceEvent, TurnServer, UpdateDelayedEventAction,
-    UpdateDelayedEventRequest, UserDirectorySearchRequest, UserDirectorySearchResponse, WidgetError, WidgetRequest,
-    WidgetResponse, WireMessage, API_VERSION_V1,
+    MediaConfigResponse, MessageKind, NavigateRequest, OpenIdCredentialsRequest, OpenIdState, OpenIdToken,
+    ReadEventsRequest, ReadRelationsRequest, ReadRelationsResponse, ReadRoomAccountDataRequest,
+    RequestCapabilitiesRequest, RoomAccountData, RtcLivekitDelegateDelayedLeaveRequest, RtcLivekitGetTokenRequest,
+    SendEventRequest, SendEventResponse, SendToDeviceRequest, SetAlwaysOnScreenRequest, StateKeySelector,
+    StickerRequest, ToDeviceEvent, TurnServer, UpdateDelayedEventAction, UpdateDelayedEventRequest,
+    UserDirectorySearchRequest, UserDirectorySearchResponse, WidgetError, WidgetRequest, WidgetResponse, WireMessage,
+    API_VERSION_V1,
 };
 
 use crate::WidgetClientError;
@@ -38,6 +39,15 @@ pub trait WidgetDelegate {
 
     /// New TURN credentials while watching them (`update_turn_servers`).
     fn on_turn_server(&self, _server: TurnServer) {}
+
+    /// The client's theme changed (`theme_change`); the object's shape is up to the client.
+    fn on_theme_change(&self, _theme: Value) {}
+
+    /// The client's UI language changed (`language_change`); a BCP 47 tag.
+    fn on_language_change(&self, _lang: String) {}
+
+    /// The client started or stopped showing the widget (`visibility`).
+    fn on_visibility_change(&self, _visible: bool) {}
 
     /// A capability negotiation finished. `approved` is the complete set now held.
     fn on_capabilities_changed(&self, _requested: Vec<Capability>, _approved: Vec<Capability>) {}
@@ -331,6 +341,32 @@ impl WidgetClient {
         }
     }
 
+    /// Ask the client to open a `https://matrix.to/#/` permalink (MSC2931). Needs
+    /// `org.matrix.msc2931.navigate`.
+    pub fn navigate(&self, uri: impl Into<String>) -> impl Future<Output = Result<(), WidgetClientError>> + 'static {
+        self.unit_request(WidgetRequest::Navigate { request: NavigateRequest { uri: uri.into() } }, "navigate")
+    }
+
+    /// Ask the client to send a sticker (`m.sticker`). Needs `m.sticker`.
+    pub fn send_sticker(
+        &self,
+        sticker: StickerRequest,
+    ) -> impl Future<Output = Result<(), WidgetClientError>> + 'static {
+        self.unit_request(WidgetRequest::SendSticker { request: sticker }, "m.sticker")
+    }
+
+    /// Ask the client to keep the widget on screen (or stop). Resolves with whether it will.
+    /// Needs `m.always_on_screen`.
+    pub fn set_always_on_screen(&self, value: bool) -> impl Future<Output = Result<bool, WidgetClientError>> + 'static {
+        let fut = self.request(WidgetRequest::SetAlwaysOnScreen { request: SetAlwaysOnScreenRequest { value } });
+        async move {
+            match fut.await? {
+                WidgetResponse::SetAlwaysOnScreen { response } => Ok(response.success),
+                _ => Err(WidgetClientError::UnexpectedResponse { action: "set_always_on_screen".into() }),
+            }
+        }
+    }
+
     /// Start receiving TURN credentials through [`WidgetDelegate::on_turn_server`] (MSC3846).
     /// Needs `town.robin.msc3846.turn_servers`.
     pub fn watch_turn_servers(&self) -> impl Future<Output = Result<(), WidgetClientError>> + 'static {
@@ -545,6 +581,18 @@ impl WidgetClient {
             HostRequest::UpdateTurnServers { server } => {
                 self.send(msg.ack());
                 self.delegate.on_turn_server(server);
+            }
+            HostRequest::ThemeChange { theme } => {
+                self.send(msg.ack());
+                self.delegate.on_theme_change(theme.into_inner());
+            }
+            HostRequest::LanguageChange { request } => {
+                self.send(msg.ack());
+                self.delegate.on_language_change(request.lang);
+            }
+            HostRequest::Visibility { request } => {
+                self.send(msg.ack());
+                self.delegate.on_visibility_change(request.visible);
             }
             HostRequest::OpenIdCredentials { request } => {
                 self.send(msg.ack());
