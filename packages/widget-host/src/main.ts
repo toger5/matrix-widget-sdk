@@ -16,6 +16,17 @@ const stringify = (data: unknown, indent?: number) =>
   JSON.stringify(data, (_, v: unknown) => (typeof v === "bigint" ? Number(v) : v), indent);
 const show = (id: string, data: unknown) => ($(id).textContent = stringify(data, 2));
 const pretty = (data: unknown) => (typeof data === "string" ? data : stringify(data));
+const el = (tag: string, className: string, text: string) =>
+  Object.assign(document.createElement(tag), { className, textContent: text });
+
+/** The parts of a widget API envelope the log highlights, if `data` is one. */
+function envelope(data: unknown) {
+  if (typeof data !== "object" || data === null) return undefined;
+  const msg = data as Record<string, unknown>;
+  if (typeof msg.action !== "string" || typeof msg.requestId !== "string") return undefined;
+  const direction = "response" in msg ? "response" : "request";
+  return { action: msg.action, direction, requestId: msg.requestId, body: msg[direction] };
+}
 
 const EXAMPLE_NEW: StateEvent = {
   type: "m.widget",
@@ -53,10 +64,23 @@ let backend: InMemoryBackend | undefined;
 let iframe: HTMLIFrameElement | undefined;
 let widgetOrigin = "*";
 
-function log(kind: "in" | "out" | "err" | "info", data: unknown) {
-  const line = document.createElement("pre");
-  line.className = kind;
-  line.textContent = `${new Date().toISOString().slice(11, 23)} ${{ in: "← widget", out: "→ widget", err: "error", info: "info" }[kind]} ${pretty(data)}`;
+const LABELS = { in: "← widget", out: "→ widget", err: "error", info: "info" };
+
+/** One log line: time and direction, then for envelopes the action, `(request|response <id>)` and the body. */
+function log(kind: keyof typeof LABELS, data: unknown) {
+  const line = el("pre", kind, `${new Date().toISOString().slice(11, 23)} ${LABELS[kind]} `);
+  const msg = envelope(data);
+  if (msg) {
+    line.append(
+      el("span", "action", msg.action),
+      "\n",
+      el("span", msg.direction, `(${msg.direction} ${msg.requestId})`),
+      "\n",
+      stringify(msg.body, 2),
+    );
+  } else {
+    line.append(pretty(data));
+  }
   $("log").prepend(line);
 }
 
