@@ -2,13 +2,15 @@
   "name": "matrix-widget-tools-sdk",
   "private": true,
   "workspaces": [
+    "packages/widget-host-bindings",
     "packages/*"
   ],
   "scripts": {
-    "wasm": "wasm-pack build crates/widget-base-sdk --target web --release && wasm-pack build crates/widget-host-driver --target web --release",
-    "build": "npm run build --workspaces",
+    "wasm": "wasm-pack build crates/widget-base-sdk --target web --release",
+    "build": "npm run wasm && npm run bindings && npm run build --workspaces --if-present",
     "test": "npm test --workspaces --if-present",
-    "dev": "concurrently -k -n host,wrapper,widgets -c blue,magenta,green \"npm:dev -w packages/widget-host\" \"npm:dev -w packages/widget-compat-wrapper\" \"npm:dev -w packages/test-widgets\""
+    "dev": "concurrently -k -n host,wrapper,widgets -c blue,magenta,green \"npm:dev -w packages/widget-host\" \"npm:dev -w packages/widget-compat-wrapper\" \"npm:dev -w packages/test-widgets\"",
+    "bindings": "npm run ubrn:web -w packages/widget-host-bindings"
   },
   "devDependencies": {
     "concurrently": "^9.0.0"

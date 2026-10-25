@@ -6,3 +6,7 @@ Cargo.lock.bak
 
 node_modules/
 dist/
+
+# ubrn output (packages/widget-host-bindings)
+packages/widget-host-bindings/src/generated/
+packages/widget-host-bindings/rust_modules/

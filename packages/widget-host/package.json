@@ -3,14 +3,14 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Minimal MSC4412 widget host webapp: widget-host-driver (wasm) on an in-memory room, for manual and e2e testing",
+  "description": "Minimal MSC4412 widget host webapp: widget-host-driver (uniffi/wasm bindings) on an in-memory room, for manual and e2e testing",
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview"
   },
   "dependencies": {
-    "widget-host-driver": "file:../../crates/widget-host-driver/pkg"
+    "@matrix-widget-tools/widget-host-bindings": "*"
   },
   "devDependencies": {
     "typescript": "^5.9.0",

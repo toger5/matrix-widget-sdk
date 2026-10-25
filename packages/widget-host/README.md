@@ -1,9 +1,11 @@
 # Widget test host
 
-A minimal MSC4412 widget host in the browser: `widget-host-driver` compiled to wasm, running on
-the crate's `InMemoryBackend` (an in-memory Matrix room). It exists for manual testing, for
-end-to-end tests of widgets and of the compat wrapper, and as the smallest possible example of
-embedding the driver. It is not a Matrix client: nothing leaves the page.
+A minimal MSC4412 widget host in the browser: `widget-host-driver` through the UniFFI/wasm
+bindings in `../widget-host-bindings`, running on the crate's `InMemoryBackend` (an in-memory
+Matrix room) which the page creates and hands to the driver like any other `MatrixBackend`. It
+exists for manual testing, for end-to-end tests of widgets and of the compat wrapper, and as the
+smallest possible example of embedding the driver. It is not a Matrix client: nothing leaves the
+page.
 
 ## What it does
 
@@ -26,11 +28,13 @@ embedding the driver. It is not a Matrix client: nothing leaves the page.
   the legacy widget's own capabilities are still prompted for, so a wrapped widget prompts once,
   like a new widget. The **Driver snapshot** lists the auto-approved set.
 - **Memory store menu**: shows the room's timeline and state as the backend holds them.
-  - **Inject event**: stores the JSON event in the room and offers it to the widget
-    (`send_event` if it has a matching `receive.*` capability).
-  - **Push state**: sends the current state to the widget (`update_state`, filtered by capabilities).
+  - **Inject event**: stores the JSON event in the room as if it came from sync. The driver's
+    subscription delivers it to the widget (`send_event`, and for state events also
+    `update_state`) if a matching `receive.*` capability was approved. Events the widget sends
+    are echoed back the same way.
   - **Clear store**: drops all stored events.
   - **fail sends**: every `send_event` from the widget fails with an error response.
+  Approving capabilities also pushes the current permitted state (`update_state`) at once.
 - **Driver snapshot**: `content_loaded`, approved and pending capabilities.
 
 ## Configuration
@@ -55,8 +59,9 @@ Example: `http://localhost:5173/?autoload=1&autoApprove=1&event=%7B%22type%22%3A
 ## Running
 
 ```sh
-npm run wasm             # once, from the repository root: builds the wasm packages (needs wasm-pack)
 npm install              # from the repository root
+npm run bindings         # once: generates ../widget-host-bindings (ubrn, wasm-bindgen-cli 0.2.129)
+npm run wasm             # once: widget-base-sdk for ../test-widgets (needs wasm-pack)
 npm run dev              # http://localhost:5173/
 ```
 

@@ -37,7 +37,6 @@ const MATRIX_CONTEXT: &str = "matrix_context";
 /// The context capabilities `m.client_context` and `m.matrix_context` guard the
 /// `client_context` / `matrix_context` actions. They have no unstable form.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-#[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
 pub enum Capability {
     SendEvent {
         event_type: String,
@@ -217,6 +216,14 @@ impl fmt::Display for Capability {
         f.write_str(&self.to_unstable_string())
     }
 }
+
+// Over the FFI a capability is its string form, exactly as on the wire: foreign code deals in
+// `org.matrix.msc2762.send.event:m.room.message` & co. and never needs the parsed shape.
+#[cfg(feature = "uniffi")]
+uniffi::custom_type!(Capability, String, {
+    try_lift: |raw| Ok(Capability::parse(&raw)),
+    lower: |cap| cap.to_string(),
+});
 
 impl From<&str> for Capability {
     fn from(raw: &str) -> Self {

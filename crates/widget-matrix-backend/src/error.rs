@@ -36,3 +36,12 @@ impl BackendError {
         Self::Other { message: message.into() }
     }
 }
+
+/// A foreign `MatrixBackend` threw something that is not a `BackendError`. Report it as an
+/// ordinary error so the widget gets an error response instead of the driver panicking.
+#[cfg(feature = "uniffi")]
+impl From<uniffi::UnexpectedUniFFICallbackError> for BackendError {
+    fn from(err: uniffi::UnexpectedUniFFICallbackError) -> Self {
+        Self::Other { message: format!("unexpected backend error: {}", err.reason) }
+    }
+}

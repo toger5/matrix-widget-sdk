@@ -5,7 +5,7 @@
 use serde::{de::Error as _, Deserialize, Deserializer, Serialize, Serializer};
 use serde_json::Value;
 
-use crate::JsonValue;
+use crate::{ActionError, JsonValue};
 
 /// A Matrix room event as exchanged with widgets (the client-server API event JSON).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -36,6 +36,20 @@ impl MatrixEvent {
     pub fn to_value(&self) -> Value {
         serde_json::to_value(self).expect("MatrixEvent is serializable")
     }
+}
+
+/// Parse an event from its client-server API JSON (`{"type": ..., "content": ...}`), the shape a
+/// host already has in hand. Mainly for foreign code, where [`MatrixEvent`] is a record with
+/// differently named fields.
+#[cfg_attr(feature = "uniffi", uniffi::export)]
+pub fn matrix_event_from_json(json: String) -> Result<MatrixEvent, ActionError> {
+    serde_json::from_str(&json).map_err(ActionError::malformed)
+}
+
+/// The client-server API JSON of an event, the inverse of [`matrix_event_from_json`].
+#[cfg_attr(feature = "uniffi", uniffi::export)]
+pub fn matrix_event_to_json(event: MatrixEvent) -> String {
+    event.to_value().to_string()
 }
 
 /// Which state keys a `read_events` request is interested in.

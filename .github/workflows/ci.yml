@@ -19,7 +19,29 @@ jobs:
           targets: wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@v2
       - run: cargo fmt --all --check
-      - run: cargo clippy --workspace --all-targets -- -D warnings
+      - run: cargo clippy --workspace --all-targets --all-features -- -D warnings
       - run: cargo test --workspace
       - run: cargo build --features uniffi -p widget-host-driver
       - run: cargo build --target wasm32-unknown-unknown -p widget-base-sdk
+
+  web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+      # wasm-bindgen-cli must match packages/widget-host-bindings/wasm-crate.patch.toml
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: wasm-pack,wasm-bindgen-cli@0.2.129
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run wasm
+      - run: npm run bindings
+      - run: npm run build --workspaces --if-present
+      - run: npm test

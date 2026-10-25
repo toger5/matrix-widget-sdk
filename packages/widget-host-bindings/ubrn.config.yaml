@@ -1,0 +1,22 @@
+# uniffi-bindgen-react-native (ubrn) configuration, `web` flavour.
+#
+# `ubrn build web` builds `widget-host-driver` natively with the `uniffi` feature, generates
+# TypeScript for every UniFFI namespace in that library (widget_actions, widget_matrix_backend,
+# widget_host_driver), writes a small wasm-bindgen shim crate to `rust_modules/wasm`, builds it
+# for wasm32-unknown-unknown and runs `wasm-bindgen` on the result. See README.md.
+rust:
+  directory: ../..
+  manifestPath: crates/widget-host-driver/Cargo.toml
+
+bindings:
+  ts: src/generated
+
+web:
+  manifestPath: rust_modules/wasm/Cargo.toml
+  manifestPatchFile: wasm-crate.patch.toml
+  wasmCrateName: widget-host-wasm
+  features:
+    - uniffi
+  target: web
+  tsBindings: src/generated
+  entrypoint: src/generated/index.web.ts

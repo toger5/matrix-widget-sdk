@@ -8,7 +8,7 @@ license.workspace = true
 repository.workspace = true
 
 [lib]
-crate-type = ["lib", "cdylib", "staticlib"]
+crate-type = ["lib"]
 
 [features]
 default = []

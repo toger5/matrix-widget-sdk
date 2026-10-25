@@ -1,0 +1,13 @@
+# Merged into the generated `rust_modules/wasm/Cargo.toml` by ubrn (`web.manifestPatchFile`).
+#
+# The generated crate asks for `wasm-bindgen = "*"`. The `wasm-bindgen` CLI that ubrn runs must
+# match the crate version exactly, so pin it here (and install the CLI with
+# `cargo install wasm-bindgen-cli --version 0.2.129 --locked`). Keep in sync with the root
+# Cargo.lock.
+[dependencies]
+wasm-bindgen = "=0.2.129"
+
+# (`opt-level` stays the template's `3`: the merge cannot change its type to "s".)
+[profile.release]
+lto = true
+codegen-units = 1

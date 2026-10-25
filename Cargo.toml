@@ -27,7 +27,7 @@ uuid = { version = "1.27", features = ["v4"] }
 async-trait = "0.1"
 futures-channel = "0.3"
 futures = "0.3"
-uniffi = { version = "0.32" }
+uniffi = { version = "=0.31" }
 
 wasm-bindgen = "0.2.129"
 wasm-bindgen-futures = "0.4"

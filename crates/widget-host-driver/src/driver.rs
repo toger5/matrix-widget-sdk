@@ -1,12 +1,12 @@
 use std::collections::HashMap;
-use std::sync::{Arc, Mutex, MutexGuard};
+use std::sync::{Arc, Mutex, MutexGuard, Weak};
 
 use widget_actions::{
     Action, ActionError, Capability, CapabilitySet, ClientContextResponse, HostRequest, MatrixContextResponse,
     MatrixEvent, MessageKind, NotifyCapabilitiesRequest, ReadEventsResponse, SendEventResponse, UpdateStateRequest,
     WidgetError, WidgetRequest, WidgetResponse, WireMessage, API_VERSION_V1,
 };
-use widget_matrix_backend::MatrixBackend;
+use widget_matrix_backend::{MatrixBackend, RoomSink, RoomSubjects, Subscription};
 
 use crate::DriverError;
 
@@ -79,6 +79,29 @@ pub struct WidgetHostDriver {
     backend: Arc<dyn MatrixBackend>,
     platform: Arc<dyn WidgetHostPlatform>,
     state: Mutex<State>,
+    /// The backend subscription matching the approved `receive.*` capabilities. Has its own
+    /// lock, which is never held while calling into the backend or the platform.
+    subscription: Mutex<Option<Arc<dyn Subscription>>>,
+    /// For handing a (weak) reference to the sink the backend calls back on.
+    this: Weak<WidgetHostDriver>,
+}
+
+/// The [`RoomSink`] the driver registers with the backend. Weak so that
+/// driver -> backend -> subscription -> sink does not keep the driver alive.
+struct DriverSink(Weak<WidgetHostDriver>);
+
+impl RoomSink for DriverSink {
+    fn on_timeline_events(&self, events: Vec<MatrixEvent>) {
+        if let Some(driver) = self.0.upgrade() {
+            driver.on_timeline_events(events);
+        }
+    }
+
+    fn on_state_events(&self, event_type: String, events: Vec<MatrixEvent>) {
+        if let Some(driver) = self.0.upgrade() {
+            driver.on_state_events(event_type, events);
+        }
+    }
 }
 
 #[cfg_attr(feature = "uniffi", uniffi::export)]
@@ -86,7 +109,13 @@ impl WidgetHostDriver {
     /// Create a driver for one widget. `backend` must be bound to the room the widget lives in.
     #[cfg_attr(feature = "uniffi", uniffi::constructor)]
     pub fn new(backend: Arc<dyn MatrixBackend>, platform: Arc<dyn WidgetHostPlatform>) -> Arc<Self> {
-        Arc::new(Self { backend, platform, state: Mutex::new(State::default()) })
+        Arc::new_cyclic(|this| Self {
+            backend,
+            platform,
+            state: Mutex::new(State::default()),
+            subscription: Mutex::new(None),
+            this: this.clone(),
+        })
     }
 
     /// Feed a message received from the widget window (`event.data`, JSON encoded) into the
@@ -140,11 +169,12 @@ impl WidgetHostDriver {
     /// [`WidgetHostPlatform::on_capabilities_requested`]. Only capabilities that were actually
     /// requested are granted; the rest of `approved` is ignored. Auto-approved capabilities
     /// (see [`set_auto_approved`](Self::set_auto_approved)) are granted in addition. Sends
-    /// `notify_capabilities`.
+    /// `notify_capabilities` and, when the set of `receive.*` capabilities grew, (re)subscribes
+    /// to the backend, which delivers the current room state as `update_state` right after.
     ///
     /// Does nothing if there is no pending request.
     pub fn approve_capabilities(&self, approved: Vec<Capability>) {
-        let outgoing = {
+        let (outgoing, changed) = {
             let mut state = self.lock();
             let Some(requested) = state.pending_requested.take() else {
                 return;
@@ -152,6 +182,7 @@ impl WidgetHostDriver {
             // only grant capabilities that were requested
             let granted: Vec<Capability> =
                 requested.iter().filter(|c| approved.contains(c) || state.auto_approved.contains(c)).cloned().collect();
+            let before = state.approved.len();
             for cap in &granted {
                 if !state.approved.contains(cap) {
                     state.approved.push(cap.clone());
@@ -159,39 +190,15 @@ impl WidgetHostDriver {
             }
             // `approved` is the complete set held after this round (cumulative, like the legacy
             // API), not only what was granted in this round.
-            HostRequest::NotifyCapabilities {
+            let outgoing = HostRequest::NotifyCapabilities {
                 request: NotifyCapabilitiesRequest { requested, approved: state.approved.clone() },
-            }
+            };
+            (outgoing, state.approved.len() != before)
         };
         self.send_request(outgoing);
-    }
-
-    /// Hand an event that arrived from sync for the widget's room to the driver. It is forwarded
-    /// with a `send_event` action if the widget has a matching `receive.*` capability.
-    /// Returns whether it was forwarded.
-    pub fn on_matrix_event(&self, event: MatrixEvent) -> bool {
-        let allowed = self.lock().approved.allows_receive(&event.event_type, event.state_key.as_deref());
-        if allowed {
-            self.send_request(HostRequest::SendEvent { event });
+        if changed {
+            self.resubscribe();
         }
-        allowed
-    }
-
-    /// Push (a subset of) the current room state. Only events the widget may receive are
-    /// included; nothing is sent when that leaves no events. Returns the number of events sent.
-    pub fn on_state_update(&self, state: Vec<MatrixEvent>) -> u32 {
-        let filtered: Vec<MatrixEvent> = {
-            let s = self.lock();
-            state
-                .into_iter()
-                .filter(|e| e.is_state() && s.approved.allows_receive(&e.event_type, e.state_key.as_deref()))
-                .collect()
-        };
-        let count = filtered.len() as u32;
-        if count > 0 {
-            self.send_request(HostRequest::UpdateState { request: UpdateStateRequest { state: filtered } });
-        }
-        count
     }
 
     /// Current state of the driver.
@@ -209,6 +216,62 @@ impl WidgetHostDriver {
 impl WidgetHostDriver {
     fn lock(&self) -> MutexGuard<'_, State> {
         self.state.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
+
+    fn take_subscription(&self) -> Option<Arc<dyn Subscription>> {
+        self.subscription.lock().unwrap_or_else(|p| p.into_inner()).take()
+    }
+
+    /// Replace the backend subscription with one matching the approved capabilities. The
+    /// backend may call the sink synchronously from inside `subscribe_room`, so no driver lock
+    /// is held across that call.
+    fn resubscribe(&self) {
+        let subjects = subjects_for(&self.lock().approved);
+        if let Some(old) = self.take_subscription() {
+            old.cancel();
+        }
+        if subjects.is_empty() {
+            return;
+        }
+        let Some(this) = self.this.upgrade() else {
+            return;
+        };
+        let sink: Arc<dyn RoomSink> = Arc::new(DriverSink(Arc::downgrade(&this)));
+        // A refused subscription leaves the widget without live events; there is no protocol
+        // message for that, so the error is dropped here.
+        if let Ok(subscription) = self.backend.subscribe_room(self.backend.room_id(), subjects, sink) {
+            *self.subscription.lock().unwrap_or_else(|p| p.into_inner()) = Some(subscription);
+        }
+    }
+
+    /// Timeline events from the subscription: forwarded one by one as `send_event` when the
+    /// widget holds a matching `receive.*` capability.
+    fn on_timeline_events(&self, events: Vec<MatrixEvent>) {
+        for event in events {
+            let allowed = self.lock().approved.allows_receive(&event.event_type, event.state_key.as_deref());
+            if allowed {
+                self.send_request(HostRequest::SendEvent { event });
+            }
+        }
+    }
+
+    /// The current state set of one type from the subscription: forwarded as `update_state`
+    /// with the events the widget may receive; nothing is sent when that leaves none.
+    fn on_state_events(&self, event_type: String, events: Vec<MatrixEvent>) {
+        let state: Vec<MatrixEvent> = {
+            let s = self.lock();
+            events
+                .into_iter()
+                .filter(|e| {
+                    e.is_state()
+                        && e.event_type == event_type
+                        && s.approved.allows_receive(&e.event_type, e.state_key.as_deref())
+                })
+                .collect()
+        };
+        if !state.is_empty() {
+            self.send_request(HostRequest::UpdateState { request: UpdateStateRequest { state } });
+        }
     }
 
     fn send(&self, msg: &WireMessage) {
@@ -346,17 +409,49 @@ impl WidgetHostDriver {
     }
 }
 
+impl Drop for WidgetHostDriver {
+    fn drop(&mut self) {
+        if let Some(subscription) = self.take_subscription() {
+            subscription.cancel();
+        }
+    }
+}
+
+/// What to subscribe to for a set of approved capabilities: `receive.event:T` means `T` on the
+/// timeline; `receive.state_event:T[#k]` means the state set of `T` *and* `T` on the timeline
+/// (state events are timeline events too, and widgets expect them as `send_event` as well).
+/// State keys are not part of the subjects; the driver filters them when forwarding.
+fn subjects_for(approved: &[Capability]) -> RoomSubjects {
+    let mut subjects = RoomSubjects::default();
+    let push = |list: &mut Vec<String>, t: &str| {
+        if !list.iter().any(|x| x == t) {
+            list.push(t.to_owned());
+        }
+    };
+    for cap in approved {
+        match cap {
+            Capability::ReceiveEvent { event_type } => push(&mut subjects.timeline_event_types, event_type),
+            Capability::ReceiveStateEvent { event_type, .. } => {
+                push(&mut subjects.timeline_event_types, event_type);
+                push(&mut subjects.state_event_types, event_type);
+            }
+            _ => {}
+        }
+    }
+    subjects
+}
+
 fn error<T>(message: String) -> Result<T, WidgetError> {
     Err(WidgetError::new(message))
 }
 
 #[cfg(test)]
 mod tests {
-    use std::sync::atomic::{AtomicBool, Ordering};
+    use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
     use serde_json::{json, Value};
     use widget_actions::{ReadEventsRequest, RequestCapabilitiesRequest, SendEventRequest, Source, StateKeySelector};
-    use widget_matrix_backend::InMemoryBackend;
+    use widget_matrix_backend::{BackendError, InMemoryBackend, JsonValue, SentEvent};
 
     use super::*;
 
@@ -395,10 +490,99 @@ mod tests {
     }
 
     fn setup() -> (Arc<WidgetHostDriver>, Arc<InMemoryBackend>, Arc<RecordingPlatform>) {
-        let backend = Arc::new(InMemoryBackend::new("!room:x", "@me:x"));
+        let backend = InMemoryBackend::new("!room:x".into(), "@me:x".into());
         let platform = Arc::new(RecordingPlatform::default());
         let driver = WidgetHostDriver::new(backend.clone(), platform.clone());
         (driver, backend, platform)
+    }
+
+    #[derive(Default)]
+    struct TestSubscription {
+        cancelled: AtomicUsize,
+    }
+
+    impl Subscription for TestSubscription {
+        fn cancel(&self) {
+            self.cancelled.fetch_add(1, Ordering::SeqCst);
+        }
+    }
+
+    /// Delegates sends and reads to an `InMemoryBackend` and records `subscribe_room` calls
+    /// (without ever delivering anything).
+    struct RecordingBackend {
+        inner: Arc<InMemoryBackend>,
+        subscribe_calls: Mutex<Vec<(String, RoomSubjects)>>,
+        subscriptions: Mutex<Vec<Arc<TestSubscription>>>,
+    }
+
+    impl RecordingBackend {
+        fn new() -> Arc<Self> {
+            Arc::new(Self {
+                inner: InMemoryBackend::new("!room:x".into(), "@me:x".into()),
+                subscribe_calls: Default::default(),
+                subscriptions: Default::default(),
+            })
+        }
+        fn calls(&self) -> Vec<(String, RoomSubjects)> {
+            self.subscribe_calls.lock().unwrap().clone()
+        }
+        fn cancelled(&self) -> Vec<usize> {
+            self.subscriptions.lock().unwrap().iter().map(|s| s.cancelled.load(Ordering::SeqCst)).collect()
+        }
+    }
+
+    #[async_trait::async_trait]
+    impl MatrixBackend for RecordingBackend {
+        fn room_id(&self) -> String {
+            self.inner.room_id()
+        }
+        fn user_id(&self) -> String {
+            self.inner.user_id()
+        }
+        fn device_id(&self) -> String {
+            self.inner.device_id()
+        }
+        fn display_name(&self) -> String {
+            self.inner.display_name()
+        }
+        fn avatar_url(&self) -> String {
+            self.inner.avatar_url()
+        }
+        fn base_url(&self) -> String {
+            self.inner.base_url()
+        }
+        async fn send_event(&self, event_type: String, content: JsonValue) -> Result<SentEvent, BackendError> {
+            self.inner.send_event(event_type, content).await
+        }
+        async fn send_state_event(
+            &self,
+            event_type: String,
+            state_key: String,
+            content: JsonValue,
+        ) -> Result<SentEvent, BackendError> {
+            self.inner.send_state_event(event_type, state_key, content).await
+        }
+        async fn read_events(&self, event_type: String, limit: u32) -> Result<Vec<MatrixEvent>, BackendError> {
+            self.inner.read_events(event_type, limit).await
+        }
+        async fn read_state(
+            &self,
+            event_type: String,
+            state_key: StateKeySelector,
+        ) -> Result<Vec<MatrixEvent>, BackendError> {
+            self.inner.read_state(event_type, state_key).await
+        }
+        fn subscribe_room(
+            &self,
+            room_id: String,
+            subjects: RoomSubjects,
+            _sink: Arc<dyn RoomSink>,
+        ) -> Result<Arc<dyn Subscription>, BackendError> {
+            self.subscribe_calls.lock().unwrap().push((room_id, subjects));
+            let subscription = Arc::new(TestSubscription::default());
+            self.subscriptions.lock().unwrap().push(subscription.clone());
+            Ok(subscription)
+        }
     }
 
     fn block<F: std::future::Future>(f: F) -> F::Output {
@@ -629,37 +813,150 @@ mod tests {
         assert_eq!(response.events[0].content["body"], "2");
     }
 
+    /// Request `caps` and approve them, returning what was sent after `notify_capabilities`.
+    fn grant_and_drain(
+        driver: &WidgetHostDriver,
+        platform: &RecordingPlatform,
+        caps: Vec<Capability>,
+    ) -> Vec<WireMessage> {
+        block(feed(
+            driver,
+            WidgetRequest::RequestCapabilities { request: RequestCapabilitiesRequest { capabilities: caps.clone() } },
+            "grant",
+        ))
+        .unwrap();
+        platform.drain();
+        driver.approve_capabilities(caps);
+        let mut sent = platform.drain();
+        assert_eq!(sent.remove(0).action, "notify_capabilities");
+        sent
+    }
+
+    fn types(list: &[&str]) -> Vec<String> {
+        list.iter().map(|s| s.to_string()).collect()
+    }
+
     #[test]
-    fn incoming_events_are_forwarded_only_with_capability() {
-        let (driver, _, platform) = setup();
-        assert!(!driver.on_matrix_event(event("m.room.message", None, json!({}))));
+    fn approving_capabilities_subscribes_with_derived_subjects() {
+        let backend = RecordingBackend::new();
+        let platform = Arc::new(RecordingPlatform::default());
+        let driver = WidgetHostDriver::new(backend.clone(), platform.clone());
+
+        // Send-only capabilities: nothing to subscribe to.
+        grant_and_drain(&driver, &platform, vec![Capability::send_event("m.room.message")]);
+        assert!(backend.calls().is_empty());
+
+        grant_and_drain(
+            &driver,
+            &platform,
+            vec![
+                Capability::receive_event("m.room.message"),
+                Capability::receive_state_event("m.room.topic", None::<&str>),
+                Capability::receive_state_event("m.room.topic", Some("")),
+            ],
+        );
+        let calls = backend.calls();
+        assert_eq!(calls.len(), 1);
+        assert_eq!(calls[0].0, "!room:x");
+        assert_eq!(calls[0].1.timeline_event_types, types(&["m.room.message", "m.room.topic"]));
+        assert_eq!(calls[0].1.state_event_types, types(&["m.room.topic"]));
+
+        // Nothing new granted: no new subscription.
+        grant_and_drain(&driver, &platform, vec![Capability::receive_event("m.room.message")]);
+        assert_eq!(backend.calls().len(), 1);
+        assert_eq!(backend.cancelled(), vec![0]);
+
+        // A new receive capability: the old subscription is cancelled, a wider one made.
+        grant_and_drain(&driver, &platform, vec![Capability::receive_event("m.reaction")]);
+        let calls = backend.calls();
+        assert_eq!(calls.len(), 2);
+        assert_eq!(calls[1].1.timeline_event_types, types(&["m.room.message", "m.room.topic", "m.reaction"]));
+        assert_eq!(backend.cancelled(), vec![1, 0]);
+    }
+
+    #[test]
+    fn dropping_the_driver_cancels_the_subscription() {
+        let backend = RecordingBackend::new();
+        let platform = Arc::new(RecordingPlatform::default());
+        let driver = WidgetHostDriver::new(backend.clone(), platform.clone());
+        grant_and_drain(&driver, &platform, vec![Capability::receive_event("m.room.message")]);
+        assert_eq!(backend.cancelled(), vec![0]);
+        drop(driver);
+        assert_eq!(backend.cancelled(), vec![1]);
+    }
+
+    #[test]
+    fn initial_state_and_changes_reach_the_widget() {
+        let (driver, backend, platform) = setup();
+        backend.inject(event("m.room.topic", Some(""), json!({"topic": "t1"})));
+        backend.inject(event("m.room.name", Some(""), json!({"name": "n"})));
+        backend.inject(event("m.room.message", None, json!({"body": "old"})));
+
+        // Approval delivers the current state the widget may see, synchronously (the in-memory
+        // backend calls the sink from inside `subscribe_room`), right after `notify_capabilities`.
+        let sent = grant_and_drain(
+            &driver,
+            &platform,
+            vec![
+                Capability::receive_state_event("m.room.topic", None::<&str>),
+                Capability::receive_event("m.room.message"),
+            ],
+        );
+        assert_eq!(sent.len(), 1);
+        assert_eq!(sent[0].action, "update_state");
+        let state = sent[0].request_body()["state"].as_array().unwrap().clone();
+        assert_eq!(state.len(), 1);
+        assert_eq!(state[0]["content"]["topic"], "t1");
+
+        // A changed topic: forwarded as a timeline event and as the new state set.
+        backend.inject(event("m.room.topic", Some(""), json!({"topic": "t2"})));
+        let sent = platform.drain();
+        assert_eq!(sent.iter().map(|m| m.action.as_str()).collect::<Vec<_>>(), ["send_event", "update_state"]);
+        assert_eq!(sent[0].source, Source::Host);
+        assert!(sent[0].is_v1());
+        assert_eq!(sent[0].request_body()["content"]["topic"], "t2");
+        let state = sent[1].request_body()["state"].as_array().unwrap().clone();
+        assert_eq!(state.len(), 1);
+        assert_eq!(state[0]["content"]["topic"], "t2");
+
+        // Types without a capability are dropped.
+        backend.inject(event("m.room.name", Some(""), json!({"name": "n2"})));
+        backend.inject(event("m.reaction", None, json!({})));
         assert!(platform.drain().is_empty());
 
-        grant(&driver, &platform, vec![Capability::receive_event("m.room.message")]);
-        assert!(driver.on_matrix_event(event("m.room.message", None, json!({"body": "x"}))));
-        assert!(!driver.on_matrix_event(event("m.reaction", None, json!({}))));
+        // A timeline event only.
+        backend.inject(event("m.room.message", None, json!({"body": "x"})));
         let sent = platform.drain();
         assert_eq!(sent.len(), 1);
-        assert_eq!(sent[0].source, Source::Host);
         assert_eq!(sent[0].action, "send_event");
-        assert!(sent[0].is_v1());
         assert_eq!(sent[0].request_body()["content"]["body"], "x");
 
-        // Unrelated state update is dropped entirely, matching ones forwarded.
-        assert_eq!(driver.on_state_update(vec![event("m.room.topic", Some(""), json!({}))]), 0);
+        // Emptied state is not pushed as an empty `update_state`.
+        backend.clear();
         assert!(platform.drain().is_empty());
-        grant(&driver, &platform, vec![Capability::receive_state_event("m.room.topic", None::<&str>)]);
-        assert_eq!(
-            driver.on_state_update(vec![
-                event("m.room.topic", Some(""), json!({})),
-                event("m.room.name", Some(""), json!({})),
-                event("m.room.message", None, json!({})),
-            ]),
-            1
-        );
-        let sent = platform.drain();
+    }
+
+    #[test]
+    fn state_key_capability_filters_the_set() {
+        let (driver, backend, platform) = setup();
+        backend.inject(event("m.room.member", Some("@me:x"), json!({"membership": "join"})));
+        backend.inject(event("m.room.member", Some("@other:x"), json!({"membership": "join"})));
+        let sent =
+            grant_and_drain(&driver, &platform, vec![Capability::receive_state_event("m.room.member", Some("@me:x"))]);
+        assert_eq!(sent.len(), 1);
         assert_eq!(sent[0].action, "update_state");
-        assert_eq!(sent[0].request_body()["state"].as_array().unwrap().len(), 1);
+        let state = sent[0].request_body()["state"].as_array().unwrap().clone();
+        assert_eq!(state.len(), 1);
+        assert_eq!(state[0]["state_key"], "@me:x");
+
+        // The other member changing: the full set is re-delivered, still filtered to `@me:x`
+        // and never as `send_event` (no capability for that state key).
+        backend.inject(event("m.room.member", Some("@other:x"), json!({"membership": "leave"})));
+        let sent = platform.drain();
+        assert_eq!(sent.iter().map(|m| m.action.as_str()).collect::<Vec<_>>(), ["update_state"]);
+        let state = sent[0].request_body()["state"].as_array().unwrap().clone();
+        assert_eq!(state.len(), 1);
+        assert_eq!(state[0]["state_key"], "@me:x");
     }
 
     #[test]

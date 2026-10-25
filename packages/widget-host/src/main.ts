@@ -1,26 +1,21 @@
-import init, { WidgetHost } from "widget-host-driver";
+import {
+  InMemoryBackend,
+  WidgetHostDriver,
+  matrixEventFromJson,
+  uniffiInitAsync,
+  type WidgetHostPlatform,
+} from "@matrix-widget-tools/widget-host-bindings";
 
 import { resolveWidget, type StateEvent } from "./widgets";
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 const value = (id: string) => $<HTMLInputElement>(id).value;
 const checked = (id: string) => $<HTMLInputElement>(id).checked;
-const show = (id: string, data: unknown) => ($(id).textContent = JSON.stringify(data, null, 2));
-const pretty = (data: unknown) => {
-  if (typeof data === "string") return data;
-  if (typeof data === "object" && data !== null) {
-    let htmlString = "action" in data ? "<span class='action'>"+data.action+"</span>": "missing_action" ;
-    let body;
-    if ("response" in data&&"requestId" in data) {
-      htmlString += "<br><span class='response'}>(response "+data.requestId+")</span><br>"; body = data.response
-    } else if ("request" in data && "requestId" in data) {
-      htmlString += "<br><span class='request'}>(request "+data.requestId+")</span><br>"; body = data.request;
-    }
-    return htmlString + JSON.stringify(body, null, 2);
-  }
-
-    return "unexpected type"
-};
+// `originServerTs` and friends are `bigint` in the bindings; JSON.stringify refuses those.
+const stringify = (data: unknown, indent?: number) =>
+  JSON.stringify(data, (_, v: unknown) => (typeof v === "bigint" ? Number(v) : v), indent);
+const show = (id: string, data: unknown) => ($(id).textContent = stringify(data, 2));
+const pretty = (data: unknown) => (typeof data === "string" ? data : stringify(data));
 
 const EXAMPLE_NEW: StateEvent = {
   type: "m.widget",
@@ -53,26 +48,27 @@ const EXAMPLE_EVENT = {
 /** Capabilities the compat wrapper needs to template a legacy widget's URL. */
 const CONTEXT_CAPABILITIES = ["m.matrix_context", "m.client_context"];
 
-let host: WidgetHost | undefined;
+let driver: WidgetHostDriver | undefined;
+let backend: InMemoryBackend | undefined;
 let iframe: HTMLIFrameElement | undefined;
 let widgetOrigin = "*";
 
 function log(kind: "in" | "out" | "err" | "info", data: unknown) {
   const line = document.createElement("pre");
   line.className = kind;
-  line.innerHTML = `${new Date().toISOString().slice(11, 23)} ${{ in: "← widget", out: "→ widget", err: "error", info: "info" }[kind]} ${pretty(data)}`;
+  line.textContent = `${new Date().toISOString().slice(11, 23)} ${{ in: "← widget", out: "→ widget", err: "error", info: "info" }[kind]} ${pretty(data)}`;
   $("log").prepend(line);
 }
 
 function refresh() {
-  if (!host) return;
-  show("snapshot", host.snapshot);
-  show("timeline", host.timeline);
-  show("state", host.state);
+  if (!driver || !backend) return;
+  show("snapshot", driver.snapshot());
+  show("timeline", backend.timeline());
+  show("state", backend.state());
 }
 
 function askCapabilities(requested: string[]) {
-  if (checked("autoApprove")) return host?.approveCapabilities(requested);
+  if (checked("autoApprove")) return driver?.approveCapabilities(requested);
   const box = $("caps");
   box.replaceChildren("Widget requests capabilities:");
   const inputs = requested.map((cap) => {
@@ -84,12 +80,32 @@ function askCapabilities(requested: string[]) {
   });
   const approve = Object.assign(document.createElement("button"), { textContent: "Approve selected" });
   approve.onclick = () => {
-    host?.approveCapabilities(inputs.filter((i) => i.checked).map((i) => i.value));
+    driver?.approveCapabilities(inputs.filter((i) => i.checked).map((i) => i.value));
     box.replaceChildren();
     refresh();
   };
   box.append(approve);
 }
+
+/** What the driver needs from this page. The driver calls these synchronously from inside its own methods. */
+const platform: WidgetHostPlatform = {
+  sendToWidget(json) {
+    const message = JSON.parse(json);
+    log("out", message);
+    iframe?.contentWindow?.postMessage(message, widgetOrigin);
+  },
+  onCapabilitiesRequested(requested) {
+    // Decide outside the driver call that reported the request, then call back in.
+    queueMicrotask(() => (askCapabilities(requested), refresh()));
+  },
+  onContentLoaded() {
+    $("spinner").hidden = true;
+    if (iframe) iframe.hidden = false;
+  },
+  clientId: () => "widget-test-host",
+  clientTheme: () => "light",
+  clientLanguage: () => "en",
+};
 
 function loadWidget() {
   const widget = resolveWidget(JSON.parse(value("event")) as StateEvent, value("wrapper"));
@@ -97,39 +113,30 @@ function loadWidget() {
 
   iframe?.remove();
   $("caps").replaceChildren();
-  host = new WidgetHost(value("room"), value("user"));
-  host.setClientContext("widget-test-host", "light", "en");
+  // A fresh in-memory room per load, handed to the driver like any other MatrixBackend would be
+  // (a matrix-js-sdk backed one, say).
+  backend = new InMemoryBackend(value("room"), value("user"));
+  driver = new WidgetHostDriver(backend.asBackend(), platform);
   // A legacy client handed these facts over as URL template parameters; the compat wrapper
   // asks for them instead, so grant them without a prompt. The driver applies the rule.
-  if (widget.legacy) host.setAutoApproved(CONTEXT_CAPABILITIES);
+  if (widget.legacy) driver.setAutoApproved(CONTEXT_CAPABILITIES);
   widgetOrigin = new URL(widget.url).origin;
   iframe = Object.assign(document.createElement("iframe"), { src: widget.url, hidden: widget.usesWidgetApi });
   $("spinner").hidden = !widget.usesWidgetApi;
-
-  host.onSendToWidget((json: string) => {
-    const message = JSON.parse(json);
-    log("out", message);
-    iframe?.contentWindow?.postMessage(message, widgetOrigin);
-  });
-  host.onCapabilitiesRequested((caps: string[]) => askCapabilities(caps));
-  host.onContentLoaded(() => {
-    $("spinner").hidden = true;
-    if (iframe) iframe.hidden = false;
-  });
   $("frame").querySelector(".fill")!.append(iframe);
   refresh();
 }
 
 window.addEventListener("message", (ev) => {
-  if (!host || !iframe || ev.source !== iframe.contentWindow) return;
+  if (!driver || !iframe || ev.source !== iframe.contentWindow) return;
   log("in", ev.data);
-  host
-    .handleMessageFromWidget(ev.data)
+  driver
+    .handleMessageFromWidget(typeof ev.data === "string" ? ev.data : JSON.stringify(ev.data))
     .catch((e: unknown) => log("err", String(e)))
     .finally(refresh);
 });
 
-await init();
+await uniffiInitAsync();
 $("exampleNew").onclick = () => ($<HTMLTextAreaElement>("event").value = JSON.stringify(EXAMPLE_NEW, null, 2));
 $("exampleLegacy").onclick = () => ($<HTMLTextAreaElement>("event").value = JSON.stringify(EXAMPLE_LEGACY, null, 2));
 $("load").onclick = () => {
@@ -141,15 +148,15 @@ $("load").onclick = () => {
 };
 $("injectBtn").onclick = () => {
   try {
-    log("info", `injected, forwarded: ${host?.injectEvent(JSON.parse(value("inject")))}`);
+    const event = backend?.inject(matrixEventFromJson(value("inject")));
+    log("info", `stored ${event?.eventId}; the widget gets it if its capabilities allow`);
   } catch (e) {
     log("err", String(e));
   }
   refresh();
 };
-$("pushState").onclick = () => (log("info", `update_state sent with ${host?.pushState()} events`), refresh());
-$("clear").onclick = () => (host?.clearStore(), refresh());
-$("fail").onchange = () => host?.failSends(checked("fail") ? "simulated failure (fail sends is on)" : undefined);
+$("clear").onclick = () => (backend?.clear(), refresh());
+$("fail").onchange = () => backend?.failSends(checked("fail") ? "simulated failure (fail sends is on)" : undefined);
 $("clearLog").onclick = () => $("log").replaceChildren();
 
 // Prefill from the URL so e2e tests can start deterministically:

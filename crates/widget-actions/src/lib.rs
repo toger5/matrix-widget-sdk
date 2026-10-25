@@ -34,7 +34,7 @@ pub use actions::Action;
 pub use capabilities::{Capability, CapabilitySet};
 pub use error::ActionError;
 pub use json::JsonValue;
-pub use matrix::{MatrixEvent, StateKeySelector};
+pub use matrix::{matrix_event_from_json, matrix_event_to_json, MatrixEvent, StateKeySelector};
 pub use wire::{MessageKind, Source, WidgetError, WireMessage, API_VERSION_V1};
 
 #[cfg(feature = "uniffi")]

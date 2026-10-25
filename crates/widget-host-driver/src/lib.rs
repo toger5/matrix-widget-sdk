@@ -10,8 +10,10 @@
 //!
 //! The driver takes care of the handshake (`content_loaded`, capability negotiation), checks
 //! capabilities, performs Matrix operations through a [`MatrixBackend`] and answers the widget.
-//! Events arriving from sync are pushed in with [`WidgetHostDriver::on_matrix_event`]; the driver
-//! forwards them only when the widget holds a matching `receive.*` capability.
+//! Events arriving from sync come through the backend too: whenever the widget's `receive.*`
+//! capabilities change, the driver subscribes to the backend
+//! ([`MatrixBackend::subscribe_room`]) for exactly those event types, pushes the current state as
+//! `update_state` and forwards new events as `send_event`.
 //!
 //! Capability approval is the one asynchronous, user-facing step: the driver acknowledges a
 //! `request_capabilities` immediately (as required by MSC4412), asks the platform via
@@ -21,14 +23,13 @@
 //! [`WidgetStateEventContent`] describes the `m.widget` state event (MSC4411) the client reads
 //! from room state to know which widgets to render.
 //!
-//! When compiled to `wasm32` this crate additionally exports a JavaScript class `WidgetHost`
-//! (see the `wasm` module): the driver wired to an [`InMemoryBackend`](widget_matrix_backend::InMemoryBackend)
-//! for test hosts and tooling.
+//! With the `uniffi` feature this crate's `cdylib` carries the UniFFI scaffolding of this crate,
+//! `widget-matrix-backend` and `widget-actions`; it is what the Kotlin/Swift/Python bindings and
+//! the web bindings (`packages/widget-host-bindings`, via uniffi-bindgen-react-native) are
+//! generated from.
 
 mod driver;
 mod error;
-#[cfg(target_arch = "wasm32")]
-pub mod wasm;
 mod widget_event;
 
 pub use driver::{DriverSnapshot, WidgetHostDriver, WidgetHostPlatform};

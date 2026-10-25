@@ -78,7 +78,7 @@ impl Loop {
         let widget_side = Rc::new(WidgetSide::default());
         let client = WidgetClient::new(widget_side.clone());
         let host_side = Arc::new(HostSide::default());
-        let backend = Arc::new(InMemoryBackend::new("!room:example", "@user:example"));
+        let backend = InMemoryBackend::new("!room:example".into(), "@user:example".into());
         let driver = WidgetHostDriver::new(backend.clone(), host_side.clone());
         Self { client, widget_side, driver, host_side, backend }
     }
@@ -119,13 +119,15 @@ fn full_widget_lifecycle() {
         assert_eq!(l.host_side.capability_requests.lock().unwrap().as_slice(), std::slice::from_ref(&caps));
         assert!(l.client.state().approved.is_empty());
 
-        // 2. The user approves all but the topic write.
+        // 2. The user approves all but the topic write. The driver subscribes to the backend;
+        //    the room has no topic yet, so no `update_state` is pushed.
         let approved: Vec<Capability> = caps.iter().take(3).cloned().collect();
         l.driver.approve_capabilities(approved.clone());
         l.pump().await;
         assert_eq!(l.client.state().approved, approved);
         assert_eq!(*l.widget_side.approved.borrow(), approved);
         assert_eq!(l.driver.snapshot().approved, approved);
+        assert!(l.widget_side.state_updates.borrow().is_empty());
 
         // 3. content_loaded
         let loaded = l.client.content_loaded();
@@ -134,19 +136,24 @@ fn full_widget_lifecycle() {
         assert!(*l.host_side.content_loaded.lock().unwrap());
         assert!(l.client.state().content_loaded);
 
-        // 4. Widget sends a message; it lands in the backend.
+        // 4. Widget sends a message; it lands in the backend and, like from a real sync, comes
+        //    back to the widget through the subscription.
         let send = l.client.send_event("m.room.message", json!({"msgtype": "m.text", "body": "hello"}));
         l.pump().await;
         let sent = send.await.unwrap();
         assert_eq!(sent.room_id, "!room:example");
         assert_eq!(l.backend.timeline()[0].event_id, sent.event_id);
+        assert_eq!(l.widget_side.events.borrow().len(), 1);
+        assert_eq!(l.widget_side.events.borrow()[0].event_id, sent.event_id);
+        l.widget_side.events.borrow_mut().clear();
 
         // 5. Denied write is reported as a host error.
         let denied = l.client.send_state_event("m.room.topic", "", json!({"topic": "x"}));
         l.pump().await;
         assert!(matches!(denied.await, Err(widget_base_sdk::WidgetClientError::Host(_))));
 
-        // 6. Sync delivers events; only permitted ones reach the widget.
+        // 6. Sync delivers events (injected into the backend); only permitted ones reach the
+        //    widget. A state event arrives as `send_event` and as a state update.
         let topic = MatrixEvent {
             event_type: "m.room.topic".into(),
             sender: "@admin:example".into(),
@@ -158,11 +165,11 @@ fn full_widget_lifecycle() {
             unsigned: None,
         };
         l.backend.inject(topic.clone());
-        assert!(l.driver.on_matrix_event(topic.clone()));
         let reaction = MatrixEvent { event_type: "m.reaction".into(), state_key: None, ..topic.clone() };
-        assert!(!l.driver.on_matrix_event(reaction));
+        l.backend.inject(reaction);
         l.pump().await;
         assert_eq!(l.widget_side.events.borrow().as_slice(), std::slice::from_ref(&topic));
+        assert_eq!(l.widget_side.state_updates.borrow().as_slice(), &[vec![topic.clone()]]);
         // The widget acked, so the driver has nothing outstanding.
         assert!(l.host_side.to_widget.lock().unwrap().is_empty());
 
@@ -171,10 +178,16 @@ fn full_widget_lifecycle() {
         l.pump().await;
         assert_eq!(read.await.unwrap(), vec![topic.clone()]);
 
-        // 8. Host pushes a state snapshot; non-permitted types are dropped.
+        // 8. State changes: non-permitted types are dropped, a changed topic replaces the set.
         let name = MatrixEvent { event_type: "m.room.name".into(), ..topic.clone() };
-        assert_eq!(l.driver.on_state_update(vec![topic.clone(), name]), 1);
+        l.backend.inject(name);
         l.pump().await;
-        assert_eq!(l.widget_side.state_updates.borrow().as_slice(), &[vec![topic]]);
+        assert_eq!(l.widget_side.state_updates.borrow().len(), 1);
+        let topic2 = MatrixEvent { event_id: "$topic2".into(), content: json!({"topic": "more!"}).into(), ..topic };
+        l.backend.inject(topic2.clone());
+        l.pump().await;
+        assert_eq!(l.widget_side.state_updates.borrow().last().unwrap(), &vec![topic2.clone()]);
+        assert_eq!(l.widget_side.events.borrow().last().unwrap(), &topic2);
+        assert!(l.host_side.to_widget.lock().unwrap().is_empty());
     });
 }

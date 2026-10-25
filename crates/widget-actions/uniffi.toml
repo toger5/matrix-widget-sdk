@@ -1,0 +1,8 @@
+# Per-language tweaks for the generated bindings of this crate.
+
+# `JsonValue` crosses the FFI as a JSON string. In TypeScript that would make every event
+# `content` a string to parse by hand, so present it as a plain JS value instead.
+[bindings.typescript.customTypes.JsonValue]
+typeName = "unknown"
+lift = "JSON.parse({})"
+lower = "JSON.stringify({})"
