@@ -1,0 +1,29 @@
+[package]
+name = "widget-host-driver"
+description = "Host (Matrix client) side state machine of the widget API: feed it widget messages, it drives a MatrixBackend"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[lib]
+crate-type = ["lib", "cdylib", "staticlib"]
+
+[features]
+default = []
+uniffi = ["dep:uniffi", "widget-actions/uniffi", "widget-matrix-backend/uniffi"]
+
+[dependencies]
+widget-actions.workspace = true
+widget-matrix-backend.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+uuid.workspace = true
+uniffi = { workspace = true, optional = true }
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+uuid = { workspace = true, features = ["js"] }
+
+[dev-dependencies]
+futures.workspace = true

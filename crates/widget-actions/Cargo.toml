@@ -1,0 +1,21 @@
+[package]
+name = "widget-actions"
+description = "Types for the Matrix widget API actions (MSC4411 / MSC4412) with optional UniFFI bindings"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[lib]
+crate-type = ["lib", "cdylib", "staticlib"]
+
+[features]
+default = []
+uniffi = ["dep:uniffi"]
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+uniffi = { workspace = true, optional = true }

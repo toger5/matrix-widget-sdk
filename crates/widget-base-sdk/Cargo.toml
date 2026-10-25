@@ -1,0 +1,35 @@
+[package]
+name = "widget-base-sdk"
+description = "Widget side of the Matrix widget API: tracks state, wraps actions in functions, speaks postMessage (wasm)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[lib]
+crate-type = ["lib", "cdylib"]
+
+[dependencies]
+widget-actions.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+futures-channel.workspace = true
+uuid.workspace = true
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+uuid = { workspace = true, features = ["js"] }
+wasm-bindgen.workspace = true
+wasm-bindgen-futures.workspace = true
+serde-wasm-bindgen.workspace = true
+js-sys.workspace = true
+web-sys = { workspace = true, features = ["Window", "MessageEvent", "EventTarget", "Event"] }
+
+[dev-dependencies]
+futures.workspace = true
+widget-host-driver.workspace = true
+widget-matrix-backend.workspace = true
+
+[package.metadata.wasm-pack.profile.release]
+wasm-opt = ["-Os"]

@@ -1,0 +1,35 @@
+//! `update_state`, host -> widget.
+//!
+//! The host pushes the current room state the widget is allowed to see (it holds
+//! `receive.state_event` capabilities for). Body: [`UpdateStateRequest`], acknowledged with `{}`.
+
+use serde::{Deserialize, Serialize};
+
+use crate::MatrixEvent;
+
+/// Wire name of the action.
+pub const ACTION: &str = "update_state";
+
+/// Body of `update_state`.
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+pub struct UpdateStateRequest {
+    pub state: Vec<MatrixEvent>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::actions::test_event;
+    use crate::{ToWidgetRequest, ToWidgetResponse};
+
+    #[test]
+    fn roundtrip() {
+        let req = ToWidgetRequest::UpdateState { request: UpdateStateRequest { state: vec![test_event()] } };
+        let wire = req.clone().into_wire("u");
+        assert_eq!(wire.action, ACTION);
+        assert_eq!(wire.to_value()["request"]["state"][0]["type"], "m.room.message");
+        assert_eq!(ToWidgetRequest::from_wire(&wire).unwrap(), req);
+        assert_eq!(ToWidgetResponse::from_wire(&wire.ack()).unwrap(), ToWidgetResponse::Ack);
+    }
+}

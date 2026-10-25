@@ -1,0 +1,25 @@
+[package]
+name = "widget-matrix-backend"
+description = "The Matrix side-effects interface the widget host driver drives (send events, read state, ...)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[lib]
+crate-type = ["lib", "cdylib", "staticlib"]
+
+[features]
+default = []
+uniffi = ["dep:uniffi", "widget-actions/uniffi"]
+
+[dependencies]
+widget-actions.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+async-trait.workspace = true
+uniffi = { workspace = true, optional = true }
+
+[dev-dependencies]
+futures.workspace = true
