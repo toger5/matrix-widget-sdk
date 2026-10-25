@@ -17,6 +17,7 @@ uniffi = ["dep:uniffi", "widget-actions/uniffi", "widget-matrix-backend/uniffi"]
 [dependencies]
 widget-actions.workspace = true
 widget-matrix-backend.workspace = true
+serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
 uuid.workspace = true

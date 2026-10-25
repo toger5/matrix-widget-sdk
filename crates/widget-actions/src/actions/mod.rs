@@ -1,31 +1,76 @@
-//! One module per widget API action.
+//! The typed layer of the protocol: the [`Action`] root and one submodule per message source with
+//! one file per action.
 //!
-//! Each submodule owns the action's wire name (`ACTION`) and the request / response body types
-//! that belong to it. The direction enums that dispatch over all actions
-//! ([`FromWidgetRequest`](crate::FromWidgetRequest), [`ToWidgetRequest`](crate::ToWidgetRequest), ...)
-//! live next to this module.
+//! * [`widget`]: actions the widget initiates (`source: widget`) and the `WidgetRequest` /
+//!   `WidgetResponse` enums.
+//! * [`host`]: actions the host initiates (`source: host`) and the `HostRequest` / `HostResponse`
+//!   enums.
 //!
-//! To add an action: create `actions/<action>.rs` with an `ACTION` constant and its body types,
-//! declare it below, re-export the constant, and add a variant to the matching direction enum.
+//! Only types that exist solely as the body of one action live here. Vocabulary that the host
+//! driver, the widget client or the backend use on their own ([`MatrixEvent`](crate::MatrixEvent),
+//! [`Capability`](crate::Capability), [`StateKeySelector`](crate::StateKeySelector)) lives at the
+//! crate root next to the wire types.
+//!
+//! `source` + `action` identify a message type, which is why `send_event` exists once per
+//! source: the widget's request to send an event and the host's delivery of one are different
+//! types that share a wire name.
+//!
+//! To add an action:
+//!
+//! 1. create `actions/<source>/<action>.rs` with a `pub const ACTION`, its body types and a
+//!    roundtrip test;
+//! 2. in that source's `mod.rs`: declare it (`pub(crate) mod`), re-export the constant
+//!    (`pub use ... as NAME`), and add one variant per enum it appears in, with
+//!    `#[serde(rename = "<action>")]` (a unit variant when the body is `{}`);
+//! 3. re-export the body types from `lib.rs`.
 
-use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use serde::de::DeserializeOwned;
+use serde::Serialize;
+use serde_json::{Map, Value};
 
-use crate::{ActionError, Source, WireMessage};
+use crate::{ActionError, MessageKind, Source, WireMessage};
 
-pub(crate) mod content_loaded;
-pub(crate) mod notify_capabilities;
-pub(crate) mod read_events;
-pub(crate) mod request_capabilities;
-pub(crate) mod send_event;
-pub(crate) mod update_state;
+pub mod host;
+pub mod widget;
 
-pub use content_loaded::ACTION as CONTENT_LOADED;
-pub use notify_capabilities::ACTION as NOTIFY_CAPABILITIES;
-pub use read_events::ACTION as READ_EVENTS;
-pub use request_capabilities::ACTION as REQUEST_CAPABILITIES;
-pub use send_event::ACTION as SEND_EVENT;
-pub use update_state::ACTION as UPDATE_STATE;
+use host::{HostRequest, HostResponse};
+use widget::{WidgetRequest, WidgetResponse};
+
+/// Every message of the protocol, typed. The variants mirror [`MessageKind`].
+///
+/// This is the one-call entry point for code that has to deal with any message. Code that only
+/// ever sees one direction can call the leaf `from_wire` directly. There is no `into_wire` on the
+/// root: requests need a fresh id ([`WidgetRequest::into_wire`]), responses are replies to an
+/// envelope ([`WireMessage::response_to`]).
+#[derive(Debug, Clone, PartialEq)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
+pub enum Action {
+    WidgetRequest { request: WidgetRequest },
+    WidgetResponse { response: WidgetResponse },
+    HostRequest { request: HostRequest },
+    HostResponse { response: HostResponse },
+}
+
+impl Action {
+    /// Parse any envelope into its typed form.
+    pub fn from_wire(msg: &WireMessage) -> Result<Self, ActionError> {
+        Ok(match msg.kind() {
+            MessageKind::WidgetRequest => Action::WidgetRequest { request: WidgetRequest::from_wire(msg)? },
+            MessageKind::WidgetResponse => Action::WidgetResponse { response: WidgetResponse::from_wire(msg)? },
+            MessageKind::HostRequest => Action::HostRequest { request: HostRequest::from_wire(msg)? },
+            MessageKind::HostResponse => Action::HostResponse { response: HostResponse::from_wire(msg)? },
+        })
+    }
+
+    pub fn kind(&self) -> MessageKind {
+        match self {
+            Action::WidgetRequest { .. } => MessageKind::WidgetRequest,
+            Action::WidgetResponse { .. } => MessageKind::WidgetResponse,
+            Action::HostRequest { .. } => MessageKind::HostRequest,
+            Action::HostResponse { .. } => MessageKind::HostResponse,
+        }
+    }
+}
 
 /// Check that `msg` was sent by `source` and is a request (`request == true`) or a response.
 pub(crate) fn expect(msg: &WireMessage, source: Source, request: bool) -> Result<(), ActionError> {
@@ -39,12 +84,30 @@ pub(crate) fn expect(msg: &WireMessage, source: Source, request: bool) -> Result
     Ok(())
 }
 
-pub(crate) fn to_value<T: Serialize>(v: &T) -> Value {
-    serde_json::to_value(v).expect("action bodies are serializable")
+/// Deserialize the action part of `msg` (`{ "action": ..., "request" | "response": ... }`) into a
+/// tagged leaf enum. Unknown actions land on the enum's `#[serde(other)]` variant; a known action
+/// with a malformed body is an [`ActionError::InvalidBody`].
+pub(crate) fn parse_tagged<T: DeserializeOwned>(msg: &WireMessage) -> Result<T, ActionError> {
+    let (key, body) =
+        if msg.is_request() { ("request", msg.request_body()) } else { ("response", msg.response_body()) };
+    let mut tagged = Map::with_capacity(2);
+    tagged.insert("action".to_owned(), Value::String(msg.action.clone()));
+    tagged.insert(key.to_owned(), body);
+    serde_json::from_value(Value::Object(tagged)).map_err(|e| ActionError::invalid_body(&msg.action, e))
 }
 
-pub(crate) fn from_value<T: for<'de> Deserialize<'de>>(action: &str, body: Value) -> Result<T, ActionError> {
-    serde_json::from_value(body).map_err(|e| ActionError::invalid_body(action, e))
+/// Serialize a tagged leaf enum and split it into `(action, body)`. The body is `{}` for unit
+/// variants.
+pub(crate) fn split_tagged<T: Serialize>(value: &T) -> (String, Value) {
+    let Value::Object(mut map) = serde_json::to_value(value).expect("actions are serializable") else {
+        unreachable!("tagged enums serialize to objects")
+    };
+    let Some(Value::String(action)) = map.remove("action") else {
+        unreachable!("tagged enums carry a string `action`")
+    };
+    let body =
+        map.remove("request").or_else(|| map.remove("response")).unwrap_or_else(|| Value::Object(Map::default()));
+    (action, body)
 }
 
 #[cfg(test)]
@@ -58,5 +121,26 @@ pub(crate) fn test_event() -> crate::MatrixEvent {
         state_key: None,
         content: serde_json::json!({"body": "x"}).into(),
         unsigned: None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn root_dispatch() {
+        let req = WidgetRequest::ContentLoaded.into_wire("a");
+        assert_eq!(Action::from_wire(&req).unwrap(), Action::WidgetRequest { request: WidgetRequest::ContentLoaded });
+        assert_eq!(
+            Action::from_wire(&req.ack()).unwrap(),
+            Action::WidgetResponse { response: WidgetResponse::ContentLoaded }
+        );
+        let host = HostRequest::SendEvent { event: test_event() }.into_wire("b");
+        let parsed = Action::from_wire(&host).unwrap();
+        assert_eq!(parsed.kind(), MessageKind::HostRequest);
+        assert_eq!(parsed, Action::HostRequest { request: HostRequest::SendEvent { event: test_event() } });
+        assert_eq!(Action::from_wire(&host.ack()).unwrap(), Action::HostResponse { response: HostResponse::SendEvent });
+        assert_eq!(HostResponse::SendEvent.into_wire_reply(&host), host.ack());
     }
 }

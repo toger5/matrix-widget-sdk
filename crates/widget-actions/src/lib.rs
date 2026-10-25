@@ -6,10 +6,10 @@
 //! This crate is deliberately free of any I/O or state. It only knows how to:
 //!
 //! * (de)serialize the generic wire envelope ([`WireMessage`]),
-//! * map an envelope to a typed action ([`FromWidgetRequest`], [`ToWidgetRequest`], ...); the
-//!   body types of each action live in their own module under [`actions`],
-//! * parse and match capability strings ([`Capability`]),
-//! * describe the widget state event ([`WidgetStateEventContent`]).
+//! * map an envelope to a typed action ([`Action`] and its leaves [`WidgetRequest`],
+//!   [`WidgetResponse`], [`HostRequest`], [`HostResponse`]); each action has its own module under
+//!   [`actions`], grouped by the source that initiates it,
+//! * parse and match capability strings ([`Capability`]).
 //!
 //! Everything is plain data so it can be shared with other languages through UniFFI
 //! (enable the `uniffi` feature) and compiled to WebAssembly.
@@ -17,29 +17,23 @@
 pub mod actions;
 mod capabilities;
 mod error;
-mod from_widget;
 mod json;
 mod matrix;
-mod to_widget;
 mod wire;
 
-pub use actions::notify_capabilities::NotifyCapabilitiesRequest;
-pub use actions::read_events::{ReadEventsRequest, ReadEventsResponse, StateKeySelector};
-pub use actions::request_capabilities::RequestCapabilitiesRequest;
-pub use actions::send_event::{SendEventRequest, SendEventResponse};
-pub use actions::update_state::UpdateStateRequest;
+pub use actions::host::notify_capabilities::NotifyCapabilitiesRequest;
+pub use actions::host::update_state::UpdateStateRequest;
+pub use actions::host::{HostRequest, HostResponse};
+pub use actions::widget::read_events::{ReadEventsRequest, ReadEventsResponse};
+pub use actions::widget::request_capabilities::RequestCapabilitiesRequest;
+pub use actions::widget::send_event::{SendEventRequest, SendEventResponse};
+pub use actions::widget::{WidgetRequest, WidgetResponse};
+pub use actions::Action;
 pub use capabilities::{Capability, CapabilitySet};
 pub use error::ActionError;
-pub use from_widget::{FromWidgetRequest, FromWidgetResponse};
 pub use json::JsonValue;
-pub use matrix::{
-    MatrixEvent, WidgetStateEventContent, WIDGET_EVENT_TYPE, WIDGET_EVENT_TYPE_LEGACY, WIDGET_EVENT_TYPE_UNSTABLE,
-};
-pub use to_widget::{ToWidgetRequest, ToWidgetResponse};
+pub use matrix::{MatrixEvent, StateKeySelector};
 pub use wire::{MessageKind, Source, WidgetError, WireMessage, API_VERSION_V1};
-
-#[cfg(feature = "uniffi")]
-mod ffi;
 
 #[cfg(feature = "uniffi")]
 uniffi::setup_scaffolding!();

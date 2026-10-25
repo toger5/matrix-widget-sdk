@@ -21,15 +21,15 @@ pub struct UpdateStateRequest {
 mod tests {
     use super::*;
     use crate::actions::test_event;
-    use crate::{ToWidgetRequest, ToWidgetResponse};
+    use crate::{HostRequest, HostResponse};
 
     #[test]
     fn roundtrip() {
-        let req = ToWidgetRequest::UpdateState { request: UpdateStateRequest { state: vec![test_event()] } };
+        let req = HostRequest::UpdateState { request: UpdateStateRequest { state: vec![test_event()] } };
         let wire = req.clone().into_wire("u");
         assert_eq!(wire.action, ACTION);
         assert_eq!(wire.to_value()["request"]["state"][0]["type"], "m.room.message");
-        assert_eq!(ToWidgetRequest::from_wire(&wire).unwrap(), req);
-        assert_eq!(ToWidgetResponse::from_wire(&wire.ack()).unwrap(), ToWidgetResponse::Ack);
+        assert_eq!(HostRequest::from_wire(&wire).unwrap(), req);
+        assert_eq!(HostResponse::from_wire(&wire.ack()).unwrap(), HostResponse::UpdateState);
     }
 }

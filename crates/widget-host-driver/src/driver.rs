@@ -2,9 +2,9 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex, MutexGuard};
 
 use widget_actions::{
-    ActionError, Capability, CapabilitySet, FromWidgetRequest, FromWidgetResponse, MatrixEvent, MessageKind,
-    NotifyCapabilitiesRequest, ReadEventsResponse, SendEventResponse, ToWidgetRequest, ToWidgetResponse,
-    UpdateStateRequest, WidgetError, WireMessage, API_VERSION_V1,
+    Action, ActionError, Capability, CapabilitySet, HostRequest, MatrixEvent, MessageKind, NotifyCapabilitiesRequest,
+    ReadEventsResponse, SendEventResponse, UpdateStateRequest, WidgetError, WidgetRequest, WidgetResponse, WireMessage,
+    API_VERSION_V1,
 };
 use widget_matrix_backend::MatrixBackend;
 
@@ -57,7 +57,7 @@ struct State {
     approved: Vec<Capability>,
     pending_requested: Option<Vec<Capability>>,
     /// Requests the host sent to the widget that have not been acknowledged yet.
-    awaiting_ack: HashMap<String, ToWidgetRequest>,
+    awaiting_ack: HashMap<String, HostRequest>,
 }
 
 /// Host side state machine for one widget instance. See the crate documentation.
@@ -90,11 +90,23 @@ impl WidgetHostDriver {
             None => return Err(DriverError::LegacyWidgetApi),
             Some(other) => return Err(DriverError::UnsupportedVersion { version: other.to_owned() }),
         }
-        match msg.kind() {
-            MessageKind::FromWidgetRequest => self.handle_request(msg).await,
-            MessageKind::ToWidgetResponse => self.handle_response(msg),
-            MessageKind::FromWidgetResponse | MessageKind::ToWidgetRequest => {
-                Err(DriverError::WrongDirection { message: format!("host received a {:?} message", msg.kind()) })
+        let action = match Action::from_wire(&msg) {
+            Ok(action) => action,
+            Err(ActionError::InvalidBody { message, .. }) if msg.kind() == MessageKind::WidgetRequest => {
+                self.send(&msg.error_response_to(WidgetError::new(format!("Invalid request body: {message}"))));
+                return Ok(());
+            }
+            // Widgets acknowledge everything with `{}`; an error response is informational only.
+            Err(ActionError::ErrorResponse { .. }) if msg.kind() == MessageKind::HostResponse => {
+                return self.handle_response(msg);
+            }
+            Err(other) => return Err(other.into()),
+        };
+        match action {
+            Action::WidgetRequest { request } => self.handle_request(msg, request).await,
+            Action::HostResponse { .. } => self.handle_response(msg),
+            other => {
+                Err(DriverError::WrongDirection { message: format!("host received a {:?} message", other.kind()) })
             }
         }
     }
@@ -116,7 +128,7 @@ impl WidgetHostDriver {
                     state.approved.push(cap.clone());
                 }
             }
-            ToWidgetRequest::NotifyCapabilities { request: NotifyCapabilitiesRequest { requested, approved: granted } }
+            HostRequest::NotifyCapabilities { request: NotifyCapabilitiesRequest { requested, approved: granted } }
         };
         self.send_request(outgoing);
     }
@@ -127,7 +139,7 @@ impl WidgetHostDriver {
     pub fn on_matrix_event(&self, event: MatrixEvent) -> bool {
         let allowed = self.lock().approved.allows_receive(&event.event_type, event.state_key.as_deref());
         if allowed {
-            self.send_request(ToWidgetRequest::SendEvent { event });
+            self.send_request(HostRequest::SendEvent { event });
         }
         allowed
     }
@@ -144,7 +156,7 @@ impl WidgetHostDriver {
         };
         let count = filtered.len() as u32;
         if count > 0 {
-            self.send_request(ToWidgetRequest::UpdateState { request: UpdateStateRequest { state: filtered } });
+            self.send_request(HostRequest::UpdateState { request: UpdateStateRequest { state: filtered } });
         }
         count
     }
@@ -169,37 +181,28 @@ impl WidgetHostDriver {
         self.platform.send_to_widget(msg.to_json());
     }
 
-    fn send_request(&self, request: ToWidgetRequest) {
+    fn send_request(&self, request: HostRequest) {
         let id = uuid::Uuid::new_v4().to_string();
         self.lock().awaiting_ack.insert(id.clone(), request.clone());
         self.send(&request.into_wire(id));
     }
 
-    async fn handle_request(&self, msg: WireMessage) -> Result<(), DriverError> {
-        let request = match FromWidgetRequest::from_wire(&msg) {
-            Ok(r) => r,
-            Err(ActionError::InvalidBody { message, .. }) => {
-                self.send(&msg.error_response_to(WidgetError::new(format!("Invalid request body: {message}"))));
-                return Ok(());
-            }
-            Err(other) => return Err(other.into()),
-        };
-
-        let response = match request {
-            FromWidgetRequest::ContentLoaded => {
+    async fn handle_request(&self, msg: WireMessage, request: WidgetRequest) -> Result<(), DriverError> {
+        let response: Result<WidgetResponse, WidgetError> = match request {
+            WidgetRequest::ContentLoaded => {
                 self.lock().content_loaded = true;
                 self.send(&msg.ack());
                 self.platform.on_content_loaded();
                 return Ok(());
             }
-            FromWidgetRequest::RequestCapabilities { request } => {
+            WidgetRequest::RequestCapabilities { request } => {
                 let requested = request.capabilities;
                 self.lock().pending_requested = Some(requested.clone());
                 self.send(&msg.ack());
                 self.platform.on_capabilities_requested(requested);
                 return Ok(());
             }
-            FromWidgetRequest::SendEvent { request } => {
+            WidgetRequest::SendEvent { request } => {
                 let allowed = self.lock().approved.allows_send(&request.event_type, request.state_key.as_deref());
                 if !allowed {
                     let needed = match &request.state_key {
@@ -215,14 +218,14 @@ impl WidgetHostDriver {
                         None => self.backend.send_event(request.event_type, request.content).await,
                     };
                     match result {
-                        Ok(sent) => FromWidgetResponse::SendEvent {
+                        Ok(sent) => Ok(WidgetResponse::SendEvent {
                             response: SendEventResponse { room_id: sent.room_id, event_id: sent.event_id },
-                        },
+                        }),
                         Err(e) => error(format!("Failed to send event: {e}")),
                     }
                 }
             }
-            FromWidgetRequest::ReadEvents { request } => {
+            WidgetRequest::ReadEvents { request } => {
                 let is_state = request.is_state();
                 let allowed = self.lock().approved.allows_read_type(&request.event_type, is_state);
                 if !allowed {
@@ -245,16 +248,19 @@ impl WidgetHostDriver {
                                 .filter(|e| approved.allows_receive(&e.event_type, e.state_key.as_deref()))
                                 .collect();
                             events.truncate(limit as usize);
-                            FromWidgetResponse::ReadEvents { response: ReadEventsResponse { events } }
+                            Ok(WidgetResponse::ReadEvents { response: ReadEventsResponse { events } })
                         }
                         Err(e) => error(format!("Failed to read events: {e}")),
                     }
                 }
             }
-            FromWidgetRequest::Unknown { action, .. } => error(format!("Unknown action `{action}`")),
+            WidgetRequest::Unknown => error(format!("Unknown action `{}`", msg.action)),
         };
 
-        self.send(&msg.response_to(response.body()));
+        self.send(&match response {
+            Ok(response) => response.into_wire_reply(&msg),
+            Err(error) => msg.error_response_to(error),
+        });
         Ok(())
     }
 
@@ -263,14 +269,12 @@ impl WidgetHostDriver {
         if pending.is_none() {
             return Err(DriverError::UnexpectedResponse { request_id: msg.request_id });
         }
-        // Widgets acknowledge everything with `{}`; an error response is informational only.
-        let _ = ToWidgetResponse::from_wire(&msg)?;
         Ok(())
     }
 }
 
-fn error(message: String) -> FromWidgetResponse {
-    FromWidgetResponse::Error { error: WidgetError::new(message) }
+fn error<T>(message: String) -> Result<T, WidgetError> {
+    Err(WidgetError::new(message))
 }
 
 #[cfg(test)]
@@ -319,7 +323,7 @@ mod tests {
         futures::executor::block_on(f)
     }
 
-    async fn feed(driver: &WidgetHostDriver, req: FromWidgetRequest, id: &str) -> Result<(), DriverError> {
+    async fn feed(driver: &WidgetHostDriver, req: WidgetRequest, id: &str) -> Result<(), DriverError> {
         driver.handle_message_from_widget(req.into_wire(id).to_json()).await
     }
 
@@ -339,7 +343,7 @@ mod tests {
     #[test]
     fn content_loaded_is_acked_and_reported() {
         let (driver, _, platform) = setup();
-        block(feed(&driver, FromWidgetRequest::ContentLoaded, "c1")).unwrap();
+        block(feed(&driver, WidgetRequest::ContentLoaded, "c1")).unwrap();
         let sent = platform.drain();
         assert_eq!(sent.len(), 1);
         assert_eq!(sent[0].request_id, "c1");
@@ -355,9 +359,7 @@ mod tests {
         let caps = vec![Capability::send_event("m.room.message"), Capability::receive_event("m.room.message")];
         block(feed(
             &driver,
-            FromWidgetRequest::RequestCapabilities {
-                request: RequestCapabilitiesRequest { capabilities: caps.clone() },
-            },
+            WidgetRequest::RequestCapabilities { request: RequestCapabilitiesRequest { capabilities: caps.clone() } },
             "cap1",
         ))
         .unwrap();
@@ -374,10 +376,10 @@ mod tests {
         driver.approve_capabilities(vec![Capability::send_event("m.room.message"), Capability::send_event("evil")]);
         let sent = platform.drain();
         assert_eq!(sent.len(), 1);
-        let notify = ToWidgetRequest::from_wire(&sent[0]).unwrap();
+        let notify = HostRequest::from_wire(&sent[0]).unwrap();
         assert_eq!(
             notify,
-            ToWidgetRequest::NotifyCapabilities {
+            HostRequest::NotifyCapabilities {
                 request: NotifyCapabilitiesRequest {
                     requested: caps,
                     approved: vec![Capability::send_event("m.room.message")]
@@ -403,9 +405,7 @@ mod tests {
     fn grant(driver: &WidgetHostDriver, platform: &RecordingPlatform, caps: Vec<Capability>) {
         block(feed(
             driver,
-            FromWidgetRequest::RequestCapabilities {
-                request: RequestCapabilitiesRequest { capabilities: caps.clone() },
-            },
+            WidgetRequest::RequestCapabilities { request: RequestCapabilitiesRequest { capabilities: caps.clone() } },
             "grant",
         ))
         .unwrap();
@@ -416,7 +416,7 @@ mod tests {
     #[test]
     fn send_event_requires_capability() {
         let (driver, backend, platform) = setup();
-        let req = FromWidgetRequest::SendEvent {
+        let req = WidgetRequest::SendEvent {
             request: SendEventRequest {
                 event_type: "m.room.message".into(),
                 state_key: None,
@@ -433,8 +433,8 @@ mod tests {
         grant(&driver, &platform, vec![Capability::send_event("m.room.message")]);
         block(feed(&driver, req, "s2")).unwrap();
         let sent = platform.drain();
-        match FromWidgetResponse::from_wire(&sent[0]).unwrap() {
-            FromWidgetResponse::SendEvent { response } => {
+        match WidgetResponse::from_wire(&sent[0]).unwrap() {
+            WidgetResponse::SendEvent { response } => {
                 assert_eq!(response.room_id, "!room:x");
                 assert_eq!(backend.timeline()[0].event_id, response.event_id);
             }
@@ -445,7 +445,7 @@ mod tests {
         // state event with a timeline-only capability -> denied
         block(feed(
             &driver,
-            FromWidgetRequest::SendEvent {
+            WidgetRequest::SendEvent {
                 request: SendEventRequest {
                     event_type: "m.room.message".into(),
                     state_key: Some("".into()),
@@ -461,7 +461,7 @@ mod tests {
         backend.set_fail_sends(Some(widget_matrix_backend::BackendError::forbidden("power level")));
         block(feed(
             &driver,
-            FromWidgetRequest::SendEvent {
+            WidgetRequest::SendEvent {
                 request: SendEventRequest {
                     event_type: "m.room.message".into(),
                     state_key: None,
@@ -483,7 +483,7 @@ mod tests {
         backend.inject(event("m.room.message", None, json!({"body": "1"})));
         backend.inject(event("m.room.message", None, json!({"body": "2"})));
 
-        let read_members = FromWidgetRequest::ReadEvents {
+        let read_members = WidgetRequest::ReadEvents {
             request: ReadEventsRequest {
                 event_type: "m.room.member".into(),
                 state_key: Some(StateKeySelector::Any),
@@ -503,8 +503,7 @@ mod tests {
         );
 
         block(feed(&driver, read_members, "r1")).unwrap();
-        let FromWidgetResponse::ReadEvents { response } = FromWidgetResponse::from_wire(&platform.drain()[0]).unwrap()
-        else {
+        let WidgetResponse::ReadEvents { response } = WidgetResponse::from_wire(&platform.drain()[0]).unwrap() else {
             panic!()
         };
         // Only the state key we are allowed to see.
@@ -513,14 +512,13 @@ mod tests {
 
         block(feed(
             &driver,
-            FromWidgetRequest::ReadEvents {
+            WidgetRequest::ReadEvents {
                 request: ReadEventsRequest { event_type: "m.room.message".into(), state_key: None, limit: Some(1) },
             },
             "r2",
         ))
         .unwrap();
-        let FromWidgetResponse::ReadEvents { response } = FromWidgetResponse::from_wire(&platform.drain()[0]).unwrap()
-        else {
+        let WidgetResponse::ReadEvents { response } = WidgetResponse::from_wire(&platform.drain()[0]).unwrap() else {
             panic!()
         };
         assert_eq!(response.events.len(), 1);
@@ -574,7 +572,7 @@ mod tests {
             block(driver.handle_message_from_widget(v2.to_string())),
             Err(DriverError::UnsupportedVersion { version: "v2".into() })
         );
-        let host_req = ToWidgetRequest::SendEvent { event: event("m.x", None, json!({})) }.into_wire("h");
+        let host_req = HostRequest::SendEvent { event: event("m.x", None, json!({})) }.into_wire("h");
         assert!(matches!(
             block(driver.handle_message_from_widget(host_req.to_json())),
             Err(DriverError::WrongDirection { .. })

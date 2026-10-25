@@ -7,9 +7,9 @@ use futures_channel::oneshot;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use widget_actions::{
-    ActionError, Capability, FromWidgetRequest, FromWidgetResponse, MatrixEvent, MessageKind, ReadEventsRequest,
-    RequestCapabilitiesRequest, SendEventRequest, SendEventResponse, StateKeySelector, ToWidgetRequest, WidgetError,
-    WireMessage, API_VERSION_V1,
+    ActionError, Capability, HostRequest, MatrixEvent, MessageKind, ReadEventsRequest, RequestCapabilitiesRequest,
+    SendEventRequest, SendEventResponse, StateKeySelector, WidgetError, WidgetRequest, WidgetResponse, WireMessage,
+    API_VERSION_V1,
 };
 
 use crate::WidgetClientError;
@@ -84,15 +84,19 @@ impl WidgetClient {
     /// The request itself is sent synchronously, before this returns.
     pub fn request(
         &self,
-        request: FromWidgetRequest,
-    ) -> impl Future<Output = Result<FromWidgetResponse, WidgetClientError>> + 'static {
+        request: WidgetRequest,
+    ) -> impl Future<Output = Result<WidgetResponse, WidgetClientError>> + 'static {
         let id = (self.next_id)();
         let (tx, rx) = oneshot::channel();
         self.inner.borrow_mut().pending.insert(id.clone(), tx);
         self.delegate.send_to_host(request.into_wire(id).to_json());
         async move {
             let msg = rx.await.map_err(|_| WidgetClientError::Cancelled)?;
-            Ok(FromWidgetResponse::from_wire(&msg)?.into_result()?)
+            match WidgetResponse::from_wire(&msg) {
+                Ok(response) => Ok(response),
+                Err(ActionError::ErrorResponse { error }) => Err(WidgetClientError::Host(error)),
+                Err(other) => Err(other.into()),
+            }
         }
     }
 
@@ -101,7 +105,7 @@ impl WidgetClient {
     pub fn content_loaded(&self) -> impl Future<Output = Result<(), WidgetClientError>> + 'static {
         // Only a weak handle: dropping the client must cancel the future, not keep state alive.
         let inner: Weak<RefCell<Inner>> = Rc::downgrade(&self.inner);
-        let fut = self.request(FromWidgetRequest::ContentLoaded);
+        let fut = self.request(WidgetRequest::ContentLoaded);
         async move {
             fut.await?;
             if let Some(inner) = inner.upgrade() {
@@ -119,8 +123,8 @@ impl WidgetClient {
         capabilities: Vec<Capability>,
     ) -> impl Future<Output = Result<(), WidgetClientError>> + 'static {
         self.inner.borrow_mut().state.pending_requested = capabilities.clone();
-        let fut = self
-            .request(FromWidgetRequest::RequestCapabilities { request: RequestCapabilitiesRequest { capabilities } });
+        let fut =
+            self.request(WidgetRequest::RequestCapabilities { request: RequestCapabilitiesRequest { capabilities } });
         async move { fut.await.map(|_| ()) }
     }
 
@@ -155,11 +159,13 @@ impl WidgetClient {
         &self,
         request: SendEventRequest,
     ) -> impl Future<Output = Result<SendEventResponse, WidgetClientError>> + 'static {
-        let fut = self.request(FromWidgetRequest::SendEvent { request });
+        let fut = self.request(WidgetRequest::SendEvent { request });
         async move {
             match fut.await? {
-                FromWidgetResponse::SendEvent { response } => Ok(response),
-                _ => Err(WidgetClientError::UnexpectedResponse { action: widget_actions::actions::SEND_EVENT.into() }),
+                WidgetResponse::SendEvent { response } => Ok(response),
+                _ => Err(WidgetClientError::UnexpectedResponse {
+                    action: widget_actions::actions::widget::SEND_EVENT.into(),
+                }),
             }
         }
     }
@@ -190,11 +196,13 @@ impl WidgetClient {
         &self,
         request: ReadEventsRequest,
     ) -> impl Future<Output = Result<Vec<MatrixEvent>, WidgetClientError>> + 'static {
-        let fut = self.request(FromWidgetRequest::ReadEvents { request });
+        let fut = self.request(WidgetRequest::ReadEvents { request });
         async move {
             match fut.await? {
-                FromWidgetResponse::ReadEvents { response } => Ok(response.events),
-                _ => Err(WidgetClientError::UnexpectedResponse { action: widget_actions::actions::READ_EVENTS.into() }),
+                WidgetResponse::ReadEvents { response } => Ok(response.events),
+                _ => Err(WidgetClientError::UnexpectedResponse {
+                    action: widget_actions::actions::widget::READ_EVENTS.into(),
+                }),
             }
         }
     }
@@ -213,9 +221,11 @@ impl WidgetClient {
             Some(API_VERSION_V1) => {}
             other => return Err(WidgetClientError::UnsupportedVersion { version: other.unwrap_or("").to_owned() }),
         }
+        // Responses are parsed by the future awaiting them (see `request`), so a malformed body
+        // is reported to the caller instead of failing here.
         match msg.kind() {
-            MessageKind::FromWidgetResponse => self.resolve_response(msg),
-            MessageKind::ToWidgetRequest => self.handle_host_request(msg),
+            MessageKind::WidgetResponse => self.resolve_response(msg),
+            MessageKind::HostRequest => self.handle_host_request(msg),
             kind => Err(WidgetClientError::WrongDirection { message: format!("widget received a {kind:?} message") }),
         }
     }
@@ -233,7 +243,7 @@ impl WidgetClient {
     }
 
     fn handle_host_request(&self, msg: WireMessage) -> Result<(), WidgetClientError> {
-        let request = match ToWidgetRequest::from_wire(&msg) {
+        let request = match HostRequest::from_wire(&msg) {
             Ok(r) => r,
             Err(ActionError::InvalidBody { message, .. }) => {
                 self.send(msg.error_response_to(WidgetError::new(format!("Invalid request body: {message}"))));
@@ -242,7 +252,7 @@ impl WidgetClient {
             Err(e) => return Err(e.into()),
         };
         match request {
-            ToWidgetRequest::NotifyCapabilities { request } => {
+            HostRequest::NotifyCapabilities { request } => {
                 let approved = {
                     let mut inner = self.inner.borrow_mut();
                     inner.state.pending_requested.clear();
@@ -256,16 +266,16 @@ impl WidgetClient {
                 self.send(msg.ack());
                 self.delegate.on_capabilities_changed(request.requested, approved);
             }
-            ToWidgetRequest::SendEvent { event } => {
+            HostRequest::SendEvent { event } => {
                 self.send(msg.ack());
                 self.delegate.on_matrix_event(event);
             }
-            ToWidgetRequest::UpdateState { request } => {
+            HostRequest::UpdateState { request } => {
                 self.send(msg.ack());
                 self.delegate.on_state_update(request.state);
             }
-            ToWidgetRequest::Unknown { action, .. } => {
-                self.send(msg.error_response_to(WidgetError::new(format!("Unknown action `{action}`"))));
+            HostRequest::Unknown => {
+                self.send(msg.error_response_to(WidgetError::new(format!("Unknown action `{}`", msg.action))));
             }
         }
         Ok(())
@@ -376,7 +386,7 @@ mod tests {
         client.handle_message(sent[0].ack()).unwrap();
         block(fut).unwrap();
 
-        let notify = ToWidgetRequest::NotifyCapabilities {
+        let notify = HostRequest::NotifyCapabilities {
             request: NotifyCapabilitiesRequest { requested: caps, approved: vec![Capability::send_event("a")] },
         }
         .into_wire("host-1");
@@ -392,7 +402,7 @@ mod tests {
         assert!(client.state().pending_requested.is_empty());
 
         // Re-exchange merges.
-        let notify2 = ToWidgetRequest::NotifyCapabilities {
+        let notify2 = HostRequest::NotifyCapabilities {
             request: NotifyCapabilitiesRequest {
                 requested: vec![Capability::receive_event("b")],
                 approved: vec![Capability::receive_event("b")],
@@ -416,7 +426,7 @@ mod tests {
             content: json!({"body": "hello"}).into(),
             unsigned: None,
         };
-        client.handle_message(ToWidgetRequest::SendEvent { event: event.clone() }.into_wire("h")).unwrap();
+        client.handle_message(HostRequest::SendEvent { event: event.clone() }.into_wire("h")).unwrap();
         assert_eq!(rec.drain()[0].response_body(), json!({}));
         assert_eq!(rec.events.borrow().as_slice(), &[event]);
 
@@ -431,10 +441,10 @@ mod tests {
         let stray = WireMessage::request(Source::Widget, "content_loaded", "zzz", json!({})).ack();
         assert_eq!(client.handle_message(stray), Err(WidgetClientError::UnknownRequestId { request_id: "zzz".into() }));
 
-        let widget_req = FromWidgetRequest::ContentLoaded.into_wire("w");
+        let widget_req = WidgetRequest::ContentLoaded.into_wire("w");
         assert!(matches!(client.handle_message(widget_req), Err(WidgetClientError::WrongDirection { .. })));
 
-        let mut legacy = FromWidgetRequest::ContentLoaded.into_wire("w").ack();
+        let mut legacy = WidgetRequest::ContentLoaded.into_wire("w").ack();
         legacy.version = None;
         assert!(matches!(client.handle_message(legacy), Err(WidgetClientError::UnsupportedVersion { .. })));
         assert!(rec.drain().is_empty());

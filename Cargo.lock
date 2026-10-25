@@ -987,6 +987,7 @@ name = "widget-host-driver"
 version = "0.1.0"
 dependencies = [
  "futures",
+ "serde",
  "serde_json",
  "thiserror",
  "uniffi",

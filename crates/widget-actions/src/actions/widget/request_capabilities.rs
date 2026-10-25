@@ -20,17 +20,17 @@ pub struct RequestCapabilitiesRequest {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{FromWidgetRequest, FromWidgetResponse};
+    use crate::{WidgetRequest, WidgetResponse};
 
     #[test]
     fn roundtrip() {
-        let caps = FromWidgetRequest::RequestCapabilities {
+        let caps = WidgetRequest::RequestCapabilities {
             request: RequestCapabilitiesRequest { capabilities: vec![Capability::send_event("m.room.message")] },
         };
         let wire = caps.clone().into_wire("y");
         assert_eq!(wire.action, ACTION);
         assert_eq!(wire.to_value()["request"]["capabilities"][0], "org.matrix.msc2762.send.event:m.room.message");
-        assert_eq!(FromWidgetRequest::from_wire(&wire).unwrap(), caps);
-        assert_eq!(FromWidgetResponse::from_wire(&wire.ack()).unwrap(), FromWidgetResponse::Ack);
+        assert_eq!(WidgetRequest::from_wire(&wire).unwrap(), caps);
+        assert_eq!(WidgetResponse::from_wire(&wire.ack()).unwrap(), WidgetResponse::RequestCapabilities);
     }
 }

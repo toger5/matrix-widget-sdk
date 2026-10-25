@@ -23,11 +23,11 @@ mod tests {
     use serde_json::json;
 
     use super::*;
-    use crate::{Source, ToWidgetRequest, ToWidgetResponse};
+    use crate::{HostRequest, HostResponse, Source};
 
     #[test]
     fn roundtrip() {
-        let req = ToWidgetRequest::NotifyCapabilities {
+        let req = HostRequest::NotifyCapabilities {
             request: NotifyCapabilitiesRequest {
                 requested: vec![Capability::send_event("a"), Capability::send_event("b")],
                 approved: vec![Capability::send_event("a")],
@@ -37,7 +37,7 @@ mod tests {
         assert_eq!(wire.action, ACTION);
         assert_eq!(wire.source, Source::Host);
         assert_eq!(wire.to_value()["request"]["approved"], json!(["org.matrix.msc2762.send.event:a"]));
-        assert_eq!(ToWidgetRequest::from_wire(&wire).unwrap(), req);
-        assert_eq!(ToWidgetResponse::from_wire(&wire.ack()).unwrap(), ToWidgetResponse::Ack);
+        assert_eq!(HostRequest::from_wire(&wire).unwrap(), req);
+        assert_eq!(HostResponse::from_wire(&wire.ack()).unwrap(), HostResponse::NotifyCapabilities);
     }
 }

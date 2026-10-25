@@ -25,9 +25,3 @@ pub enum WidgetClientError {
     #[error("the widget client was dropped before a response arrived")]
     Cancelled,
 }
-
-impl From<WidgetError> for WidgetClientError {
-    fn from(e: WidgetError) -> Self {
-        Self::Host(e)
-    }
-}

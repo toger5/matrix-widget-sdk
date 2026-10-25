@@ -17,13 +17,20 @@
 //! `request_capabilities` immediately (as required by MSC4412), asks the platform via
 //! [`WidgetHostPlatform::on_capabilities_requested`], and sends `notify_capabilities` once the
 //! platform calls [`WidgetHostDriver::approve_capabilities`].
+//!
+//! [`WidgetStateEventContent`] describes the `m.widget` state event (MSC4411) the client reads
+//! from room state to know which widgets to render.
 
 mod driver;
 mod error;
+mod widget_event;
 
 pub use driver::{DriverSnapshot, WidgetHostDriver, WidgetHostPlatform};
 pub use error::DriverError;
 pub use widget_actions;
+pub use widget_event::{
+    WidgetStateEventContent, WIDGET_EVENT_TYPE, WIDGET_EVENT_TYPE_LEGACY, WIDGET_EVENT_TYPE_UNSTABLE,
+};
 pub use widget_matrix_backend::{self, MatrixBackend};
 
 #[cfg(feature = "uniffi")]

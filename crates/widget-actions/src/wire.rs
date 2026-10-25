@@ -41,13 +41,13 @@ impl std::fmt::Display for Source {
 #[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
 pub enum MessageKind {
     /// `source: widget`, has `request`. Sent by the widget, handled by the host.
-    FromWidgetRequest,
+    WidgetRequest,
     /// `source: widget`, has `response`. Sent by the host, handled by the widget.
-    FromWidgetResponse,
+    WidgetResponse,
     /// `source: host`, has `request`. Sent by the host, handled by the widget.
-    ToWidgetRequest,
+    HostRequest,
     /// `source: host`, has `response`. Sent by the widget, handled by the host.
-    ToWidgetResponse,
+    HostResponse,
 }
 
 /// The generic JSON envelope every widget API message uses (MSC4412).
@@ -129,10 +129,10 @@ impl WireMessage {
 
     pub fn kind(&self) -> MessageKind {
         match (self.source, self.is_request()) {
-            (Source::Widget, true) => MessageKind::FromWidgetRequest,
-            (Source::Widget, false) => MessageKind::FromWidgetResponse,
-            (Source::Host, true) => MessageKind::ToWidgetRequest,
-            (Source::Host, false) => MessageKind::ToWidgetResponse,
+            (Source::Widget, true) => MessageKind::WidgetRequest,
+            (Source::Widget, false) => MessageKind::WidgetResponse,
+            (Source::Host, true) => MessageKind::HostRequest,
+            (Source::Host, false) => MessageKind::HostResponse,
         }
     }
 
@@ -217,7 +217,7 @@ mod tests {
         let json = msg.to_json();
         let parsed = WireMessage::from_json(&json).unwrap();
         assert_eq!(parsed, msg);
-        assert_eq!(parsed.kind(), MessageKind::FromWidgetRequest);
+        assert_eq!(parsed.kind(), MessageKind::WidgetRequest);
         assert!(parsed.is_v1());
 
         let value = parsed.to_value();
@@ -231,7 +231,7 @@ mod tests {
     fn response_copies_envelope_and_drops_request() {
         let req = WireMessage::request(Source::Host, "send_event", "abc", json!({"x": 1}));
         let res = req.response_to(json!({}));
-        assert_eq!(res.kind(), MessageKind::ToWidgetResponse);
+        assert_eq!(res.kind(), MessageKind::HostResponse);
         assert_eq!(res.request_id, "abc");
         assert_eq!(res.action, "send_event");
         assert!(res.request.is_none());

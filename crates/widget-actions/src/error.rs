@@ -1,3 +1,5 @@
+use crate::WidgetError;
+
 /// Errors produced while converting between wire messages and typed actions.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Error))]
@@ -14,9 +16,9 @@ pub enum ActionError {
     /// The `request`/`response` body did not match the schema of the action.
     #[error("invalid body for action `{action}`: {message}")]
     InvalidBody { action: String, message: String },
-    /// The response body carried an error object.
-    #[error("widget api error: {message}")]
-    ErrorResponse { message: String },
+    /// The response body carried an error object: the other side rejected the request.
+    #[error("widget api error: {error}")]
+    ErrorResponse { error: WidgetError },
 }
 
 impl ActionError {

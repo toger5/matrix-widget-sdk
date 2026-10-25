@@ -1,4 +1,8 @@
-use serde::{Deserialize, Serialize};
+//! Shared matrix types: Matrix objects used in widget action bodies *and* outside of them (backend
+//! trait, driver callbacks, widget client). Types that only ever appear as the body of one action
+//! live with that action under `actions/`.
+
+use serde::{de::Error as _, Deserialize, Deserializer, Serialize, Serializer};
 use serde_json::Value;
 
 use crate::JsonValue;
@@ -34,48 +38,46 @@ impl MatrixEvent {
     }
 }
 
-/// Stable event type of the widget state event (MSC4411).
-pub const WIDGET_EVENT_TYPE: &str = "m.widget";
-/// Unstable event type of the widget state event (MSC4411).
-pub const WIDGET_EVENT_TYPE_UNSTABLE: &str = "org.matrix.msc4411.widget";
-/// Legacy event type still used by Element and friends.
-pub const WIDGET_EVENT_TYPE_LEGACY: &str = "im.vector.modular.widgets";
-
-/// Content of an `m.widget` state event (MSC4411 + the `usesWidgetAPI` field from MSC4412).
+/// Which state keys a `read_events` request is interested in.
 ///
-/// The `state_key` of the event is the opaque widget id (a client generated uuid v4). An event
-/// whose content does not match this shape (e.g. `{}`) denotes a *removed* widget; use
-/// [`WidgetStateEventContent::parse`] which returns `None` in that case.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
-pub struct WidgetStateEventContent {
-    /// Human readable name, treated like a room name (same for all users).
-    pub name: String,
-    /// `https://` URL the widget is loaded from. Also serves as the widget "type".
-    pub url: String,
-    /// Optional `mxc://` avatar.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub avatar_url: Option<String>,
-    /// When `true` the host waits for `content_loaded` before showing the widget and sets up
-    /// the widget API. Defaults to `false` (the widget is a plain embedded web page).
-    #[serde(rename = "usesWidgetAPI", default, skip_serializing_if = "std::ops::Not::not")]
-    pub uses_widget_api: bool,
+/// On the wire this is either a string (one state key) or the boolean `true` (all state keys),
+/// following MSC2876.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
+pub enum StateKeySelector {
+    Any,
+    Key { key: String },
 }
 
-impl WidgetStateEventContent {
-    /// Parse state event content. Returns `None` for removed widgets (content not matching).
-    pub fn parse(content: &Value) -> Option<Self> {
-        serde_json::from_value(content.clone()).ok()
+impl StateKeySelector {
+    pub fn key(key: impl Into<String>) -> Self {
+        Self::Key { key: key.into() }
     }
 
-    /// Is this one of the event types that carries widget definitions?
-    pub fn is_widget_event_type(event_type: &str) -> bool {
-        matches!(event_type, WIDGET_EVENT_TYPE | WIDGET_EVENT_TYPE_UNSTABLE)
+    pub fn matches(&self, state_key: &str) -> bool {
+        match self {
+            StateKeySelector::Any => true,
+            StateKeySelector::Key { key } => key == state_key,
+        }
     }
+}
 
-    /// Basic URL validation as demanded by MSC4411: only `https://` is acceptable in production.
-    pub fn has_valid_url(&self) -> bool {
-        self.url.starts_with("https://")
+impl Serialize for StateKeySelector {
+    fn serialize<S: Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+        match self {
+            StateKeySelector::Any => s.serialize_bool(true),
+            StateKeySelector::Key { key } => s.serialize_str(key),
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for StateKeySelector {
+    fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        match Value::deserialize(d)? {
+            Value::Bool(true) => Ok(StateKeySelector::Any),
+            Value::String(key) => Ok(StateKeySelector::Key { key }),
+            other => Err(D::Error::custom(format!("state_key must be a string or `true`, got {other}"))),
+        }
     }
 }
 
@@ -83,26 +85,6 @@ impl WidgetStateEventContent {
 mod tests {
     use super::*;
     use serde_json::json;
-
-    #[test]
-    fn widget_content() {
-        let c = WidgetStateEventContent::parse(&json!({
-            "name": "Notes", "url": "https://w.example/notes", "usesWidgetAPI": true
-        }))
-        .unwrap();
-        assert!(c.uses_widget_api);
-        assert!(c.has_valid_url());
-        assert_eq!(serde_json::to_value(&c).unwrap()["usesWidgetAPI"], true);
-
-        let plain = WidgetStateEventContent::parse(&json!({"name": "n", "url": "https://x"})).unwrap();
-        assert!(!plain.uses_widget_api);
-        assert!(serde_json::to_value(&plain).unwrap().get("usesWidgetAPI").is_none());
-
-        assert!(WidgetStateEventContent::parse(&json!({})).is_none());
-        assert!(!WidgetStateEventContent::parse(&json!({"name": "n", "url": "javascript:alert(1)"}))
-            .unwrap()
-            .has_valid_url());
-    }
 
     #[test]
     fn event_roundtrip() {
