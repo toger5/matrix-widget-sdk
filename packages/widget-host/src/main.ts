@@ -6,7 +6,21 @@ const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getEleme
 const value = (id: string) => $<HTMLInputElement>(id).value;
 const checked = (id: string) => $<HTMLInputElement>(id).checked;
 const show = (id: string, data: unknown) => ($(id).textContent = JSON.stringify(data, null, 2));
-const pretty = (data: unknown) => (typeof data === "string" ? data : JSON.stringify(data));
+const pretty = (data: unknown) => {
+  if (typeof data === "string") return data;
+  if (typeof data === "object" && data !== null) {
+    let htmlString = "action" in data ? "<span class='action'>"+data.action+"</span>": "missing_action" ;
+    let body;
+    if ("response" in data&&"requestId" in data) {
+      htmlString += "<br><span class='response'}>(response "+data.requestId+")</span><br>"; body = data.response
+    } else if ("request" in data && "requestId" in data) {
+      htmlString += "<br><span class='request'}>(request "+data.requestId+")</span><br>"; body = data.request;
+    }
+    return htmlString + JSON.stringify(body, null, 2);
+  }
+
+    return "unexpected type"
+};
 
 const EXAMPLE_NEW: StateEvent = {
   type: "m.widget",
@@ -46,7 +60,7 @@ let widgetOrigin = "*";
 function log(kind: "in" | "out" | "err" | "info", data: unknown) {
   const line = document.createElement("pre");
   line.className = kind;
-  line.textContent = `${new Date().toISOString().slice(11, 23)} ${{ in: "← widget", out: "→ widget", err: "error", info: "info" }[kind]} ${pretty(data)}`;
+  line.innerHTML = `${new Date().toISOString().slice(11, 23)} ${{ in: "← widget", out: "→ widget", err: "error", info: "info" }[kind]} ${pretty(data)}`;
   $("log").prepend(line);
 }
 
