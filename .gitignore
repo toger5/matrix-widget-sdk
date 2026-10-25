@@ -3,3 +3,6 @@
 Cargo.lock.bak
 .DS_Store
 /bindings/
+
+node_modules/
+dist/

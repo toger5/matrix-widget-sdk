@@ -20,9 +20,15 @@
 //!
 //! [`WidgetStateEventContent`] describes the `m.widget` state event (MSC4411) the client reads
 //! from room state to know which widgets to render.
+//!
+//! When compiled to `wasm32` this crate additionally exports a JavaScript class `WidgetHost`
+//! (see the `wasm` module): the driver wired to an [`InMemoryBackend`](widget_matrix_backend::InMemoryBackend)
+//! for test hosts and tooling.
 
 mod driver;
 mod error;
+#[cfg(target_arch = "wasm32")]
+pub mod wasm;
 mod widget_event;
 
 pub use driver::{DriverSnapshot, WidgetHostDriver, WidgetHostPlatform};

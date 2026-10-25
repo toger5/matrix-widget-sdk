@@ -29,6 +29,21 @@ The same core is meant to be used on both ends of the wire and from several lang
 | [`widget-matrix-backend`](crates/widget-matrix-backend) | host side, optional UniFFI | `MatrixBackend`: the async trait a host implements once per Matrix SDK (send event, send state, read events, read state). Ships `InMemoryBackend` for tests. |
 | [`uniffi-bindgen`](crates/uniffi-bindgen) | tooling | Binary that generates Kotlin / Swift / Python bindings for the crates above. |
 
+Web packages (npm workspaces under `packages/`, see each README):
+
+| package | what it is |
+|---|---|
+| [`widget-compat-wrapper`](packages/widget-compat-wrapper) | Hosted widget that wraps a legacy matrix-widget-api widget and speaks MSC4412 to the host. Lets a client drop its legacy widget code during the transition. |
+| [`widget-host`](packages/widget-host) | Minimal browser host: `widget-host-driver` (wasm) on the in-memory backend, with a memory-store menu, a state event input and the legacy/new embedding decision. For manual and e2e testing. |
+| [`test-widgets`](packages/test-widgets) | A legacy and an MSC4412 test widget with buttons for the basic actions and a log of what arrives. |
+
+```sh
+npm run wasm      # build the wasm packages (needs wasm-pack)
+npm install
+npm run dev       # host on :5173, wrapper on :5174, widgets on :5175
+npm test          # wrapper unit tests
+```
+
 ## Protocol summary (MSC4412)
 
 Every message is one JSON object:

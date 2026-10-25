@@ -39,7 +39,7 @@ pub trait WidgetHostPlatform: Send + Sync {
 }
 
 /// A read-only copy of the driver's state.
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Default, serde::Serialize)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct DriverSnapshot {
     /// `content_loaded` was received.
@@ -122,13 +122,18 @@ impl WidgetHostDriver {
             let Some(requested) = state.pending_requested.take() else {
                 return;
             };
+            // only grant capabilites we requested
             let granted: Vec<Capability> = requested.iter().filter(|c| approved.contains(c)).cloned().collect();
             for cap in &granted {
                 if !state.approved.contains(cap) {
                     state.approved.push(cap.clone());
                 }
             }
-            HostRequest::NotifyCapabilities { request: NotifyCapabilitiesRequest { requested, approved: granted } }
+            // `approved` is the complete set held after this round (cumulative, like the legacy
+            // API), not only what was granted in this round.
+            HostRequest::NotifyCapabilities {
+                request: NotifyCapabilitiesRequest { requested, approved: state.approved.clone() },
+            }
         };
         self.send_request(outgoing);
     }
@@ -396,6 +401,28 @@ mod tests {
             block(driver.handle_message_from_widget(sent[0].ack().to_json())),
             Err(DriverError::UnexpectedResponse { request_id: sent[0].request_id.clone() })
         );
+
+        // A second round: `approved` in notify_capabilities is cumulative (legacy compatible).
+        let more = vec![Capability::receive_event("m.room.topic")];
+        block(feed(
+            &driver,
+            WidgetRequest::RequestCapabilities { request: RequestCapabilitiesRequest { capabilities: more.clone() } },
+            "cap2",
+        ))
+        .unwrap();
+        platform.drain();
+        driver.approve_capabilities(more.clone());
+        let sent = platform.drain();
+        assert_eq!(
+            HostRequest::from_wire(&sent[0]).unwrap(),
+            HostRequest::NotifyCapabilities {
+                request: NotifyCapabilitiesRequest {
+                    requested: more,
+                    approved: vec![Capability::send_event("m.room.message"), Capability::receive_event("m.room.topic")]
+                }
+            }
+        );
+        block(driver.handle_message_from_widget(sent[0].ack().to_json())).unwrap();
 
         // Approving again with nothing pending is a no-op.
         driver.approve_capabilities(vec![Capability::send_event("x")]);

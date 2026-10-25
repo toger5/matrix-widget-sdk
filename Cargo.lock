@@ -987,11 +987,15 @@ name = "widget-host-driver"
 version = "0.1.0"
 dependencies = [
  "futures",
+ "js-sys",
  "serde",
+ "serde-wasm-bindgen",
  "serde_json",
  "thiserror",
  "uniffi",
  "uuid",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
  "widget-actions",
  "widget-matrix-backend",
 ]

@@ -41,6 +41,13 @@ impl InMemoryBackend {
         self.inner.lock().unwrap().state.values().cloned().collect()
     }
 
+    /// Forget all stored events. Room and user id stay.
+    pub fn clear(&self) {
+        let mut inner = self.inner.lock().unwrap();
+        inner.timeline.clear();
+        inner.state.clear();
+    }
+
     /// Make every subsequent send fail with `error` (or succeed again with `None`).
     pub fn set_fail_sends(&self, error: Option<BackendError>) {
         self.inner.lock().unwrap().fail_sends = error;
