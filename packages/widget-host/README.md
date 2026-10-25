@@ -19,9 +19,12 @@ embedding the driver. It is not a Matrix client: nothing leaves the page.
 - **Drives the protocol**: every message from the widget iframe goes into the driver, every
   message from the driver goes to the iframe. Both directions are shown in the **Messages** log.
 - **Capability prompt**: when the widget requests capabilities you get a checklist and an
-  **Approve selected** button, or tick **auto-approve capabilities** to grant everything. A
-  wrapped legacy widget prompts twice: first the wrapper asks for `m.matrix_context` and
-  `m.client_context` to template the URL, then the legacy widget's own capabilities follow.
+  **Approve selected** button, or tick **auto-approve capabilities** to grant everything.
+  For legacy widgets the host calls the driver's `setAutoApproved` with `m.matrix_context` and
+  `m.client_context`, which the compat wrapper needs to template the URL (a legacy client handed
+  the same facts over as URL parameters). The driver grants those without consulting the host;
+  the legacy widget's own capabilities are still prompted for, so a wrapped widget prompts once,
+  like a new widget. The **Driver snapshot** lists the auto-approved set.
 - **Memory store menu**: shows the room's timeline and state as the backend holds them.
   - **Inject event**: stores the JSON event in the room and offers it to the widget
     (`send_event` if it has a matching `receive.*` capability).

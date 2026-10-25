@@ -36,6 +36,9 @@ const EXAMPLE_EVENT = {
   content: { msgtype: "m.text", body: "hello from the host" },
 };
 
+/** Capabilities the compat wrapper needs to template a legacy widget's URL. */
+const CONTEXT_CAPABILITIES = ["m.matrix_context", "m.client_context"];
+
 let host: WidgetHost | undefined;
 let iframe: HTMLIFrameElement | undefined;
 let widgetOrigin = "*";
@@ -82,6 +85,9 @@ function loadWidget() {
   $("caps").replaceChildren();
   host = new WidgetHost(value("room"), value("user"));
   host.setClientContext("widget-test-host", "light", "en");
+  // A legacy client handed these facts over as URL template parameters; the compat wrapper
+  // asks for them instead, so grant them without a prompt. The driver applies the rule.
+  if (widget.legacy) host.setAutoApproved(CONTEXT_CAPABILITIES);
   widgetOrigin = new URL(widget.url).origin;
   iframe = Object.assign(document.createElement("iframe"), { src: widget.url, hidden: widget.usesWidgetApi });
   $("spinner").hidden = !widget.usesWidgetApi;

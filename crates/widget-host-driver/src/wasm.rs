@@ -174,6 +174,12 @@ impl WidgetHost {
         })
     }
 
+    /// Capabilities granted without asking (see the driver's `set_auto_approved`). Replaces the list.
+    #[wasm_bindgen(js_name = setAutoApproved)]
+    pub fn set_auto_approved(&self, capabilities: Vec<String>) {
+        self.driver.set_auto_approved(capabilities.iter().map(|c| Capability::parse(c)).collect());
+    }
+
     /// Complete a pending capability negotiation with the approved capability strings.
     #[wasm_bindgen(js_name = approveCapabilities)]
     pub fn approve_capabilities(&self, approved: Vec<String>) {

@@ -58,6 +58,9 @@ pub struct DriverSnapshot {
     /// Capabilities requested by the widget that are still waiting for
     /// [`WidgetHostDriver::approve_capabilities`].
     pub pending_requested: Vec<Capability>,
+    /// Capabilities granted without asking the platform, see
+    /// [`WidgetHostDriver::set_auto_approved`].
+    pub auto_approved: Vec<Capability>,
 }
 
 #[derive(Debug, Default)]
@@ -65,6 +68,7 @@ struct State {
     content_loaded: bool,
     approved: Vec<Capability>,
     pending_requested: Option<Vec<Capability>>,
+    auto_approved: Vec<Capability>,
     /// Requests the host sent to the widget that have not been acknowledged yet.
     awaiting_ack: HashMap<String, HostRequest>,
 }
@@ -120,9 +124,23 @@ impl WidgetHostDriver {
         }
     }
 
+    /// Capabilities this driver grants without consulting the platform. When a widget requests
+    /// capabilities, these are approved at once; only the remaining ones reach
+    /// [`WidgetHostPlatform::on_capabilities_requested`], and if nothing remains the platform is
+    /// not called at all and `notify_capabilities` is sent immediately.
+    ///
+    /// Typical use: `m.matrix_context` and `m.client_context` for a legacy widget embedded
+    /// through the compat wrapper, since a legacy client handed the same facts over as URL
+    /// template parameters. Replaces any earlier list; affects future requests only.
+    pub fn set_auto_approved(&self, capabilities: Vec<Capability>) {
+        self.lock().auto_approved = capabilities;
+    }
+
     /// Complete a capability negotiation started by
     /// [`WidgetHostPlatform::on_capabilities_requested`]. Only capabilities that were actually
-    /// requested are granted; the rest of `approved` is ignored. Sends `notify_capabilities`.
+    /// requested are granted; the rest of `approved` is ignored. Auto-approved capabilities
+    /// (see [`set_auto_approved`](Self::set_auto_approved)) are granted in addition. Sends
+    /// `notify_capabilities`.
     ///
     /// Does nothing if there is no pending request.
     pub fn approve_capabilities(&self, approved: Vec<Capability>) {
@@ -131,8 +149,9 @@ impl WidgetHostDriver {
             let Some(requested) = state.pending_requested.take() else {
                 return;
             };
-            // only grant capabilites we requested
-            let granted: Vec<Capability> = requested.iter().filter(|c| approved.contains(c)).cloned().collect();
+            // only grant capabilities that were requested
+            let granted: Vec<Capability> =
+                requested.iter().filter(|c| approved.contains(c) || state.auto_approved.contains(c)).cloned().collect();
             for cap in &granted {
                 if !state.approved.contains(cap) {
                     state.approved.push(cap.clone());
@@ -182,6 +201,7 @@ impl WidgetHostDriver {
             content_loaded: s.content_loaded,
             approved: s.approved.clone(),
             pending_requested: s.pending_requested.clone().unwrap_or_default(),
+            auto_approved: s.auto_approved.clone(),
         }
     }
 }
@@ -211,9 +231,19 @@ impl WidgetHostDriver {
             }
             WidgetRequest::RequestCapabilities { request } => {
                 let requested = request.capabilities;
-                self.lock().pending_requested = Some(requested.clone());
+                let to_ask: Vec<Capability> = {
+                    let mut state = self.lock();
+                    let to_ask = requested.iter().filter(|c| !state.auto_approved.contains(c)).cloned().collect();
+                    state.pending_requested = Some(requested);
+                    to_ask
+                };
                 self.send(&msg.ack());
-                self.platform.on_capabilities_requested(requested);
+                if to_ask.is_empty() {
+                    // Everything is auto-approved: no need to involve the platform.
+                    self.approve_capabilities(Vec::new());
+                } else {
+                    self.platform.on_capabilities_requested(to_ask);
+                }
                 return Ok(());
             }
             WidgetRequest::SendEvent { request } => {
@@ -706,6 +736,63 @@ mod tests {
                     client_id: Some("test-client".into()),
                     client_theme: Some("dark".into()),
                     client_language: None
+                }
+            }
+        );
+    }
+
+    #[test]
+    fn auto_approved_capabilities_skip_the_platform() {
+        let (driver, _, platform) = setup();
+        driver.set_auto_approved(vec![Capability::MatrixContext, Capability::ClientContext]);
+        assert_eq!(driver.snapshot().auto_approved.len(), 2);
+
+        // Only auto-approved capabilities: granted at once, platform never asked.
+        block(feed(
+            &driver,
+            WidgetRequest::RequestCapabilities {
+                request: RequestCapabilitiesRequest { capabilities: vec![Capability::MatrixContext] },
+            },
+            "a1",
+        ))
+        .unwrap();
+        let sent = platform.drain();
+        assert!(platform.requested.lock().unwrap().is_empty());
+        assert_eq!(sent.len(), 2);
+        assert_eq!(sent[0].request_id, "a1");
+        assert_eq!(
+            HostRequest::from_wire(&sent[1]).unwrap(),
+            HostRequest::NotifyCapabilities {
+                request: NotifyCapabilitiesRequest {
+                    requested: vec![Capability::MatrixContext],
+                    approved: vec![Capability::MatrixContext]
+                }
+            }
+        );
+        block(driver.handle_message_from_widget(sent[1].ack().to_json())).unwrap();
+
+        // Mixed: the platform is asked only about the rest, auto-approved ones are added.
+        let mixed = vec![Capability::ClientContext, Capability::send_event("m.room.message")];
+        block(feed(
+            &driver,
+            WidgetRequest::RequestCapabilities { request: RequestCapabilitiesRequest { capabilities: mixed } },
+            "a2",
+        ))
+        .unwrap();
+        platform.drain();
+        assert_eq!(platform.requested.lock().unwrap().as_slice(), &[vec![Capability::send_event("m.room.message")]]);
+        driver.approve_capabilities(vec![Capability::send_event("m.room.message")]);
+        let notify = HostRequest::from_wire(&platform.drain()[0]).unwrap();
+        assert_eq!(
+            notify,
+            HostRequest::NotifyCapabilities {
+                request: NotifyCapabilitiesRequest {
+                    requested: vec![Capability::ClientContext, Capability::send_event("m.room.message")],
+                    approved: vec![
+                        Capability::MatrixContext,
+                        Capability::ClientContext,
+                        Capability::send_event("m.room.message")
+                    ]
                 }
             }
         );

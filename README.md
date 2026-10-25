@@ -144,6 +144,8 @@ impl WidgetHostPlatform for Platform {
 
 let backend: Arc<dyn MatrixBackend> = Arc::new(MyRustSdkBackend::new(room));
 let driver = WidgetHostDriver::new(backend, Arc::new(Platform { .. }));
+// granted without a prompt, e.g. for a legacy widget behind the compat wrapper:
+driver.set_auto_approved(vec![Capability::MatrixContext, Capability::ClientContext]);
 
 // from the iframe's message handler:
 driver.handle_message_from_widget(json).await?;
