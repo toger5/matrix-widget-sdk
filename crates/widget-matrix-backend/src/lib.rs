@@ -26,7 +26,7 @@ use std::sync::Arc;
 
 pub use error::BackendError;
 pub use in_memory::{DelayedEvent, InMemoryBackend, SentToDeviceMessage};
-pub use widget_actions::{JsonValue, MatrixEvent, RelationDirection, StateKeySelector, ToDeviceEvent};
+pub use widget_actions::{JsonValue, MatrixEvent, OpenIdToken, RelationDirection, StateKeySelector, ToDeviceEvent};
 
 /// One to-device message to send: its recipient device and the content for that device
 /// ([`MatrixBackend::send_to_device_message`]).
@@ -246,6 +246,10 @@ pub trait MatrixBackend: Send + Sync {
         limit: Option<u32>,
         direction: Option<RelationDirection>,
     ) -> Result<RelationsChunk, BackendError>;
+
+    /// A fresh OpenID token for the account (`POST /user/{userId}/openid/request_token`), for
+    /// a widget whose `get_openid` the user allowed.
+    async fn openid_token(&self) -> Result<OpenIdToken, BackendError>;
 
     /// Deliver `subjects` of `room_id` to `sink` until the returned subscription is cancelled.
     ///

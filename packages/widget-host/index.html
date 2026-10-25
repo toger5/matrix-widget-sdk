@@ -24,6 +24,8 @@
       #log .in { color: #0a6; } #log .out { color: #06c; } #log .err { color: #b00020; }
       #caps { background: #fff8e1; padding: 6px; margin: 6px 0; }
       #caps:empty { display: none; }
+      #openid { background: #e3f2fd; padding: 6px; margin: 6px 0; }
+      #openid:empty { display: none; }
       .request { color: black;}
       .response { color: gray;}
       .action {font-weight:bold;}
@@ -36,6 +38,7 @@
       <label>user id <input id="user" value="@alice:example.org" /></label>
       <label>compat wrapper url <input id="wrapper" value="http://localhost:5174/" /></label>
       <label><input id="autoApprove" type="checkbox" style="width:auto" /> auto-approve capabilities</label>
+      <label><input id="autoApproveOpenId" type="checkbox" style="width:auto" /> auto-approve OpenID tokens</label>
 
       <h2>Widget state event</h2>
       <button id="exampleNew">example: new widget</button>
@@ -44,6 +47,7 @@
       <button id="load">Load widget</button>
       <div id="decision"></div>
       <div id="caps"></div>
+      <div id="openid"></div>
 
       <h2>Driver snapshot</h2>
       <pre id="snapshot"></pre>

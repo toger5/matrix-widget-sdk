@@ -26,9 +26,11 @@ mod matrix;
 mod wire;
 
 pub use actions::host::notify_capabilities::NotifyCapabilitiesRequest;
+pub use actions::host::openid_credentials::OpenIdCredentialsRequest;
 pub use actions::host::update_state::UpdateStateRequest;
 pub use actions::host::{HostRequest, HostResponse};
 pub use actions::widget::client_context::ClientContextResponse;
+pub use actions::widget::get_openid::{GetOpenIdResponse, OpenIdState};
 pub use actions::widget::matrix_context::MatrixContextResponse;
 pub use actions::widget::read_events::{ReadEventsRequest, ReadEventsResponse, RoomSelector};
 pub use actions::widget::read_relations::{ReadRelationsRequest, ReadRelationsResponse, RelationDirection};
@@ -41,7 +43,9 @@ pub use actions::Action;
 pub use capabilities::{Capability, CapabilitySet};
 pub use error::ActionError;
 pub use json::JsonValue;
-pub use matrix::{matrix_event_from_json, matrix_event_to_json, MatrixEvent, StateKeySelector, ToDeviceEvent};
+pub use matrix::{
+    matrix_event_from_json, matrix_event_to_json, MatrixEvent, OpenIdToken, StateKeySelector, ToDeviceEvent,
+};
 pub use wire::{MatrixApiError, MatrixErrorResponse, MessageKind, Source, WidgetError, WireMessage, API_VERSION_V1};
 
 #[cfg(feature = "uniffi")]

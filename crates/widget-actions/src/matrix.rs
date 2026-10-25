@@ -66,6 +66,42 @@ pub struct ToDeviceEvent {
     pub encrypted: bool,
 }
 
+/// A Matrix OpenID token (MSC1960), as returned by
+/// `POST /_matrix/client/v3/user/{userId}/openid/request_token`. Same shape as matrix-rust-rtc's.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+pub struct OpenIdToken {
+    pub access_token: String,
+    /// `Bearer`.
+    pub token_type: String,
+    /// The homeserver that issued the token and will answer `/openid/userinfo` for it.
+    pub matrix_server_name: String,
+    /// Seconds until the token expires.
+    pub expires_in: u64,
+}
+
+impl OpenIdToken {
+    /// Build a token from the loose fields of an OpenID response body, when `state` is
+    /// `allowed` and every field is present.
+    pub(crate) fn assemble(
+        state: crate::OpenIdState,
+        access_token: Option<String>,
+        token_type: Option<String>,
+        matrix_server_name: Option<String>,
+        expires_in: Option<u64>,
+    ) -> Option<Self> {
+        if state != crate::OpenIdState::Allowed {
+            return None;
+        }
+        Some(Self {
+            access_token: access_token?,
+            token_type: token_type?,
+            matrix_server_name: matrix_server_name?,
+            expires_in: expires_in?,
+        })
+    }
+}
+
 /// Which state keys a `read_events` request is interested in.
 ///
 /// On the wire this is either a string (one state key) or the boolean `true` (all state keys),

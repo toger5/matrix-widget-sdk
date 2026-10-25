@@ -5,10 +5,12 @@ use serde::{Deserialize, Serialize};
 
 use super::{expect, parse_tagged, split_tagged};
 use crate::{
-    ActionError, MatrixEvent, NotifyCapabilitiesRequest, Source, ToDeviceEvent, UpdateStateRequest, WireMessage,
+    ActionError, MatrixEvent, NotifyCapabilitiesRequest, OpenIdCredentialsRequest, Source, ToDeviceEvent,
+    UpdateStateRequest, WireMessage,
 };
 
 pub(crate) mod notify_capabilities;
+pub(crate) mod openid_credentials;
 pub(crate) mod send_event;
 pub(crate) mod send_to_device;
 pub(crate) mod update_state;
@@ -40,6 +42,9 @@ pub enum HostRequest {
         #[serde(rename = "request")]
         message: ToDeviceEvent,
     },
+    /// The late outcome of a `get_openid` (MSC1960).
+    #[serde(rename = "openid_credentials")]
+    OpenIdCredentials { request: OpenIdCredentialsRequest },
     /// An action this crate does not know; see [`WidgetRequest::Unknown`](crate::WidgetRequest::Unknown).
     #[serde(other)]
     Unknown,
@@ -60,6 +65,8 @@ pub enum HostResponse {
     UpdateState,
     #[serde(rename = "send_to_device")]
     SendToDevice,
+    #[serde(rename = "openid_credentials")]
+    OpenIdCredentials,
     /// A response to an action this crate does not know; the raw body is in the [`WireMessage`].
     #[serde(other)]
     Unknown,

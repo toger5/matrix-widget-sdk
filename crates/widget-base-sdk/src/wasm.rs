@@ -322,6 +322,13 @@ impl WidgetApi {
         promise(self.client.read_relations(request))
     }
 
+    /// Resolves with `{ access_token, token_type, matrix_server_name, expires_in }` once the host
+    /// (and the user) allowed it; rejects when blocked. (MSC1960)
+    #[wasm_bindgen(js_name = requestOpenIdToken)]
+    pub fn request_openid_token(&self) -> Promise {
+        promise(self.client.request_openid_token())
+    }
+
     /// Resolves with `{ client_id?, client_theme?, client_language? }`. Needs `m.client_context`.
     #[wasm_bindgen(js_name = getClientContext)]
     pub fn get_client_context(&self) -> Promise {

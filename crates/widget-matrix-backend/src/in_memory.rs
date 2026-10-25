@@ -3,8 +3,8 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard};
 
 use crate::{
-    BackendError, JsonValue, MatrixBackend, MatrixEvent, RelationDirection, RelationsChunk, RoomSink, RoomSubjects,
-    StateKeySelector, Subscription, ToDeviceDelivery, ToDeviceEvent, ToDeviceMessage, ToDeviceSink,
+    BackendError, JsonValue, MatrixBackend, MatrixEvent, OpenIdToken, RelationDirection, RelationsChunk, RoomSink,
+    RoomSubjects, StateKeySelector, Subscription, ToDeviceDelivery, ToDeviceEvent, ToDeviceMessage, ToDeviceSink,
 };
 
 /// A [`MatrixBackend`] backed by plain vectors. Intended for tests and prototypes.
@@ -525,6 +525,19 @@ impl MatrixBackend for InMemoryBackend {
             chunk.truncate(limit as usize);
         }
         Ok(RelationsChunk { chunk, next_batch: None, prev_batch: None })
+    }
+
+    /// A placeholder token: `access_token` counts up per call, `matrix_server_name` is the
+    /// host of the base URL.
+    async fn openid_token(&self) -> Result<OpenIdToken, BackendError> {
+        let n = self.counter.fetch_add(1, Ordering::Relaxed);
+        let server = self.base_url.split("://").nth(1).unwrap_or(&self.base_url).trim_end_matches('/').to_owned();
+        Ok(OpenIdToken {
+            access_token: format!("openid-token-{n}"),
+            token_type: "Bearer".into(),
+            matrix_server_name: server,
+            expires_in: 3600,
+        })
     }
 
     async fn send_to_device_message(

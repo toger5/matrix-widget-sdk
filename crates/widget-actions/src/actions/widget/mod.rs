@@ -20,13 +20,14 @@ use serde::{Deserialize, Serialize};
 
 use super::{expect, parse_tagged, split_tagged};
 use crate::{
-    ActionError, ClientContextResponse, MatrixContextResponse, ReadEventsRequest, ReadEventsResponse,
-    ReadRelationsRequest, ReadRelationsResponse, RequestCapabilitiesRequest, SendEventRequest, SendEventResponse,
-    SendToDeviceRequest, Source, UpdateDelayedEventRequest, WireMessage,
+    ActionError, ClientContextResponse, GetOpenIdResponse, MatrixContextResponse, ReadEventsRequest,
+    ReadEventsResponse, ReadRelationsRequest, ReadRelationsResponse, RequestCapabilitiesRequest, SendEventRequest,
+    SendEventResponse, SendToDeviceRequest, Source, UpdateDelayedEventRequest, WireMessage,
 };
 
 pub(crate) mod client_context;
 pub(crate) mod content_loaded;
+pub(crate) mod get_openid;
 pub(crate) mod matrix_context;
 pub(crate) mod read_events;
 pub(crate) mod read_relations;
@@ -61,6 +62,9 @@ pub enum WidgetRequest {
     /// Cancel / restart / fire a delayed event. Requires `org.matrix.msc4157.update_delayed_event`.
     #[serde(rename = "org.matrix.msc4157.update_delayed_event", alias = "update_delayed_event")]
     UpdateDelayedEvent { request: UpdateDelayedEventRequest },
+    /// Ask for an OpenID token (MSC1960). No capability; the user may be asked.
+    #[serde(rename = "get_openid")]
+    GetOpenId,
     /// Who and where the widget is on Matrix. Requires `m.matrix_context`.
     #[serde(rename = "org.matrix.msc4412.matrix_context", alias = "matrix_context")]
     MatrixContext,
@@ -96,6 +100,8 @@ pub enum WidgetResponse {
     /// `{}`
     #[serde(rename = "org.matrix.msc4157.update_delayed_event", alias = "update_delayed_event")]
     UpdateDelayedEvent,
+    #[serde(rename = "get_openid")]
+    GetOpenId { response: GetOpenIdResponse },
     #[serde(rename = "org.matrix.msc4412.matrix_context", alias = "matrix_context")]
     MatrixContext { response: MatrixContextResponse },
     #[serde(rename = "org.matrix.msc4412.client_context", alias = "client_context")]

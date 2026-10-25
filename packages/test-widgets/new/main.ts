@@ -55,6 +55,7 @@ mount("MSC4412 test widget (widget-base-sdk)", [
   button("send to-device org.example.ping", () => api.sendToDevice("org.example.ping", false, TO_DEVICE_MESSAGES)),
   button("read m.room.message (limit 10)", () => api.readEvents("m.room.message", 10)),
   button("read state m.room.topic", () => api.readState("m.room.topic", undefined)),
+  button("get_openid", () => api.requestOpenIdToken()),
   button("matrix_context", () => api.getMatrixContext()),
   button("client_context", () => api.getClientContext()),
 ]);

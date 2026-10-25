@@ -120,6 +120,19 @@ function askCapabilities(requested: string[]) {
   box.append(approve);
 }
 
+function askOpenId() {
+  const box = $("openid");
+  box.replaceChildren("Widget asks for an OpenID token (proves your identity to the widget's backend):");
+  for (const [label, allowed] of [["Allow", true], ["Block", false]] as const) {
+    const b = Object.assign(document.createElement("button"), { textContent: label });
+    b.onclick = () => {
+      box.replaceChildren();
+      driver?.resolveOpenid(allowed).catch((e: unknown) => log("err", String(e))).finally(refresh);
+    };
+    box.append(b);
+  }
+}
+
 /** What the driver needs from this page. The driver calls these synchronously from inside its own methods. */
 const platform: WidgetHostPlatform = {
   sendToWidget(json) {
@@ -135,6 +148,9 @@ const platform: WidgetHostPlatform = {
     $("spinner").hidden = true;
     if (iframe) iframe.hidden = false;
   },
+  onOpenidRequested() {
+    queueMicrotask(() => (askOpenId(), refresh()));
+  },
   clientId: () => "widget-test-host",
   clientTheme: () => "light",
   clientLanguage: () => "en",
@@ -146,6 +162,7 @@ function loadWidget() {
 
   iframe?.remove();
   $("caps").replaceChildren();
+  $("openid").replaceChildren();
   // A fresh in-memory room per load, handed to the driver like any other MatrixBackend would be
   // (a matrix-js-sdk backed one, say).
   backend = new InMemoryBackend(value("room"), value("user"));
@@ -153,6 +170,7 @@ function loadWidget() {
   // A legacy client handed these facts over as URL template parameters; the compat wrapper
   // asks for them instead, so grant them without a prompt. The driver applies the rule.
   if (widget.legacy) driver.setAutoApproved(CONTEXT_CAPABILITIES);
+  driver.setOpenidAutoApproved(checked("autoApproveOpenId"));
   widgetOrigin = new URL(widget.url).origin;
   iframe = Object.assign(document.createElement("iframe"), { src: widget.url, hidden: widget.usesWidgetApi });
   $("spinner").hidden = !widget.usesWidgetApi;
@@ -212,6 +230,7 @@ $("fireDelayed").onclick = () => {
 };
 $("fail").onchange = () => backend?.failSends(checked("fail") ? "simulated failure (fail sends is on)" : undefined);
 $("clearLog").onclick = () => $("log").replaceChildren();
+$("autoApproveOpenId").onchange = () => driver?.setOpenidAutoApproved(checked("autoApproveOpenId"));
 
 // Prefill from the URL so e2e tests can start deterministically:
 //   ?event=<json state event>&autoApprove=1&autoload=1&wrapper=<url>

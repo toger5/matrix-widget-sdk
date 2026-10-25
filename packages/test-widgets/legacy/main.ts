@@ -75,6 +75,7 @@ mount("Legacy test widget (matrix-widget-api)", [
   button("send to-device org.example.ping", () => api.sendToDevice("org.example.ping", false, TO_DEVICE_MESSAGES)),
   button("read m.room.message (limit 10)", () => api.readRoomEvents("m.room.message", 10)),
   button("read state m.room.topic", () => api.readStateEvents("m.room.topic", undefined, "")),
+  button("get_openid", () => api.requestOpenIDConnectToken()),
   button("custom action org.example.custom", () => api.transport.send("org.example.custom" as never, { hello: "world" })),
 ]);
 refresh();

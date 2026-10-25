@@ -54,6 +54,7 @@ impl WidgetHostPlatform for HostSide {
     fn on_content_loaded(&self) {
         *self.content_loaded.lock().unwrap() = true;
     }
+    fn on_openid_requested(&self) {}
     fn client_id(&self) -> Option<String> {
         Some("loopback".into())
     }

@@ -77,6 +77,8 @@ Actions implemented here:
 | `update_state` | host | `{ state: [...] }` the current permitted state, on approval and after changes | `receive.state_event:*` |
 | `send_to_device` | widget | `{ type, encrypted, messages: { user_id: { device_id: content } } }` | `org.matrix.msc3819.send.to_device:<type>` |
 | `send_to_device` | host | `{ type, sender, content, encrypted }` from the backend's to-device subscription | `org.matrix.msc3819.receive.to_device:<type>` |
+| `get_openid` | widget | `{}` → `{ state: allowed \| blocked \| request, ...token }`; `request` means the user is being asked (`WidgetHostPlatform::on_openid_requested`, then `driver.resolve_openid`) | none (user consent) |
+| `openid_credentials` | host | `{ state, original_request_id, ...token }` after the user decided | – |
 | `org.matrix.msc4412.matrix_context` | widget | `{ user_id, device_id, room_id, display_name, avatar_url, matrix_base_url }`, replaces the legacy URL template parameters | `org.matrix.msc4412.matrix_context` |
 | `org.matrix.msc4412.client_context` | widget | `{ client_id?, client_theme?, client_language? }` about the embedding client | `org.matrix.msc4412.client_context` |
 

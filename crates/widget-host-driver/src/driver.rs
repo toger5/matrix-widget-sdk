@@ -2,11 +2,11 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex, MutexGuard, Weak};
 
 use widget_actions::{
-    Action, ActionError, Capability, CapabilitySet, ClientContextResponse, HostRequest, MatrixContextResponse,
-    MatrixEvent, MessageKind, NotifyCapabilitiesRequest, ReadEventsRequest, ReadEventsResponse, ReadRelationsRequest,
-    ReadRelationsResponse, RoomSelector, SendEventRequest, SendEventResponse, SendToDeviceRequest, ToDeviceEvent,
-    UpdateDelayedEventAction, UpdateStateRequest, WidgetError, WidgetRequest, WidgetResponse, WireMessage,
-    API_VERSION_V1,
+    Action, ActionError, Capability, CapabilitySet, ClientContextResponse, GetOpenIdResponse, HostRequest,
+    MatrixContextResponse, MatrixEvent, MessageKind, NotifyCapabilitiesRequest, OpenIdCredentialsRequest,
+    ReadEventsRequest, ReadEventsResponse, ReadRelationsRequest, ReadRelationsResponse, RoomSelector, SendEventRequest,
+    SendEventResponse, SendToDeviceRequest, ToDeviceEvent, UpdateDelayedEventAction, UpdateStateRequest, WidgetError,
+    WidgetRequest, WidgetResponse, WireMessage, API_VERSION_V1,
 };
 use widget_matrix_backend::{
     BackendError, MatrixBackend, RoomSink, RoomSubjects, Subscription, ToDeviceMessage, ToDeviceSink,
@@ -41,6 +41,11 @@ pub trait WidgetHostPlatform: Send + Sync {
     /// The widget sent `content_loaded`. Hide the loading indicator and show the iframe.
     fn on_content_loaded(&self);
 
+    /// The widget asked for an OpenID token (`get_openid`) and the driver answered that the user
+    /// is being asked. Prompt the user and call [`WidgetHostDriver::resolve_openid`]. Not called
+    /// when [`WidgetHostDriver::set_openid_auto_approved`] is on.
+    fn on_openid_requested(&self);
+
     /// Identifier of the embedding client, reported by `client_context` (e.g. `io.element.web`).
     fn client_id(&self) -> Option<String>;
 
@@ -65,6 +70,11 @@ pub struct DriverSnapshot {
     /// Capabilities granted without asking the platform, see
     /// [`WidgetHostDriver::set_auto_approved`].
     pub auto_approved: Vec<Capability>,
+    /// `get_openid` requests waiting for [`WidgetHostDriver::resolve_openid`] (their request ids).
+    pub pending_openid_requests: Vec<String>,
+    /// OpenID tokens are handed out without asking, see
+    /// [`WidgetHostDriver::set_openid_auto_approved`].
+    pub openid_auto_approved: bool,
 }
 
 #[derive(Debug, Default)]
@@ -73,6 +83,8 @@ struct State {
     approved: Vec<Capability>,
     pending_requested: Option<Vec<Capability>>,
     auto_approved: Vec<Capability>,
+    pending_openid: Vec<String>,
+    openid_auto_approved: bool,
     /// Requests the host sent to the widget that have not been acknowledged yet.
     awaiting_ack: HashMap<String, HostRequest>,
 }
@@ -216,6 +228,32 @@ impl WidgetHostDriver {
         }
     }
 
+    /// Hand out OpenID tokens without consulting the platform: `get_openid` is then answered
+    /// directly with `state: allowed` and the token (or `blocked` when the backend fails).
+    /// Off by default; affects future requests only.
+    pub fn set_openid_auto_approved(&self, auto_approved: bool) {
+        self.lock().openid_auto_approved = auto_approved;
+    }
+
+    /// Complete the OpenID requests reported through
+    /// [`WidgetHostPlatform::on_openid_requested`]: fetch a token from the backend when `allowed`
+    /// and send `openid_credentials` (`allowed` with the token, or `blocked` when refused or when
+    /// the backend fails) for every pending `get_openid`. Does nothing if none is pending.
+    pub async fn resolve_openid(&self, allowed: bool) {
+        let pending = std::mem::take(&mut self.lock().pending_openid);
+        if pending.is_empty() {
+            return;
+        }
+        let token = if allowed { self.backend.openid_token().await.ok() } else { None };
+        for original_request_id in pending {
+            let request = match &token {
+                Some(token) => OpenIdCredentialsRequest::allowed(original_request_id, token.clone()),
+                None => OpenIdCredentialsRequest::blocked(original_request_id),
+            };
+            self.send_request(HostRequest::OpenIdCredentials { request });
+        }
+    }
+
     /// Current state of the driver.
     pub fn snapshot(&self) -> DriverSnapshot {
         let s = self.lock();
@@ -224,6 +262,8 @@ impl WidgetHostDriver {
             approved: s.approved.clone(),
             pending_requested: s.pending_requested.clone().unwrap_or_default(),
             auto_approved: s.auto_approved.clone(),
+            pending_openid_requests: s.pending_openid.clone(),
+            openid_auto_approved: s.openid_auto_approved,
         }
     }
 }
@@ -368,6 +408,23 @@ impl WidgetHostDriver {
                     result
                         .map(|_| WidgetResponse::UpdateDelayedEvent)
                         .map_err(|e| backend_error("Failed to update delayed event", e))
+                }
+            }
+            WidgetRequest::GetOpenId => {
+                if self.lock().openid_auto_approved {
+                    let response = match self.backend.openid_token().await {
+                        Ok(token) => GetOpenIdResponse::allowed(token),
+                        Err(_) => GetOpenIdResponse::blocked(),
+                    };
+                    Ok(WidgetResponse::GetOpenId { response })
+                } else {
+                    // Phase one: tell the widget the user is being asked, then ask.
+                    self.lock().pending_openid.push(msg.request_id.clone());
+                    self.send(
+                        &WidgetResponse::GetOpenId { response: GetOpenIdResponse::pending() }.into_wire_reply(&msg),
+                    );
+                    self.platform.on_openid_requested();
+                    return Ok(());
                 }
             }
             WidgetRequest::SendToDevice { request } => self.send_to_device(request).await,
@@ -678,6 +735,7 @@ mod tests {
         sent: Mutex<Vec<WireMessage>>,
         requested: Mutex<Vec<Vec<Capability>>>,
         loaded: AtomicBool,
+        openid_requests: AtomicUsize,
     }
 
     impl RecordingPlatform {
@@ -695,6 +753,9 @@ mod tests {
         }
         fn on_content_loaded(&self) {
             self.loaded.store(true, Ordering::SeqCst);
+        }
+        fn on_openid_requested(&self) {
+            self.openid_requests.fetch_add(1, Ordering::SeqCst);
         }
         fn client_id(&self) -> Option<String> {
             Some("test-client".into())
@@ -856,6 +917,9 @@ mod tests {
             direction: Option<widget_actions::RelationDirection>,
         ) -> Result<RelationsChunk, BackendError> {
             self.inner.relations(room_id, event_id, rel_type, event_type, from, to, limit, direction).await
+        }
+        async fn openid_token(&self) -> Result<widget_matrix_backend::OpenIdToken, BackendError> {
+            self.inner.openid_token().await
         }
         async fn send_to_device_message(
             &self,
@@ -1379,6 +1443,65 @@ mod tests {
         assert_eq!(calls.len(), 2);
         assert_eq!(calls[1].1.timeline_event_types, types(&["m.room.message", "m.room.topic", "m.reaction"]));
         assert_eq!(backend.cancelled(), vec![1, 0]);
+    }
+
+    #[test]
+    fn openid_flow() {
+        let (driver, backend, platform) = setup();
+        // Phase one: the user is asked.
+        block(feed(&driver, WidgetRequest::GetOpenId, "o1")).unwrap();
+        block(feed(&driver, WidgetRequest::GetOpenId, "o2")).unwrap();
+        let sent = platform.drain();
+        assert_eq!(sent.len(), 2);
+        for m in &sent {
+            assert_eq!(
+                WidgetResponse::from_wire(m).unwrap(),
+                WidgetResponse::GetOpenId { response: GetOpenIdResponse::pending() }
+            );
+        }
+        assert_eq!(platform.openid_requests.load(Ordering::SeqCst), 2);
+        assert_eq!(driver.snapshot().pending_openid_requests, vec!["o1".to_string(), "o2".to_string()]);
+
+        // Allowed: one openid_credentials per pending request, all with the same token.
+        block(driver.resolve_openid(true));
+        let sent = platform.drain();
+        assert_eq!(sent.len(), 2);
+        let creds: Vec<OpenIdCredentialsRequest> = sent
+            .iter()
+            .map(|m| match HostRequest::from_wire(m).unwrap() {
+                HostRequest::OpenIdCredentials { request } => request,
+                other => panic!("{other:?}"),
+            })
+            .collect();
+        assert_eq!(creds[0].original_request_id, "o1");
+        assert_eq!(creds[1].original_request_id, "o2");
+        assert_eq!(creds[0].token().unwrap().matrix_server_name, "matrix.example.org");
+        assert_eq!(creds[0].token(), creds[1].token());
+        assert!(driver.snapshot().pending_openid_requests.is_empty());
+        // Resolving again is a no-op.
+        block(driver.resolve_openid(true));
+        assert!(platform.drain().is_empty());
+
+        // Blocked.
+        block(feed(&driver, WidgetRequest::GetOpenId, "o3")).unwrap();
+        platform.drain();
+        block(driver.resolve_openid(false));
+        let sent = platform.drain();
+        assert_eq!(
+            HostRequest::from_wire(&sent[0]).unwrap(),
+            HostRequest::OpenIdCredentials { request: OpenIdCredentialsRequest::blocked("o3") }
+        );
+
+        // Auto-approved: answered in phase one, platform not asked.
+        driver.set_openid_auto_approved(true);
+        assert!(driver.snapshot().openid_auto_approved);
+        block(feed(&driver, WidgetRequest::GetOpenId, "o4")).unwrap();
+        let sent = platform.drain();
+        assert_eq!(sent.len(), 1);
+        let WidgetResponse::GetOpenId { response } = WidgetResponse::from_wire(&sent[0]).unwrap() else { panic!() };
+        assert!(response.token().unwrap().access_token.starts_with("openid-token-"));
+        assert_eq!(platform.openid_requests.load(Ordering::SeqCst), 3);
+        let _ = backend;
     }
 
     #[test]

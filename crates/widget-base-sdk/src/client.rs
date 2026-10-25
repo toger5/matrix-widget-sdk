@@ -9,10 +9,10 @@ use serde_json::Value;
 // TODO consider splitting those into widget_actions::widget and widget_actions::host so that they are more explicit here.
 use widget_actions::{
     ActionError, Capability, ClientContextResponse, HostRequest, JsonValue, MatrixContextResponse, MatrixEvent,
-    MessageKind, ReadEventsRequest, ReadRelationsRequest, ReadRelationsResponse, RequestCapabilitiesRequest,
-    SendEventRequest, SendEventResponse, SendToDeviceRequest, StateKeySelector, ToDeviceEvent,
-    UpdateDelayedEventAction, UpdateDelayedEventRequest, WidgetError, WidgetRequest, WidgetResponse, WireMessage,
-    API_VERSION_V1,
+    MessageKind, OpenIdCredentialsRequest, OpenIdState, OpenIdToken, ReadEventsRequest, ReadRelationsRequest,
+    ReadRelationsResponse, RequestCapabilitiesRequest, SendEventRequest, SendEventResponse, SendToDeviceRequest,
+    StateKeySelector, ToDeviceEvent, UpdateDelayedEventAction, UpdateDelayedEventRequest, WidgetError, WidgetRequest,
+    WidgetResponse, WireMessage, API_VERSION_V1,
 };
 
 use crate::WidgetClientError;
@@ -54,6 +54,8 @@ pub struct WidgetState {
 struct Inner {
     state: WidgetState,
     pending: HashMap<String, oneshot::Sender<WireMessage>>,
+    /// `get_openid` requests answered with `state: request`, waiting for `openid_credentials`.
+    openid_waiters: HashMap<String, oneshot::Sender<OpenIdCredentialsRequest>>,
 }
 
 /// The widget side state machine. See the crate documentation.
@@ -92,16 +94,57 @@ impl WidgetClient {
         &self,
         request: WidgetRequest,
     ) -> impl Future<Output = Result<WidgetResponse, WidgetClientError>> + 'static {
+        self.request_with_id(request).1
+    }
+
+    /// [`request`](Self::request), also returning the request id it was sent with.
+    pub fn request_with_id(
+        &self,
+        request: WidgetRequest,
+    ) -> (String, impl Future<Output = Result<WidgetResponse, WidgetClientError>> + 'static) {
         let id = (self.next_id)();
         let (tx, rx) = oneshot::channel();
         self.inner.borrow_mut().pending.insert(id.clone(), tx);
-        self.delegate.send_to_host(request.into_wire(id).to_json());
-        async move {
+        self.delegate.send_to_host(request.into_wire(id.clone()).to_json());
+        let fut = async move {
             let msg = rx.await.map_err(|_| WidgetClientError::Cancelled)?;
             match WidgetResponse::from_wire(&msg) {
                 Ok(response) => Ok(response),
                 Err(ActionError::ErrorResponse { error }) => Err(WidgetClientError::Host(error)),
                 Err(other) => Err(other.into()),
+            }
+        };
+        (id, fut)
+    }
+
+    /// Ask the host for an OpenID token (MSC1960). Resolves with the token once the host (and
+    /// possibly the user) allowed it, which may take a while; fails with
+    /// [`WidgetClientError::OpenIdBlocked`] when refused.
+    pub fn request_openid_token(&self) -> impl Future<Output = Result<OpenIdToken, WidgetClientError>> + 'static {
+        let (id, fut) = self.request_with_id(WidgetRequest::GetOpenId);
+        let (tx, rx) = oneshot::channel();
+        self.inner.borrow_mut().openid_waiters.insert(id.clone(), tx);
+        let inner: Weak<RefCell<Inner>> = Rc::downgrade(&self.inner);
+        async move {
+            let unexpected = || WidgetClientError::UnexpectedResponse { action: "get_openid".into() };
+            let response = match fut.await? {
+                WidgetResponse::GetOpenId { response } => response,
+                _ => return Err(unexpected()),
+            };
+            if response.state != OpenIdState::PendingUserConfirmation {
+                if let Some(inner) = inner.upgrade() {
+                    inner.borrow_mut().openid_waiters.remove(&id);
+                }
+                return match response.state {
+                    OpenIdState::Allowed => response.token().ok_or_else(unexpected),
+                    _ => Err(WidgetClientError::OpenIdBlocked),
+                };
+            }
+            // Phase two: the host sends `openid_credentials` once the user decided.
+            let credentials = rx.await.map_err(|_| WidgetClientError::Cancelled)?;
+            match credentials.state {
+                OpenIdState::Allowed => credentials.token().ok_or_else(unexpected),
+                _ => Err(WidgetClientError::OpenIdBlocked),
             }
         }
     }
@@ -383,6 +426,13 @@ impl WidgetClient {
                 self.send(msg.ack());
                 self.delegate.on_to_device_message(message);
             }
+            HostRequest::OpenIdCredentials { request } => {
+                self.send(msg.ack());
+                let waiter = self.inner.borrow_mut().openid_waiters.remove(&request.original_request_id);
+                if let Some(tx) = waiter {
+                    let _ = tx.send(request);
+                }
+            }
             HostRequest::Unknown => {
                 self.send(msg.error_response_to(WidgetError::new(format!("Unknown action `{}`", msg.action))));
             }
@@ -535,6 +585,53 @@ mod tests {
         .into_wire("host-2");
         client.handle_message(notify2).unwrap();
         assert_eq!(client.state().approved.len(), 2);
+    }
+
+    #[test]
+    fn openid_phases() {
+        let (client, rec) = setup();
+        let token = OpenIdToken {
+            access_token: "t".into(),
+            token_type: "Bearer".into(),
+            matrix_server_name: "x".into(),
+            expires_in: 1,
+        };
+        // Allowed right away.
+        let fut = client.request_openid_token();
+        let sent = rec.drain();
+        assert_eq!(sent[0].action, "get_openid");
+        client
+            .handle_message(
+                sent[0].response_to(json!({"state": "allowed", "access_token": "t", "token_type": "Bearer",
+                                           "matrix_server_name": "x", "expires_in": 1})),
+            )
+            .unwrap();
+        assert_eq!(block(fut).unwrap(), token);
+
+        // Blocked right away.
+        let fut = client.request_openid_token();
+        let sent = rec.drain();
+        client.handle_message(sent[0].response_to(json!({"state": "blocked"}))).unwrap();
+        assert_eq!(block(fut), Err(WidgetClientError::OpenIdBlocked));
+
+        // Pending, then credentials for that request id.
+        let fut = client.request_openid_token();
+        let sent = rec.drain();
+        let id = sent[0].request_id.clone();
+        client.handle_message(sent[0].response_to(json!({"state": "request"}))).unwrap();
+        let creds = HostRequest::OpenIdCredentials { request: OpenIdCredentialsRequest::allowed(id, token.clone()) }
+            .into_wire("h");
+        client.handle_message(creds).unwrap();
+        assert_eq!(rec.drain()[0].response_body(), json!({}));
+        assert_eq!(block(fut).unwrap(), token);
+
+        // Credentials for an unknown request are acknowledged and ignored.
+        client
+            .handle_message(
+                HostRequest::OpenIdCredentials { request: OpenIdCredentialsRequest::blocked("nope") }.into_wire("h2"),
+            )
+            .unwrap();
+        assert_eq!(rec.drain()[0].response_body(), json!({}));
     }
 
     #[test]
