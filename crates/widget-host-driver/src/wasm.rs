@@ -37,11 +37,19 @@ enum PlatformEvent {
 /// platform only queues what happened and [`WidgetHost`] drains the queue after every driver
 /// call and invokes the callbacks from there.
 #[derive(Default)]
-struct QueuePlatform(Mutex<Vec<PlatformEvent>>);
+struct QueuePlatform {
+    events: Mutex<Vec<PlatformEvent>>,
+    /// `(client_id, client_theme, client_language)` reported by `client_context`.
+    client: Mutex<(Option<String>, Option<String>, Option<String>)>,
+}
 
 impl QueuePlatform {
     fn push(&self, event: PlatformEvent) {
-        self.0.lock().unwrap_or_else(|p| p.into_inner()).push(event);
+        self.events.lock().unwrap_or_else(|p| p.into_inner()).push(event);
+    }
+
+    fn client(&self) -> (Option<String>, Option<String>, Option<String>) {
+        self.client.lock().unwrap_or_else(|p| p.into_inner()).clone()
     }
 }
 
@@ -56,6 +64,18 @@ impl WidgetHostPlatform for QueuePlatform {
 
     fn on_content_loaded(&self) {
         self.push(PlatformEvent::ContentLoaded);
+    }
+
+    fn client_id(&self) -> Option<String> {
+        self.client().0
+    }
+
+    fn client_theme(&self) -> Option<String> {
+        self.client().1
+    }
+
+    fn client_language(&self) -> Option<String> {
+        self.client().2
     }
 }
 
@@ -83,7 +103,7 @@ fn call(cb: &Option<Function>, arg: JsValue) {
 
 /// Deliver everything the driver queued to the JavaScript callbacks.
 fn flush(platform: &QueuePlatform, callbacks: &RefCell<Callbacks>) {
-    let events = std::mem::take(&mut *platform.0.lock().unwrap_or_else(|p| p.into_inner()));
+    let events = std::mem::take(&mut *platform.events.lock().unwrap_or_else(|p| p.into_inner()));
     // Clone so a callback may register callbacks or call back into the host.
     let cb = callbacks.borrow().clone();
     for event in events {
@@ -196,6 +216,12 @@ impl WidgetHost {
     #[wasm_bindgen(getter)]
     pub fn snapshot(&self) -> JsValue {
         to_js(&self.driver.snapshot())
+    }
+
+    /// What `client_context` reports. All three default to absent.
+    #[wasm_bindgen(js_name = setClientContext)]
+    pub fn set_client_context(&self, client_id: Option<String>, theme: Option<String>, language: Option<String>) {
+        *self.platform.client.lock().unwrap_or_else(|p| p.into_inner()) = (client_id, theme, language);
     }
 
     /// Forget all stored events.

@@ -54,6 +54,15 @@ impl WidgetHostPlatform for HostSide {
     fn on_content_loaded(&self) {
         *self.content_loaded.lock().unwrap() = true;
     }
+    fn client_id(&self) -> Option<String> {
+        Some("loopback".into())
+    }
+    fn client_theme(&self) -> Option<String> {
+        None
+    }
+    fn client_language(&self) -> Option<String> {
+        None
+    }
 }
 
 struct Loop {

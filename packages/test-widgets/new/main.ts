@@ -16,7 +16,7 @@ api.onCapabilitiesChanged((requested: string[], approved: string[]) => (log("not
 
 const content = () => ({ msgtype: "m.text", body: valueOf("body") });
 mount("MSC4412 test widget (widget-base-sdk)", [
-  input("caps", DEFAULT_CAPABILITIES, "capabilities"),
+  input("caps", `${DEFAULT_CAPABILITIES},m.matrix_context,m.client_context`, "capabilities"),
   button("request_capabilities", () => api.requestCapabilities(capabilityList()).finally(refresh)),
   button("content_loaded", () => api.contentLoaded().finally(refresh)),
   input("body", "hello from the new widget", "message body"),
@@ -24,6 +24,8 @@ mount("MSC4412 test widget (widget-base-sdk)", [
   button("send state m.room.topic", () => api.sendStateEvent("m.room.topic", "", { topic: valueOf("body") })),
   button("read m.room.message (limit 10)", () => api.readEvents("m.room.message", 10)),
   button("read state m.room.topic", () => api.readState("m.room.topic", undefined)),
+  button("matrix_context", () => api.getMatrixContext()),
+  button("client_context", () => api.getClientContext()),
 ]);
 refresh();
 if (new URLSearchParams(location.search).get("autostart") !== "0") {

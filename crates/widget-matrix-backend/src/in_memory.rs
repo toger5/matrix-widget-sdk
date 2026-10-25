@@ -13,6 +13,10 @@ use crate::{BackendError, JsonValue, MatrixBackend, MatrixEvent, SentEvent, Stat
 pub struct InMemoryBackend {
     room_id: String,
     user_id: String,
+    device_id: String,
+    display_name: String,
+    avatar_url: String,
+    base_url: String,
     counter: AtomicU64,
     inner: Mutex<Inner>,
 }
@@ -28,7 +32,32 @@ struct Inner {
 
 impl InMemoryBackend {
     pub fn new(room_id: impl Into<String>, user_id: impl Into<String>) -> Self {
-        Self { room_id: room_id.into(), user_id: user_id.into(), counter: AtomicU64::new(1), inner: Default::default() }
+        let user_id = user_id.into();
+        Self {
+            room_id: room_id.into(),
+            display_name: user_id.clone(),
+            user_id,
+            device_id: "WIDGETTEST".into(),
+            avatar_url: String::new(),
+            base_url: "https://matrix.example.org".into(),
+            counter: AtomicU64::new(1),
+            inner: Default::default(),
+        }
+    }
+
+    /// Set what `matrix_context` reports besides room and user id.
+    pub fn with_context(
+        mut self,
+        device_id: impl Into<String>,
+        display_name: impl Into<String>,
+        avatar_url: impl Into<String>,
+        base_url: impl Into<String>,
+    ) -> Self {
+        self.device_id = device_id.into();
+        self.display_name = display_name.into();
+        self.avatar_url = avatar_url.into();
+        self.base_url = base_url.into();
+        self
     }
 
     /// All timeline events sent or injected so far, oldest first.
@@ -102,6 +131,22 @@ impl MatrixBackend for InMemoryBackend {
 
     fn user_id(&self) -> String {
         self.user_id.clone()
+    }
+
+    fn device_id(&self) -> String {
+        self.device_id.clone()
+    }
+
+    fn display_name(&self) -> String {
+        self.display_name.clone()
+    }
+
+    fn avatar_url(&self) -> String {
+        self.avatar_url.clone()
+    }
+
+    fn base_url(&self) -> String {
+        self.base_url.clone()
     }
 
     async fn send_event(&self, event_type: String, content: JsonValue) -> Result<SentEvent, BackendError> {

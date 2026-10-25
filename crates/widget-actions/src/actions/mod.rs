@@ -17,11 +17,10 @@
 //!
 //! To add an action:
 //!
-//! 1. create `actions/<source>/<action>.rs` with a `pub const ACTION`, its body types and a
-//!    roundtrip test;
-//! 2. in that source's `mod.rs`: declare it (`pub(crate) mod`), re-export the constant
-//!    (`pub use ... as NAME`), and add one variant per enum it appears in, with
-//!    `#[serde(rename = "<action>")]` (a unit variant when the body is `{}`);
+//! 1. create `actions/<source>/<action>.rs` with its body types and a roundtrip test;
+//! 2. in that source's `mod.rs`: declare it (`pub(crate) mod`) and add one variant per enum it
+//!    appears in, with `#[serde(rename = "<action>")]` (a unit variant when the body is `{}`);
+//!    the serde literal is the single place the wire name lives;
 //! 3. re-export the body types from `lib.rs`.
 
 use serde::de::DeserializeOwned;

@@ -6,10 +6,11 @@ use std::rc::{Rc, Weak};
 use futures_channel::oneshot;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+// TODO consider splitting those into widget_actions::widget and widget_actions::host so that they are more explicit here.
 use widget_actions::{
-    ActionError, Capability, HostRequest, MatrixEvent, MessageKind, ReadEventsRequest, RequestCapabilitiesRequest,
-    SendEventRequest, SendEventResponse, StateKeySelector, WidgetError, WidgetRequest, WidgetResponse, WireMessage,
-    API_VERSION_V1,
+    ActionError, Capability, ClientContextResponse, HostRequest, MatrixContextResponse, MatrixEvent, MessageKind,
+    ReadEventsRequest, RequestCapabilitiesRequest, SendEventRequest, SendEventResponse, StateKeySelector, WidgetError,
+    WidgetRequest, WidgetResponse, WireMessage, API_VERSION_V1,
 };
 
 use crate::WidgetClientError;
@@ -115,6 +116,33 @@ impl WidgetClient {
         }
     }
 
+    /// Ask the host about the embedding client (id, theme, language). Needs `m.client_context`.
+    pub fn get_client_context(
+        &self,
+    ) -> impl Future<Output = Result<ClientContextResponse, WidgetClientError>> + 'static {
+        let fut = self.request(WidgetRequest::ClientContext);
+        async move {
+            match fut.await? {
+                WidgetResponse::ClientContext { response } => Ok(response),
+                _ => Err(WidgetClientError::UnexpectedResponse { action: "client_context".into() }),
+            }
+        }
+    }
+
+    /// Ask the host who and where this widget is on Matrix (user, device, room, display name,
+    /// avatar, homeserver). Needs `m.matrix_context`.
+    pub fn get_matrix_context(
+        &self,
+    ) -> impl Future<Output = Result<MatrixContextResponse, WidgetClientError>> + 'static {
+        let fut = self.request(WidgetRequest::MatrixContext);
+        async move {
+            match fut.await? {
+                WidgetResponse::MatrixContext { response } => Ok(response),
+                _ => Err(WidgetClientError::UnexpectedResponse { action: "matrix_context".into() }),
+            }
+        }
+    }
+
     /// Ask the host for capabilities. Resolves when the host *acknowledged* the request; the
     /// actual decision arrives later through [`WidgetDelegate::on_capabilities_changed`] and
     /// is visible in [`state`](Self::state).
@@ -163,9 +191,7 @@ impl WidgetClient {
         async move {
             match fut.await? {
                 WidgetResponse::SendEvent { response } => Ok(response),
-                _ => Err(WidgetClientError::UnexpectedResponse {
-                    action: widget_actions::actions::widget::SEND_EVENT.into(),
-                }),
+                _ => Err(WidgetClientError::UnexpectedResponse { action: "send_event".into() }),
             }
         }
     }
@@ -200,9 +226,7 @@ impl WidgetClient {
         async move {
             match fut.await? {
                 WidgetResponse::ReadEvents { response } => Ok(response.events),
-                _ => Err(WidgetClientError::UnexpectedResponse {
-                    action: widget_actions::actions::widget::READ_EVENTS.into(),
-                }),
+                _ => Err(WidgetClientError::UnexpectedResponse { action: "read_events".into() }),
             }
         }
     }

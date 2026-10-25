@@ -16,19 +16,16 @@ use serde::{Deserialize, Serialize};
 
 use super::{expect, parse_tagged, split_tagged};
 use crate::{
-    ActionError, ReadEventsRequest, ReadEventsResponse, RequestCapabilitiesRequest, SendEventRequest,
-    SendEventResponse, Source, WireMessage,
+    ActionError, ClientContextResponse, MatrixContextResponse, ReadEventsRequest, ReadEventsResponse,
+    RequestCapabilitiesRequest, SendEventRequest, SendEventResponse, Source, WireMessage,
 };
 
+pub(crate) mod client_context;
 pub(crate) mod content_loaded;
+pub(crate) mod matrix_context;
 pub(crate) mod read_events;
 pub(crate) mod request_capabilities;
 pub(crate) mod send_event;
-
-pub use content_loaded::ACTION as CONTENT_LOADED;
-pub use read_events::ACTION as READ_EVENTS;
-pub use request_capabilities::ACTION as REQUEST_CAPABILITIES;
-pub use send_event::ACTION as SEND_EVENT;
 
 /// A request sent by the widget (`source: widget`, has `request`).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -47,24 +44,16 @@ pub enum WidgetRequest {
     /// Read events from the room. Requires a `receive.*` capability.
     #[serde(rename = "read_events")]
     ReadEvents { request: ReadEventsRequest },
+    /// Who and where the widget is on Matrix. Requires `m.matrix_context`.
+    #[serde(rename = "matrix_context")]
+    MatrixContext,
+    /// Facts about the embedding client. Requires `m.client_context`.
+    #[serde(rename = "client_context")]
+    ClientContext,
     /// An action this crate does not know. The [`WireMessage`] it was parsed from carries the
     /// action string and the raw body. Serializing it yields the placeholder action `Unknown`.
     #[serde(other)]
     Unknown,
-}
-
-impl WidgetRequest {
-    /// Wrap into a wire envelope with the given request id.
-    pub fn into_wire(self, request_id: impl Into<String>) -> WireMessage {
-        let (action, body) = split_tagged(&self);
-        WireMessage::request(Source::Widget, action, request_id, body)
-    }
-
-    /// Interpret a wire envelope as a widget request.
-    pub fn from_wire(msg: &WireMessage) -> Result<Self, ActionError> {
-        expect(msg, Source::Widget, true)?;
-        parse_tagged(msg)
-    }
 }
 
 /// The host's response to a [`WidgetRequest`] (`source: widget`, has `response`).
@@ -82,9 +71,27 @@ pub enum WidgetResponse {
     SendEvent { response: SendEventResponse },
     #[serde(rename = "read_events")]
     ReadEvents { response: ReadEventsResponse },
+    #[serde(rename = "matrix_context")]
+    MatrixContext { response: MatrixContextResponse },
+    #[serde(rename = "client_context")]
+    ClientContext { response: ClientContextResponse },
     /// A response to an action this crate does not know; the raw body is in the [`WireMessage`].
     #[serde(other)]
     Unknown,
+}
+
+impl WidgetRequest {
+    /// Wrap into a wire envelope with the given request id.
+    pub fn into_wire(self, request_id: impl Into<String>) -> WireMessage {
+        let (action, body) = split_tagged(&self);
+        WireMessage::request(Source::Widget, action, request_id, body)
+    }
+
+    /// Interpret a wire envelope as a widget request.
+    pub fn from_wire(msg: &WireMessage) -> Result<Self, ActionError> {
+        expect(msg, Source::Widget, true)?;
+        parse_tagged(msg)
+    }
 }
 
 impl WidgetResponse {
@@ -127,10 +134,10 @@ mod tests {
         );
 
         // A *known* action with a malformed body is an InvalidBody, never Unknown.
-        let bad = WireMessage::request(Source::Widget, SEND_EVENT, "b", json!({"type": 5}));
+        let bad = WireMessage::request(Source::Widget, "send_event", "b", json!({"type": 5}));
         assert!(matches!(WidgetRequest::from_wire(&bad), Err(ActionError::InvalidBody { .. })));
 
-        let host_msg = WireMessage::request(Source::Host, SEND_EVENT, "r", json!({}));
+        let host_msg = WireMessage::request(Source::Host, "send_event", "r", json!({}));
         assert!(matches!(WidgetRequest::from_wire(&host_msg), Err(ActionError::WrongSource { .. })));
         assert!(matches!(WidgetRequest::from_wire(&wire.ack()), Err(ActionError::WrongDirection { .. })));
 

@@ -24,6 +24,8 @@ mod wire;
 pub use actions::host::notify_capabilities::NotifyCapabilitiesRequest;
 pub use actions::host::update_state::UpdateStateRequest;
 pub use actions::host::{HostRequest, HostResponse};
+pub use actions::widget::client_context::ClientContextResponse;
+pub use actions::widget::matrix_context::MatrixContextResponse;
 pub use actions::widget::read_events::{ReadEventsRequest, ReadEventsResponse};
 pub use actions::widget::request_capabilities::RequestCapabilitiesRequest;
 pub use actions::widget::send_event::{SendEventRequest, SendEventResponse};

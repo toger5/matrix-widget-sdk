@@ -7,9 +7,6 @@ use serde::{Deserialize, Serialize};
 
 use crate::Capability;
 
-/// Wire name of the action.
-pub const ACTION: &str = "notify_capabilities";
-
 /// Body of `notify_capabilities`: the outcome of a `request_capabilities`.
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
@@ -34,7 +31,7 @@ mod tests {
             },
         };
         let wire = req.clone().into_wire("n");
-        assert_eq!(wire.action, ACTION);
+        assert_eq!(wire.action, "notify_capabilities");
         assert_eq!(wire.source, Source::Host);
         assert_eq!(wire.to_value()["request"]["approved"], json!(["org.matrix.msc2762.send.event:a"]));
         assert_eq!(HostRequest::from_wire(&wire).unwrap(), req);

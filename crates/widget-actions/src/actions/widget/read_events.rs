@@ -7,9 +7,6 @@ use serde::{Deserialize, Serialize};
 
 use crate::{MatrixEvent, StateKeySelector};
 
-/// Wire name of the action.
-pub const ACTION: &str = "read_events";
-
 /// Body of `read_events`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
@@ -49,7 +46,7 @@ mod tests {
     fn state_key_selector() {
         let wire = WireMessage::request(
             Source::Widget,
-            ACTION,
+            "read_events",
             "r",
             json!({"type": "m.room.member", "state_key": true, "limit": 5}),
         );
@@ -62,12 +59,16 @@ mod tests {
             other => panic!("{other:?}"),
         }
 
-        let wire =
-            WireMessage::request(Source::Widget, ACTION, "r", json!({"type": "m.room.member", "state_key": "@a:b"}));
+        let wire = WireMessage::request(
+            Source::Widget,
+            "read_events",
+            "r",
+            json!({"type": "m.room.member", "state_key": "@a:b"}),
+        );
         let WidgetRequest::ReadEvents { request } = WidgetRequest::from_wire(&wire).unwrap() else { panic!() };
         assert_eq!(request.state_key, Some(StateKeySelector::key("@a:b")));
 
-        let bad = WireMessage::request(Source::Widget, ACTION, "r", json!({"type": "x", "state_key": 5}));
+        let bad = WireMessage::request(Source::Widget, "read_events", "r", json!({"type": "x", "state_key": 5}));
         assert!(matches!(WidgetRequest::from_wire(&bad), Err(ActionError::InvalidBody { .. })));
     }
 

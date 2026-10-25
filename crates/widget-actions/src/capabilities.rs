@@ -2,15 +2,20 @@ use std::fmt;
 
 use serde::{Deserialize, Serialize};
 
-/// Stable prefixes as they would appear once MSC2762 is merged into the spec.
+/// Stable prefix of every capability this crate models.
 const STABLE_PREFIX: &str = "m.";
-/// Unstable prefixes used by all current implementations (matrix-widget-api, Element).
-const UNSTABLE_PREFIX: &str = "org.matrix.msc2762.";
+/// Unstable prefix of the MSC2762 event capabilities, used by all deployed implementations
+/// (matrix-widget-api, Element). Each capability knows its own unstable prefix, see
+/// [`Capability::unstable_prefix`].
+const MSC2762_PREFIX: &str = "org.matrix.msc2762.";
 
 const SEND_EVENT: &str = "send.event:";
 const RECEIVE_EVENT: &str = "receive.event:";
 const SEND_STATE: &str = "send.state_event:";
 const RECEIVE_STATE: &str = "receive.state_event:";
+
+const CLIENT_CONTEXT: &str = "client_context";
+const MATRIX_CONTEXT: &str = "matrix_context";
 
 /// A widget capability (MSC2762 / MSC2974).
 ///
@@ -28,6 +33,9 @@ const RECEIVE_STATE: &str = "receive.state_event:";
 /// where `<prefix>` is `m.` (stable) or `org.matrix.msc2762.` (unstable). Both are accepted
 /// when parsing. [`Display`](fmt::Display) emits the unstable prefix because that is what
 /// deployed hosts understand; use [`Capability::to_stable_string`] for the stable form.
+///
+/// The context capabilities `m.client_context` and `m.matrix_context` guard the
+/// `client_context` / `matrix_context` actions. They have no unstable form.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
 pub enum Capability {
@@ -45,6 +53,10 @@ pub enum Capability {
         event_type: String,
         state_key: Option<String>,
     },
+    /// May call `client_context`.
+    ClientContext,
+    /// May call `matrix_context`.
+    MatrixContext,
     /// Any capability this crate does not model.
     Other {
         raw: String,
@@ -70,7 +82,7 @@ impl Capability {
 
     /// Parse a capability string. Never fails: unknown strings become [`Capability::Other`].
     pub fn parse(raw: &str) -> Self {
-        let body = raw.strip_prefix(UNSTABLE_PREFIX).or_else(|| raw.strip_prefix(STABLE_PREFIX));
+        let body = raw.strip_prefix(MSC2762_PREFIX).or_else(|| raw.strip_prefix(STABLE_PREFIX));
         let Some(body) = body else {
             return Self::Other { raw: raw.to_owned() };
         };
@@ -89,6 +101,12 @@ impl Capability {
             let (event_type, state_key) = split_state(rest);
             return Self::ReceiveStateEvent { event_type, state_key };
         }
+        if body == CLIENT_CONTEXT {
+            return Self::ClientContext;
+        }
+        if body == MATRIX_CONTEXT {
+            return Self::MatrixContext;
+        }
         Self::Other { raw: raw.to_owned() }
     }
 
@@ -102,14 +120,29 @@ impl Capability {
             Capability::ReceiveStateEvent { event_type, state_key } => {
                 format!("{RECEIVE_STATE}{}", join_state(event_type, state_key.as_deref()))
             }
+            Capability::ClientContext => CLIENT_CONTEXT.to_owned(),
+            Capability::MatrixContext => MATRIX_CONTEXT.to_owned(),
             Capability::Other { .. } => return None,
         })
     }
 
-    /// The `org.matrix.msc2762.*` representation (or the raw string for `Other`).
+    /// The prefix of this capability's unstable form. Capabilities without an unstable form
+    /// (the context capabilities) use the stable prefix.
+    pub fn unstable_prefix(&self) -> &'static str {
+        match self {
+            Capability::SendEvent { .. }
+            | Capability::ReceiveEvent { .. }
+            | Capability::SendStateEvent { .. }
+            | Capability::ReceiveStateEvent { .. } => MSC2762_PREFIX,
+            Capability::ClientContext | Capability::MatrixContext | Capability::Other { .. } => STABLE_PREFIX,
+        }
+    }
+
+    /// The unstable representation, e.g. `org.matrix.msc2762.send.event:m.room.message`
+    /// (or the raw string for `Other`).
     pub fn to_unstable_string(&self) -> String {
         match self.body() {
-            Some(body) => format!("{UNSTABLE_PREFIX}{body}"),
+            Some(body) => format!("{}{body}", self.unstable_prefix()),
             None => self.raw_other(),
         }
     }
@@ -285,5 +318,15 @@ mod tests {
         let v: Vec<Capability> = serde_json::from_str(r#"["m.send.event:a", "zzz"]"#).unwrap();
         assert_eq!(v[0], Capability::send_event("a"));
         assert_eq!(serde_json::to_string(&v).unwrap(), r#"["org.matrix.msc2762.send.event:a","zzz"]"#);
+    }
+
+    #[test]
+    fn context_capabilities() {
+        assert_eq!(Capability::parse("m.client_context"), Capability::ClientContext);
+        assert_eq!(Capability::parse("m.matrix_context"), Capability::MatrixContext);
+        assert_eq!(Capability::ClientContext.to_unstable_string(), "m.client_context");
+        assert_eq!(Capability::MatrixContext.to_stable_string(), "m.matrix_context");
+        assert_eq!(Capability::send_event("x").unstable_prefix(), "org.matrix.msc2762.");
+        assert!(!Capability::ClientContext.allows_send("m.room.message", None));
     }
 }

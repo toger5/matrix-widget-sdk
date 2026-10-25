@@ -10,10 +10,6 @@ pub(crate) mod notify_capabilities;
 pub(crate) mod send_event;
 pub(crate) mod update_state;
 
-pub use notify_capabilities::ACTION as NOTIFY_CAPABILITIES;
-pub use send_event::ACTION as SEND_EVENT;
-pub use update_state::ACTION as UPDATE_STATE;
-
 // ----- Enums -----
 // The two enums are the source of truth for all host actions (actions where: `source: "host"`)
 // To keep this list easy to read each type for the different request gets their own file.
@@ -111,7 +107,7 @@ mod tests {
         );
         assert!(matches!(HostRequest::from_wire(&wire.ack()), Err(ActionError::WrongDirection { .. })));
 
-        let bad = WireMessage::request(Source::Host, UPDATE_STATE, "b", json!({"state": 5}));
+        let bad = WireMessage::request(Source::Host, "update_state", "b", json!({"state": 5}));
         assert!(matches!(HostRequest::from_wire(&bad), Err(ActionError::InvalidBody { .. })));
     }
 }

@@ -71,6 +71,8 @@ Actions implemented here:
 | `send_event` | host | an event from sync | `receive.event:<type>` / `receive.state_event:<type>[#<key>]` |
 | `read_events` | widget | read timeline (`limit`) or state (`state_key`: string or `true`) | `receive.*` |
 | `update_state` | host | `{ state: [...] }` snapshot of permitted state | `receive.state_event:*` |
+| `matrix_context` | widget | `{ user_id, device_id, room_id, display_name, avatar_url, matrix_base_url }`, replaces the legacy URL template parameters | `m.matrix_context` |
+| `client_context` | widget | `{ client_id?, client_theme?, client_language? }` about the embedding client | `m.client_context` |
 
 Capability strings are parsed with both the stable `m.` and the unstable `org.matrix.msc2762.`
 prefix and emitted with the unstable one (what deployed hosts understand). MSC4412 spells the

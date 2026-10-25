@@ -2,9 +2,9 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex, MutexGuard};
 
 use widget_actions::{
-    Action, ActionError, Capability, CapabilitySet, HostRequest, MatrixEvent, MessageKind, NotifyCapabilitiesRequest,
-    ReadEventsResponse, SendEventResponse, UpdateStateRequest, WidgetError, WidgetRequest, WidgetResponse, WireMessage,
-    API_VERSION_V1,
+    Action, ActionError, Capability, CapabilitySet, ClientContextResponse, HostRequest, MatrixContextResponse,
+    MatrixEvent, MessageKind, NotifyCapabilitiesRequest, ReadEventsResponse, SendEventResponse, UpdateStateRequest,
+    WidgetError, WidgetRequest, WidgetResponse, WireMessage, API_VERSION_V1,
 };
 use widget_matrix_backend::MatrixBackend;
 
@@ -36,6 +36,15 @@ pub trait WidgetHostPlatform: Send + Sync {
 
     /// The widget sent `content_loaded`. Hide the loading indicator and show the iframe.
     fn on_content_loaded(&self);
+
+    /// Identifier of the embedding client, reported by `client_context` (e.g. `io.element.web`).
+    fn client_id(&self) -> Option<String>;
+
+    /// Current theme name of the client, reported by `client_context` (e.g. `dark`).
+    fn client_theme(&self) -> Option<String>;
+
+    /// Current UI language of the client, reported by `client_context` (e.g. `en`).
+    fn client_language(&self) -> Option<String>;
 }
 
 /// A read-only copy of the driver's state.
@@ -259,6 +268,35 @@ impl WidgetHostDriver {
                     }
                 }
             }
+            WidgetRequest::MatrixContext => {
+                if !self.lock().approved.contains(&Capability::MatrixContext) {
+                    error("Not allowed to read the matrix context (missing capability m.matrix_context)".into())
+                } else {
+                    Ok(WidgetResponse::MatrixContext {
+                        response: MatrixContextResponse {
+                            user_id: self.backend.user_id(),
+                            device_id: self.backend.device_id(),
+                            room_id: self.backend.room_id(),
+                            display_name: self.backend.display_name(),
+                            avatar_url: self.backend.avatar_url(),
+                            matrix_base_url: self.backend.base_url(),
+                        },
+                    })
+                }
+            }
+            WidgetRequest::ClientContext => {
+                if !self.lock().approved.contains(&Capability::ClientContext) {
+                    error("Not allowed to read the client context (missing capability m.client_context)".into())
+                } else {
+                    Ok(WidgetResponse::ClientContext {
+                        response: ClientContextResponse {
+                            client_id: self.platform.client_id(),
+                            client_theme: self.platform.client_theme(),
+                            client_language: self.platform.client_language(),
+                        },
+                    })
+                }
+            }
             WidgetRequest::Unknown => error(format!("Unknown action `{}`", msg.action)),
         };
 
@@ -314,6 +352,15 @@ mod tests {
         }
         fn on_content_loaded(&self) {
             self.loaded.store(true, Ordering::SeqCst);
+        }
+        fn client_id(&self) -> Option<String> {
+            Some("test-client".into())
+        }
+        fn client_theme(&self) -> Option<String> {
+            Some("dark".into())
+        }
+        fn client_language(&self) -> Option<String> {
+            None
         }
     }
 
@@ -615,5 +662,52 @@ mod tests {
         assert_eq!(sent.len(), 2);
         assert!(sent[0].error().unwrap().message.contains("Unknown action"));
         assert!(sent[1].error().unwrap().message.contains("Invalid request body"));
+    }
+
+    #[test]
+    fn context_actions_need_their_capabilities() {
+        let (driver, _, platform) = setup();
+        block(feed(&driver, WidgetRequest::MatrixContext, "m1")).unwrap();
+        block(feed(&driver, WidgetRequest::ClientContext, "c1")).unwrap();
+        let sent = platform.drain();
+        assert!(sent[0].error().unwrap().message.contains("m.matrix_context"));
+        assert!(sent[1].error().unwrap().message.contains("m.client_context"));
+
+        let caps = vec![Capability::MatrixContext, Capability::ClientContext];
+        block(feed(
+            &driver,
+            WidgetRequest::RequestCapabilities { request: RequestCapabilitiesRequest { capabilities: caps.clone() } },
+            "cap",
+        ))
+        .unwrap();
+        driver.approve_capabilities(caps);
+        platform.drain();
+
+        block(feed(&driver, WidgetRequest::MatrixContext, "m2")).unwrap();
+        block(feed(&driver, WidgetRequest::ClientContext, "c2")).unwrap();
+        let sent = platform.drain();
+        assert_eq!(
+            WidgetResponse::from_wire(&sent[0]).unwrap(),
+            WidgetResponse::MatrixContext {
+                response: MatrixContextResponse {
+                    user_id: "@me:x".into(),
+                    device_id: "WIDGETTEST".into(),
+                    room_id: "!room:x".into(),
+                    display_name: "@me:x".into(),
+                    avatar_url: String::new(),
+                    matrix_base_url: "https://matrix.example.org".into(),
+                }
+            }
+        );
+        assert_eq!(
+            WidgetResponse::from_wire(&sent[1]).unwrap(),
+            WidgetResponse::ClientContext {
+                response: ClientContextResponse {
+                    client_id: Some("test-client".into()),
+                    client_theme: Some("dark".into()),
+                    client_language: None
+                }
+            }
+        );
     }
 }

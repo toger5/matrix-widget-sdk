@@ -7,9 +7,6 @@ use serde::{Deserialize, Serialize};
 
 use crate::JsonValue;
 
-/// Wire name of the action.
-pub const ACTION: &str = "send_event";
-
 /// Body of a widget's `send_event` request.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
@@ -53,7 +50,7 @@ mod tests {
             },
         };
         let wire = req.clone().into_wire("r1");
-        assert_eq!(wire.action, ACTION);
+        assert_eq!(wire.action, "send_event");
         assert_eq!(wire.to_value()["request"]["type"], "m.room.message");
         assert!(wire.to_value()["request"].get("state_key").is_none());
         assert_eq!(WidgetRequest::from_wire(&wire).unwrap(), req);

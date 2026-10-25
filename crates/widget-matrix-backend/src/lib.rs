@@ -39,6 +39,18 @@ pub trait MatrixBackend: Send + Sync {
     /// The Matrix user id of the logged in user.
     fn user_id(&self) -> String;
 
+    /// The device id of the logged in session.
+    fn device_id(&self) -> String;
+
+    /// The user's display name, or the user id when there is none.
+    fn display_name(&self) -> String;
+
+    /// The user's `mxc://` avatar, or an empty string when there is none.
+    fn avatar_url(&self) -> String;
+
+    /// The client-server API base URL of the homeserver, e.g. `https://matrix.example.org`.
+    fn base_url(&self) -> String;
+
     /// Send a timeline (non-state) event.
     async fn send_event(&self, event_type: String, content: JsonValue) -> Result<SentEvent, BackendError>;
 

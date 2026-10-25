@@ -243,6 +243,19 @@ impl WidgetApi {
         promise(self.client.read_events(event_type, limit))
     }
 
+    /// Resolves with `{ client_id?, client_theme?, client_language? }`. Needs `m.client_context`.
+    #[wasm_bindgen(js_name = getClientContext)]
+    pub fn get_client_context(&self) -> Promise {
+        promise(self.client.get_client_context())
+    }
+
+    /// Resolves with `{ user_id, device_id, room_id, display_name, avatar_url, matrix_base_url }`.
+    /// Needs `m.matrix_context`.
+    #[wasm_bindgen(js_name = getMatrixContext)]
+    pub fn get_matrix_context(&self) -> Promise {
+        promise(self.client.get_matrix_context())
+    }
+
     /// Resolves with an array of state events. `stateKey` is a string for one state key, or
     /// omitted / `true` for all state keys of the type.
     #[wasm_bindgen(js_name = readState)]
