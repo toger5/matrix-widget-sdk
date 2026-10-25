@@ -8,13 +8,17 @@ import { WidgetApi, type IWidgetApiRequest } from "matrix-widget-api";
 import {
   DEFAULT_CAPABILITIES,
   DELAYED_CAPABILITIES,
+  RELATION_CAPABILITIES,
   button,
   capabilityList,
   input,
   lastDelay,
+  lastEvent,
   log,
   mount,
+  reactionTo,
   rememberDelay,
+  rememberEvent,
   showState,
   valueOf,
 } from "../shared/ui";
@@ -44,7 +48,7 @@ for (const action of ["send_event", "update_state"]) {
 }
 
 mount("Legacy test widget (matrix-widget-api)", [
-  input("caps", `${DEFAULT_CAPABILITIES},${DELAYED_CAPABILITIES}`, "capabilities"),
+  input("caps", `${DEFAULT_CAPABILITIES},${DELAYED_CAPABILITIES},${RELATION_CAPABILITIES}`, "capabilities"),
   button("start (requests capabilities above)", () => {
     api.requestCapabilities(capabilityList());
     api.start();
@@ -55,7 +59,9 @@ mount("Legacy test widget (matrix-widget-api)", [
   button("content_loaded", () => api.sendContentLoaded()),
   button("renegotiate capabilities (MSC2974)", () => (api.requestCapabilities(capabilityList()), api.updateRequestedCapabilities())),
   input("body", "hello from the legacy widget", "message body"),
-  button("send m.room.message", () => api.sendRoomEvent("m.room.message", { msgtype: "m.text", body: valueOf("body") })),
+  button("send m.room.message", () => api.sendRoomEvent("m.room.message", { msgtype: "m.text", body: valueOf("body") }).then(rememberEvent)),
+  button("react 👍 to last message", () => api.sendRoomEvent("m.reaction", reactionTo(lastEvent.id, "👍"))),
+  button("read relations of last message", () => api.readEventRelations(lastEvent.id, undefined, undefined, undefined, 10)),
   button("send state m.room.topic", () => api.sendStateEvent("m.room.topic", "", { topic: valueOf("body") })),
   button("send delayed m.room.message (5s)", () =>
     api.sendRoomEvent("m.room.message", { msgtype: "m.text", body: valueOf("body") }, undefined, 5000).then(rememberDelay),

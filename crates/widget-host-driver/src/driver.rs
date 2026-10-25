@@ -3,9 +3,9 @@ use std::sync::{Arc, Mutex, MutexGuard, Weak};
 
 use widget_actions::{
     Action, ActionError, Capability, CapabilitySet, ClientContextResponse, HostRequest, MatrixContextResponse,
-    MatrixEvent, MessageKind, NotifyCapabilitiesRequest, ReadEventsResponse, SendEventRequest, SendEventResponse,
-    UpdateDelayedEventAction, UpdateStateRequest, WidgetError, WidgetRequest, WidgetResponse, WireMessage,
-    API_VERSION_V1,
+    MatrixEvent, MessageKind, NotifyCapabilitiesRequest, ReadEventsRequest, ReadEventsResponse, ReadRelationsRequest,
+    ReadRelationsResponse, RoomSelector, SendEventRequest, SendEventResponse, UpdateDelayedEventAction,
+    UpdateStateRequest, WidgetError, WidgetRequest, WidgetResponse, WireMessage, API_VERSION_V1,
 };
 use widget_matrix_backend::{BackendError, MatrixBackend, RoomSink, RoomSubjects, Subscription};
 
@@ -333,38 +333,8 @@ impl WidgetHostDriver {
                         .map_err(|e| backend_error("Failed to update delayed event", e))
                 }
             }
-            WidgetRequest::ReadEvents { request } => {
-                let is_state = request.is_state();
-                let allowed = self.lock().approved.allows_read_type(&request.event_type, is_state);
-                if !allowed {
-                    error(format!(
-                        "Not allowed to read {} events of type {}",
-                        if is_state { "state" } else { "timeline" },
-                        request.event_type
-                    ))
-                } else {
-                    let limit = request.limit.unwrap_or(DEFAULT_READ_LIMIT).clamp(1, MAX_READ_LIMIT);
-                    let room_id = self.backend.room_id();
-                    let result = match request.state_key {
-                        Some(selector) => self.backend.read_room_state(room_id, request.event_type, selector).await,
-                        None => self.backend.read_room_events(room_id, request.event_type, None, limit, None).await,
-                    };
-                    match result {
-                        Ok(events) => {
-                            let approved = self.lock().approved.clone();
-                            let mut events: Vec<MatrixEvent> = events
-                                .into_iter()
-                                .filter(|e| {
-                                    approved.allows_receive(&e.event_type, e.state_key.as_deref(), msgtype_of(e))
-                                })
-                                .collect();
-                            events.truncate(limit as usize);
-                            Ok(WidgetResponse::ReadEvents { response: ReadEventsResponse { events } })
-                        }
-                        Err(e) => Err(backend_error("Failed to read events", e)),
-                    }
-                }
-            }
+            WidgetRequest::ReadEvents { request } => self.read_events(request).await,
+            WidgetRequest::ReadRelations { request } => self.read_relations(request).await,
             WidgetRequest::MatrixContext => {
                 if !self.lock().approved.contains(&Capability::MatrixContext) {
                     error("Not allowed to read the matrix context (missing capability m.matrix_context)".into())
@@ -404,6 +374,86 @@ impl WidgetHostDriver {
         Ok(())
     }
 
+    /// Is the widget allowed to name `room_id` explicitly? Like matrix-widget-api this needs
+    /// the `timeline:<room>` capability even for its own room; and this host serves one room.
+    fn check_explicit_room(&self, approved: &[Capability], room_id: &str) -> Result<(), WidgetError> {
+        if !(approved.has(&Capability::timeline(room_id)) || approved.has(&Capability::timeline("*"))) {
+            return error(format!("Unable to access room timeline: {room_id}"));
+        }
+        let own = self.backend.room_id();
+        if room_id != own {
+            return error(format!("Unable to access room timeline: {room_id} (this host serves {own})"));
+        }
+        Ok(())
+    }
+
+    /// `read_events` from the widget: capability checks, the backend read, then the result
+    /// filtered to what the widget may receive.
+    async fn read_events(&self, request: ReadEventsRequest) -> Result<WidgetResponse, WidgetError> {
+        let is_state = request.is_state();
+        let approved = self.lock().approved.clone();
+        match &request.room_ids {
+            None => {}
+            // `*` means every room the widget may read; here that is at most the own room.
+            Some(RoomSelector::Any) => {
+                let own = self.backend.room_id();
+                if !(approved.has(&Capability::timeline(&own)) || approved.has(&Capability::timeline("*"))) {
+                    return Ok(WidgetResponse::ReadEvents { response: ReadEventsResponse::default() });
+                }
+            }
+            Some(RoomSelector::Rooms { room_ids }) => {
+                for room_id in room_ids {
+                    self.check_explicit_room(&approved, room_id)?;
+                }
+            }
+        }
+        if !approved.allows_read_type(&request.event_type, is_state) {
+            return error(format!(
+                "Not allowed to read {} events of type {}",
+                if is_state { "state" } else { "timeline" },
+                request.event_type
+            ));
+        }
+        let limit = request.limit.unwrap_or(DEFAULT_READ_LIMIT).clamp(1, MAX_READ_LIMIT);
+        let room_id = self.backend.room_id();
+        let result = match request.state_key {
+            Some(selector) => self.backend.read_room_state(room_id, request.event_type, selector).await,
+            None => {
+                self.backend.read_room_events(room_id, request.event_type, request.msgtype, limit, request.since).await
+            }
+        };
+        let events = result.map_err(|e| backend_error("Failed to read events", e))?;
+        let mut events: Vec<MatrixEvent> = events
+            .into_iter()
+            .filter(|e| approved.allows_receive(&e.event_type, e.state_key.as_deref(), msgtype_of(e)))
+            .collect();
+        events.truncate(limit as usize);
+        Ok(WidgetResponse::ReadEvents { response: ReadEventsResponse { events } })
+    }
+
+    /// `read_relations` from the widget: no capability of its own, the page is filtered to what
+    /// the widget may receive (as matrix-widget-api does).
+    async fn read_relations(&self, request: ReadRelationsRequest) -> Result<WidgetResponse, WidgetError> {
+        let approved = self.lock().approved.clone();
+        if let Some(room_id) = &request.room_id {
+            self.check_explicit_room(&approved, room_id)?;
+        }
+        let ReadRelationsRequest { event_id, rel_type, event_type, limit, from, to, direction, .. } = request;
+        let page = self
+            .backend
+            .relations(self.backend.room_id(), event_id, rel_type, event_type, from, to, limit, direction)
+            .await
+            .map_err(|e| backend_error("Failed to read relations", e))?;
+        let chunk = page
+            .chunk
+            .into_iter()
+            .filter(|e| approved.allows_receive(&e.event_type, e.state_key.as_deref(), msgtype_of(e)))
+            .collect();
+        Ok(WidgetResponse::ReadRelations {
+            response: ReadRelationsResponse { chunk, next_batch: page.next_batch, prev_batch: page.prev_batch },
+        })
+    }
+
     /// `send_event` from the widget: capability checks for every variant (plain, state, other
     /// room, delayed, sticky), then the matching backend call.
     async fn send_event(&self, request: SendEventRequest) -> Result<WidgetResponse, WidgetError> {
@@ -412,14 +462,7 @@ impl WidgetHostDriver {
         {
             let approved = self.lock().approved.clone();
             if let Some(requested) = &request.room_id {
-                // Like matrix-widget-api: an explicit room needs the timeline capability even
-                // when it is the widget's own room, and this host only serves that one.
-                if !(approved.has(&Capability::timeline(requested)) || approved.has(&Capability::timeline("*"))) {
-                    return error(format!("Unable to access room timeline: {requested}"));
-                }
-                if *requested != room_id {
-                    return error(format!("Unable to access room timeline: {requested} (this host serves {room_id})"));
-                }
+                self.check_explicit_room(&approved, requested)?;
             }
             if request.is_delayed() && !approved.has(&Capability::SendDelayedEvent) {
                 return error(format!("Missing capability for {}", Capability::SendDelayedEvent));
@@ -535,7 +578,7 @@ mod tests {
 
     use serde_json::{json, Value};
     use widget_actions::{ReadEventsRequest, RequestCapabilitiesRequest, SendEventRequest, Source, StateKeySelector};
-    use widget_matrix_backend::{InMemoryBackend, JsonValue};
+    use widget_matrix_backend::{InMemoryBackend, JsonValue, RelationsChunk};
 
     use super::*;
 
@@ -707,6 +750,19 @@ mod tests {
             state_key: StateKeySelector,
         ) -> Result<Vec<MatrixEvent>, BackendError> {
             self.inner.read_room_state(room_id, event_type, state_key).await
+        }
+        async fn relations(
+            &self,
+            room_id: String,
+            event_id: String,
+            rel_type: Option<String>,
+            event_type: Option<String>,
+            from: Option<String>,
+            to: Option<String>,
+            limit: Option<u32>,
+            direction: Option<widget_actions::RelationDirection>,
+        ) -> Result<RelationsChunk, BackendError> {
+            self.inner.relations(room_id, event_id, rel_type, event_type, from, to, limit, direction).await
         }
         fn subscribe_room(
             &self,
@@ -921,9 +977,7 @@ mod tests {
 
         block(feed(
             &driver,
-            WidgetRequest::ReadEvents {
-                request: ReadEventsRequest { event_type: "m.room.message".into(), state_key: None, limit: None },
-            },
+            WidgetRequest::ReadEvents { request: ReadEventsRequest::timeline("m.room.message", None) },
             "r",
         ))
         .unwrap();
@@ -1043,6 +1097,75 @@ mod tests {
     }
 
     #[test]
+    fn read_relations_is_filtered_and_room_checked() {
+        let (driver, backend, platform) = setup();
+        backend.inject(event("m.room.message", None, json!({"body": "root"})));
+        let mut root = event("m.room.message", None, json!({"body": "root"}));
+        root.event_id = "$root".into();
+        backend.inject(root);
+        let relate = |t: &str, id: &str| {
+            let mut e = event(t, None, json!({"m.relates_to": {"rel_type": "m.annotation", "event_id": "$root"}}));
+            e.event_id = id.into();
+            e
+        };
+        backend.inject(relate("m.reaction", "$r1"));
+        backend.inject(relate("org.example.other", "$o1"));
+
+        let read = |room_id: Option<&str>, id: &str| {
+            let mut request = ReadRelationsRequest::new("$root");
+            request.room_id = room_id.map(Into::into);
+            block(feed(&driver, WidgetRequest::ReadRelations { request }, id)).unwrap();
+            platform.drain().pop().unwrap()
+        };
+        // Nothing receivable yet: an empty page, not an error.
+        let WidgetResponse::ReadRelations { response } = WidgetResponse::from_wire(&read(None, "a")).unwrap() else {
+            panic!()
+        };
+        assert!(response.chunk.is_empty());
+
+        grant(&driver, &platform, vec![Capability::receive_event("m.reaction")]);
+        let WidgetResponse::ReadRelations { response } = WidgetResponse::from_wire(&read(None, "b")).unwrap() else {
+            panic!()
+        };
+        assert_eq!(response.chunk.iter().map(|e| e.event_id.as_str()).collect::<Vec<_>>(), ["$r1"]);
+
+        assert!(read(Some("!room:x"), "c").error().unwrap().message.contains("Unable to access room timeline"));
+        grant(&driver, &platform, vec![Capability::timeline("!room:x")]);
+        assert!(read(Some("!room:x"), "d").error().is_none());
+        assert!(read(Some("!other:x"), "e").error().is_some());
+    }
+
+    #[test]
+    fn read_events_room_ids_msgtype() {
+        let (driver, backend, platform) = setup();
+        backend.inject(event("m.room.message", None, json!({"msgtype": "m.text", "body": "1"})));
+        backend.inject(event("m.room.message", None, json!({"msgtype": "m.image", "body": "2"})));
+        grant(&driver, &platform, vec![Capability::receive_event("m.room.message")]);
+        let read = |room_ids: Option<RoomSelector>, msgtype: Option<&str>, id: &str| {
+            let mut request = ReadEventsRequest::timeline("m.room.message", None);
+            request.room_ids = room_ids;
+            request.msgtype = msgtype.map(Into::into);
+            block(feed(&driver, WidgetRequest::ReadEvents { request }, id)).unwrap();
+            platform.drain().pop().unwrap()
+        };
+        let events = |msg: WireMessage| match WidgetResponse::from_wire(&msg).unwrap() {
+            WidgetResponse::ReadEvents { response } => response.events,
+            other => panic!("{other:?}"),
+        };
+        assert_eq!(events(read(None, Some("m.image"), "a")).len(), 1);
+        assert_eq!(events(read(None, None, "b")).len(), 2);
+        // `*` without a timeline capability: nothing readable, so an empty list.
+        assert!(events(read(Some(RoomSelector::Any), None, "c")).is_empty());
+        // Explicit rooms need the timeline capability.
+        let own = Some(RoomSelector::Rooms { room_ids: vec!["!room:x".into()] });
+        assert!(read(own.clone(), None, "d").error().is_some());
+        grant(&driver, &platform, vec![Capability::timeline("*")]);
+        assert_eq!(events(read(own, None, "e")).len(), 2);
+        assert_eq!(events(read(Some(RoomSelector::Any), None, "f")).len(), 2);
+        assert!(read(Some(RoomSelector::Rooms { room_ids: vec!["!other:x".into()] }), None, "g").error().is_some());
+    }
+
+    #[test]
     fn read_events_filters_by_capability() {
         let (driver, backend, platform) = setup();
         backend.inject(event("m.room.topic", Some(""), json!({"topic": "t"})));
@@ -1051,13 +1174,8 @@ mod tests {
         backend.inject(event("m.room.message", None, json!({"body": "1"})));
         backend.inject(event("m.room.message", None, json!({"body": "2"})));
 
-        let read_members = WidgetRequest::ReadEvents {
-            request: ReadEventsRequest {
-                event_type: "m.room.member".into(),
-                state_key: Some(StateKeySelector::Any),
-                limit: None,
-            },
-        };
+        let read_members =
+            WidgetRequest::ReadEvents { request: ReadEventsRequest::state("m.room.member", StateKeySelector::Any) };
         block(feed(&driver, read_members.clone(), "r0")).unwrap();
         assert!(platform.drain()[0].error().is_some());
 
@@ -1080,9 +1198,7 @@ mod tests {
 
         block(feed(
             &driver,
-            WidgetRequest::ReadEvents {
-                request: ReadEventsRequest { event_type: "m.room.message".into(), state_key: None, limit: Some(1) },
-            },
+            WidgetRequest::ReadEvents { request: ReadEventsRequest::timeline("m.room.message", Some(1)) },
             "r2",
         ))
         .unwrap();

@@ -26,7 +26,9 @@ use js_sys::{Function, Promise};
 use serde::Serialize;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::future_to_promise;
-use widget_actions::{Capability, MatrixEvent, StateKeySelector, UpdateDelayedEventAction};
+use widget_actions::{
+    Capability, MatrixEvent, ReadEventsRequest, ReadRelationsRequest, StateKeySelector, UpdateDelayedEventAction,
+};
 
 use crate::{WidgetClient, WidgetClientError, WidgetDelegate};
 
@@ -274,10 +276,28 @@ impl WidgetApi {
         promise(self.client.update_delayed_event(delay_id, action))
     }
 
-    /// Resolves with an array of timeline events.
+    /// Resolves with an array of timeline events; `msgtype` narrows `m.room.message` reads.
     #[wasm_bindgen(js_name = readEvents)]
-    pub fn read_events(&self, event_type: String, limit: Option<u32>) -> Promise {
-        promise(self.client.read_events(event_type, limit))
+    pub fn read_events(&self, event_type: String, limit: Option<u32>, msgtype: Option<String>) -> Promise {
+        let mut request = ReadEventsRequest::timeline(event_type, limit);
+        request.msgtype = msgtype;
+        promise(self.client.read_events_request(request))
+    }
+
+    /// Resolves with `{ chunk, next_batch?, prev_batch? }` (MSC3869).
+    #[wasm_bindgen(js_name = readRelations)]
+    pub fn read_relations(
+        &self,
+        event_id: String,
+        rel_type: Option<String>,
+        event_type: Option<String>,
+        limit: Option<u32>,
+    ) -> Promise {
+        let mut request = ReadRelationsRequest::new(event_id);
+        request.rel_type = rel_type;
+        request.event_type = event_type;
+        request.limit = limit;
+        promise(self.client.read_relations(request))
     }
 
     /// Resolves with `{ client_id?, client_theme?, client_language? }`. Needs `m.client_context`.

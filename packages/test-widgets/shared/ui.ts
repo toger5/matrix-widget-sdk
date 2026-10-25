@@ -63,9 +63,23 @@ export const DELAYED_CAPABILITIES = [
 
 export const capabilityList = (): string[] => valueOf("caps").split(",").map((c) => c.trim()).filter(Boolean);
 
+/** Reactions (MSC3869 relations) between the test widgets' own messages. */
+export const RELATION_CAPABILITIES = [
+  "org.matrix.msc2762.send.event:m.reaction",
+  "org.matrix.msc2762.receive.event:m.reaction",
+].join(",");
+
 /** Remembers the delay id of the last scheduled event so the update buttons have a target. */
 export const lastDelay = { id: "" };
 export const rememberDelay = <T extends { delay_id?: string } | string>(result: T): T => {
   lastDelay.id = typeof result === "string" ? result : (result.delay_id ?? lastDelay.id);
   return result;
 };
+
+/** Remembers the event id of the last immediate send, the target of reactions and relation reads. */
+export const lastEvent = { id: "" };
+export const rememberEvent = <T extends { event_id?: string }>(result: T): T => {
+  if (result.event_id) lastEvent.id = result.event_id;
+  return result;
+};
+export const reactionTo = (eventId: string, key: string) => ({ "m.relates_to": { rel_type: "m.annotation", event_id: eventId, key } });

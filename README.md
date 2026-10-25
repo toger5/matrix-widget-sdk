@@ -72,7 +72,8 @@ Actions implemented here:
 | `send_event` | widget | send a timeline/state event; `room_id` (own room only, needs `timeline:<room>`), `delay` (MSC4157, answers with `delay_id`), `sticky_duration_ms` (MSC4407) | `send.event:<type>[#<msgtype>]` / `send.state_event:<type>[#<key>]`, plus `org.matrix.msc4157.send.delayed_event` / `org.matrix.msc4407.send.sticky_event` |
 | `org.matrix.msc4157.update_delayed_event` | widget | `{ delay_id, action: cancel \| restart \| send }` | `org.matrix.msc4157.update_delayed_event` |
 | `send_event` | host | an event from sync (the driver's backend subscription) | `receive.event:<type>` / `receive.state_event:<type>[#<key>]` |
-| `org.matrix.msc2876.read_events` | widget | read timeline (`limit`) or state (`state_key`: string or `true`) | `receive.*` |
+| `org.matrix.msc2876.read_events` | widget | read timeline (`limit`, `msgtype`, `since`) or state (`state_key`: string or `true`); `room_ids` (own room only) | `receive.*` (+ `timeline:<room>` for `room_ids`) |
+| `org.matrix.msc3869.read_relations` | widget | `{ event_id, rel_type?, event_type?, limit?, from?, to?, direction? }` → `{ chunk, next_batch?, prev_batch? }` | results filtered by `receive.*` |
 | `update_state` | host | `{ state: [...] }` the current permitted state, on approval and after changes | `receive.state_event:*` |
 | `org.matrix.msc4412.matrix_context` | widget | `{ user_id, device_id, room_id, display_name, avatar_url, matrix_base_url }`, replaces the legacy URL template parameters | `org.matrix.msc4412.matrix_context` |
 | `org.matrix.msc4412.client_context` | widget | `{ client_id?, client_theme?, client_language? }` about the embedding client | `org.matrix.msc4412.client_context` |

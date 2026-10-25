@@ -9,9 +9,9 @@ use serde_json::Value;
 // TODO consider splitting those into widget_actions::widget and widget_actions::host so that they are more explicit here.
 use widget_actions::{
     ActionError, Capability, ClientContextResponse, HostRequest, MatrixContextResponse, MatrixEvent, MessageKind,
-    ReadEventsRequest, RequestCapabilitiesRequest, SendEventRequest, SendEventResponse, StateKeySelector,
-    UpdateDelayedEventAction, UpdateDelayedEventRequest, WidgetError, WidgetRequest, WidgetResponse, WireMessage,
-    API_VERSION_V1,
+    ReadEventsRequest, ReadRelationsRequest, ReadRelationsResponse, RequestCapabilitiesRequest, SendEventRequest,
+    SendEventResponse, StateKeySelector, UpdateDelayedEventAction, UpdateDelayedEventRequest, WidgetError,
+    WidgetRequest, WidgetResponse, WireMessage, API_VERSION_V1,
 };
 
 use crate::WidgetClientError;
@@ -243,7 +243,7 @@ impl WidgetClient {
         event_type: impl Into<String>,
         limit: Option<u32>,
     ) -> impl Future<Output = Result<Vec<MatrixEvent>, WidgetClientError>> + 'static {
-        self.read_events_request(ReadEventsRequest { event_type: event_type.into(), state_key: None, limit })
+        self.read_events_request(ReadEventsRequest::timeline(event_type, limit))
     }
 
     /// Read current state events of a type. Needs `receive.state_event:<type>[#<state_key>]`.
@@ -252,14 +252,26 @@ impl WidgetClient {
         event_type: impl Into<String>,
         state_key: StateKeySelector,
     ) -> impl Future<Output = Result<Vec<MatrixEvent>, WidgetClientError>> + 'static {
-        self.read_events_request(ReadEventsRequest {
-            event_type: event_type.into(),
-            state_key: Some(state_key),
-            limit: None,
-        })
+        self.read_events_request(ReadEventsRequest::state(event_type, state_key))
     }
 
-    fn read_events_request(
+    /// Read the events relating to `request.event_id` (MSC3869). The host filters the page by
+    /// the `receive.*` capabilities.
+    pub fn read_relations(
+        &self,
+        request: ReadRelationsRequest,
+    ) -> impl Future<Output = Result<ReadRelationsResponse, WidgetClientError>> + 'static {
+        let fut = self.request(WidgetRequest::ReadRelations { request });
+        async move {
+            match fut.await? {
+                WidgetResponse::ReadRelations { response } => Ok(response),
+                _ => Err(WidgetClientError::UnexpectedResponse { action: "read_relations".into() }),
+            }
+        }
+    }
+
+    /// Send any `read_events` request as is (`msgtype`, `room_ids`, `since`, ...).
+    pub fn read_events_request(
         &self,
         request: ReadEventsRequest,
     ) -> impl Future<Output = Result<Vec<MatrixEvent>, WidgetClientError>> + 'static {

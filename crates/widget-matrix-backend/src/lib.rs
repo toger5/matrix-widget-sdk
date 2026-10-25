@@ -26,7 +26,16 @@ use std::sync::Arc;
 
 pub use error::BackendError;
 pub use in_memory::{DelayedEvent, InMemoryBackend};
-pub use widget_actions::{JsonValue, MatrixEvent, StateKeySelector};
+pub use widget_actions::{JsonValue, MatrixEvent, RelationDirection, StateKeySelector};
+
+/// One page of a relations read ([`MatrixBackend::relations`]).
+#[derive(Debug, Clone, PartialEq, Default)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+pub struct RelationsChunk {
+    pub chunk: Vec<MatrixEvent>,
+    pub next_batch: Option<String>,
+    pub prev_batch: Option<String>,
+}
 
 /// What a subscriber wants delivered for a room, by event type.
 ///
@@ -182,6 +191,22 @@ pub trait MatrixBackend: Send + Sync {
         event_type: String,
         state_key: StateKeySelector,
     ) -> Result<Vec<MatrixEvent>, BackendError>;
+
+    /// `GET /rooms/{room_id}/relations/{event_id}[/{rel_type}[/{event_type}]]` (MSC3869), decrypted.
+    /// `limit`, `from`, `to` and `direction` are the endpoint's query parameters; absent means
+    /// the homeserver's default. Same as matrix-rust-rtc's `relations` plus the pagination.
+    #[allow(clippy::too_many_arguments)]
+    async fn relations(
+        &self,
+        room_id: String,
+        event_id: String,
+        rel_type: Option<String>,
+        event_type: Option<String>,
+        from: Option<String>,
+        to: Option<String>,
+        limit: Option<u32>,
+        direction: Option<RelationDirection>,
+    ) -> Result<RelationsChunk, BackendError>;
 
     /// Deliver `subjects` of `room_id` to `sink` until the returned subscription is cancelled.
     ///

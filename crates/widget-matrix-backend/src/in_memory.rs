@@ -3,7 +3,8 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard};
 
 use crate::{
-    BackendError, JsonValue, MatrixBackend, MatrixEvent, RoomSink, RoomSubjects, StateKeySelector, Subscription,
+    BackendError, JsonValue, MatrixBackend, MatrixEvent, RelationDirection, RelationsChunk, RoomSink, RoomSubjects,
+    StateKeySelector, Subscription,
 };
 
 /// A [`MatrixBackend`] backed by plain vectors. Intended for tests and prototypes.
@@ -438,6 +439,38 @@ impl MatrixBackend for InMemoryBackend {
             .collect())
     }
 
+    /// Relations are found through `content["m.relates_to"]`; `from` / `to` are ignored and no
+    /// batch tokens are produced (the whole result is one page).
+    async fn relations(
+        &self,
+        room_id: String,
+        event_id: String,
+        rel_type: Option<String>,
+        event_type: Option<String>,
+        _from: Option<String>,
+        _to: Option<String>,
+        limit: Option<u32>,
+        direction: Option<RelationDirection>,
+    ) -> Result<RelationsChunk, BackendError> {
+        self.check_room(&room_id)?;
+        let inner = self.inner();
+        let relates = |e: &MatrixEvent| -> bool {
+            let Some(rel) = e.content.get("m.relates_to") else { return false };
+            rel.get("event_id").and_then(|v| v.as_str()) == Some(event_id.as_str())
+                && rel_type.as_deref().is_none_or(|t| rel.get("rel_type").and_then(|v| v.as_str()) == Some(t))
+                && event_type.as_deref().is_none_or(|t| e.event_type == t)
+        };
+        let mut chunk: Vec<MatrixEvent> = inner.timeline.iter().filter(|e| relates(e)).cloned().collect();
+        // The endpoint defaults to newest first.
+        if direction != Some(RelationDirection::Forward) {
+            chunk.reverse();
+        }
+        if let Some(limit) = limit {
+            chunk.truncate(limit as usize);
+        }
+        Ok(RelationsChunk { chunk, next_batch: None, prev_batch: None })
+    }
+
     fn subscribe_room(
         &self,
         room_id: String,
@@ -558,6 +591,63 @@ mod tests {
             let other = "!other:x".to_string();
             assert!(b.send_room_event(other.clone(), "m.x".into(), json!({}).into()).await.is_err());
             assert!(b.read_room_events(other, "m.x".into(), None, 1, None).await.is_err());
+        });
+    }
+
+    #[test]
+    fn relations() {
+        futures::executor::block_on(async {
+            let b = InMemoryBackend::new(room(), "@me:x".into());
+            b.inject(event("m.room.message", None, "root"));
+            let react = |key: &str, body: &str| MatrixEvent {
+                content: json!({"m.relates_to": {"rel_type": "m.annotation", "event_id": "$root", "key": key}}).into(),
+                ..event("m.reaction", None, body)
+            };
+            b.inject(react("👍", "r1"));
+            b.inject(MatrixEvent {
+                content: json!({"m.relates_to": {"rel_type": "m.thread", "event_id": "$root"}, "body": "t"}).into(),
+                ..event("m.room.message", None, "t1")
+            });
+            b.inject(react("👎", "r2"));
+            b.inject(event("m.reaction", None, "unrelated"));
+
+            let all = b.relations(room(), "$root".into(), None, None, None, None, None, None).await.unwrap();
+            assert_eq!(all.chunk.iter().map(|e| e.event_id.as_str()).collect::<Vec<_>>(), ["$r2", "$t1", "$r1"]);
+            assert!(all.next_batch.is_none());
+            let forward = b
+                .relations(room(), "$root".into(), None, None, None, None, Some(2), Some(RelationDirection::Forward))
+                .await
+                .unwrap();
+            assert_eq!(forward.chunk.iter().map(|e| e.event_id.as_str()).collect::<Vec<_>>(), ["$r1", "$t1"]);
+            let annotations = b
+                .relations(
+                    room(),
+                    "$root".into(),
+                    Some("m.annotation".into()),
+                    Some("m.reaction".into()),
+                    None,
+                    None,
+                    None,
+                    None,
+                )
+                .await
+                .unwrap();
+            assert_eq!(annotations.chunk.len(), 2);
+            assert!(b
+                .relations(
+                    room(),
+                    "$root".into(),
+                    Some("m.thread".into()),
+                    Some("m.reaction".into()),
+                    None,
+                    None,
+                    None,
+                    None
+                )
+                .await
+                .unwrap()
+                .chunk
+                .is_empty());
         });
     }
 

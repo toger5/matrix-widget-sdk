@@ -21,13 +21,15 @@ use serde::{Deserialize, Serialize};
 use super::{expect, parse_tagged, split_tagged};
 use crate::{
     ActionError, ClientContextResponse, MatrixContextResponse, ReadEventsRequest, ReadEventsResponse,
-    RequestCapabilitiesRequest, SendEventRequest, SendEventResponse, Source, UpdateDelayedEventRequest, WireMessage,
+    ReadRelationsRequest, ReadRelationsResponse, RequestCapabilitiesRequest, SendEventRequest, SendEventResponse,
+    Source, UpdateDelayedEventRequest, WireMessage,
 };
 
 pub(crate) mod client_context;
 pub(crate) mod content_loaded;
 pub(crate) mod matrix_context;
 pub(crate) mod read_events;
+pub(crate) mod read_relations;
 pub(crate) mod request_capabilities;
 pub(crate) mod send_event;
 pub(crate) mod update_delayed_event;
@@ -49,6 +51,9 @@ pub enum WidgetRequest {
     /// Read events from the room. Requires a `receive.*` capability.
     #[serde(rename = "org.matrix.msc2876.read_events", alias = "read_events")]
     ReadEvents { request: ReadEventsRequest },
+    /// Read the events relating to one event. Results are filtered by the `receive.*` capabilities.
+    #[serde(rename = "org.matrix.msc3869.read_relations", alias = "read_relations")]
+    ReadRelations { request: ReadRelationsRequest },
     /// Cancel / restart / fire a delayed event. Requires `org.matrix.msc4157.update_delayed_event`.
     #[serde(rename = "org.matrix.msc4157.update_delayed_event", alias = "update_delayed_event")]
     UpdateDelayedEvent { request: UpdateDelayedEventRequest },
@@ -79,6 +84,8 @@ pub enum WidgetResponse {
     SendEvent { response: SendEventResponse },
     #[serde(rename = "org.matrix.msc2876.read_events", alias = "read_events")]
     ReadEvents { response: ReadEventsResponse },
+    #[serde(rename = "org.matrix.msc3869.read_relations", alias = "read_relations")]
+    ReadRelations { response: ReadRelationsResponse },
     /// `{}`
     #[serde(rename = "org.matrix.msc4157.update_delayed_event", alias = "update_delayed_event")]
     UpdateDelayedEvent,
