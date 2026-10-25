@@ -9,6 +9,8 @@ import {
   DEFAULT_CAPABILITIES,
   DELAYED_CAPABILITIES,
   RELATION_CAPABILITIES,
+  TO_DEVICE_CAPABILITIES,
+  TO_DEVICE_MESSAGES,
   button,
   capabilityList,
   input,
@@ -40,7 +42,7 @@ api.on("action:notify_capabilities", (ev: CustomEvent<IWidgetApiRequest>) => {
   state.approved = (ev.detail.data as { approved: string[] }).approved;
   refresh();
 });
-for (const action of ["send_event", "update_state"]) {
+for (const action of ["send_event", "update_state", "send_to_device"]) {
   api.on(`action:${action}`, (ev: CustomEvent<IWidgetApiRequest>) => {
     ev.preventDefault();
     api.transport.reply(ev.detail, {});
@@ -48,7 +50,7 @@ for (const action of ["send_event", "update_state"]) {
 }
 
 mount("Legacy test widget (matrix-widget-api)", [
-  input("caps", `${DEFAULT_CAPABILITIES},${DELAYED_CAPABILITIES},${RELATION_CAPABILITIES}`, "capabilities"),
+  input("caps", `${DEFAULT_CAPABILITIES},${DELAYED_CAPABILITIES},${RELATION_CAPABILITIES},${TO_DEVICE_CAPABILITIES}`, "capabilities"),
   button("start (requests capabilities above)", () => {
     api.requestCapabilities(capabilityList());
     api.start();
@@ -70,6 +72,7 @@ mount("Legacy test widget (matrix-widget-api)", [
   button("delayed: send now", () => api.sendScheduledDelayedEvent(lastDelay.id)),
   button("delayed: cancel", () => api.cancelScheduledDelayedEvent(lastDelay.id)),
   button("send sticky m.rtc.member (30s)", () => api.sendRoomEvent("m.rtc.member", { from: "legacy widget" }, undefined, undefined, 30000)),
+  button("send to-device org.example.ping", () => api.sendToDevice("org.example.ping", false, TO_DEVICE_MESSAGES)),
   button("read m.room.message (limit 10)", () => api.readRoomEvents("m.room.message", 10)),
   button("read state m.room.topic", () => api.readStateEvents("m.room.topic", undefined, "")),
   button("custom action org.example.custom", () => api.transport.send("org.example.custom" as never, { hello: "world" })),

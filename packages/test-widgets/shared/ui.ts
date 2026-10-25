@@ -69,6 +69,13 @@ export const RELATION_CAPABILITIES = [
   "org.matrix.msc2762.receive.event:m.reaction",
 ].join(",");
 
+/** To-device messages (MSC3819) of one test type, both directions. */
+export const TO_DEVICE_CAPABILITIES = [
+  "org.matrix.msc3819.send.to_device:org.example.ping",
+  "org.matrix.msc3819.receive.to_device:org.example.ping",
+].join(",");
+export const TO_DEVICE_MESSAGES = { "@bob:example.org": { "*": { hello: "from the widget" } } };
+
 /** Remembers the delay id of the last scheduled event so the update buttons have a target. */
 export const lastDelay = { id: "" };
 export const rememberDelay = <T extends { delay_id?: string } | string>(result: T): T => {

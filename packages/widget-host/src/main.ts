@@ -56,6 +56,13 @@ const EXAMPLE_EVENT = {
   content: { msgtype: "m.text", body: "hello from the host" },
 };
 
+const EXAMPLE_TO_DEVICE = {
+  type: "org.example.ping",
+  sender: "@bob:example.org",
+  content: { n: 1 },
+  encrypted: false,
+};
+
 /** Capabilities the compat wrapper needs to template a legacy widget's URL. */
 const CONTEXT_CAPABILITIES = ["org.matrix.msc4412.matrix_context", "org.matrix.msc4412.client_context"];
 
@@ -89,6 +96,7 @@ function refresh() {
   show("snapshot", driver.snapshot());
   show("timeline", backend.timeline());
   show("delayed", backend.delayedEvents());
+  show("toDeviceSent", backend.toDeviceSent());
   show("state", backend.state());
 }
 
@@ -180,6 +188,16 @@ $("injectBtn").onclick = () => {
   }
   refresh();
 };
+$("injectToDeviceBtn").onclick = () => {
+  try {
+    const m = JSON.parse(value("injectToDevice")) as { type: string; sender: string; content: unknown; encrypted?: boolean };
+    backend?.injectToDevice({ eventType: m.type, sender: m.sender, content: m.content, encrypted: m.encrypted === true });
+    log("info", "delivered to the to-device subscription; the widget gets it if its capabilities allow");
+  } catch (e) {
+    log("err", String(e));
+  }
+  refresh();
+};
 $("clear").onclick = () => (backend?.clear(), refresh());
 $("fireDelayed").onclick = () => {
   const next = backend?.delayedEvents()[0];
@@ -200,6 +218,7 @@ $("clearLog").onclick = () => $("log").replaceChildren();
 const params = new URLSearchParams(location.search);
 $<HTMLTextAreaElement>("event").value = params.get("event") ?? JSON.stringify(EXAMPLE_NEW, null, 2);
 $<HTMLTextAreaElement>("inject").value = JSON.stringify(EXAMPLE_EVENT, null, 2);
+$<HTMLTextAreaElement>("injectToDevice").value = JSON.stringify(EXAMPLE_TO_DEVICE, null, 2);
 if (params.get("wrapper")) $<HTMLInputElement>("wrapper").value = params.get("wrapper")!;
 $<HTMLInputElement>("autoApprove").checked = params.get("autoApprove") === "1";
 if (params.get("autoload") === "1") $("load").click();

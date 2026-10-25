@@ -22,7 +22,7 @@ use super::{expect, parse_tagged, split_tagged};
 use crate::{
     ActionError, ClientContextResponse, MatrixContextResponse, ReadEventsRequest, ReadEventsResponse,
     ReadRelationsRequest, ReadRelationsResponse, RequestCapabilitiesRequest, SendEventRequest, SendEventResponse,
-    Source, UpdateDelayedEventRequest, WireMessage,
+    SendToDeviceRequest, Source, UpdateDelayedEventRequest, WireMessage,
 };
 
 pub(crate) mod client_context;
@@ -32,6 +32,7 @@ pub(crate) mod read_events;
 pub(crate) mod read_relations;
 pub(crate) mod request_capabilities;
 pub(crate) mod send_event;
+pub(crate) mod send_to_device;
 pub(crate) mod update_delayed_event;
 
 /// A request sent by the widget (`source: widget`, has `request`).
@@ -48,6 +49,9 @@ pub enum WidgetRequest {
     /// Send an event to the room. Requires a `send.*` capability.
     #[serde(rename = "send_event")]
     SendEvent { request: SendEventRequest },
+    /// Send a to-device message. Requires `org.matrix.msc3819.send.to_device:<type>`.
+    #[serde(rename = "send_to_device")]
+    SendToDevice { request: SendToDeviceRequest },
     /// Read events from the room. Requires a `receive.*` capability.
     #[serde(rename = "org.matrix.msc2876.read_events", alias = "read_events")]
     ReadEvents { request: ReadEventsRequest },
@@ -82,6 +86,9 @@ pub enum WidgetResponse {
     RequestCapabilities,
     #[serde(rename = "send_event")]
     SendEvent { response: SendEventResponse },
+    /// `{}`
+    #[serde(rename = "send_to_device")]
+    SendToDevice,
     #[serde(rename = "org.matrix.msc2876.read_events", alias = "read_events")]
     ReadEvents { response: ReadEventsResponse },
     #[serde(rename = "org.matrix.msc3869.read_relations", alias = "read_relations")]

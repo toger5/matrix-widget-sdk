@@ -8,10 +8,11 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 // TODO consider splitting those into widget_actions::widget and widget_actions::host so that they are more explicit here.
 use widget_actions::{
-    ActionError, Capability, ClientContextResponse, HostRequest, MatrixContextResponse, MatrixEvent, MessageKind,
-    ReadEventsRequest, ReadRelationsRequest, ReadRelationsResponse, RequestCapabilitiesRequest, SendEventRequest,
-    SendEventResponse, StateKeySelector, UpdateDelayedEventAction, UpdateDelayedEventRequest, WidgetError,
-    WidgetRequest, WidgetResponse, WireMessage, API_VERSION_V1,
+    ActionError, Capability, ClientContextResponse, HostRequest, JsonValue, MatrixContextResponse, MatrixEvent,
+    MessageKind, ReadEventsRequest, ReadRelationsRequest, ReadRelationsResponse, RequestCapabilitiesRequest,
+    SendEventRequest, SendEventResponse, SendToDeviceRequest, StateKeySelector, ToDeviceEvent,
+    UpdateDelayedEventAction, UpdateDelayedEventRequest, WidgetError, WidgetRequest, WidgetResponse, WireMessage,
+    API_VERSION_V1,
 };
 
 use crate::WidgetClientError;
@@ -29,6 +30,9 @@ pub trait WidgetDelegate {
 
     /// The host pushed (part of) the current room state (`update_state`).
     fn on_state_update(&self, _state: Vec<MatrixEvent>) {}
+
+    /// A to-device message the host forwarded to this widget (`send_to_device` from the host).
+    fn on_to_device_message(&self, _message: ToDeviceEvent) {}
 
     /// A capability negotiation finished. `approved` is the complete set now held.
     fn on_capabilities_changed(&self, _requested: Vec<Capability>, _approved: Vec<Capability>) {}
@@ -255,6 +259,30 @@ impl WidgetClient {
         self.read_events_request(ReadEventsRequest::state(event_type, state_key))
     }
 
+    /// Send a to-device message (MSC3819): `messages` is `user_id -> device_id -> content`
+    /// (`*` as device id means every device of the user). Needs
+    /// `org.matrix.msc3819.send.to_device:<type>`.
+    pub fn send_to_device(
+        &self,
+        event_type: impl Into<String>,
+        encrypted: bool,
+        messages: HashMap<String, HashMap<String, Value>>,
+    ) -> impl Future<Output = Result<(), WidgetClientError>> + 'static {
+        let messages = messages
+            .into_iter()
+            .map(|(user, devices)| (user, devices.into_iter().map(|(d, c)| (d, JsonValue::from(c))).collect()))
+            .collect();
+        let fut = self.request(WidgetRequest::SendToDevice {
+            request: SendToDeviceRequest { event_type: event_type.into(), encrypted, messages },
+        });
+        async move {
+            match fut.await? {
+                WidgetResponse::SendToDevice => Ok(()),
+                _ => Err(WidgetClientError::UnexpectedResponse { action: "send_to_device".into() }),
+            }
+        }
+    }
+
     /// Read the events relating to `request.event_id` (MSC3869). The host filters the page by
     /// the `receive.*` capabilities.
     pub fn read_relations(
@@ -350,6 +378,10 @@ impl WidgetClient {
             HostRequest::UpdateState { request } => {
                 self.send(msg.ack());
                 self.delegate.on_state_update(request.state);
+            }
+            HostRequest::SendToDevice { message } => {
+                self.send(msg.ack());
+                self.delegate.on_to_device_message(message);
             }
             HostRequest::Unknown => {
                 self.send(msg.error_response_to(WidgetError::new(format!("Unknown action `{}`", msg.action))));

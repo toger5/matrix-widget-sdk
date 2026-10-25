@@ -8,6 +8,8 @@ import {
   DEFAULT_CAPABILITIES,
   DELAYED_CAPABILITIES,
   RELATION_CAPABILITIES,
+  TO_DEVICE_CAPABILITIES,
+  TO_DEVICE_MESSAGES,
   button,
   capabilityList,
   input,
@@ -28,13 +30,14 @@ const refresh = () => showState(api.state);
 
 api.onEvent((event: unknown) => (log("send_event", event), refresh()));
 api.onStateUpdate((state: unknown) => (log("update_state", state), refresh()));
+api.onToDeviceMessage((message: unknown) => log("send_to_device", message));
 api.onCapabilitiesChanged((requested: string[], approved: string[]) => (log("notify_capabilities", { requested, approved }), refresh()));
 
 const content = () => ({ msgtype: "m.text", body: valueOf("body") });
 mount("MSC4412 test widget (widget-base-sdk)", [
   input(
     "caps",
-    `${DEFAULT_CAPABILITIES},${DELAYED_CAPABILITIES},${RELATION_CAPABILITIES},org.matrix.msc4412.matrix_context,org.matrix.msc4412.client_context`,
+    `${DEFAULT_CAPABILITIES},${DELAYED_CAPABILITIES},${RELATION_CAPABILITIES},${TO_DEVICE_CAPABILITIES},org.matrix.msc4412.matrix_context,org.matrix.msc4412.client_context`,
     "capabilities",
   ),
   button("request_capabilities", () => api.requestCapabilities(capabilityList()).finally(refresh)),
@@ -49,6 +52,7 @@ mount("MSC4412 test widget (widget-base-sdk)", [
   button("delayed: send now", () => api.updateDelayedEvent(lastDelay.id, "send")),
   button("delayed: cancel", () => api.updateDelayedEvent(lastDelay.id, "cancel")),
   button("send sticky m.rtc.member (30s)", () => api.sendStickyEvent("m.rtc.member", { from: "new widget" }, 30000)),
+  button("send to-device org.example.ping", () => api.sendToDevice("org.example.ping", false, TO_DEVICE_MESSAGES)),
   button("read m.room.message (limit 10)", () => api.readEvents("m.room.message", 10)),
   button("read state m.room.topic", () => api.readState("m.room.topic", undefined)),
   button("matrix_context", () => api.getMatrixContext()),

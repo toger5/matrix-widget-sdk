@@ -4,7 +4,7 @@ use std::sync::{Arc, Mutex, MutexGuard};
 
 use crate::{
     BackendError, JsonValue, MatrixBackend, MatrixEvent, RelationDirection, RelationsChunk, RoomSink, RoomSubjects,
-    StateKeySelector, Subscription,
+    StateKeySelector, Subscription, ToDeviceDelivery, ToDeviceEvent, ToDeviceMessage, ToDeviceSink,
 };
 
 /// A [`MatrixBackend`] backed by plain vectors. Intended for tests and prototypes.
@@ -25,6 +25,18 @@ pub struct InMemoryBackend {
     counter: AtomicU64,
     inner: Mutex<Inner>,
     subscriptions: Mutex<Vec<Arc<InMemorySubscription>>>,
+    to_device_subscriptions: Mutex<Vec<Arc<InMemoryToDeviceSubscription>>>,
+}
+
+/// A to-device message "sent" through [`InMemoryBackend`], for inspection.
+#[derive(Debug, Clone, PartialEq)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+pub struct SentToDeviceMessage {
+    pub user_id: String,
+    pub device_id: String,
+    pub event_type: String,
+    pub content: JsonValue,
+    pub encrypted: bool,
 }
 
 #[derive(Debug, Default)]
@@ -35,6 +47,8 @@ struct Inner {
     /// Scheduled (MSC4140) events by delay id. Nothing fires them automatically; a test fires
     /// them through `send_delayed_event_now` or [`InMemoryBackend::fire_delayed_event`].
     delayed: BTreeMap<String, DelayedEvent>,
+    /// To-device messages sent so far, oldest first.
+    to_device_sent: Vec<SentToDeviceMessage>,
     /// When set, every send fails with this error. Handy for tests.
     fail_sends: Option<BackendError>,
 }
@@ -70,6 +84,26 @@ impl std::fmt::Debug for dyn RoomSink {
 }
 
 impl Subscription for InMemorySubscription {
+    fn cancel(&self) {
+        self.active.store(false, Ordering::SeqCst);
+    }
+}
+
+/// One live `subscribe_to_device` call.
+#[derive(Debug)]
+struct InMemoryToDeviceSubscription {
+    event_types: Vec<String>,
+    sink: Arc<dyn ToDeviceSink>,
+    active: AtomicBool,
+}
+
+impl std::fmt::Debug for dyn ToDeviceSink {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("ToDeviceSink")
+    }
+}
+
+impl Subscription for InMemoryToDeviceSubscription {
     fn cancel(&self) {
         self.active.store(false, Ordering::SeqCst);
     }
@@ -111,6 +145,7 @@ impl InMemoryBackend {
             counter: AtomicU64::new(1),
             inner: Default::default(),
             subscriptions: Default::default(),
+            to_device_subscriptions: Default::default(),
         })
     }
 
@@ -127,6 +162,26 @@ impl InMemoryBackend {
     /// Scheduled events that have not fired or been cancelled, oldest first.
     pub fn delayed_events(&self) -> Vec<DelayedEvent> {
         self.inner().delayed.values().cloned().collect()
+    }
+
+    /// To-device messages sent through this backend, oldest first (one entry per recipient).
+    pub fn to_device_sent(&self) -> Vec<SentToDeviceMessage> {
+        self.inner().to_device_sent.clone()
+    }
+
+    /// Deliver a to-device message as if it had arrived from sync: every live to-device
+    /// subscription for its type gets it.
+    pub fn inject_to_device(&self, message: ToDeviceEvent) {
+        let subs = {
+            let mut subs = self.to_device_subscriptions.lock().unwrap_or_else(|p| p.into_inner());
+            subs.retain(|s| s.active.load(Ordering::SeqCst));
+            subs.clone()
+        };
+        for sub in subs {
+            if sub.event_types.contains(&message.event_type) {
+                sub.sink.on_to_device_message(message.clone());
+            }
+        }
     }
 
     /// Fire a scheduled event as if its delay had elapsed. The host side of
@@ -150,6 +205,7 @@ impl InMemoryBackend {
             inner.timeline.clear();
             inner.state.clear();
             inner.delayed.clear();
+            inner.to_device_sent.clear();
         }
         for sub in self.live_subscriptions() {
             for event_type in &sub.subjects.state_event_types {
@@ -471,6 +527,40 @@ impl MatrixBackend for InMemoryBackend {
         Ok(RelationsChunk { chunk, next_batch: None, prev_batch: None })
     }
 
+    async fn send_to_device_message(
+        &self,
+        encrypted: bool,
+        event_type: String,
+        messages: Vec<ToDeviceMessage>,
+    ) -> Result<Vec<ToDeviceDelivery>, BackendError> {
+        let mut inner = self.inner();
+        if let Some(err) = &inner.fail_sends {
+            return Err(err.clone());
+        }
+        let mut deliveries = Vec::with_capacity(messages.len());
+        for m in messages {
+            inner.to_device_sent.push(SentToDeviceMessage {
+                user_id: m.user_id.clone(),
+                device_id: m.device_id.clone(),
+                event_type: event_type.clone(),
+                content: m.content,
+                encrypted,
+            });
+            deliveries.push(ToDeviceDelivery { user_id: m.user_id, device_id: m.device_id, error: None });
+        }
+        Ok(deliveries)
+    }
+
+    fn subscribe_to_device(
+        &self,
+        event_types: Vec<String>,
+        sink: Arc<dyn ToDeviceSink>,
+    ) -> Result<Arc<dyn Subscription>, BackendError> {
+        let subscription = Arc::new(InMemoryToDeviceSubscription { event_types, sink, active: AtomicBool::new(true) });
+        self.to_device_subscriptions.lock().unwrap_or_else(|p| p.into_inner()).push(subscription.clone());
+        Ok(subscription)
+    }
+
     fn subscribe_room(
         &self,
         room_id: String,
@@ -648,6 +738,61 @@ mod tests {
                 .unwrap()
                 .chunk
                 .is_empty());
+        });
+    }
+
+    #[test]
+    fn to_device() {
+        futures::executor::block_on(async {
+            let b = InMemoryBackend::new(room(), "@me:x".into());
+            #[derive(Default)]
+            struct Sink(Mutex<Vec<ToDeviceEvent>>);
+            impl ToDeviceSink for Sink {
+                fn on_to_device_message(&self, message: ToDeviceEvent) {
+                    self.0.lock().unwrap().push(message);
+                }
+            }
+            let sink = Arc::new(Sink::default());
+            let sub = b.subscribe_to_device(vec!["org.example.ping".into()], sink.clone()).unwrap();
+            let ping = ToDeviceEvent {
+                event_type: "org.example.ping".into(),
+                sender: "@other:x".into(),
+                content: json!({"n": 1}).into(),
+                encrypted: true,
+            };
+            b.inject_to_device(ping.clone());
+            b.inject_to_device(ToDeviceEvent { event_type: "org.example.other".into(), ..ping.clone() });
+            assert_eq!(sink.0.lock().unwrap().as_slice(), std::slice::from_ref(&ping));
+            sub.cancel();
+            b.inject_to_device(ping);
+            assert_eq!(sink.0.lock().unwrap().len(), 1);
+
+            let deliveries = b
+                .send_to_device_message(
+                    false,
+                    "org.example.ping".into(),
+                    vec![
+                        ToDeviceMessage {
+                            user_id: "@a:x".into(),
+                            device_id: "A".into(),
+                            content: json!({"a": 1}).into(),
+                        },
+                        ToDeviceMessage {
+                            user_id: "@b:x".into(),
+                            device_id: "*".into(),
+                            content: json!({"b": 1}).into(),
+                        },
+                    ],
+                )
+                .await
+                .unwrap();
+            assert_eq!(deliveries.len(), 2);
+            assert!(deliveries.iter().all(|d| d.error.is_none()));
+            let sent = b.to_device_sent();
+            assert_eq!(sent.len(), 2);
+            assert_eq!(sent[1].device_id, "*");
+            assert_eq!(sent[1].content["b"], 1);
+            assert!(!sent[0].encrypted);
         });
     }
 

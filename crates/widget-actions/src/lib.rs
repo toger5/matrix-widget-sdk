@@ -34,13 +34,14 @@ pub use actions::widget::read_events::{ReadEventsRequest, ReadEventsResponse, Ro
 pub use actions::widget::read_relations::{ReadRelationsRequest, ReadRelationsResponse, RelationDirection};
 pub use actions::widget::request_capabilities::RequestCapabilitiesRequest;
 pub use actions::widget::send_event::{SendEventRequest, SendEventResponse};
+pub use actions::widget::send_to_device::SendToDeviceRequest;
 pub use actions::widget::update_delayed_event::{UpdateDelayedEventAction, UpdateDelayedEventRequest};
 pub use actions::widget::{WidgetRequest, WidgetResponse};
 pub use actions::Action;
 pub use capabilities::{Capability, CapabilitySet};
 pub use error::ActionError;
 pub use json::JsonValue;
-pub use matrix::{matrix_event_from_json, matrix_event_to_json, MatrixEvent, StateKeySelector};
+pub use matrix::{matrix_event_from_json, matrix_event_to_json, MatrixEvent, StateKeySelector, ToDeviceEvent};
 pub use wire::{MatrixApiError, MatrixErrorResponse, MessageKind, Source, WidgetError, WireMessage, API_VERSION_V1};
 
 #[cfg(feature = "uniffi")]

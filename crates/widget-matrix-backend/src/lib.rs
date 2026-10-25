@@ -25,8 +25,29 @@ mod in_memory;
 use std::sync::Arc;
 
 pub use error::BackendError;
-pub use in_memory::{DelayedEvent, InMemoryBackend};
-pub use widget_actions::{JsonValue, MatrixEvent, RelationDirection, StateKeySelector};
+pub use in_memory::{DelayedEvent, InMemoryBackend, SentToDeviceMessage};
+pub use widget_actions::{JsonValue, MatrixEvent, RelationDirection, StateKeySelector, ToDeviceEvent};
+
+/// One to-device message to send: its recipient device and the content for that device
+/// ([`MatrixBackend::send_to_device_message`]).
+#[derive(Debug, Clone, PartialEq)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+pub struct ToDeviceMessage {
+    pub user_id: String,
+    /// A device id, or `*` for every device of the user.
+    pub device_id: String,
+    pub content: JsonValue,
+}
+
+/// What became of one recipient of a to-device send (same as matrix-rust-rtc).
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+pub struct ToDeviceDelivery {
+    pub user_id: String,
+    pub device_id: String,
+    /// `None` when the message was accepted for this recipient; otherwise why not.
+    pub error: Option<String>,
+}
 
 /// One page of a relations read ([`MatrixBackend::relations`]).
 #[derive(Debug, Clone, PartialEq, Default)]
@@ -70,6 +91,14 @@ pub trait RoomSink: Send + Sync {
     /// first call per type is the set at subscription time; later calls follow every change.
     /// An empty vector means there is no such state.
     fn on_state_events(&self, event_type: String, events: Vec<MatrixEvent>);
+}
+
+/// Where a backend delivers to-device messages of the subscribed types. Implemented by the
+/// driver; every call returns at once.
+#[cfg_attr(feature = "uniffi", uniffi::export)]
+pub trait ToDeviceSink: Send + Sync {
+    /// A decrypted (or cleartext) to-device message of a subscribed type.
+    fn on_to_device_message(&self, message: ToDeviceEvent);
 }
 
 /// A live subscription. The driver ends it with [`cancel`](Subscription::cancel); cancelling
@@ -170,6 +199,16 @@ pub trait MatrixBackend: Send + Sync {
     /// MSC4140 `send`: send a delayed event right now.
     async fn send_delayed_event_now(&self, room_id: String, delay_id: String) -> Result<(), BackendError>;
 
+    /// Send one to-device message type to a set of devices, each with its own content
+    /// (MSC3819 `messages: { user_id: { device_id: content } }`), Olm-encrypted when `encrypted`.
+    /// Reports the outcome per recipient; an `Err` means the batch could not be attempted at all.
+    async fn send_to_device_message(
+        &self,
+        encrypted: bool,
+        event_type: String,
+        messages: Vec<ToDeviceMessage>,
+    ) -> Result<Vec<ToDeviceDelivery>, BackendError>;
+
     // ---- Read half ----
 
     /// Read the most recent timeline events of `event_type`, newest last, at most `limit`.
@@ -219,6 +258,14 @@ pub trait MatrixBackend: Send + Sync {
         room_id: String,
         subjects: RoomSubjects,
         sink: Arc<dyn RoomSink>,
+    ) -> Result<Arc<dyn Subscription>, BackendError>;
+
+    /// Deliver every to-device message of `event_types` to `sink` until the returned
+    /// subscription is cancelled. Synchronous, as [`subscribe_room`](Self::subscribe_room).
+    fn subscribe_to_device(
+        &self,
+        event_types: Vec<String>,
+        sink: Arc<dyn ToDeviceSink>,
     ) -> Result<Arc<dyn Subscription>, BackendError>;
 }
 

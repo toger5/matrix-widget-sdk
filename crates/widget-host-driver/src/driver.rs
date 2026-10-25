@@ -4,10 +4,13 @@ use std::sync::{Arc, Mutex, MutexGuard, Weak};
 use widget_actions::{
     Action, ActionError, Capability, CapabilitySet, ClientContextResponse, HostRequest, MatrixContextResponse,
     MatrixEvent, MessageKind, NotifyCapabilitiesRequest, ReadEventsRequest, ReadEventsResponse, ReadRelationsRequest,
-    ReadRelationsResponse, RoomSelector, SendEventRequest, SendEventResponse, UpdateDelayedEventAction,
-    UpdateStateRequest, WidgetError, WidgetRequest, WidgetResponse, WireMessage, API_VERSION_V1,
+    ReadRelationsResponse, RoomSelector, SendEventRequest, SendEventResponse, SendToDeviceRequest, ToDeviceEvent,
+    UpdateDelayedEventAction, UpdateStateRequest, WidgetError, WidgetRequest, WidgetResponse, WireMessage,
+    API_VERSION_V1,
 };
-use widget_matrix_backend::{BackendError, MatrixBackend, RoomSink, RoomSubjects, Subscription};
+use widget_matrix_backend::{
+    BackendError, MatrixBackend, RoomSink, RoomSubjects, Subscription, ToDeviceMessage, ToDeviceSink,
+};
 
 use crate::DriverError;
 
@@ -83,6 +86,8 @@ pub struct WidgetHostDriver {
     /// The backend subscription matching the approved `receive.*` capabilities. Has its own
     /// lock, which is never held while calling into the backend or the platform.
     subscription: Mutex<Option<Arc<dyn Subscription>>>,
+    /// The backend subscription matching the approved `receive.to_device:*` capabilities.
+    to_device_subscription: Mutex<Option<Arc<dyn Subscription>>>,
     /// For handing a (weak) reference to the sink the backend calls back on.
     this: Weak<WidgetHostDriver>,
 }
@@ -105,6 +110,14 @@ impl RoomSink for DriverSink {
     }
 }
 
+impl ToDeviceSink for DriverSink {
+    fn on_to_device_message(&self, message: ToDeviceEvent) {
+        if let Some(driver) = self.0.upgrade() {
+            driver.on_to_device_message(message);
+        }
+    }
+}
+
 #[cfg_attr(feature = "uniffi", uniffi::export)]
 impl WidgetHostDriver {
     /// Create a driver for one widget. `backend` must be bound to the room the widget lives in.
@@ -115,6 +128,7 @@ impl WidgetHostDriver {
             platform,
             state: Mutex::new(State::default()),
             subscription: Mutex::new(None),
+            to_device_subscription: Mutex::new(None),
             this: this.clone(),
         })
     }
@@ -223,25 +237,48 @@ impl WidgetHostDriver {
         self.subscription.lock().unwrap_or_else(|p| p.into_inner()).take()
     }
 
+    fn take_to_device_subscription(&self) -> Option<Arc<dyn Subscription>> {
+        self.to_device_subscription.lock().unwrap_or_else(|p| p.into_inner()).take()
+    }
+
     /// Replace the backend subscription with one matching the approved capabilities. The
     /// backend may call the sink synchronously from inside `subscribe_room`, so no driver lock
     /// is held across that call.
     fn resubscribe(&self) {
-        let subjects = subjects_for(&self.lock().approved);
+        let (subjects, to_device_types) = {
+            let approved = &self.lock().approved;
+            (subjects_for(approved), to_device_types_for(approved))
+        };
         if let Some(old) = self.take_subscription() {
             old.cancel();
         }
-        if subjects.is_empty() {
-            return;
+        if let Some(old) = self.take_to_device_subscription() {
+            old.cancel();
         }
         let Some(this) = self.this.upgrade() else {
             return;
         };
-        let sink: Arc<dyn RoomSink> = Arc::new(DriverSink(Arc::downgrade(&this)));
         // A refused subscription leaves the widget without live events; there is no protocol
-        // message for that, so the error is dropped here.
-        if let Ok(subscription) = self.backend.subscribe_room(self.backend.room_id(), subjects, sink) {
-            *self.subscription.lock().unwrap_or_else(|p| p.into_inner()) = Some(subscription);
+        // message for that, so the errors are dropped here.
+        if !subjects.is_empty() {
+            let sink: Arc<dyn RoomSink> = Arc::new(DriverSink(Arc::downgrade(&this)));
+            if let Ok(subscription) = self.backend.subscribe_room(self.backend.room_id(), subjects, sink) {
+                *self.subscription.lock().unwrap_or_else(|p| p.into_inner()) = Some(subscription);
+            }
+        }
+        if !to_device_types.is_empty() {
+            let sink: Arc<dyn ToDeviceSink> = Arc::new(DriverSink(Arc::downgrade(&this)));
+            if let Ok(subscription) = self.backend.subscribe_to_device(to_device_types, sink) {
+                *self.to_device_subscription.lock().unwrap_or_else(|p| p.into_inner()) = Some(subscription);
+            }
+        }
+    }
+
+    /// A to-device message from the subscription: forwarded as `send_to_device` when the widget
+    /// holds the matching `receive.to_device` capability.
+    fn on_to_device_message(&self, message: ToDeviceEvent) {
+        if self.lock().approved.allows_receive_to_device(&message.event_type) {
+            self.send_request(HostRequest::SendToDevice { message });
         }
     }
 
@@ -333,6 +370,7 @@ impl WidgetHostDriver {
                         .map_err(|e| backend_error("Failed to update delayed event", e))
                 }
             }
+            WidgetRequest::SendToDevice { request } => self.send_to_device(request).await,
             WidgetRequest::ReadEvents { request } => self.read_events(request).await,
             WidgetRequest::ReadRelations { request } => self.read_relations(request).await,
             WidgetRequest::MatrixContext => {
@@ -385,6 +423,43 @@ impl WidgetHostDriver {
             return error(format!("Unable to access room timeline: {room_id} (this host serves {own})"));
         }
         Ok(())
+    }
+
+    /// `send_to_device` from the widget: one backend call for the whole recipient map; any
+    /// recipient the backend could not serve fails the request (the widget cannot act on a
+    /// partial result through this api).
+    async fn send_to_device(&self, request: SendToDeviceRequest) -> Result<WidgetResponse, WidgetError> {
+        if !self.lock().approved.allows_send_to_device(&request.event_type) {
+            return error(format!(
+                "Not allowed to send to-device messages of this type (missing capability {})",
+                Capability::send_to_device(&request.event_type)
+            ));
+        }
+        let messages: Vec<ToDeviceMessage> = request
+            .messages
+            .into_iter()
+            .flat_map(|(user_id, devices)| {
+                devices.into_iter().map(move |(device_id, content)| ToDeviceMessage {
+                    user_id: user_id.clone(),
+                    device_id,
+                    content,
+                })
+            })
+            .collect();
+        let deliveries = self
+            .backend
+            .send_to_device_message(request.encrypted, request.event_type, messages)
+            .await
+            .map_err(|e| backend_error("Failed to send to-device message", e))?;
+        let failed: Vec<String> = deliveries
+            .into_iter()
+            .filter_map(|d| d.error.map(|e| format!("{}/{}: {e}", d.user_id, d.device_id)))
+            .collect();
+        if failed.is_empty() {
+            Ok(WidgetResponse::SendToDevice)
+        } else {
+            error(format!("Failed to send to-device message to {}", failed.join(", ")))
+        }
     }
 
     /// `read_events` from the widget: capability checks, the backend read, then the result
@@ -525,7 +600,23 @@ impl Drop for WidgetHostDriver {
         if let Some(subscription) = self.take_subscription() {
             subscription.cancel();
         }
+        if let Some(subscription) = self.take_to_device_subscription() {
+            subscription.cancel();
+        }
     }
+}
+
+/// The to-device message types to subscribe to for a set of approved capabilities.
+fn to_device_types_for(approved: &[Capability]) -> Vec<String> {
+    let mut types: Vec<String> = Vec::new();
+    for cap in approved {
+        if let Capability::ReceiveToDevice { event_type } = cap {
+            if !types.contains(event_type) {
+                types.push(event_type.clone());
+            }
+        }
+    }
+    types
 }
 
 /// What to subscribe to for a set of approved capabilities: `receive.event:T` means `T` on the
@@ -639,6 +730,7 @@ mod tests {
     struct RecordingBackend {
         inner: Arc<InMemoryBackend>,
         subscribe_calls: Mutex<Vec<(String, RoomSubjects)>>,
+        to_device_calls: Mutex<Vec<Vec<String>>>,
         subscriptions: Mutex<Vec<Arc<TestSubscription>>>,
     }
 
@@ -647,6 +739,7 @@ mod tests {
             Arc::new(Self {
                 inner: InMemoryBackend::new("!room:x".into(), "@me:x".into()),
                 subscribe_calls: Default::default(),
+                to_device_calls: Default::default(),
                 subscriptions: Default::default(),
             })
         }
@@ -763,6 +856,24 @@ mod tests {
             direction: Option<widget_actions::RelationDirection>,
         ) -> Result<RelationsChunk, BackendError> {
             self.inner.relations(room_id, event_id, rel_type, event_type, from, to, limit, direction).await
+        }
+        async fn send_to_device_message(
+            &self,
+            encrypted: bool,
+            event_type: String,
+            messages: Vec<ToDeviceMessage>,
+        ) -> Result<Vec<widget_matrix_backend::ToDeviceDelivery>, BackendError> {
+            self.inner.send_to_device_message(encrypted, event_type, messages).await
+        }
+        fn subscribe_to_device(
+            &self,
+            event_types: Vec<String>,
+            _sink: Arc<dyn ToDeviceSink>,
+        ) -> Result<Arc<dyn Subscription>, BackendError> {
+            self.to_device_calls.lock().unwrap().push(event_types);
+            let subscription = Arc::new(TestSubscription::default());
+            self.subscriptions.lock().unwrap().push(subscription.clone());
+            Ok(subscription)
         }
         fn subscribe_room(
             &self,
@@ -1268,6 +1379,69 @@ mod tests {
         assert_eq!(calls.len(), 2);
         assert_eq!(calls[1].1.timeline_event_types, types(&["m.room.message", "m.room.topic", "m.reaction"]));
         assert_eq!(backend.cancelled(), vec![1, 0]);
+    }
+
+    #[test]
+    fn to_device_both_directions() {
+        let (driver, backend, platform) = setup();
+        let mut messages = std::collections::HashMap::new();
+        messages.insert(
+            "@a:x".to_string(),
+            std::collections::HashMap::from([("DEV".to_string(), JsonValue::from(json!({"n": 1})))]),
+        );
+        let request = SendToDeviceRequest { event_type: "org.example.ping".into(), encrypted: true, messages };
+        block(feed(&driver, WidgetRequest::SendToDevice { request: request.clone() }, "t0")).unwrap();
+        assert!(platform.drain()[0]
+            .error()
+            .unwrap()
+            .message
+            .contains("org.matrix.msc3819.send.to_device:org.example.ping"));
+
+        grant(
+            &driver,
+            &platform,
+            vec![Capability::send_to_device("org.example.ping"), Capability::receive_to_device("org.example.ping")],
+        );
+        block(feed(&driver, WidgetRequest::SendToDevice { request }, "t1")).unwrap();
+        assert_eq!(WidgetResponse::from_wire(&platform.drain()[0]).unwrap(), WidgetResponse::SendToDevice);
+        let sent = backend.to_device_sent();
+        assert_eq!(sent.len(), 1);
+        assert_eq!((sent[0].user_id.as_str(), sent[0].device_id.as_str()), ("@a:x", "DEV"));
+        assert!(sent[0].encrypted);
+
+        // Incoming: only subscribed / permitted types reach the widget.
+        let ping = ToDeviceEvent {
+            event_type: "org.example.ping".into(),
+            sender: "@other:x".into(),
+            content: json!({"n": 2}).into(),
+            encrypted: false,
+        };
+        backend.inject_to_device(ToDeviceEvent { event_type: "org.example.other".into(), ..ping.clone() });
+        assert!(platform.drain().is_empty());
+        backend.inject_to_device(ping.clone());
+        let sent = platform.drain();
+        assert_eq!(sent.len(), 1);
+        assert_eq!(HostRequest::from_wire(&sent[0]).unwrap(), HostRequest::SendToDevice { message: ping });
+        block(driver.handle_message_from_widget(sent[0].ack().to_json())).unwrap();
+    }
+
+    #[test]
+    fn to_device_capabilities_subscribe_separately() {
+        let backend = RecordingBackend::new();
+        let platform = Arc::new(RecordingPlatform::default());
+        let driver = WidgetHostDriver::new(backend.clone(), platform.clone());
+        grant_and_drain(
+            &driver,
+            &platform,
+            vec![Capability::receive_to_device("a"), Capability::receive_to_device("a")],
+        );
+        assert!(backend.calls().is_empty());
+        assert_eq!(backend.to_device_calls.lock().unwrap().as_slice(), &[vec!["a".to_string()]]);
+        grant_and_drain(&driver, &platform, vec![Capability::receive_to_device("b")]);
+        assert_eq!(backend.to_device_calls.lock().unwrap().len(), 2);
+        assert_eq!(backend.cancelled(), vec![1, 0]);
+        drop(driver);
+        assert_eq!(backend.cancelled(), vec![1, 1]);
     }
 
     #[test]

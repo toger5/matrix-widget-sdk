@@ -27,7 +27,8 @@ use serde::Serialize;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::future_to_promise;
 use widget_actions::{
-    Capability, MatrixEvent, ReadEventsRequest, ReadRelationsRequest, StateKeySelector, UpdateDelayedEventAction,
+    Capability, MatrixEvent, ReadEventsRequest, ReadRelationsRequest, StateKeySelector, ToDeviceEvent,
+    UpdateDelayedEventAction,
 };
 
 use crate::{WidgetClient, WidgetClientError, WidgetDelegate};
@@ -36,6 +37,7 @@ use crate::{WidgetClient, WidgetClientError, WidgetDelegate};
 struct Callbacks {
     on_event: Option<Function>,
     on_state_update: Option<Function>,
+    on_to_device_message: Option<Function>,
     on_capabilities_changed: Option<Function>,
 }
 
@@ -89,6 +91,10 @@ impl WidgetDelegate for JsDelegate {
 
     fn on_state_update(&self, state: Vec<MatrixEvent>) {
         call(&self.callbacks.borrow().on_state_update, to_js(&state));
+    }
+
+    fn on_to_device_message(&self, message: ToDeviceEvent) {
+        call(&self.callbacks.borrow().on_to_device_message, to_js(&message));
     }
 
     fn on_capabilities_changed(&self, requested: Vec<Capability>, approved: Vec<Capability>) {
@@ -189,6 +195,13 @@ impl WidgetApi {
         self.delegate.callbacks.borrow_mut().on_state_update = callback;
     }
 
+    /// Register a callback for to-device messages forwarded by the host
+    /// (`{ type, sender, content, encrypted }`).
+    #[wasm_bindgen(js_name = onToDeviceMessage)]
+    pub fn on_to_device_message(&self, callback: Option<Function>) {
+        self.delegate.callbacks.borrow_mut().on_to_device_message = callback;
+    }
+
     /// Register a callback `(requested: string[], approved: string[]) => void` invoked when a
     /// capability negotiation completes.
     #[wasm_bindgen(js_name = onCapabilitiesChanged)]
@@ -274,6 +287,15 @@ impl WidgetApi {
             other => return Promise::reject(&js_error(format!("unknown delayed event action `{other}`"))),
         };
         promise(self.client.update_delayed_event(delay_id, action))
+    }
+
+    /// Send a to-device message (MSC3819). `messages` is `{ [userId]: { [deviceId]: content } }`.
+    #[wasm_bindgen(js_name = sendToDevice)]
+    pub fn send_to_device(&self, event_type: String, encrypted: bool, messages: JsValue) -> Promise {
+        match serde_wasm_bindgen::from_value(messages) {
+            Ok(messages) => promise(self.client.send_to_device(event_type, encrypted, messages)),
+            Err(e) => Promise::reject(&js_error(e)),
+        }
     }
 
     /// Resolves with an array of timeline events; `msgtype` narrows `m.room.message` reads.

@@ -75,6 +75,8 @@ Actions implemented here:
 | `org.matrix.msc2876.read_events` | widget | read timeline (`limit`, `msgtype`, `since`) or state (`state_key`: string or `true`); `room_ids` (own room only) | `receive.*` (+ `timeline:<room>` for `room_ids`) |
 | `org.matrix.msc3869.read_relations` | widget | `{ event_id, rel_type?, event_type?, limit?, from?, to?, direction? }` → `{ chunk, next_batch?, prev_batch? }` | results filtered by `receive.*` |
 | `update_state` | host | `{ state: [...] }` the current permitted state, on approval and after changes | `receive.state_event:*` |
+| `send_to_device` | widget | `{ type, encrypted, messages: { user_id: { device_id: content } } }` | `org.matrix.msc3819.send.to_device:<type>` |
+| `send_to_device` | host | `{ type, sender, content, encrypted }` from the backend's to-device subscription | `org.matrix.msc3819.receive.to_device:<type>` |
 | `org.matrix.msc4412.matrix_context` | widget | `{ user_id, device_id, room_id, display_name, avatar_url, matrix_base_url }`, replaces the legacy URL template parameters | `org.matrix.msc4412.matrix_context` |
 | `org.matrix.msc4412.client_context` | widget | `{ client_id?, client_theme?, client_language? }` about the embedding client | `org.matrix.msc4412.client_context` |
 

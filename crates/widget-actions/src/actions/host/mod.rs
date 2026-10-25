@@ -4,10 +4,13 @@
 use serde::{Deserialize, Serialize};
 
 use super::{expect, parse_tagged, split_tagged};
-use crate::{ActionError, MatrixEvent, NotifyCapabilitiesRequest, Source, UpdateStateRequest, WireMessage};
+use crate::{
+    ActionError, MatrixEvent, NotifyCapabilitiesRequest, Source, ToDeviceEvent, UpdateStateRequest, WireMessage,
+};
 
 pub(crate) mod notify_capabilities;
 pub(crate) mod send_event;
+pub(crate) mod send_to_device;
 pub(crate) mod update_state;
 
 // ----- Enums -----
@@ -31,6 +34,12 @@ pub enum HostRequest {
     /// Current room state the widget has `receive.state_event` capabilities for.
     #[serde(rename = "update_state")]
     UpdateState { request: UpdateStateRequest },
+    /// A to-device message the widget has a `receive.to_device` capability for.
+    #[serde(rename = "send_to_device")]
+    SendToDevice {
+        #[serde(rename = "request")]
+        message: ToDeviceEvent,
+    },
     /// An action this crate does not know; see [`WidgetRequest::Unknown`](crate::WidgetRequest::Unknown).
     #[serde(other)]
     Unknown,
@@ -38,7 +47,7 @@ pub enum HostRequest {
 
 /// The widget's response to a [`HostRequest`] (`source: host`, has `response`).
 ///
-/// All host initiated actions defined so far are acknowledged with `{}`.
+/// Every host initiated action defined so far is acknowledged with `{}`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "action")]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
@@ -49,6 +58,8 @@ pub enum HostResponse {
     SendEvent,
     #[serde(rename = "update_state")]
     UpdateState,
+    #[serde(rename = "send_to_device")]
+    SendToDevice,
     /// A response to an action this crate does not know; the raw body is in the [`WireMessage`].
     #[serde(other)]
     Unknown,

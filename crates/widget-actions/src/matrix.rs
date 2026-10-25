@@ -52,6 +52,20 @@ pub fn matrix_event_to_json(event: MatrixEvent) -> String {
     event.to_value().to_string()
 }
 
+/// A to-device message as delivered to widgets (MSC3819): the message plus whether it arrived
+/// Olm-encrypted. Used by the host's `send_to_device` action and by the backend's to-device
+/// subscription.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+pub struct ToDeviceEvent {
+    #[serde(rename = "type")]
+    pub event_type: String,
+    pub sender: String,
+    pub content: JsonValue,
+    /// Whether the message was encrypted on the wire.
+    pub encrypted: bool,
+}
+
 /// Which state keys a `read_events` request is interested in.
 ///
 /// On the wire this is either a string (one state key) or the boolean `true` (all state keys),
