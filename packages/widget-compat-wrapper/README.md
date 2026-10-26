@@ -33,6 +33,7 @@ gone, delete it and the wrapper. The host keeps no template engine at all.
 |---|---|---|---|
 | `legacy_widget_url` | yes | `content.url`, **untemplated** | Template variables are resolved by the wrapper. `widgetId` is added if missing and `parentUrl` is always set to the wrapper's own URL, because the widget's parent is now the wrapper. |
 | `legacy_widget_id` | no | `state_key` | `widgetId` put on every legacy message and value of `$matrix_widget_id`. Default: the `widgetId` query parameter of `legacy_widget_url`. One of the two must exist. |
+| `legacy_widget_name` | no | `content.name` | Accessible name (`title`) of the inner iframe. Default: the widget id. |
 | `legacy_wait_for_iframe_load` | no | `content.waitForIframeLoad` (default `true`) | Decides when the legacy capability round starts, see below. |
 | `legacy_widget_data` | no | `content.data` as JSON | Extra `$key` template variables, as in legacy clients. |
 | `client_origin` | no | | Target origin for `postMessage` to the host. Default `*`. Set it in production. |

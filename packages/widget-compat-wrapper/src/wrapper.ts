@@ -5,6 +5,8 @@ export interface WrapperConfig {
   /** Untemplated legacy widget URL. */
   legacyWidgetUrl: string;
   widgetId: string;
+  /** Accessible name of the inner iframe; the legacy widget's name. */
+  widgetName: string;
   waitForIframeLoad: boolean;
   widgetData?: Record<string, unknown>;
   clientOrigin: string;
@@ -19,6 +21,7 @@ export function parseConfig(params: URLSearchParams): WrapperConfig {
   return {
     legacyWidgetUrl,
     widgetId,
+    widgetName: params.get("legacy_widget_name") ?? widgetId,
     waitForIframeLoad: params.get("legacy_wait_for_iframe_load") !== "false",
     widgetData: data ? (JSON.parse(data) as Record<string, unknown>) : undefined,
     clientOrigin: params.get("client_origin") ?? "*",
@@ -28,6 +31,7 @@ export function parseConfig(params: URLSearchParams): WrapperConfig {
 export function startWrapper(config: WrapperConfig, container: HTMLElement, parent: Window = window.parent): CompatBridge {
   const iframe = document.createElement("iframe");
   iframe.allow = "camera; microphone; display-capture; autoplay; clipboard-write";
+  iframe.title = config.widgetName;
   let widgetOrigin = "*";
 
   const bridge = new CompatBridge({

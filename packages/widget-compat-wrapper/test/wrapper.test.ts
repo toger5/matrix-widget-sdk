@@ -7,7 +7,7 @@ describe("parseConfig", () => {
 
   it("keeps the legacy url untemplated and reads the widget id from it", () => {
     const config = parseConfig(new URLSearchParams({ legacy_widget_url: legacy }));
-    expect(config).toEqual({ legacyWidgetUrl: legacy, widgetId: "w1", waitForIframeLoad: true, widgetData: undefined, clientOrigin: "*" });
+    expect(config).toEqual({ legacyWidgetUrl: legacy, widgetId: "w1", widgetName: "w1", waitForIframeLoad: true, widgetData: undefined, clientOrigin: "*" });
   });
 
   it("prefers explicit parameters and parses widget data", () => {
