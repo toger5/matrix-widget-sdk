@@ -8,16 +8,10 @@ Reusable Rust building blocks for Matrix widgets as proposed in
 
 The same core is meant to be used on both ends of the wire and from several languages:
 
-```
- ┌──────────────── widget (iframe) ───────────────┐      ┌──────────────── host (Matrix client) ─────────────────┐
- │  your web app                                  │      │  client UI                 Matrix SDK                   │
- │     │  JS: WidgetApi (wasm-bindgen)            │      │     │ WidgetHostPlatform        │ MatrixBackend         │
- │     ▼                                          │ post │     ▼                           ▼                       │
- │  widget-base-sdk  ── WireMessage JSON ─────────┼──────┼──▶ widget-host-driver ──▶ widget-matrix-backend (trait) │
- │                   ◀────────────────────────────┼──────┼──                                                         │
- └────────────────────────────────────────────────┘      └─────────────────────────────────────────────────────────┘
-                     └──────────── widget-actions: shared types ────────────┘
-```
+![Architecture](docs/diagrams/01-architecture.svg)
+
+More diagrams (legacy widgets, wire format, the actions crate, capabilities, test setup) are in
+[`docs/diagrams`](docs/diagrams/README.md).
 
 ## Crates
 
@@ -51,8 +45,13 @@ npm test          # wrapper unit tests
 Every message is one JSON object:
 
 ```json5
-{ "source": "widget" | "host", "action": "send_event", "requestId": "<uuid v4>", "version": "v1",
-  "request": { ... } }            // or  "response": { ... }
+{
+  "source": "widget" | "host",
+  "action": "send_event",
+  "requestId": "<uuid v4>",
+  "version": "v1",
+  "request": { ... } // or  "response": { ... }
+}
 ```
 
 * `source` names the side that *initiated* the exchange and is the same on request and response
@@ -239,13 +238,23 @@ receive → read → state update). It is the best place to see the whole protoc
 
 ## Not (yet) covered
 
-* Legacy (`im.vector.modular.widgets`, versionless) widgets. The driver detects them and hands
-  back `DriverError::LegacyWidgetApi`.
-* The actions matrix-widget-api has that carry binary payloads (`upload_file`, `download_file`,
-  `screenshot`) and the modal widget actions; why, and the full comparison with matrix-widget-api
-  and matrix-rust-rtc, is in [`docs/parity.md`](docs/parity.md). Unknown capability strings and
-  actions are preserved as `Other` / `Unknown` so they can be layered on.
-* Multi-room access: `room_id` / `room_ids` are accepted but must name the widget's own room.
-* A concrete `MatrixBackend` for matrix-rust-sdk or matrix-js-sdk. The trait is small on
-  purpose; an implementation is a thin adapter around `Room::send_raw`,
+* **Binary payloads**: `upload_file`, `download_file` and `screenshot`. matrix-widget-api sends a
+  `Blob` through `postMessage`, which cannot cross the JSON / FFI boundary. Their capability
+  strings parse; the actions stay `Unknown` until there is a JSON form (or the platform
+  intercepts them before the driver). `get_media_config` is implemented.
+* **Modal widgets** (`open_modal`, `close_modal`, `set_button_enabled`, `button_clicked`,
+  `widget_config`): client UI only, not in MSC4412.
+* **Receiving sticky events** (`org.matrix.msc4407.receive.sticky_event`): the capability parses,
+  but nothing delivers them yet. Sending sticky events works.
+* **Multi-room access**: `room_id` / `room_ids` are accepted only when they name the widget's own
+  room; `room_ids: "*"` and other rooms get an error.
+* **A production `MatrixBackend`** for matrix-rust-sdk or matrix-js-sdk. Only `InMemoryBackend`
+  exists. An implementation is a thin adapter around `Room::send_raw`,
   `Room::get_state_events`, a room event handler for `subscribe_room`, ...
+
+Legacy (`im.vector.modular.widgets`) widgets are covered: the driver rejects versionless
+messages with `DriverError::LegacyWidgetApi`, and `packages/widget-compat-wrapper` runs them on
+an MSC4412 host. Smaller gaps (`redact_event`, `parent_delay_id`, `\#` escaping in msgtype
+capabilities, the order of the TURN watch acknowledgement) and the full comparison with
+matrix-widget-api and matrix-rust-rtc are in [`docs/parity.md`](docs/parity.md). Unknown
+capability strings and actions are kept as `Other` / `Unknown`, so they can be added on top.

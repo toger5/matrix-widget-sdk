@@ -7,6 +7,8 @@ exists for manual testing, for end-to-end tests of widgets and of the compat wra
 smallest possible example of embedding the driver. It is not a Matrix client: nothing leaves the
 page.
 
+![Test host, test widgets and the in-memory store](../../docs/diagrams/07-test-setup.svg)
+
 ## What it does
 
 - **Loads a widget from a widget state event** you paste in. The event decides how it is embedded:

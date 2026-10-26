@@ -1,0 +1,147 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 800" width="1200" height="800" font-family="-apple-system, 'Segoe UI', Helvetica, Arial, sans-serif">
+  <style>
+    text { fill: #1f2937; white-space: pre; }
+    .h1 { font-size: 22px; font-weight: 700; }
+    .h2 { font-size: 15px; font-weight: 700; }
+    .b { font-size: 13px; }
+    .s { font-size: 12px; fill: #4b5563; }
+    .m { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11.5px; }
+    .badge { font-size: 11px; font-weight: 700; fill: #ffffff; }
+    .purple { fill: #6d28d9; }
+    .blue { fill: #1d4ed8; }
+  </style>
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#374151"/>
+    </marker>
+    <marker id="tri" viewBox="0 0 12 12" refX="11" refY="6" markerWidth="11" markerHeight="11" orient="auto">
+      <path d="M0,0 L12,6 L0,12 z" fill="#ffffff" stroke="#c2410c" stroke-width="1.2"/>
+    </marker>
+  </defs>
+  <rect width="1200" height="800" fill="#ffffff"/>
+
+  <text x="30" y="42" class="h1">How a widget integration is built</text>
+  <text x="30" y="66" class="s">widget-base-sdk lives only in the webview (wasm). The driver, backend and action crates live in the Matrix client and compile natively / through UniFFI.</text>
+
+  <!-- ============ Webview panel ============ -->
+  <rect x="30" y="90" width="370" height="610" rx="14" fill="#faf5ff" stroke="#7c3aed" stroke-width="1.5" stroke-dasharray="6 4"/>
+  <text x="50" y="117" class="h2 purple">Webview (iframe): the widget</text>
+  <text x="50" y="136" class="s">sandboxed browser context, any origin</text>
+
+  <rect x="55" y="155" width="320" height="64" rx="8" fill="#ffffff" stroke="#9ca3af"/>
+  <text x="75" y="182" class="b" font-weight="700">Your widget web app</text>
+  <text x="75" y="202" class="s">plain JS / TS, any framework</text>
+
+  <line x1="215" y1="219" x2="215" y2="262" stroke="#374151" stroke-width="1.5" marker-end="url(#arr)"/>
+  <text x="225" y="240" class="m">WidgetApi</text>
+  <text x="225" y="255" class="s">JS class (wasm-bindgen)</text>
+
+  <rect x="55" y="265" width="320" height="250" rx="10" fill="#f3e8ff" stroke="#7c3aed" stroke-width="1.5"/>
+  <text x="75" y="292" class="h2">widget-base-sdk</text>
+  <rect x="258" y="277" width="104" height="22" rx="11" fill="#7c3aed"/>
+  <text x="310" y="292" class="badge" text-anchor="middle">wasm only</text>
+  <text x="75" y="320" class="b">• WidgetClient: session state</text>
+  <text x="75" y="338" class="s">   approved capabilities, content_loaded</text>
+  <text x="75" y="360" class="b">• every action as an async function</text>
+  <text x="75" y="382" class="b">• answers host requests</text>
+  <text x="75" y="400" class="s">   send_event, update_state, notify_capabilities…</text>
+  <text x="75" y="422" class="b">• connectToParent() wires it to</text>
+  <text x="75" y="440" class="s">   window.parent.postMessage</text>
+  <rect x="75" y="460" width="280" height="38" rx="6" fill="#d1fae5" stroke="#059669"/>
+  <text x="215" y="484" class="b" text-anchor="middle">uses widget-actions (shared types)</text>
+
+  <text x="55" y="545" class="b" font-weight="700">Build</text>
+  <text x="55" y="565" class="m">wasm-pack build crates/widget-base-sdk</text>
+  <text x="55" y="583" class="s">→ widget_base_sdk.js + .wasm, shipped with the widget</text>
+  <text x="55" y="611" class="b" font-weight="700">Never part of the Matrix client.</text>
+  <text x="55" y="630" class="s">No UniFFI. The only native build is the</text>
+  <text x="55" y="647" class="s">cargo loopback test (tests/loopback.rs).</text>
+
+  <!-- ============ postMessage ============ -->
+  <text x="465" y="330" class="b" font-weight="700" text-anchor="middle">postMessage</text>
+  <text x="465" y="346" class="s" text-anchor="middle">JSON WireMessage</text>
+  <line x1="378" y1="362" x2="552" y2="362" stroke="#374151" stroke-width="1.6" marker-end="url(#arr)"/>
+  <line x1="552" y1="392" x2="378" y2="392" stroke="#374151" stroke-width="1.6" marker-end="url(#arr)"/>
+  <rect x="408" y="410" width="114" height="102" rx="6" fill="#f9fafb" stroke="#d1d5db"/>
+  <text x="414" y="428" class="m" style="font-size:10.5px">{ source,</text>
+  <text x="416" y="443" class="m" style="font-size:10.5px">  action,</text>
+  <text x="416" y="458" class="m" style="font-size:10.5px">  requestId,</text>
+  <text x="416" y="473" class="m" style="font-size:10.5px">  version,</text>
+  <text x="416" y="488" class="m" style="font-size:10.5px">  request |</text>
+  <text x="416" y="503" class="m" style="font-size:10.5px">  response }</text>
+
+  <!-- ============ Host panel ============ -->
+  <rect x="530" y="90" width="640" height="610" rx="14" fill="#eff6ff" stroke="#2563eb" stroke-width="1.5" stroke-dasharray="6 4"/>
+  <text x="550" y="117" class="h2 blue">Matrix client (host): native or web</text>
+  <text x="550" y="136" class="s">Element Web, Element X iOS / Android, any client on matrix-rust-sdk or matrix-js-sdk</text>
+
+  <!-- platform -->
+  <rect x="555" y="155" width="590" height="100" rx="10" fill="#ffedd5" stroke="#ea580c" stroke-width="1.5"/>
+  <text x="575" y="180" class="b" font-weight="700">Client UI implements WidgetHostPlatform</text>
+  <rect x="1022" y="165" width="110" height="22" rx="11" fill="#ea580c"/>
+  <text x="1077" y="180" class="badge" text-anchor="middle">you implement</text>
+  <text x="575" y="202" class="m">send_to_widget · on_capabilities_requested · on_content_loaded</text>
+  <text x="575" y="220" class="m">on_openid_requested · navigate · send_sticker · set_always_on_screen</text>
+  <text x="575" y="238" class="m">client_id · client_theme · client_language   (→ client_context)</text>
+
+  <line x1="600" y1="257" x2="600" y2="301" stroke="#374151" stroke-width="1.5" marker-end="url(#arr)"/>
+  <text x="610" y="276" class="s">handle_message_from_widget(json)</text>
+  <text x="610" y="292" class="s">approve_capabilities · resolve_openid · notify_*</text>
+  <line x1="1110" y1="301" x2="1110" y2="257" stroke="#374151" stroke-width="1.5" marker-end="url(#arr)"/>
+  <text x="1100" y="276" class="s" text-anchor="end">send_to_widget(json)</text>
+  <text x="1100" y="292" class="s" text-anchor="end">on_* callbacks</text>
+
+  <!-- driver -->
+  <rect x="555" y="305" width="590" height="135" rx="10" fill="#dbeafe" stroke="#2563eb" stroke-width="1.5"/>
+  <text x="575" y="331" class="h2">widget-host-driver</text>
+  <rect x="1052" y="317" width="80" height="22" rx="11" fill="#2563eb"/>
+  <text x="1092" y="332" class="badge" text-anchor="middle">UniFFI</text>
+  <text x="575" y="354" class="b">WidgetHostDriver, one instance per rendered widget:</text>
+  <text x="575" y="375" class="b">• version check (no version → legacy), parse into Action, capability handshake</text>
+  <text x="575" y="395" class="b">• checks every request against the approved capabilities, calls the backend</text>
+  <text x="575" y="415" class="b">• subscribes for receive.* and pushes send_event / update_state / send_to_device</text>
+  <text x="575" y="433" class="s">The cdylib carries the UniFFI scaffolding of all three host crates.</text>
+
+  <line x1="600" y1="442" x2="600" y2="486" stroke="#374151" stroke-width="1.5" marker-end="url(#arr)"/>
+  <text x="610" y="461" class="s">send_* · read_* · openid_token · …</text>
+  <text x="610" y="477" class="s">subscribe_room(room, subjects, sink)</text>
+  <line x1="1110" y1="486" x2="1110" y2="442" stroke="#374151" stroke-width="1.5" marker-end="url(#arr)"/>
+  <text x="1100" y="461" class="s" text-anchor="end">RoomSink · ToDeviceSink</text>
+  <text x="1100" y="477" class="s" text-anchor="end">TurnServerSink (pushes)</text>
+
+  <!-- backend -->
+  <rect x="555" y="490" width="330" height="100" rx="10" fill="#dbeafe" stroke="#2563eb" stroke-width="1.5"/>
+  <text x="575" y="515" class="h2">widget-matrix-backend</text>
+  <rect x="792" y="502" width="80" height="22" rx="11" fill="#2563eb"/>
+  <text x="832" y="517" class="badge" text-anchor="middle">UniFFI</text>
+  <text x="575" y="538" class="m">trait MatrixBackend</text>
+  <text x="575" y="556" class="s">sinks + Subscription, shaped like matrix-rust-rtc</text>
+  <text x="575" y="576" class="s">ships InMemoryBackend for tests / test host</text>
+
+  <rect x="925" y="490" width="220" height="100" rx="10" fill="#ffedd5" stroke="#ea580c" stroke-width="1.5"/>
+  <text x="943" y="515" class="b" font-weight="700">Your MatrixBackend impl</text>
+  <text x="943" y="536" class="s">thin adapter over</text>
+  <text x="943" y="553" class="s">matrix-rust-sdk / matrix-js-sdk</text>
+  <text x="943" y="576" class="s">→ sync, /send, /state, openid…</text>
+  <line x1="925" y1="540" x2="887" y2="540" stroke="#c2410c" stroke-width="1.5" stroke-dasharray="5 3" marker-end="url(#tri)"/>
+  <text x="906" y="532" class="s" text-anchor="middle" style="font-size:10px">impl</text>
+
+  <!-- shared types -->
+  <rect x="555" y="605" width="590" height="36" rx="8" fill="#d1fae5" stroke="#059669" stroke-width="1.5"/>
+  <text x="575" y="628" class="b"><tspan font-weight="700">widget-actions</tspan>: WireMessage, Action, Capability, MatrixEvent · UniFFI optional</text>
+
+  <text x="555" y="665" class="b" font-weight="700">Builds as</text>
+  <text x="630" y="665" class="b">native Rust · UniFFI → Kotlin / Swift / Python ·</text>
+  <text x="630" y="684" class="b">UniFFI-wasm (ubrn, web) → TypeScript: packages/widget-host-bindings</text>
+
+  <!-- legend -->
+  <rect x="30" y="725" width="16" height="16" rx="3" fill="#f3e8ff" stroke="#7c3aed"/>
+  <text x="54" y="738" class="s">webview only (wasm)</text>
+  <rect x="200" y="725" width="16" height="16" rx="3" fill="#dbeafe" stroke="#2563eb"/>
+  <text x="224" y="738" class="s">host crates, any Matrix client (UniFFI)</text>
+  <rect x="470" y="725" width="16" height="16" rx="3" fill="#ffedd5" stroke="#ea580c"/>
+  <text x="494" y="738" class="s">implemented by the client</text>
+  <rect x="680" y="725" width="16" height="16" rx="3" fill="#d1fae5" stroke="#059669"/>
+  <text x="704" y="738" class="s">shared types, used on both sides</text>
+  <text x="30" y="772" class="s">The JSON on the wire is the only contract between the two sides; a widget does not have to use widget-base-sdk, and a host does not have to use the driver.</text>
+</svg>

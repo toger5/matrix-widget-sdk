@@ -1,0 +1,182 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 1060" width="1200" height="1060" font-family="-apple-system, 'Segoe UI', Helvetica, Arial, sans-serif">
+  <style>
+    text { fill: #1f2937; white-space: pre; }
+    .h1 { font-size: 22px; font-weight: 700; }
+    .h2 { font-size: 15px; font-weight: 700; }
+    .b { font-size: 13px; }
+    .bb { font-size: 13px; font-weight: 700; }
+    .s { font-size: 12px; fill: #4b5563; }
+    .m { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
+    .big { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 17px; font-weight: 700; }
+    .num { font-size: 13px; font-weight: 700; fill: #ffffff; }
+  </style>
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M0,0 L10,5 L0,10 z" fill="#374151"/>
+    </marker>
+  </defs>
+  <rect width="1200" height="1060" fill="#ffffff"/>
+
+  <text x="30" y="42" class="h1">Capabilities and how the actions use them</text>
+  <text x="30" y="66" class="s">A capability is a string on the wire and a Capability enum in code (capabilities.rs). The driver holds the approved set and checks it on every request and every push.</text>
+
+  <!-- ================= anatomy ================= -->
+  <text x="30" y="104" class="h2">1 · Anatomy of a capability string</text>
+  <rect x="30" y="118" width="250" height="38" rx="6" fill="#ede9fe" stroke="#7c3aed"/>
+  <text x="155" y="143" class="big" text-anchor="middle">org.matrix.msc2762.</text>
+  <rect x="284" y="118" width="130" height="38" rx="6" fill="#dbeafe" stroke="#2563eb"/>
+  <text x="349" y="143" class="big" text-anchor="middle">send.event:</text>
+  <rect x="418" y="118" width="170" height="38" rx="6" fill="#dcfce7" stroke="#16a34a"/>
+  <text x="503" y="143" class="big" text-anchor="middle">m.room.message</text>
+  <rect x="592" y="118" width="90" height="38" rx="6" fill="#fef3c7" stroke="#d97706"/>
+  <text x="637" y="143" class="big" text-anchor="middle">#m.text</text>
+  <text x="155" y="176" class="s" text-anchor="middle">prefix, one per MSC</text>
+  <text x="349" y="176" class="s" text-anchor="middle">kind</text>
+  <text x="503" y="176" class="s" text-anchor="middle">event type</text>
+  <text x="637" y="176" class="s" text-anchor="middle">msgtype or #state_key</text>
+
+  <text x="720" y="128" class="b">• the unstable prefix is <tspan font-weight="700">emitted</tspan> (what deployed hosts know),</text>
+  <text x="734" y="146" class="b">the stable <tspan font-family="ui-monospace, Menlo, monospace">m.</tspan> prefix is <tspan font-weight="700">accepted</tspan>: both parse to the same value</text>
+  <text x="720" y="168" class="b">• parsed into <tspan font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="12">SendEvent { event_type, msgtype }</tspan></text>
+  <text x="720" y="190" class="b">• unknown strings survive as <tspan font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="12">Capability::Other { raw }</tspan></text>
+
+  <!-- ================= lifecycle ================= -->
+  <text x="30" y="232" class="h2">2 · Negotiation (widget-initiated)</text>
+
+  <rect x="30" y="248" width="200" height="96" rx="8" fill="#f3e8ff" stroke="#7c3aed"/>
+  <text x="46" y="272" class="bb">Widget</text>
+  <text x="46" y="292" class="m">request_capabilities</text>
+  <text x="46" y="308" class="m">{ capabilities: […] }</text>
+  <text x="46" y="330" class="s">acked with {} at once</text>
+
+  <line x1="232" y1="296" x2="268" y2="296" stroke="#374151" stroke-width="1.5" marker-end="url(#arr)"/>
+
+  <rect x="270" y="248" width="250" height="96" rx="8" fill="#dbeafe" stroke="#2563eb"/>
+  <text x="286" y="272" class="bb">Driver splits the list</text>
+  <text x="286" y="294" class="b">in set_auto_approved → granted</text>
+  <text x="286" y="314" class="b">the rest → platform</text>
+  <text x="286" y="334" class="m">on_capabilities_requested</text>
+
+  <line x1="522" y1="296" x2="558" y2="296" stroke="#374151" stroke-width="1.5" marker-end="url(#arr)"/>
+
+  <rect x="560" y="248" width="190" height="96" rx="8" fill="#ffedd5" stroke="#ea580c"/>
+  <text x="576" y="272" class="bb">Client UI</text>
+  <text x="576" y="294" class="b">asks the user, then</text>
+  <text x="576" y="314" class="m">driver.approve_</text>
+  <text x="576" y="330" class="m">  capabilities(list)</text>
+
+  <line x1="752" y1="296" x2="788" y2="296" stroke="#374151" stroke-width="1.5" marker-end="url(#arr)"/>
+
+  <rect x="790" y="248" width="380" height="96" rx="8" fill="#dbeafe" stroke="#2563eb"/>
+  <text x="806" y="272" class="bb">Driver grants requested ∩ (approved ∪ auto)</text>
+  <text x="806" y="292" class="b">adds them to the cumulative approved set, sends</text>
+  <text x="806" y="310" class="m">notify_capabilities { requested, approved }</text>
+  <text x="806" y="332" class="b">and if the set grew: <tspan font-family="ui-monospace, Menlo, monospace" font-size="12">resubscribe()</tspan> (see 4)</text>
+
+  <text x="30" y="370" class="s">Asking again later (renegotiation) runs the same round; approved only grows. Never requested ⇒ never granted, whatever the platform returns.</text>
+
+  <!-- ================= gates ================= -->
+  <text x="30" y="412" class="h2">3 · How a request is gated</text>
+  <text x="270" y="412" class="s">a failed check is answered with an error response: "Missing capability for …"</text>
+
+  <!-- card A -->
+  <rect x="30" y="426" width="270" height="290" rx="10" fill="#f9fafb" stroke="#9ca3af"/>
+  <circle cx="52" cy="450" r="12" fill="#6b7280"/><text x="52" y="455" class="num" text-anchor="middle">A</text>
+  <text x="72" y="455" class="bb">No capability</text>
+  <text x="46" y="482" class="m">content_loaded</text>
+  <text x="46" y="500" class="m">request_capabilities</text>
+  <text x="46" y="518" class="m">get_openid</text>
+  <text x="46" y="540" class="s">get_openid is gated by user consent</text>
+  <text x="46" y="556" class="s">per request: on_openid_requested</text>
+  <text x="46" y="572" class="s">→ resolve_openid (or auto-approved)</text>
+  <text x="46" y="600" class="s">host pushes theme_change,</text>
+  <text x="46" y="616" class="s">language_change, visibility need none</text>
+
+  <!-- card B -->
+  <rect x="315" y="426" width="270" height="290" rx="10" fill="#f9fafb" stroke="#9ca3af"/>
+  <circle cx="337" cy="450" r="12" fill="#6b7280"/><text x="337" y="455" class="num" text-anchor="middle">B</text>
+  <text x="357" y="455" class="bb">One flag per action</text>
+  <text x="331" y="478" class="m">approved.has(&amp;Capability::X)</text>
+  <text x="331" y="504" class="m">navigate            Navigate</text>
+  <text x="331" y="520" class="m">m.sticker           Sticker</text>
+  <text x="331" y="536" class="m">set_always_on_…     AlwaysOnScreen</text>
+  <text x="331" y="552" class="m">watch_turn_servers  TurnServers</text>
+  <text x="331" y="568" class="m">get_rtc_transports  RtcTransports</text>
+  <text x="331" y="584" class="m">user_directory_…    UserDirectory…</text>
+  <text x="331" y="600" class="m">get_media_config    UploadFile</text>
+  <text x="331" y="616" class="m">rtc_livekit_* ×2    RtcLivekit…</text>
+  <text x="331" y="632" class="m">update_delayed_…    UpdateDelayed…</text>
+  <text x="331" y="648" class="m">matrix_context      MatrixContext</text>
+  <text x="331" y="664" class="m">client_context      ClientContext</text>
+  <text x="331" y="692" class="s">action ↔ capability is 1:1, the body</text>
+  <text x="331" y="708" class="s">does not matter</text>
+
+  <!-- card C -->
+  <rect x="600" y="426" width="570" height="290" rx="10" fill="#f9fafb" stroke="#9ca3af"/>
+  <circle cx="622" cy="450" r="12" fill="#6b7280"/><text x="622" y="455" class="num" text-anchor="middle">C</text>
+  <text x="642" y="455" class="bb">Typed capability, matched against the request body</text>
+  <text x="616" y="478" class="s">CapabilitySet on Vec&lt;Capability&gt;: one allows_* per check</text>
+  <rect x="616" y="490" width="538" height="24" fill="#eef2ff"/>
+  <text x="624" y="507" class="bb">action</text><text x="800" y="507" class="bb">check</text><text x="990" y="507" class="bb">capability</text>
+  <text x="624" y="534" class="m">send_event</text>
+  <text x="800" y="534" class="m">allows_send(type,</text>
+  <text x="800" y="550" class="m">  state_key, msgtype)</text>
+  <text x="990" y="534" class="m" style="font-size:11px">send.event:&lt;t&gt;[#mt]</text>
+  <text x="990" y="550" class="m" style="font-size:11px">send.state_event:&lt;t&gt;[#k]</text>
+  <text x="624" y="576" class="m">send_to_device</text>
+  <text x="800" y="576" class="m">allows_send_to_device</text>
+  <text x="990" y="576" class="m" style="font-size:11px">send.to_device:&lt;t&gt;</text>
+  <text x="624" y="600" class="m">read_events</text>
+  <text x="800" y="600" class="m">allows_read_type</text>
+  <text x="990" y="600" class="m" style="font-size:11px">receive.*:&lt;t&gt;</text>
+  <text x="624" y="624" class="m">read_room_account_data</text>
+  <text x="800" y="624" class="m">allows_receive_room…</text>
+  <text x="990" y="624" class="m" style="font-size:11px">…room_account_data:&lt;t&gt;</text>
+  <line x1="616" y1="638" x2="1154" y2="638" stroke="#d1d5db"/>
+  <text x="616" y="658" class="bb">Modifiers on top, checked with has():</text>
+  <text x="624" y="678" class="m">send_event + delay</text><text x="870" y="678" class="m">→ msc4157.send.delayed_event</text>
+  <text x="624" y="694" class="m">send_event + sticky_duration_ms</text><text x="870" y="694" class="m">→ msc4407.send.sticky_event</text>
+  <text x="624" y="710" class="m">room_id / room_ids</text><text x="870" y="710" class="m">→ msc2762.timeline:&lt;room&gt; (own room)</text>
+
+  <!-- ================= receive ================= -->
+  <text x="30" y="758" class="h2">4 · receive.* decides what flows to the widget</text>
+
+  <rect x="30" y="774" width="210" height="84" rx="8" fill="#dbeafe" stroke="#2563eb"/>
+  <text x="46" y="798" class="bb">approved set</text>
+  <text x="46" y="818" class="m">receive.event:&lt;t&gt;</text>
+  <text x="46" y="834" class="m">receive.state_event:&lt;t&gt;</text>
+  <text x="46" y="850" class="m">receive.to_device:&lt;t&gt;</text>
+
+  <line x1="242" y1="816" x2="278" y2="816" stroke="#374151" stroke-width="1.5" marker-end="url(#arr)"/>
+
+  <rect x="280" y="774" width="250" height="84" rx="8" fill="#dbeafe" stroke="#2563eb"/>
+  <text x="296" y="798" class="m" font-weight="700">subjects_for(approved)</text>
+  <text x="296" y="818" class="s">event types only; a state type is</text>
+  <text x="296" y="834" class="s">subscribed as state and timeline</text>
+  <text x="296" y="850" class="s">(state keys filtered later)</text>
+
+  <line x1="532" y1="816" x2="568" y2="816" stroke="#374151" stroke-width="1.5" marker-end="url(#arr)"/>
+
+  <rect x="570" y="774" width="250" height="84" rx="8" fill="#ffedd5" stroke="#ea580c"/>
+  <text x="586" y="798" class="bb">MatrixBackend</text>
+  <text x="586" y="818" class="m">subscribe_room(room,</text>
+  <text x="586" y="834" class="m">  subjects, sink)</text>
+  <text x="586" y="850" class="m">subscribe_to_device(…)</text>
+
+  <line x1="822" y1="816" x2="858" y2="816" stroke="#374151" stroke-width="1.5" marker-end="url(#arr)"/>
+
+  <rect x="860" y="774" width="310" height="84" rx="8" fill="#dbeafe" stroke="#2563eb"/>
+  <text x="876" y="798" class="bb">sink → driver filters each item</text>
+  <text x="876" y="818" class="m">allows_receive(type, key, msgtype)</text>
+  <text x="876" y="836" class="b">→ send_event / update_state /</text>
+  <text x="876" y="852" class="b">   send_to_device to the widget</text>
+
+  <text x="30" y="890" class="b">The same <tspan font-family="ui-monospace, Menlo, monospace" font-size="12">allows_receive</tspan> filter is applied to the results of read_events and read_relations, so a widget never sees an event type, state key or</text>
+  <text x="30" y="908" class="b">msgtype it was not granted. On approval the backend hands over the current state at once, which reaches the widget as update_state.</text>
+
+  <rect x="30" y="934" width="1140" height="100" rx="10" fill="#fffbeb" stroke="#d97706"/>
+  <text x="46" y="960" class="h2">In short</text>
+  <text x="46" y="984" class="b">• Capabilities are the only permission model; actions do not have permissions of their own. Each action names the capability that gates it.</text>
+  <text x="46" y="1004" class="b">• send.* / read and flag capabilities gate <tspan font-weight="700">requests</tspan> (widget → host); receive.* also gates <tspan font-weight="700">pushes</tspan> (host → widget) and drives the backend subscription.</text>
+  <text x="46" y="1024" class="b">• The host side is authoritative: the widget's own copy of the approved set (WidgetClient) is only for its UI.</text>
+</svg>

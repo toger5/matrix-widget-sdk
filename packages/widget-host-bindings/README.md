@@ -10,6 +10,8 @@ through the native UniFFI bindings.
 The widget side (`widget-base-sdk`) is not part of this: it only ever runs inside a widget and
 keeps its own wasm-bindgen build.
 
+![Architecture](../../docs/diagrams/01-architecture.svg)
+
 ## Prerequisites
 
 ```sh

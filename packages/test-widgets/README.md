@@ -12,6 +12,8 @@ Both pages have the same layout: an **actions** column (capability list input, m
 input, one button per action), a **state** panel, and a **log** of outgoing results and incoming
 host messages, newest first. Button results and errors are logged with the button's label.
 
+![Test host, test widgets and the in-memory store](../../docs/diagrams/07-test-setup.svg)
+
 ## Actions
 
 Legacy (`/legacy/`): start (requests the listed capabilities, calls `start()`, fetches the host's

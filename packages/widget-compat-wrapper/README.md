@@ -10,6 +10,8 @@ the legacy **URL templating** (`$matrix_user_id` & co., fed by the `matrix_conte
 `client_context` actions) and the startup handshake, where the two protocols are structurally
 different.
 
+![Using legacy widgets with the new driver](../../docs/diagrams/02-legacy-widgets.svg)
+
 ## How a client uses it during the transition
 
 The client speaks MSC4412 only (for example through `widget-host-driver`) and keeps one piece of
@@ -80,6 +82,8 @@ passes through unchanged (the host emits and accepts the unstable MSC spellings 
 `org.matrix.msc2876.read_events` itself, see `docs/parity.md`), so an
 action the host does not implement is answered by the host's own error response, which is
 forwarded to the widget as is.
+
+![How the envelope changed](../../docs/diagrams/03-wire-format-changes.svg)
 
 ### Startup handshake
 
