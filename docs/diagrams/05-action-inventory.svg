@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1849 698" width="1849" height="698" font-family="-apple-system, 'Segoe UI', Helvetica, Arial, sans-serif">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1849 790" width="1849" height="790" font-family="-apple-system, 'Segoe UI', Helvetica, Arial, sans-serif">
   <style>
     text { fill: #1f2937; white-space: pre; }
     .h1 { font-size: 22px; font-weight: 700; }
@@ -9,15 +9,15 @@
     .m { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
     .chip { font-size: 10.5px; font-weight: 700; fill: #ffffff; }
   </style>
-  <rect width="1849" height="698" fill="#ffffff"/>
+  <rect width="1849" height="790" fill="#ffffff"/>
   <text x="30" y="42" class="h1">The actions, grouped</text>
   <text x="30" y="66" class="s" style="font-size:12px">Wire names and capabilities as the code emits them (unstable prefixes; "…" abbreviates org.matrix.). The grouping is a proposal for the MSC discussion; the code treats all actions the same.</text>
   <rect x="30" y="80" width="40" height="18" rx="9" fill="#7c3aed"/><text x="50" y="93" class="chip" text-anchor="middle">W→H</text><text x="78" y="93" class="s">widget-initiated</text>
   <rect x="190" y="80" width="40" height="18" rx="9" fill="#2563eb"/><text x="210" y="93" class="chip" text-anchor="middle">H→W</text><text x="238" y="93" class="s">host-initiated</text>
   <rect x="340" y="80" width="40" height="18" rx="9" fill="#ffffff" stroke="#9ca3af" stroke-dasharray="3 2"/><text x="388" y="93" class="s">dashed: not implemented (capability string parses, action stays Unknown)</text>
-  <rect x="30" y="110" width="436" height="484" rx="12" fill="#eff6ff" stroke="#2563eb" stroke-width="1.5"/>
+  <rect x="30" y="110" width="436" height="576" rx="12" fill="#eff6ff" stroke="#2563eb" stroke-width="1.5"/>
   <text x="46" y="134" class="h2" style="fill:#2563eb">Core</text>
-  <text x="46" y="152" class="s">The MSC4412 handshake, plus media download.</text>
+  <text x="46" y="152" class="s">The MSC4412 handshake.</text>
   <rect x="40" y="164" width="416" height="40" rx="6" fill="#ffffff" stroke="#d1d5db"/>
   <text x="50" y="181" class="m">content_loaded</text>
   <text x="50" y="197" class="s">no capability: widget may be shown</text>
@@ -30,20 +30,9 @@
   <text x="50" y="273" class="m">notify_capabilities</text>
   <text x="50" y="289" class="s">the host&#x27;s decision, { requested, approved }</text>
   <rect x="406" y="278" width="36" height="16" rx="8" fill="#2563eb"/><text x="424" y="290" class="chip" text-anchor="middle" style="font-size:9.5px">H→W</text>
-  <rect x="40" y="302" width="416" height="40" rx="6" fill="#ffffff" stroke="#d1d5db"/>
-  <text x="50" y="319" class="m">org.matrix.msc4039.get_media_config</text>
-  <text x="50" y="335" class="s">msc4039.upload_file · upload size limit</text>
-  <rect x="406" y="324" width="36" height="16" rx="8" fill="#7c3aed"/><text x="424" y="336" class="chip" text-anchor="middle" style="font-size:9.5px">W→H</text>
-  <rect x="40" y="348" width="416" height="40" rx="6" fill="#ffffff" stroke="#d1d5db" stroke-dasharray="4 3"/>
-  <text x="50" y="365" class="m">org.matrix.msc4039.download_file</text>
-  <text x="50" y="381" class="s">msc4039.download_file · Blob, needs a JSON form</text>
-  <rect x="406" y="370" width="36" height="16" rx="8" fill="#7c3aed"/><text x="424" y="382" class="chip" text-anchor="middle" style="font-size:9.5px">W→H</text>
-  <text x="46" y="418" class="bb">Note</text>
-  <text x="46" y="438" class="s" style="font-size:12px">The handshake is all MSC4412 specs today.</text>
-  <text x="46" y="456" class="s" style="font-size:12px">download_file is not implemented yet: its</text>
-  <text x="46" y="474" class="s" style="font-size:12px">Blob body cannot cross the JSON FFI and</text>
-  <text x="46" y="492" class="s" style="font-size:12px">needs a JSON-safe form first.</text>
-  <rect x="481" y="110" width="887" height="484" rx="12" fill="#fffbeb" stroke="#d97706" stroke-width="1.5"/>
+  <text x="46" y="326" class="bb">Note</text>
+  <text x="46" y="346" class="s" style="font-size:12px">The handshake is all MSC4412 specs today.</text>
+  <rect x="481" y="110" width="887" height="576" rx="12" fill="#fffbeb" stroke="#d97706" stroke-width="1.5"/>
   <text x="497" y="134" class="h2" style="fill:#d97706">Experimental</text>
   <text x="497" y="152" class="s">Implemented and capability-gated, but not specced in MSC4412 yet. Shapes may still change.</text>
   <rect x="491" y="164" width="416" height="40" rx="6" fill="#ffffff" stroke="#d1d5db"/>
@@ -117,7 +106,19 @@
   <text x="952" y="503" class="m">com.beeper.read_room_account_data</text>
   <text x="952" y="519" class="s">com.beeper.capabilities.receive.room_account_data:&lt;type&gt;</text>
   <rect x="1308" y="508" width="36" height="16" rx="8" fill="#7c3aed"/><text x="1326" y="520" class="chip" text-anchor="middle" style="font-size:9.5px">W→H</text>
-  <rect x="1383" y="110" width="436" height="484" rx="12" fill="#fef2f2" stroke="#dc2626" stroke-width="1.5"/>
+  <rect x="942" y="532" width="416" height="40" rx="6" fill="#ffffff" stroke="#d1d5db"/>
+  <text x="952" y="549" class="m">org.matrix.msc4039.get_media_config</text>
+  <text x="952" y="565" class="s">msc4039.upload_file · upload size limit</text>
+  <rect x="1308" y="554" width="36" height="16" rx="8" fill="#7c3aed"/><text x="1326" y="566" class="chip" text-anchor="middle" style="font-size:9.5px">W→H</text>
+  <rect x="942" y="578" width="416" height="40" rx="6" fill="#ffffff" stroke="#d1d5db"/>
+  <text x="952" y="595" class="m">org.matrix.msc4039.upload_file</text>
+  <text x="952" y="611" class="s">msc4039.upload_file · file as base64</text>
+  <rect x="1308" y="600" width="36" height="16" rx="8" fill="#7c3aed"/><text x="1326" y="612" class="chip" text-anchor="middle" style="font-size:9.5px">W→H</text>
+  <rect x="942" y="624" width="416" height="40" rx="6" fill="#ffffff" stroke="#d1d5db"/>
+  <text x="952" y="641" class="m">org.matrix.msc4039.download_file</text>
+  <text x="952" y="657" class="s">msc4039.download_file · file as base64</text>
+  <rect x="1308" y="646" width="36" height="16" rx="8" fill="#7c3aed"/><text x="1326" y="658" class="chip" text-anchor="middle" style="font-size:9.5px">W→H</text>
+  <rect x="1383" y="110" width="436" height="576" rx="12" fill="#fef2f2" stroke="#dc2626" stroke-width="1.5"/>
   <text x="1399" y="134" class="h2" style="fill:#dc2626">Security / edge cases</text>
   <text x="1399" y="152" class="s">Exposes too much, or client-UI features; candidates to drop.</text>
   <rect x="1393" y="164" width="416" height="40" rx="6" fill="#ffffff" stroke="#d1d5db"/>
@@ -141,24 +142,20 @@
   <text x="1403" y="381" class="s">msc2931.navigate · open a matrix.to link</text>
   <rect x="1759" y="370" width="36" height="16" rx="8" fill="#7c3aed"/><text x="1777" y="382" class="chip" text-anchor="middle" style="font-size:9.5px">W→H</text>
   <rect x="1393" y="394" width="416" height="40" rx="6" fill="#ffffff" stroke="#d1d5db" stroke-dasharray="4 3"/>
-  <text x="1403" y="411" class="m">org.matrix.msc4039.upload_file</text>
-  <text x="1403" y="427" class="s">msc4039.upload_file · Blob over postMessage</text>
-  <rect x="1759" y="416" width="36" height="16" rx="8" fill="#7c3aed"/><text x="1777" y="428" class="chip" text-anchor="middle" style="font-size:9.5px">W→H</text>
+  <text x="1403" y="411" class="m">screenshot</text>
+  <text x="1403" y="427" class="s">m.capability.screenshot · binary payload</text>
+  <rect x="1759" y="416" width="36" height="16" rx="8" fill="#2563eb"/><text x="1777" y="428" class="chip" text-anchor="middle" style="font-size:9.5px">H→W</text>
   <rect x="1393" y="440" width="416" height="40" rx="6" fill="#ffffff" stroke="#d1d5db" stroke-dasharray="4 3"/>
-  <text x="1403" y="457" class="m">screenshot</text>
-  <text x="1403" y="473" class="s">m.capability.screenshot · binary payload</text>
-  <rect x="1759" y="462" width="36" height="16" rx="8" fill="#2563eb"/><text x="1777" y="474" class="chip" text-anchor="middle" style="font-size:9.5px">H→W</text>
+  <text x="1403" y="457" class="m">open_modal · close_modal · set_button_enabled</text>
+  <text x="1403" y="473" class="s">modal widgets: pure client UI, not in MSC4412</text>
+  <rect x="1759" y="462" width="36" height="16" rx="8" fill="#7c3aed"/><text x="1777" y="474" class="chip" text-anchor="middle" style="font-size:9.5px">W→H</text>
   <rect x="1393" y="486" width="416" height="40" rx="6" fill="#ffffff" stroke="#d1d5db" stroke-dasharray="4 3"/>
-  <text x="1403" y="503" class="m">open_modal · close_modal · set_button_enabled</text>
-  <text x="1403" y="519" class="s">modal widgets: pure client UI, not in MSC4412</text>
-  <rect x="1759" y="508" width="36" height="16" rx="8" fill="#7c3aed"/><text x="1777" y="520" class="chip" text-anchor="middle" style="font-size:9.5px">W→H</text>
-  <rect x="1393" y="532" width="416" height="40" rx="6" fill="#ffffff" stroke="#d1d5db" stroke-dasharray="4 3"/>
-  <text x="1403" y="549" class="m">button_clicked · widget_config</text>
-  <text x="1403" y="565" class="s">modal widgets</text>
-  <rect x="1759" y="554" width="36" height="16" rx="8" fill="#2563eb"/><text x="1777" y="566" class="chip" text-anchor="middle" style="font-size:9.5px">H→W</text>
-  <rect x="30" y="618" width="1789" height="58" rx="10" fill="#f9fafb" stroke="#9ca3af" stroke-dasharray="6 4"/>
-  <text x="46" y="642" class="bb">Dropped by MSC4412</text>
-  <text x="46" y="662" class="m">supported_api_versions</text><text x="226" y="662" class="s">→ version: "v1" in every envelope</text>
-  <text x="520" y="662" class="m">toWidget capabilities</text><text x="690" y="662" class="s">→ widget-initiated request_capabilities</text>
-  <text x="1010" y="662" class="m">URL $templates</text><text x="1125" y="662" class="s">→ matrix_context / client_context</text>
+  <text x="1403" y="503" class="m">button_clicked · widget_config</text>
+  <text x="1403" y="519" class="s">modal widgets</text>
+  <rect x="1759" y="508" width="36" height="16" rx="8" fill="#2563eb"/><text x="1777" y="520" class="chip" text-anchor="middle" style="font-size:9.5px">H→W</text>
+  <rect x="30" y="710" width="1789" height="58" rx="10" fill="#f9fafb" stroke="#9ca3af" stroke-dasharray="6 4"/>
+  <text x="46" y="734" class="bb">Dropped by MSC4412</text>
+  <text x="46" y="754" class="m">supported_api_versions</text><text x="226" y="754" class="s">→ version: "v1" in every envelope</text>
+  <text x="520" y="754" class="m">toWidget capabilities</text><text x="690" y="754" class="s">→ widget-initiated request_capabilities</text>
+  <text x="1010" y="754" class="m">URL $templates</text><text x="1125" y="754" class="s">→ matrix_context / client_context</text>
 </svg>

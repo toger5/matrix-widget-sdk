@@ -3,9 +3,10 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard};
 
 use crate::{
-    BackendError, JsonValue, MatrixBackend, MatrixEvent, MediaConfig, OpenIdToken, RelationDirection, RelationsChunk,
-    RoomAccountData, RoomSink, RoomSubjects, StateKeySelector, Subscription, ToDeviceDelivery, ToDeviceEvent,
-    ToDeviceMessage, ToDeviceSink, TurnServer, TurnServerSink, UserDirectorySearchResult, UserDirectoryUser,
+    BackendError, JsonValue, MatrixBackend, MatrixEvent, MediaConfig, MediaFile, OpenIdToken, RelationDirection,
+    RelationsChunk, RoomAccountData, RoomSink, RoomSubjects, StateKeySelector, Subscription, ToDeviceDelivery,
+    ToDeviceEvent, ToDeviceMessage, ToDeviceSink, TurnServer, TurnServerSink, UserDirectorySearchResult,
+    UserDirectoryUser,
 };
 
 /// A [`MatrixBackend`] backed by plain vectors. Intended for tests and prototypes.
@@ -60,6 +61,14 @@ pub struct DelegatedDelayedLeave {
     pub delay_id: String,
 }
 
+/// A file in [`InMemoryBackend`]'s media repository, for inspection.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+pub struct StoredMedia {
+    pub content_uri: String,
+    pub file: MediaFile,
+}
+
 /// A to-device message "sent" through [`InMemoryBackend`], for inspection.
 #[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
@@ -89,6 +98,8 @@ struct Inner {
     room_account_data: BTreeMap<String, JsonValue>,
     /// Delayed leaves delegated through `rtc_livekit_delegate_delayed_leave`.
     delegated_leaves: Vec<DelegatedDelayedLeave>,
+    /// Uploaded media by `mxc://` URI.
+    media: BTreeMap<String, MediaFile>,
     /// When set, every send fails with this error. Handy for tests.
     fail_sends: Option<BackendError>,
 }
@@ -233,6 +244,22 @@ impl InMemoryBackend {
         self.inner().room_account_data.insert(event_type, content);
     }
 
+    /// Put a file into the media repository under `content_uri`, as if someone had uploaded it
+    /// (e.g. demo files a test host offers for `download_file`). Replaces an existing entry.
+    pub fn add_media(&self, content_uri: String, file: MediaFile) {
+        self.inner().media.insert(content_uri, file);
+    }
+
+    /// Every file in the media repository, seeded or uploaded, ordered by `mxc://` URI.
+    pub fn media(&self) -> Vec<StoredMedia> {
+        let inner = self.inner();
+        inner
+            .media
+            .iter()
+            .map(|(content_uri, file)| StoredMedia { content_uri: content_uri.clone(), file: file.clone() })
+            .collect()
+    }
+
     /// Delayed leaves handed over through `rtc_livekit_delegate_delayed_leave`, oldest first.
     pub fn delegated_delayed_leaves(&self) -> Vec<DelegatedDelayedLeave> {
         self.inner().delegated_leaves.clone()
@@ -310,6 +337,11 @@ impl InMemoryBackend {
     /// Make every subsequent send fail with `error` (or succeed again with `None`).
     pub fn set_fail_sends(&self, error: Option<BackendError>) {
         self.inner().fail_sends = error;
+    }
+
+    /// The host part of the base URL, used as the server name of tokens and media.
+    fn server_name(&self) -> String {
+        self.base_url.split("://").nth(1).unwrap_or(&self.base_url).trim_end_matches('/').to_owned()
     }
 
     fn inner(&self) -> MutexGuard<'_, Inner> {
@@ -602,7 +634,7 @@ impl MatrixBackend for InMemoryBackend {
     /// host of the base URL.
     async fn openid_token(&self) -> Result<OpenIdToken, BackendError> {
         let n = self.counter.fetch_add(1, Ordering::Relaxed);
-        let server = self.base_url.split("://").nth(1).unwrap_or(&self.base_url).trim_end_matches('/').to_owned();
+        let server = self.server_name();
         Ok(OpenIdToken {
             access_token: format!("openid-token-{n}"),
             token_type: "Bearer".into(),
@@ -647,6 +679,27 @@ impl MatrixBackend for InMemoryBackend {
 
     async fn media_config(&self) -> Result<MediaConfig, BackendError> {
         Ok(MediaConfig { upload_size: Some(50 * 1024 * 1024) })
+    }
+
+    /// Stores the file under `mxc://<host of base_url>/media-<n>`. Fails like a send when
+    /// `fail_sends` is set.
+    async fn upload_media(&self, file: MediaFile) -> Result<String, BackendError> {
+        let n = self.counter.fetch_add(1, Ordering::Relaxed);
+        let mut inner = self.inner();
+        if let Some(err) = &inner.fail_sends {
+            return Err(err.clone());
+        }
+        let content_uri = format!("mxc://{}/media-{n}", self.server_name());
+        inner.media.insert(content_uri.clone(), file);
+        Ok(content_uri)
+    }
+
+    async fn download_media(&self, content_uri: String) -> Result<MediaFile, BackendError> {
+        self.inner()
+            .media
+            .get(&content_uri)
+            .cloned()
+            .ok_or_else(|| BackendError::not_found(format!("no media {content_uri}")))
     }
 
     async fn read_room_account_data(
@@ -1014,6 +1067,14 @@ mod tests {
             assert_eq!(hits.results.len(), 1);
 
             assert!(b.media_config().await.unwrap().upload_size.is_some());
+            let file = MediaFile { data: b"hi".to_vec(), mimetype: Some("text/plain".into()) };
+            let uri = b.upload_media(file.clone()).await.unwrap();
+            assert!(uri.starts_with("mxc://"));
+            assert_eq!(b.download_media(uri).await.unwrap(), file);
+            assert!(b.download_media("mxc://x/missing".into()).await.is_err());
+            b.add_media("mxc://x/demo".into(), file.clone());
+            assert_eq!(b.download_media("mxc://x/demo".into()).await.unwrap(), file);
+            assert_eq!(b.media().len(), 2);
 
             assert!(b.read_room_account_data(room(), "m.tag".into()).await.unwrap().is_empty());
             b.set_room_account_data("m.tag".into(), json!({"tags": {"u.work": {}}}).into());

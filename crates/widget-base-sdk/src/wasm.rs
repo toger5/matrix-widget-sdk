@@ -28,8 +28,9 @@ use serde_json::Value;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::future_to_promise;
 use widget_actions::{
-    Capability, MatrixEvent, ReadEventsRequest, ReadRelationsRequest, RtcLivekitDelegateDelayedLeaveRequest,
-    RtcLivekitGetTokenRequest, StateKeySelector, StickerRequest, ToDeviceEvent, TurnServer, UpdateDelayedEventAction,
+    Base64File, Capability, MatrixEvent, ReadEventsRequest, ReadRelationsRequest,
+    RtcLivekitDelegateDelayedLeaveRequest, RtcLivekitGetTokenRequest, StateKeySelector, StickerRequest, ToDeviceEvent,
+    TurnServer, UpdateDelayedEventAction,
 };
 
 use crate::{WidgetClient, WidgetClientError, WidgetDelegate};
@@ -417,6 +418,31 @@ impl WidgetApi {
     #[wasm_bindgen(js_name = getMediaConfig)]
     pub fn get_media_config(&self) -> Promise {
         promise(self.client.get_media_config())
+    }
+
+    /// Upload `data` (a `Uint8Array`) to the media repository; resolves with `{ content_uri }`
+    /// (MSC4039). The bytes travel to the host as base64.
+    #[wasm_bindgen(js_name = uploadFile)]
+    pub fn upload_file(&self, data: Vec<u8>, mimetype: Option<String>) -> Promise {
+        promise(self.client.upload_file(Base64File::from_bytes(&data, mimetype)))
+    }
+
+    /// Download an `mxc://` URI; resolves with `{ mimetype?, data: Uint8Array }` (MSC4039).
+    #[wasm_bindgen(js_name = downloadFile)]
+    pub fn download_file(&self, content_uri: String) -> Promise {
+        let fut = self.client.download_file(content_uri);
+        future_to_promise(async move {
+            let file = fut.await.map_err(js_error)?;
+            let data = file
+                .to_bytes()
+                .map_err(|e| JsValue::from(js_sys::Error::new(&format!("Invalid base64 file from the host: {e}"))))?;
+            let result = js_sys::Object::new();
+            if let Some(mimetype) = &file.mimetype {
+                js_sys::Reflect::set(&result, &"mimetype".into(), &mimetype.into())?;
+            }
+            js_sys::Reflect::set(&result, &"data".into(), &js_sys::Uint8Array::from(data.as_slice()))?;
+            Ok(result.into())
+        })
     }
 
     /// Resolves with the room account data events of `eventType` (`[{ type, room_id, content }]`).

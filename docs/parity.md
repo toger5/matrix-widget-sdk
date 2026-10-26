@@ -45,7 +45,7 @@ marker shows what changed) · ⛔ raised, not built · ➖ dropped by MSC4412.
 | `org.matrix.msc4515.get_rtc_transports` | `org.matrix.msc4515.get_rtc_transports` (alias `get_rtc_transports`) | `org.matrix.msc4515.rtc_transports` | 🔨 | `backend.rtc_transports` |
 | `org.matrix.msc3973.user_directory_search` | `org.matrix.msc3973.user_directory_search` (alias `user_directory_search`) | `org.matrix.msc3973.user_directory_search` | 🔨 | `backend.search_user_directory` |
 | `org.matrix.msc4039.get_media_config` | `org.matrix.msc4039.get_media_config` (alias `get_media_config`) | `org.matrix.msc4039.upload_file` | 🔨 | `backend.media_config` |
-| `org.matrix.msc4039.upload_file` / `download_file` | – | `org.matrix.msc4039.upload_file` / `download_file` | ⛔ binary payload, see §6 | – |
+| `org.matrix.msc4039.upload_file` / `download_file` | same (aliases `upload_file` / `download_file`) | `org.matrix.msc4039.upload_file` / `download_file` | 🔨 file as base64, see §6 | `backend.upload_media` / `download_media` |
 | `com.beeper.read_room_account_data` | `com.beeper.read_room_account_data` (alias `read_room_account_data`) | `com.beeper.capabilities.receive.room_account_data:<type>` | 🔨 | `backend.read_room_account_data` |
 | `org.matrix.msc2931.navigate` | `org.matrix.msc2931.navigate` (alias `navigate`) | `org.matrix.msc2931.navigate` | 🔨 | `platform.navigate` |
 | `m.sticker` | `m.sticker` | `m.sticker` | 🔨 | `platform.send_sticker` |
@@ -134,7 +134,7 @@ the method here has the same name and parameter order, so one adapter per Matrix
 | – | `read_room_events(room_id, type, msgtype?, limit, since?)`, `read_room_state(room_id, type, selector)` | widgets read on demand; rtc only subscribes |
 | – | `rtc_livekit_get_token(server_name, url, room_id, slot_id, member_id) -> jwt`, `rtc_livekit_delegate_delayed_leave(url, room_id, slot_id, member_id, delay_id)` | MSC4533 (added to matrix-widget-api in October 2026); rtc may grow the same when it hosts a LiveKit integration |
 | – | `read_room_account_data(room_id, type)` | beeper extension |
-| – | `search_user_directory(term, limit?)`, `media_config()` | MSC3973 / MSC4039 |
+| – | `search_user_directory(term, limit?)`, `media_config()`, `upload_media(MediaFile) -> mxc`, `download_media(mxc) -> MediaFile` | MSC3973 / MSC4039; media takes raw bytes, the driver does the base64 |
 | `BackendError { errcode?, status?, message }` | `BackendError::Failed { errcode?, status?, reason }` | one uniffi error variant like rtc's ffi layer (`reason`, because Kotlin exceptions own `message`); replaces the old four-variant enum; `errcode` and `status` are forwarded to the widget as `matrix_api_error` |
 | `EventIn { ..., encryption }` | `MatrixEvent` (client-server JSON incl. `room_id`, `unsigned`) | widgets get the event as the C-S API has it; decryption facts are not part of the widget API |
 | content as `content_json: String` | `JsonValue` (string over FFI, plain value in TS) | same thing, nicer in TypeScript |
@@ -195,10 +195,12 @@ the method here has the same name and parameter order, so one adapter per Matrix
 
 * **Binary payloads** (`upload_file`, `download_file`, `screenshot`): matrix-widget-api carries a
   `Blob` / `XMLHttpRequestBodyInit` through `postMessage` structured cloning. Every message here is
-  a JSON string across the FFI, which cannot carry a `Blob`. Options: (a) define the file as
-  `{ "mimetype": ..., "base64": ... }` on the wire (needs an MSC change), (b) keep file transfer
-  out of the Rust driver and let the platform intercept these three actions before
-  `handle_message_from_widget`. The capability strings parse already; the actions stay `Unknown`.
+  a JSON string across the FFI (and across the Android / iOS WebView bridges), which cannot carry a
+  `Blob`. **Decision:** the MSC4412 format for a file is `{ "mimetype": ..., "base64": ... }`;
+  only legacy widgets send `Blob`, and the compat wrapper converts in both directions
+  (`packages/widget-compat-wrapper/src/files.ts`). `upload_file` / `download_file` are built: the
+  driver decodes / encodes base64 and the backend works with raw bytes (`MediaFile`). Still
+  missing: the driver side of `screenshot`.
 * **Modal widgets** (`open_modal`, `close_modal`, `button_clicked`, `set_button_enabled`,
   `widget_config`): pure client UI, no Matrix side effect, and MSC4412 does not mention them.
   Can be added as platform callbacks later without touching the backend.

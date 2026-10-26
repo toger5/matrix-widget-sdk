@@ -202,3 +202,28 @@ fn full_widget_lifecycle() {
         assert!(l.host_side.to_widget.lock().unwrap().is_empty());
     });
 }
+
+#[test]
+fn file_upload_and_download() {
+    futures::executor::block_on(async {
+        let l = Loop::new();
+        let caps = vec![Capability::UploadFile, Capability::DownloadFile];
+        let cap_fut = l.client.request_capabilities(caps.clone());
+        l.pump().await;
+        cap_fut.await.unwrap();
+        l.driver.approve_capabilities(caps);
+        l.pump().await;
+
+        // base64 on the wire, bytes in the backend, the same base64 back.
+        let file = widget_actions::Base64File::from_bytes(&[0, 1, 2, 255], Some("image/png".into()));
+        let upload = l.client.upload_file(file.clone());
+        l.pump().await;
+        let content_uri = upload.await.unwrap().content_uri;
+        let stored = widget_matrix_backend::MatrixBackend::download_media(&*l.backend, content_uri.clone()).await;
+        assert_eq!(stored.unwrap().data, vec![0, 1, 2, 255]);
+
+        let download = l.client.download_file(content_uri);
+        l.pump().await;
+        assert_eq!(download.await.unwrap(), file);
+    });
+}

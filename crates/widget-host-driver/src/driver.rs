@@ -2,16 +2,18 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex, MutexGuard, Weak};
 
 use widget_actions::{
-    Action, ActionError, Capability, CapabilitySet, ClientContextResponse, GetOpenIdResponse, HostRequest, JsonValue,
-    LanguageChangeRequest, MatrixContextResponse, MatrixEvent, MessageKind, NotifyCapabilitiesRequest,
-    OpenIdCredentialsRequest, ReadEventsRequest, ReadEventsResponse, ReadRelationsRequest, ReadRelationsResponse,
-    ReadRoomAccountDataRequest, ReadRoomAccountDataResponse, RoomSelector, RtcLivekitGetTokenResponse,
-    RtcTransportsResponse, SendEventRequest, SendEventResponse, SendToDeviceRequest, SetAlwaysOnScreenResponse,
-    StickerRequest, ToDeviceEvent, TurnServer, UpdateDelayedEventAction, UpdateStateRequest, VisibilityRequest,
+    Action, ActionError, Base64File, Capability, CapabilitySet, ClientContextResponse, DownloadFileRequest,
+    DownloadFileResponse, GetOpenIdResponse, HostRequest, JsonValue, LanguageChangeRequest, MatrixContextResponse,
+    MatrixEvent, MessageKind, NotifyCapabilitiesRequest, OpenIdCredentialsRequest, ReadEventsRequest,
+    ReadEventsResponse, ReadRelationsRequest, ReadRelationsResponse, ReadRoomAccountDataRequest,
+    ReadRoomAccountDataResponse, RoomSelector, RtcLivekitGetTokenResponse, RtcTransportsResponse, SendEventRequest,
+    SendEventResponse, SendToDeviceRequest, SetAlwaysOnScreenResponse, StickerRequest, ToDeviceEvent, TurnServer,
+    UpdateDelayedEventAction, UpdateStateRequest, UploadFileRequest, UploadFileResponse, VisibilityRequest,
     WidgetError, WidgetRequest, WidgetResponse, WireMessage, API_VERSION_V1,
 };
 use widget_matrix_backend::{
-    BackendError, MatrixBackend, RoomSink, RoomSubjects, Subscription, ToDeviceMessage, ToDeviceSink, TurnServerSink,
+    BackendError, MatrixBackend, MediaFile, RoomSink, RoomSubjects, Subscription, ToDeviceMessage, ToDeviceSink,
+    TurnServerSink,
 };
 
 use crate::{DriverError, PlatformError};
@@ -576,6 +578,8 @@ impl WidgetHostDriver {
                         .map_err(|e| backend_error("Failed to get the media config", e))
                 }
             }
+            WidgetRequest::UploadFile { request } => self.upload_file(request).await,
+            WidgetRequest::DownloadFile { request } => self.download_file(request).await,
             WidgetRequest::ReadRoomAccountData { request } => self.read_room_account_data(request).await,
             WidgetRequest::RtcLivekitGetToken { request } => {
                 if !self.lock().approved.has(&Capability::RtcLivekitGetToken) {
@@ -780,6 +784,32 @@ impl WidgetHostDriver {
 
     /// `read_relations` from the widget: no capability of its own, the page is filtered to what
     /// the widget may receive (as matrix-widget-api does).
+    /// `upload_file`: decode the base64 body and hand the bytes to the backend.
+    async fn upload_file(&self, request: UploadFileRequest) -> Result<WidgetResponse, WidgetError> {
+        if !self.lock().approved.has(&Capability::UploadFile) {
+            return error(format!("Missing capability for {}", Capability::UploadFile));
+        }
+        let data = request.file.to_bytes().map_err(|e| WidgetError::new(format!("Invalid base64 file: {e}")))?;
+        let file = MediaFile { data, mimetype: request.file.mimetype };
+        let content_uri =
+            self.backend.upload_media(file).await.map_err(|e| backend_error("Failed to upload the file", e))?;
+        Ok(WidgetResponse::UploadFile { response: UploadFileResponse { content_uri } })
+    }
+
+    /// `download_file`: fetch the bytes from the backend and answer them base64 encoded.
+    async fn download_file(&self, request: DownloadFileRequest) -> Result<WidgetResponse, WidgetError> {
+        if !self.lock().approved.has(&Capability::DownloadFile) {
+            return error(format!("Missing capability for {}", Capability::DownloadFile));
+        }
+        let media = self
+            .backend
+            .download_media(request.content_uri)
+            .await
+            .map_err(|e| backend_error("Failed to download the file", e))?;
+        let file = Base64File::from_bytes(&media.data, media.mimetype);
+        Ok(WidgetResponse::DownloadFile { response: DownloadFileResponse { file } })
+    }
+
     async fn read_relations(&self, request: ReadRelationsRequest) -> Result<WidgetResponse, WidgetError> {
         let approved = self.lock().approved.clone();
         if let Some(room_id) = &request.room_id {
@@ -1169,6 +1199,12 @@ mod tests {
         }
         async fn media_config(&self) -> Result<widget_matrix_backend::MediaConfig, BackendError> {
             self.inner.media_config().await
+        }
+        async fn upload_media(&self, file: MediaFile) -> Result<String, BackendError> {
+            self.inner.upload_media(file).await
+        }
+        async fn download_media(&self, content_uri: String) -> Result<MediaFile, BackendError> {
+            self.inner.download_media(content_uri).await
         }
         async fn read_room_account_data(
             &self,
@@ -1897,6 +1933,45 @@ mod tests {
         ))
         .unwrap();
         assert!(platform.drain()[0].error().is_some());
+    }
+
+    #[test]
+    fn upload_and_download_files() {
+        let (driver, backend, platform) = setup();
+        let upload = |file: Base64File, id: &str| {
+            block(feed(&driver, WidgetRequest::UploadFile { request: UploadFileRequest { file } }, id)).unwrap();
+            platform.drain().pop().unwrap()
+        };
+        let download = |content_uri: &str, id: &str| {
+            let request = DownloadFileRequest { content_uri: content_uri.into() };
+            block(feed(&driver, WidgetRequest::DownloadFile { request }, id)).unwrap();
+            platform.drain().pop().unwrap()
+        };
+        let hello = Base64File::from_bytes(b"hello", Some("text/plain".into()));
+
+        // Each direction needs its own capability.
+        assert!(upload(hello.clone(), "u0").error().unwrap().message.contains("msc4039.upload_file"));
+        assert!(download("mxc://x/y", "d0").error().unwrap().message.contains("msc4039.download_file"));
+        grant(&driver, &platform, vec![Capability::UploadFile, Capability::DownloadFile]);
+
+        let WidgetResponse::UploadFile { response } = WidgetResponse::from_wire(&upload(hello.clone(), "u1")).unwrap()
+        else {
+            panic!()
+        };
+        // The backend got raw bytes, the widget gets the same base64 back.
+        let stored = block(backend.download_media(response.content_uri.clone())).unwrap();
+        assert_eq!(stored, MediaFile { data: b"hello".to_vec(), mimetype: Some("text/plain".into()) });
+        assert_eq!(
+            WidgetResponse::from_wire(&download(&response.content_uri, "d1")).unwrap(),
+            WidgetResponse::DownloadFile { response: DownloadFileResponse { file: hello } }
+        );
+
+        let broken = Base64File { mimetype: None, base64: "%%%".into() };
+        assert!(upload(broken, "u2").error().unwrap().message.contains("Invalid base64"));
+        assert!(download("mxc://x/missing", "d2").error().unwrap().message.contains("Failed to download"));
+        backend.fail_sends(Some("full".into()));
+        let failed = upload(Base64File::from_bytes(b"x", None), "u3");
+        assert!(failed.error().unwrap().message.contains("Failed to upload"));
     }
 
     #[test]

@@ -25,7 +25,7 @@ mod in_memory;
 use std::sync::Arc;
 
 pub use error::BackendError;
-pub use in_memory::{DelayedEvent, DelegatedDelayedLeave, InMemoryBackend, SentToDeviceMessage};
+pub use in_memory::{DelayedEvent, DelegatedDelayedLeave, InMemoryBackend, SentToDeviceMessage, StoredMedia};
 pub use widget_actions::{
     JsonValue, MatrixEvent, MediaConfigResponse as MediaConfig, OpenIdToken, RelationDirection, RoomAccountData,
     StateKeySelector, ToDeviceEvent, TurnServer, UserDirectorySearchResponse as UserDirectorySearchResult,
@@ -51,6 +51,16 @@ pub struct ToDeviceDelivery {
     pub device_id: String,
     /// `None` when the message was accepted for this recipient; otherwise why not.
     pub error: Option<String>,
+}
+
+/// A file in the media repository, as raw bytes ([`MatrixBackend::upload_media`] /
+/// [`MatrixBackend::download_media`]). The driver does the base64 coding of the widget API.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+pub struct MediaFile {
+    pub data: Vec<u8>,
+    /// The content type, when known.
+    pub mimetype: Option<String>,
 }
 
 /// One page of a relations read ([`MatrixBackend::relations`]).
@@ -277,6 +287,14 @@ pub trait MatrixBackend: Send + Sync {
 
     /// `GET /_matrix/client/v1/media/config` (MSC4039).
     async fn media_config(&self) -> Result<MediaConfig, BackendError>;
+
+    /// `POST /_matrix/media/v3/upload` (MSC4039 `upload_file`); returns the `mxc://` URI. The
+    /// media repository is not room bound, so there is no `room_id`.
+    async fn upload_media(&self, file: MediaFile) -> Result<String, BackendError>;
+
+    /// `GET /_matrix/client/v1/media/download/{server}/{media_id}` (MSC4039 `download_file`) for
+    /// an `mxc://` URI.
+    async fn download_media(&self, content_uri: String) -> Result<MediaFile, BackendError>;
 
     /// The room account data of `event_type` in `room_id` (`com.beeper.read_room_account_data`);
     /// empty when there is none.

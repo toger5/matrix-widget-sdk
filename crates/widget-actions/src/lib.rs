@@ -21,6 +21,7 @@
 pub mod actions;
 mod capabilities;
 mod error;
+mod file;
 mod json;
 mod matrix;
 mod wire;
@@ -32,6 +33,7 @@ pub use actions::host::update_state::UpdateStateRequest;
 pub use actions::host::visibility::VisibilityRequest;
 pub use actions::host::{HostRequest, HostResponse};
 pub use actions::widget::client_context::ClientContextResponse;
+pub use actions::widget::download_file::{DownloadFileRequest, DownloadFileResponse};
 pub use actions::widget::get_media_config::MediaConfigResponse;
 pub use actions::widget::get_openid::{GetOpenIdResponse, OpenIdState};
 pub use actions::widget::get_rtc_transports::RtcTransportsResponse;
@@ -49,6 +51,7 @@ pub use actions::widget::send_to_device::SendToDeviceRequest;
 pub use actions::widget::set_always_on_screen::{SetAlwaysOnScreenRequest, SetAlwaysOnScreenResponse};
 pub use actions::widget::sticker::StickerRequest;
 pub use actions::widget::update_delayed_event::{UpdateDelayedEventAction, UpdateDelayedEventRequest};
+pub use actions::widget::upload_file::{UploadFileRequest, UploadFileResponse};
 pub use actions::widget::user_directory_search::{
     UserDirectorySearchRequest, UserDirectorySearchResponse, UserDirectoryUser,
 };
@@ -56,6 +59,7 @@ pub use actions::widget::{WidgetRequest, WidgetResponse};
 pub use actions::Action;
 pub use capabilities::{Capability, CapabilitySet};
 pub use error::ActionError;
+pub use file::Base64File;
 pub use json::JsonValue;
 pub use matrix::{
     matrix_event_from_json, matrix_event_to_json, MatrixEvent, OpenIdToken, RoomAccountData, StateKeySelector,

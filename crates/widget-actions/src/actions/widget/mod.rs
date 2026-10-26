@@ -20,16 +20,18 @@ use serde::{Deserialize, Serialize};
 
 use super::{expect, parse_tagged, split_tagged};
 use crate::{
-    ActionError, ClientContextResponse, GetOpenIdResponse, MatrixContextResponse, MediaConfigResponse, NavigateRequest,
-    ReadEventsRequest, ReadEventsResponse, ReadRelationsRequest, ReadRelationsResponse, ReadRoomAccountDataRequest,
-    ReadRoomAccountDataResponse, RequestCapabilitiesRequest, RtcLivekitDelegateDelayedLeaveRequest,
-    RtcLivekitGetTokenRequest, RtcLivekitGetTokenResponse, RtcTransportsResponse, SendEventRequest, SendEventResponse,
-    SendToDeviceRequest, SetAlwaysOnScreenRequest, SetAlwaysOnScreenResponse, Source, StickerRequest,
-    UpdateDelayedEventRequest, UserDirectorySearchRequest, UserDirectorySearchResponse, WireMessage,
+    ActionError, ClientContextResponse, DownloadFileRequest, DownloadFileResponse, GetOpenIdResponse,
+    MatrixContextResponse, MediaConfigResponse, NavigateRequest, ReadEventsRequest, ReadEventsResponse,
+    ReadRelationsRequest, ReadRelationsResponse, ReadRoomAccountDataRequest, ReadRoomAccountDataResponse,
+    RequestCapabilitiesRequest, RtcLivekitDelegateDelayedLeaveRequest, RtcLivekitGetTokenRequest,
+    RtcLivekitGetTokenResponse, RtcTransportsResponse, SendEventRequest, SendEventResponse, SendToDeviceRequest,
+    SetAlwaysOnScreenRequest, SetAlwaysOnScreenResponse, Source, StickerRequest, UpdateDelayedEventRequest,
+    UploadFileRequest, UploadFileResponse, UserDirectorySearchRequest, UserDirectorySearchResponse, WireMessage,
 };
 
 pub(crate) mod client_context;
 pub(crate) mod content_loaded;
+pub(crate) mod download_file;
 pub(crate) mod get_media_config;
 pub(crate) mod get_openid;
 pub(crate) mod get_rtc_transports;
@@ -46,6 +48,7 @@ pub(crate) mod set_always_on_screen;
 pub(crate) mod sticker;
 pub(crate) mod turn_servers;
 pub(crate) mod update_delayed_event;
+pub(crate) mod upload_file;
 pub(crate) mod user_directory_search;
 
 /// A request sent by the widget (`source: widget`, has `request`).
@@ -92,6 +95,12 @@ pub enum WidgetRequest {
     /// The homeserver's media config. Requires `org.matrix.msc4039.upload_file`.
     #[serde(rename = "org.matrix.msc4039.get_media_config", alias = "get_media_config")]
     GetMediaConfig,
+    /// Upload a base64 file to the media repository. Requires `org.matrix.msc4039.upload_file`.
+    #[serde(rename = "org.matrix.msc4039.upload_file", alias = "upload_file")]
+    UploadFile { request: UploadFileRequest },
+    /// Download a file as base64. Requires `org.matrix.msc4039.download_file`.
+    #[serde(rename = "org.matrix.msc4039.download_file", alias = "download_file")]
+    DownloadFile { request: DownloadFileRequest },
     /// Read room account data. Requires `com.beeper.capabilities.receive.room_account_data:<type>`.
     #[serde(rename = "com.beeper.read_room_account_data", alias = "read_room_account_data")]
     ReadRoomAccountData { request: ReadRoomAccountDataRequest },
@@ -163,6 +172,10 @@ pub enum WidgetResponse {
     UserDirectorySearch { response: UserDirectorySearchResponse },
     #[serde(rename = "org.matrix.msc4039.get_media_config", alias = "get_media_config")]
     GetMediaConfig { response: MediaConfigResponse },
+    #[serde(rename = "org.matrix.msc4039.upload_file", alias = "upload_file")]
+    UploadFile { response: UploadFileResponse },
+    #[serde(rename = "org.matrix.msc4039.download_file", alias = "download_file")]
+    DownloadFile { response: DownloadFileResponse },
     #[serde(rename = "com.beeper.read_room_account_data", alias = "read_room_account_data")]
     ReadRoomAccountData { response: ReadRoomAccountDataResponse },
     #[serde(rename = "org.matrix.msc4533.rtc_livekit_get_token", alias = "rtc_livekit_get_token")]

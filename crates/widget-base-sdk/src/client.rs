@@ -8,14 +8,14 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 // TODO consider splitting those into widget_actions::widget and widget_actions::host so that they are more explicit here.
 use widget_actions::{
-    ActionError, Capability, ClientContextResponse, HostRequest, JsonValue, MatrixContextResponse, MatrixEvent,
-    MediaConfigResponse, MessageKind, NavigateRequest, OpenIdCredentialsRequest, OpenIdState, OpenIdToken,
-    ReadEventsRequest, ReadRelationsRequest, ReadRelationsResponse, ReadRoomAccountDataRequest,
-    RequestCapabilitiesRequest, RoomAccountData, RtcLivekitDelegateDelayedLeaveRequest, RtcLivekitGetTokenRequest,
-    SendEventRequest, SendEventResponse, SendToDeviceRequest, SetAlwaysOnScreenRequest, StateKeySelector,
-    StickerRequest, ToDeviceEvent, TurnServer, UpdateDelayedEventAction, UpdateDelayedEventRequest,
-    UserDirectorySearchRequest, UserDirectorySearchResponse, WidgetError, WidgetRequest, WidgetResponse, WireMessage,
-    API_VERSION_V1,
+    ActionError, Base64File, Capability, ClientContextResponse, DownloadFileRequest, HostRequest, JsonValue,
+    MatrixContextResponse, MatrixEvent, MediaConfigResponse, MessageKind, NavigateRequest, OpenIdCredentialsRequest,
+    OpenIdState, OpenIdToken, ReadEventsRequest, ReadRelationsRequest, ReadRelationsResponse,
+    ReadRoomAccountDataRequest, RequestCapabilitiesRequest, RoomAccountData, RtcLivekitDelegateDelayedLeaveRequest,
+    RtcLivekitGetTokenRequest, SendEventRequest, SendEventResponse, SendToDeviceRequest, SetAlwaysOnScreenRequest,
+    StateKeySelector, StickerRequest, ToDeviceEvent, TurnServer, UpdateDelayedEventAction, UpdateDelayedEventRequest,
+    UploadFileRequest, UploadFileResponse, UserDirectorySearchRequest, UserDirectorySearchResponse, WidgetError,
+    WidgetRequest, WidgetResponse, WireMessage, API_VERSION_V1,
 };
 
 use crate::WidgetClientError;
@@ -416,6 +416,36 @@ impl WidgetClient {
             match fut.await? {
                 WidgetResponse::GetMediaConfig { response } => Ok(response),
                 _ => Err(WidgetClientError::UnexpectedResponse { action: "get_media_config".into() }),
+            }
+        }
+    }
+
+    /// Upload a file to the media repository and get its `mxc://` URI. Needs
+    /// `org.matrix.msc4039.upload_file`.
+    pub fn upload_file(
+        &self,
+        file: Base64File,
+    ) -> impl Future<Output = Result<UploadFileResponse, WidgetClientError>> + 'static {
+        let fut = self.request(WidgetRequest::UploadFile { request: UploadFileRequest { file } });
+        async move {
+            match fut.await? {
+                WidgetResponse::UploadFile { response } => Ok(response),
+                _ => Err(WidgetClientError::UnexpectedResponse { action: "upload_file".into() }),
+            }
+        }
+    }
+
+    /// Download an `mxc://` URI. Needs `org.matrix.msc4039.download_file`.
+    pub fn download_file(
+        &self,
+        content_uri: impl Into<String>,
+    ) -> impl Future<Output = Result<Base64File, WidgetClientError>> + 'static {
+        let fut = self
+            .request(WidgetRequest::DownloadFile { request: DownloadFileRequest { content_uri: content_uri.into() } });
+        async move {
+            match fut.await? {
+                WidgetResponse::DownloadFile { response } => Ok(response.file),
+                _ => Err(WidgetClientError::UnexpectedResponse { action: "download_file".into() }),
             }
         }
     }
