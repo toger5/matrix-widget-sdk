@@ -35,7 +35,14 @@ page.
     `update_state`) if a matching `receive.*` capability was approved. Events the widget sends
     are echoed back the same way.
   - **Clear store**: drops all stored events.
-  - **fail sends**: every `send_event` from the widget fails with an error response.
+  - **fail sends**: every `send_event` (and `upload_file`) from the widget fails with an error
+    response.
+  - **Media repository**: every new store starts with three demo files from `public/demo/`
+    (`mxc://example.org/demo-landscape`, `…/demo-tiles`, `…/demo-notes`). Files the widget
+    uploads appear here too. Images are previewed, every file has a download link and a
+    **copy uri** button for the widget's `mxc uri` input. A typical round trip: download the demo
+    image in the widget, upload it again, or upload a file chosen from disk, and watch it show
+    up here.
   Approving capabilities also pushes the current permitted state (`update_state`) at once.
 - **Driver snapshot**: `content_loaded`, approved and pending capabilities.
 

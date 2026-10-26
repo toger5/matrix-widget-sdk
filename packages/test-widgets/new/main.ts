@@ -14,6 +14,7 @@ import {
   TO_DEVICE_MESSAGES,
   button,
   capabilityList,
+  fileControls,
   input,
   lastDelay,
   lastEvent,
@@ -70,6 +71,16 @@ mount("MSC4412 test widget (widget-base-sdk)", [
   button("get_rtc_transports", () => api.getRtcTransports()),
   button("user_directory_search 'ali'", () => api.searchUserDirectory("ali", 10)),
   button("get_media_config", () => api.getMediaConfig()),
+  ...fileControls({
+    async download(contentUri) {
+      const { data, mimetype } = (await api.downloadFile(contentUri)) as { data: Uint8Array<ArrayBuffer>; mimetype?: string };
+      return new Blob([data], { type: mimetype ?? "" });
+    },
+    async upload(file) {
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      return ((await api.uploadFile(bytes, file.type || undefined)) as { content_uri: string }).content_uri;
+    },
+  }),
   button("read_room_account_data m.tag", () => api.readRoomAccountData("m.tag")),
   button("rtc_livekit_get_token", () =>
     api.rtcLivekitGetToken({ server_name: "example.org", url: "https://livekit.example.org", room_id: "!room:example.org", slot_id: "slot", member_id: "member" }),

@@ -83,6 +83,8 @@ Actions implemented here:
 | `org.matrix.msc4515.get_rtc_transports` | widget | `{}` → `{ rtc_transports: [...] }` | `org.matrix.msc4515.rtc_transports` |
 | `org.matrix.msc3973.user_directory_search` | widget | `{ search_term, limit? }` → `{ limited, results }` | `org.matrix.msc3973.user_directory_search` |
 | `org.matrix.msc4039.get_media_config` | widget | `{}` → `{ "m.upload.size"? }` | `org.matrix.msc4039.upload_file` |
+| `org.matrix.msc4039.upload_file` | widget | `{ file: { mimetype?, base64 } }` → `{ content_uri }`; the backend gets raw bytes (`upload_media`) | `org.matrix.msc4039.upload_file` |
+| `org.matrix.msc4039.download_file` | widget | `{ content_uri }` → `{ file: { mimetype?, base64 } }` (`download_media`) | `org.matrix.msc4039.download_file` |
 | `com.beeper.read_room_account_data` | widget | `{ type, room_ids? }` → `{ events }` | `com.beeper.capabilities.receive.room_account_data:<type>` |
 | `org.matrix.msc4533.rtc_livekit_get_token` | widget | `{ server_name, url, room_id, slot_id, member_id }` → `{ jwt }` | `org.matrix.msc4533.rtc_livekit_get_token` |
 | `org.matrix.msc4533.rtc_livekit_delegate_delayed_leave` | widget | `{ url, room_id, slot_id, member_id, delay_id }` → `{}` | `org.matrix.msc4533.rtc_livekit_delegate_delayed_leave` |
@@ -238,10 +240,11 @@ receive → read → state update). It is the best place to see the whole protoc
 
 ## Not (yet) covered
 
-* **Binary payloads**: `upload_file`, `download_file` and `screenshot`. matrix-widget-api sends a
-  `Blob` through `postMessage`, which cannot cross the JSON / FFI boundary. Their capability
-  strings parse; the actions stay `Unknown` until there is a JSON form (or the platform
-  intercepts them before the driver). `get_media_config` is implemented.
+* **`screenshot`** (host → widget). Files travel as base64 (`{ mimetype, base64 }`) and the
+  compat wrapper already converts a legacy widget's screenshot `Blob`, but the driver has no way
+  to request one yet. `upload_file` and `download_file` are implemented; legacy widgets send a
+  `Blob`, which cannot cross the JSON string boundary of UniFFI or the mobile WebView bridges, so
+  the compat wrapper converts it.
 * **Modal widgets** (`open_modal`, `close_modal`, `set_button_enabled`, `button_clicked`,
   `widget_config`): client UI only, not in MSC4412.
 * **Receiving sticky events** (`org.matrix.msc4407.receive.sticky_event`): the capability parses,

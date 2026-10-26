@@ -19,7 +19,14 @@ host messages, newest first. Button results and errors are logged with the butto
 Legacy (`/legacy/`): start (requests the listed capabilities, calls `start()`, fetches the host's
 supported versions), `content_loaded`, renegotiate capabilities (MSC2974), send `m.room.message`,
 send state `m.room.topic`, read `m.room.message`, read state `m.room.topic`, and a custom action
-`org.example.custom` to see the host's unknown-action error. Incoming `send_event` and
+`org.example.custom` to see the host's unknown-action error.
+
+Both pages also have **file** controls (MSC4039): an `mxc uri` input (default
+`mxc://example.org/demo-landscape`, a demo image the test host seeds), **download_file** (images
+are previewed, other files get a save link), **upload_file: last download** and **upload_file:
+chosen file** (pick any file from disk). An upload puts the new URI into the input, so the file
+can be downloaded straight back. The new widget sends the bytes as base64; the legacy widget
+sends a `Blob`, which the compat wrapper converts. Incoming `send_event` and
 `update_state` are acknowledged and logged. The state panel shows `urlParams`, the query
 parameters the page was loaded with: when embedded through the compat wrapper that is the
 wrapper's templating result (`userId`, `baseUrl`, `parentUrl`, ...). The same object is written

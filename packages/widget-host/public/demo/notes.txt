@@ -1,0 +1,2 @@
+Demo file from the widget test host.
+Not an image, so the host offers it as a download.

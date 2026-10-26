@@ -78,7 +78,8 @@ backend.inject(matrixEventFromJson(JSON.stringify(eventFromSync)));   // reaches
 `MatrixBackend` is a plain interface shaped after matrix-rust-rtc's: identity getters, async
 operations (`sendRoomEvent` / `sendStateEvent` / `sendStickyEvent` / `sendDelayedEvent` & co.,
 `readRoomEvents` / `readRoomState` / `relations` / `readRoomAccountData`, `openidToken`,
-`rtcTransports`, `searchUserDirectory`, `mediaConfig`, `sendToDeviceMessage`, the LiveKit pair;
+`rtcTransports`, `searchUserDirectory`, `mediaConfig`, `uploadMedia` / `downloadMedia` (raw bytes
+as `ArrayBuffer`), `sendToDeviceMessage`, the LiveKit pair;
 each returns a `Promise` and throws `new BackendError.Failed({ errcode, status, reason })` to
 fail, which the widget sees as `error.matrix_api_error`), and the subscription half:
 

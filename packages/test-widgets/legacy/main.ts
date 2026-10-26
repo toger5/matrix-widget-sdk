@@ -15,6 +15,7 @@ import {
   TO_DEVICE_MESSAGES,
   button,
   capabilityList,
+  fileControls,
   input,
   lastDelay,
   lastEvent,
@@ -91,6 +92,11 @@ mount("Legacy test widget (matrix-widget-api)", [
   button("get_rtc_transports", () => api.getRtcTransports()),
   button("user_directory_search 'ali'", () => api.searchUserDirectory("ali", 10)),
   button("get_media_config", () => api.getMediaConfig()),
+  ...fileControls({
+    // The compat wrapper turns the host's base64 back into a Blob, as legacy hosts sent it.
+    download: async (contentUri) => new Response((await api.downloadFile(contentUri)).file).blob(),
+    upload: async (file) => (await api.uploadFile(file)).content_uri,
+  }),
   button("read_room_account_data m.tag", () => api.readRoomAccountData("m.tag")),
   button("rtc_livekit_get_token", () =>
     api.getRtcLivekitToken({ server_name: "example.org", url: "https://livekit.example.org", room_id: "!room:example.org", slot_id: "slot", member_id: "member" }),

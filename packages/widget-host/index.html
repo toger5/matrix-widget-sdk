@@ -29,6 +29,11 @@
       .request { color: black;}
       .response { color: gray;}
       .action {font-weight:bold;}
+      .hint { color: var(--muted); font-size: 12px; }
+      #media .file { border-bottom: 1px solid var(--line); padding: 4px 0; }
+      #media code { display: block; font: 11px ui-monospace, monospace; word-break: break-all; }
+      #media .meta { color: var(--muted); display: inline; }
+      #media img { display: block; max-width: 100%; max-height: 140px; margin-top: 4px; border: 1px solid var(--line); }
     </style>
   </head>
   <body>
@@ -52,6 +57,9 @@
       <h2>Driver snapshot</h2>
       <pre id="snapshot"></pre>
 
+      <h2>Media repository (MSC4039)</h2>
+      <div class="hint">demo files + everything widgets uploaded; images are previewed</div>
+      <div id="media"></div>
       <h2>Memory store</h2>
       <textarea id="inject"></textarea>
       <button id="injectBtn">Inject event (store; the subscription forwards)</button>

@@ -12,8 +12,14 @@ const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getEleme
 const value = (id: string) => $<HTMLInputElement>(id).value;
 const checked = (id: string) => $<HTMLInputElement>(id).checked;
 // `originServerTs` and friends are `bigint` in the bindings; JSON.stringify refuses those.
+// File contents (`base64`) are cut short so an image does not flood the log.
 const stringify = (data: unknown, indent?: number) =>
-  JSON.stringify(data, (_, v: unknown) => (typeof v === "bigint" ? Number(v) : v), indent);
+  JSON.stringify(
+    data,
+    (key, v: unknown) =>
+      typeof v === "bigint" ? Number(v) : key === "base64" && typeof v === "string" && v.length > 80 ? `${v.slice(0, 80)}… (${v.length} chars)` : v,
+    indent,
+  );
 const show = (id: string, data: unknown) => ($(id).textContent = stringify(data, 2));
 const pretty = (data: unknown) => (typeof data === "string" ? data : stringify(data));
 const el = (tag: string, className: string, text: string) =>
@@ -63,6 +69,54 @@ const EXAMPLE_TO_DEVICE = {
   encrypted: false,
 };
 
+/**
+ * Demo files every fresh in-memory store starts with (served from `public/demo/`), so a widget
+ * has something to `download_file`. The first one is the test widgets' default URI.
+ */
+const DEMO_MEDIA = [
+  { contentUri: "mxc://example.org/demo-landscape", path: "demo/landscape.png", mimetype: "image/png" },
+  { contentUri: "mxc://example.org/demo-tiles", path: "demo/tiles.png", mimetype: "image/png" },
+  { contentUri: "mxc://example.org/demo-notes", path: "demo/notes.txt", mimetype: "text/plain" },
+];
+
+async function seedMedia(target: InMemoryBackend) {
+  for (const { contentUri, path, mimetype } of DEMO_MEDIA) {
+    const data = await (await fetch(path)).arrayBuffer();
+    target.addMedia(contentUri, { data, mimetype });
+  }
+}
+
+/** Object URLs of the files shown in the media list, by `mxc://` URI; reset with the store. */
+const mediaUrls = new Map<string, string>();
+
+/** The media repository: images are previewed, everything else can be saved. */
+function showMedia() {
+  const files = backend?.media() ?? [];
+  const list = $("media");
+  const key = files.map((m) => m.contentUri).join("\n");
+  if (list.dataset.key === key) return;
+  list.dataset.key = key;
+  list.replaceChildren(
+    ...files.map(({ contentUri, file }) => {
+      let url = mediaUrls.get(contentUri);
+      if (!url) {
+        url = URL.createObjectURL(new Blob([file.data], { type: file.mimetype ?? "" }));
+        mediaUrls.set(contentUri, url);
+      }
+      const name = contentUri.split("/").pop() ?? "file";
+      const item = el("div", "file", "");
+      const copy = Object.assign(document.createElement("button"), { textContent: "copy uri" });
+      copy.onclick = () => navigator.clipboard.writeText(contentUri);
+      const save = Object.assign(document.createElement("a"), { href: url, download: name, textContent: "download" });
+      item.append(el("code", "", contentUri), el("div", "meta", `${file.mimetype ?? "unknown type"} · ${file.data.byteLength} bytes `), copy, save);
+      if (file.mimetype?.startsWith("image/")) {
+        item.append(Object.assign(document.createElement("img"), { src: url, alt: name }));
+      }
+      return item;
+    }),
+  );
+}
+
 /** Capabilities the compat wrapper needs to template a legacy widget's URL. */
 const CONTEXT_CAPABILITIES = ["org.matrix.msc4412.matrix_context", "org.matrix.msc4412.client_context"];
 
@@ -98,6 +152,7 @@ function refresh() {
   show("delayed", backend.delayedEvents());
   show("toDeviceSent", backend.toDeviceSent());
   show("state", backend.state());
+  showMedia();
 }
 
 function askCapabilities(requested: string[]) {
@@ -166,7 +221,7 @@ const platform: WidgetHostPlatform = {
   clientLanguage: () => "en",
 };
 
-function loadWidget() {
+async function loadWidget() {
   const widget = resolveWidget(JSON.parse(value("event")) as StateEvent, value("wrapper"));
   $("decision").textContent = `${widget.legacy ? "legacy event → compat wrapper" : "MSC4411 event → direct"}\n${widget.url}`;
 
@@ -176,6 +231,9 @@ function loadWidget() {
   // A fresh in-memory room per load, handed to the driver like any other MatrixBackend would be
   // (a matrix-js-sdk backed one, say).
   backend = new InMemoryBackend(value("room"), value("user"));
+  for (const url of mediaUrls.values()) URL.revokeObjectURL(url);
+  mediaUrls.clear();
+  await seedMedia(backend);
   driver = new WidgetHostDriver(backend.asBackend(), platform);
   // A legacy client handed these facts over as URL template parameters; the compat wrapper
   // asks for them instead, so grant them without a prompt. The driver applies the rule.
@@ -200,13 +258,7 @@ window.addEventListener("message", (ev) => {
 await uniffiInitAsync();
 $("exampleNew").onclick = () => ($<HTMLTextAreaElement>("event").value = JSON.stringify(EXAMPLE_NEW, null, 2));
 $("exampleLegacy").onclick = () => ($<HTMLTextAreaElement>("event").value = JSON.stringify(EXAMPLE_LEGACY, null, 2));
-$("load").onclick = () => {
-  try {
-    loadWidget();
-  } catch (e) {
-    log("err", String(e));
-  }
-};
+$("load").onclick = () => loadWidget().catch((e: unknown) => log("err", String(e)));
 $("injectBtn").onclick = () => {
   try {
     const event = backend?.inject(matrixEventFromJson(value("inject")));
