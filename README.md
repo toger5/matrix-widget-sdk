@@ -1,10 +1,27 @@
-# matrix-widget-tools-sdk
+# matrix-widget-sdk
+
+> [!NOTE]
+> This repository is created as a companion to the MSC's
+> [MSC4411](https://github.com/matrix-org/matrix-spec-proposals/blob/toger5/widget-state-event/proposals/4411-widget-state-event.md)
+> and [MSC4412](https://github.com/matrix-org/matrix-spec-proposals/blob/dbkr/widget-base-postmessage-api/proposals/4412-widget-base-postmessage-api.md)
+> which define widgets without the quirks of the old api. So it tries to do a full reference implementation for the spec process.
+> At the same time core architecture has been carefully crafted so that the actions are structured in a way so they are also helpful as
+> documentation.
+> A big part is proving the backwards compatibility approach via a wrapper widget.
 
 Reusable Rust building blocks for Matrix widgets as proposed in
 [MSC4411](https://github.com/matrix-org/matrix-spec-proposals/blob/toger5/widget-state-event/proposals/4411-widget-state-event.md)
 (the `m.widget` state event) and
 [MSC4412](https://github.com/matrix-org/matrix-spec-proposals/blob/dbkr/widget-base-postmessage-api/proposals/4412-widget-base-postmessage-api.md)
 (the JSON action protocol spoken over `postMessage`).
+
+This is an SDK in the true sense of the word—a toolkit consisting of several building blocks:
+ - A rust library for the core widget action types
+ - An SDK for buiding a widget webapp
+ - An SDK that is used to simplify adding widget support for matrix clients
+ - A test widget
+ - A wrapper so convert legacy widgets into the "hopefully eventually specced" widget/action format
+ - A widget test host
 
 The same core is meant to be used on both ends of the wire and from several languages:
 
