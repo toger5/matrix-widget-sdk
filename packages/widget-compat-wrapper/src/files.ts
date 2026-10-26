@@ -5,7 +5,7 @@
  *
  *   { "mimetype": "image/png", "base64": "iVBORw0…" }
  *
- * and the wrapper converts on the three actions that carry one.
+ * and the wrapper converts on the two actions that carry one (`upload_file`, `download_file`).
  */
 
 /** A file as it travels between the wrapper and an MSC4412 host. */
@@ -16,7 +16,6 @@ export interface Base64File {
 
 export const UPLOAD_FILE_ACTION = "org.matrix.msc4039.upload_file";
 export const DOWNLOAD_FILE_ACTION = "org.matrix.msc4039.download_file";
-export const SCREENSHOT_ACTION = "screenshot";
 
 export const isBase64File = (v: unknown): v is Base64File =>
   typeof v === "object" && v !== null && typeof (v as Base64File).base64 === "string";

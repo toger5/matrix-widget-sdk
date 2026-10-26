@@ -14,8 +14,7 @@
  *    `supported_api_versions`, which an MSC4412 host does not know.
  *
  * Bodies are forwarded untouched with one exception: files. Legacy widgets send them as `Blob`,
- * MSC4412 hosts get `{ mimetype, base64 }` (files.ts), on `upload_file`, `download_file` and
- * `screenshot`.
+ * MSC4412 hosts get `{ mimetype, base64 }` (files.ts), on `upload_file` and `download_file`.
  *
  * This class is transport free: it is driven by `start`, `onIframeLoad`, `onWidgetMessage`
  * and `onHostMessage` and talks back through the callbacks in `BridgeOptions`.
@@ -38,7 +37,6 @@ import {
   DOWNLOAD_FILE_ACTION,
   fromBase64File,
   isBase64File,
-  SCREENSHOT_ACTION,
   toBase64File,
   UPLOAD_FILE_ACTION,
 } from "./files";
@@ -233,15 +231,6 @@ export class CompatBridge {
     const request = this.fromHost.get(m.requestId);
     if (!request) return;
     this.fromHost.delete(m.requestId);
-    const screenshot = (m.response as { screenshot?: unknown } | undefined)?.screenshot;
-    if (request.action === SCREENSHOT_ACTION && screenshot !== undefined && !isError(m.response)) {
-      // The widget answers `screenshot` with a `Blob`; the host gets it as base64.
-      toBase64File(screenshot).then(
-        (file) => this.o.sendToHost(newResponse(request, { ...(m.response as object), screenshot: file })),
-        (e: unknown) => this.o.sendToHost(newResponse(request, errorBody(`Could not read the screenshot: ${String(e)}`))),
-      );
-      return;
-    }
     this.o.sendToHost(newResponse(request, m.response));
   }
 

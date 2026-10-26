@@ -215,14 +215,4 @@ describe("file payloads", () => {
     expect(file.type).toBe("text/plain");
     expect(await file.text()).toBe("hello");
   });
-
-  it("sends the widget's screenshot Blob to the host as base64", async () => {
-    s.bridge.onHostMessage(fromHost("screenshot", "s1"));
-    const [legacy] = s.take(s.toWidget);
-    s.bridge.onWidgetMessage({ ...legacy, response: { screenshot: new Blob([new Uint8Array([1, 2, 3])], { type: "image/png" }) } });
-    await flush();
-    expect(s.take(s.toHost)).toEqual([
-      { source: "host", version: "v1", requestId: "s1", action: "screenshot", response: { screenshot: { mimetype: "image/png", base64: "AQID" } } },
-    ]);
-  });
 });

@@ -63,7 +63,6 @@ const RTC_LIVEKIT_GET_TOKEN: &str = "rtc_livekit_get_token";
 const RTC_LIVEKIT_DELEGATE_DELAYED_LEAVE: &str = "rtc_livekit_delegate_delayed_leave";
 const STICKER: &str = "sticker";
 const ALWAYS_ON_SCREEN: &str = "always_on_screen";
-const SCREENSHOT: &str = "capability.screenshot";
 const CLIENT_CONTEXT: &str = "client_context";
 const MATRIX_CONTEXT: &str = "matrix_context";
 
@@ -151,8 +150,6 @@ pub enum Capability {
     Sticker,
     /// May ask to stay on screen (`m.always_on_screen`).
     AlwaysOnScreen,
-    /// The client may ask the widget for screenshots (`m.capability.screenshot`).
-    Screenshot,
     /// May call `client_context`.
     ClientContext,
     /// May call `matrix_context`.
@@ -266,7 +263,6 @@ impl Capability {
             RTC_LIVEKIT_DELEGATE_DELAYED_LEAVE => Self::RtcLivekitDelegateDelayedLeave,
             STICKER => Self::Sticker,
             ALWAYS_ON_SCREEN => Self::AlwaysOnScreen,
-            SCREENSHOT => Self::Screenshot,
             CLIENT_CONTEXT => Self::ClientContext,
             MATRIX_CONTEXT => Self::MatrixContext,
             _ => return None,
@@ -305,7 +301,6 @@ impl Capability {
             Capability::RtcLivekitDelegateDelayedLeave => RTC_LIVEKIT_DELEGATE_DELAYED_LEAVE.to_owned(),
             Capability::Sticker => STICKER.to_owned(),
             Capability::AlwaysOnScreen => ALWAYS_ON_SCREEN.to_owned(),
-            Capability::Screenshot => SCREENSHOT.to_owned(),
             Capability::ClientContext => CLIENT_CONTEXT.to_owned(),
             Capability::MatrixContext => MATRIX_CONTEXT.to_owned(),
             Capability::Other { .. } => return None,
@@ -332,9 +327,7 @@ impl Capability {
             Capability::Navigate => MSC2931_PREFIX,
             Capability::RtcLivekitGetToken | Capability::RtcLivekitDelegateDelayedLeave => MSC4533_PREFIX,
             Capability::ClientContext | Capability::MatrixContext => MSC4412_PREFIX,
-            Capability::Sticker | Capability::AlwaysOnScreen | Capability::Screenshot | Capability::Other { .. } => {
-                STABLE_PREFIX
-            }
+            Capability::Sticker | Capability::AlwaysOnScreen | Capability::Other { .. } => STABLE_PREFIX,
         }
     }
 
@@ -546,7 +539,6 @@ mod tests {
             ("org.matrix.msc4533.rtc_livekit_delegate_delayed_leave", Capability::RtcLivekitDelegateDelayedLeave),
             ("m.sticker", Capability::Sticker),
             ("m.always_on_screen", Capability::AlwaysOnScreen),
-            ("m.capability.screenshot", Capability::Screenshot),
             ("org.matrix.msc4412.matrix_context", Capability::MatrixContext),
             ("m.matrix_context", Capability::MatrixContext),
             ("m.client_context", Capability::ClientContext),

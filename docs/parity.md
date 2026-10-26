@@ -71,7 +71,7 @@ marker shows what changed) · ⛔ raised, not built · ➖ dropped by MSC4412.
 | `theme_change` (MSC2873) | `theme_change` | – | 🔨 | `driver.notify_theme_change` |
 | `language_change` | `language_change` | – | 🔨 | `driver.notify_language_change` |
 | `visibility` | `visibility` | – | 🔨 | `driver.notify_visibility` |
-| `screenshot` | – | `m.capability.screenshot` | ⛔ binary payload, see §6 | – |
+| `screenshot` | – | `m.capability.screenshot` | ⛔ intentionally not supported, see §6 | – |
 | `widget_config` / `button_clicked` / `close_modal` | – | – | ⛔ modal widgets, see §6 | – |
 
 ### Capability strings
@@ -100,8 +100,8 @@ All of these parse into a `Capability` variant (unknown ones stay `Capability::O
 | `org.matrix.msc4533.rtc_livekit_get_token` / `rtc_livekit_delegate_delayed_leave` | `RtcLivekitGetToken` / `RtcLivekitDelegateDelayedLeave` |
 | `m.sticker` | `Sticker` |
 | `m.always_on_screen` | `AlwaysOnScreen` |
-| `m.capability.screenshot` | `Screenshot` |
 | `io.element.requires_client` | `Other` (deprecated Element hint, passed through) |
+| `m.capability.screenshot` | `Other` (screenshots are intentionally not supported) |
 | `org.matrix.msc4412.matrix_context` (`m.matrix_context` alias) | `MatrixContext` |
 | `org.matrix.msc4412.client_context` (`m.client_context` alias) | `ClientContext` |
 
@@ -193,14 +193,13 @@ the method here has the same name and parameter order, so one adapter per Matrix
 
 ## 6. Not built, and why
 
-* **Binary payloads** (`upload_file`, `download_file`, `screenshot`): matrix-widget-api carries a
+* **Binary payloads** (`upload_file`, `download_file`): matrix-widget-api carries a
   `Blob` / `XMLHttpRequestBodyInit` through `postMessage` structured cloning. Every message here is
   a JSON string across the FFI (and across the Android / iOS WebView bridges), which cannot carry a
   `Blob`. **Decision:** the MSC4412 format for a file is `{ "mimetype": ..., "base64": ... }`;
   only legacy widgets send `Blob`, and the compat wrapper converts in both directions
   (`packages/widget-compat-wrapper/src/files.ts`). `upload_file` / `download_file` are built: the
-  driver decodes / encodes base64 and the backend works with raw bytes (`MediaFile`). Still
-  missing: the driver side of `screenshot`.
+  driver decodes / encodes base64 and the backend works with raw bytes (`MediaFile`).
 * **Modal widgets** (`open_modal`, `close_modal`, `button_clicked`, `set_button_enabled`,
   `widget_config`): pure client UI, no Matrix side effect, and MSC4412 does not mention them.
   Can be added as platform callbacks later without touching the backend.

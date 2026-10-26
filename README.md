@@ -240,11 +240,9 @@ receive → read → state update). It is the best place to see the whole protoc
 
 ## Not (yet) covered
 
-* **`screenshot`** (host → widget). Files travel as base64 (`{ mimetype, base64 }`) and the
-  compat wrapper already converts a legacy widget's screenshot `Blob`, but the driver has no way
-  to request one yet. `upload_file` and `download_file` are implemented; legacy widgets send a
-  `Blob`, which cannot cross the JSON string boundary of UniFFI or the mobile WebView bridges, so
-  the compat wrapper converts it.
+* **`screenshot`** (host → widget, `m.capability.screenshot`): **intentionally not supported**
+  and will not be added. The capability is no longer modelled (it parses as `Capability::Other`)
+  and neither the driver nor the compat wrapper handles the action.
 * **Modal widgets** (`open_modal`, `close_modal`, `set_button_enabled`, `button_clicked`,
   `widget_config`): client UI only, not in MSC4412.
 * **Receiving sticky events** (`org.matrix.msc4407.receive.sticky_event`): the capability parses,

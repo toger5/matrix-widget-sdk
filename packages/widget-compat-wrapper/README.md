@@ -95,19 +95,21 @@ forwarded to the widget as is.
 matrix-widget-api passes files as `Blob` (`XMLHttpRequestBodyInit`) through `postMessage`
 structured cloning. That does not survive the JSON string boundary every MSC4412 host has: the
 UniFFI layer and the Android / iOS WebView bridges carry strings only (`JSON.stringify(blob)` is
-`{}`, so the file would be silently lost). The wrapper converts on the three actions that carry a
+`{}`, so the file would be silently lost). The wrapper converts on the two actions that carry a
 file (`src/files.ts`):
 
 | action | direction | conversion |
 |---|---|---|
 | `org.matrix.msc4039.upload_file` | widget → host, request `file` | `Blob` → base64 |
 | `org.matrix.msc4039.download_file` | host → widget, response `file` | base64 → `Blob` |
-| `screenshot` | widget → host, response `screenshot` | `Blob` → base64 |
 
 Any `XMLHttpRequestBodyInit` (Blob, ArrayBuffer, typed array, string, ...) is accepted; the
 `mimetype` is the content type the browser would send for that body. The widget still gets its
 own request echoed back with the original `Blob`. Base64 adds about 33% to the size, which is
 fine for widget-sized files.
+
+The legacy `screenshot` action (host → widget) is **intentionally not supported**: there is no
+conversion for it, and an MSC4412 host never asks for one.
 
 ### Startup handshake
 
