@@ -5,7 +5,8 @@ look like an **MSC4412 widget** to its host. The host embeds the wrapper; the wr
 widget in an inner iframe and translates between the two protocols.
 
 It contains **no action logic**. It translates envelopes and two action names, forwards every body
-untouched (including error responses in both directions), and implements only two things itself:
+untouched (including error responses in both directions) except file payloads (converted between
+`Blob` and base64, see below), and implements only two things itself:
 the legacy **URL templating** (`$matrix_user_id` & co., fed by the `matrix_context` /
 `client_context` actions) and the startup handshake, where the two protocols are structurally
 different.
@@ -85,6 +86,29 @@ forwarded to the widget as is.
 
 ![How the envelope changed](../../docs/diagrams/03-wire-format-changes.svg)
 
+### File payloads: Blob → base64
+
+> **The MSC4412 file format is base64.** A file always travels between widget and host as
+> `{ "mimetype": "image/png", "base64": "iVBORw0…" }`. Only legacy widgets send files as `Blob`,
+> and only the wrapper ever sees one.
+
+matrix-widget-api passes files as `Blob` (`XMLHttpRequestBodyInit`) through `postMessage`
+structured cloning. That does not survive the JSON string boundary every MSC4412 host has: the
+UniFFI layer and the Android / iOS WebView bridges carry strings only (`JSON.stringify(blob)` is
+`{}`, so the file would be silently lost). The wrapper converts on the three actions that carry a
+file (`src/files.ts`):
+
+| action | direction | conversion |
+|---|---|---|
+| `org.matrix.msc4039.upload_file` | widget → host, request `file` | `Blob` → base64 |
+| `org.matrix.msc4039.download_file` | host → widget, response `file` | base64 → `Blob` |
+| `screenshot` | widget → host, response `screenshot` | `Blob` → base64 |
+
+Any `XMLHttpRequestBodyInit` (Blob, ArrayBuffer, typed array, string, ...) is accepted; the
+`mimetype` is the content type the browser would send for that body. The widget still gets its
+own request echoed back with the original `Blob`. Base64 adds about 33% to the size, which is
+fine for widget-sized files.
+
 ### Startup handshake
 
 After the bootstrap above has loaded the inner iframe. Legacy capabilities are **host-initiated**
@@ -146,7 +170,7 @@ npm run build            # static output in dist/, serve it under its own origin
 ```
 
 Source layout: `src/envelope.ts` (translation tables), `src/template.ts` (legacy URL
-templating), `src/bridge.ts` (bootstrap and handshake state machine, transport free),
+templating), `src/files.ts` (Blob ↔ base64), `src/bridge.ts` (bootstrap and handshake state machine, transport free),
 `src/wrapper.ts` (URL config, iframe, `postMessage` routing), `src/main.ts`.
 
 For an end-to-end run use the test host in `../widget-host` with the legacy test widget from

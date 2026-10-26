@@ -188,3 +188,41 @@ describe("steady state forwarding", () => {
     expect(s.take(s.toHost)[0].response).toEqual({ error: { message: "Unsupported widget api version `v2`" } });
   });
 });
+
+describe("file payloads", () => {
+  const s = setup(true);
+  boot(s);
+  const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+  it("sends an uploaded Blob to the host as base64 and echoes the original request back", async () => {
+    const blob = new Blob(["hello"], { type: "text/plain" });
+    const request = fromWidget("org.matrix.msc4039.upload_file", "u1", { file: blob });
+    s.bridge.onWidgetMessage(request);
+    await flush();
+    expect(s.take(s.toHost)).toEqual([
+      { source: "widget", version: "v1", requestId: "u1", action: "org.matrix.msc4039.upload_file", request: { file: { mimetype: "text/plain", base64: "aGVsbG8=" } } },
+    ]);
+    s.bridge.onHostMessage({ source: "widget", version: "v1", requestId: "u1", action: "org.matrix.msc4039.upload_file", response: { content_uri: "mxc://hs/abc" } });
+    expect(s.take(s.toWidget)).toEqual([{ ...request, response: { content_uri: "mxc://hs/abc" } }]);
+  });
+
+  it("turns a downloaded base64 file back into a Blob for the widget", async () => {
+    s.bridge.onWidgetMessage(fromWidget("org.matrix.msc4039.download_file", "d1", { content_uri: "mxc://hs/abc" }));
+    expect(s.take(s.toHost)[0].request).toEqual({ content_uri: "mxc://hs/abc" });
+    s.bridge.onHostMessage({ source: "widget", version: "v1", requestId: "d1", action: "org.matrix.msc4039.download_file", response: { file: { mimetype: "text/plain", base64: "aGVsbG8=" } } });
+    const file = (s.take(s.toWidget)[0].response as { file: Blob }).file;
+    expect(file).toBeInstanceOf(Blob);
+    expect(file.type).toBe("text/plain");
+    expect(await file.text()).toBe("hello");
+  });
+
+  it("sends the widget's screenshot Blob to the host as base64", async () => {
+    s.bridge.onHostMessage(fromHost("screenshot", "s1"));
+    const [legacy] = s.take(s.toWidget);
+    s.bridge.onWidgetMessage({ ...legacy, response: { screenshot: new Blob([new Uint8Array([1, 2, 3])], { type: "image/png" }) } });
+    await flush();
+    expect(s.take(s.toHost)).toEqual([
+      { source: "host", version: "v1", requestId: "s1", action: "screenshot", response: { screenshot: { mimetype: "image/png", base64: "AQID" } } },
+    ]);
+  });
+});

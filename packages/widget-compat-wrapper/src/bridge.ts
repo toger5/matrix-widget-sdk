@@ -13,6 +13,10 @@
  *    `content_loaded` (waitForIframeLoad=false); and the legacy widget asks
  *    `supported_api_versions`, which an MSC4412 host does not know.
  *
+ * Bodies are forwarded untouched with one exception: files. Legacy widgets send them as `Blob`,
+ * MSC4412 hosts get `{ mimetype, base64 }` (files.ts), on `upload_file`, `download_file` and
+ * `screenshot`.
+ *
  * This class is transport free: it is driven by `start`, `onIframeLoad`, `onWidgetMessage`
  * and `onHostMessage` and talks back through the callbacks in `BridgeOptions`.
  */
@@ -30,6 +34,14 @@ import {
   type LegacyMessage,
   type NewMessage,
 } from "./envelope";
+import {
+  DOWNLOAD_FILE_ACTION,
+  fromBase64File,
+  isBase64File,
+  SCREENSHOT_ACTION,
+  toBase64File,
+  UPLOAD_FILE_ACTION,
+} from "./files";
 import { renderLegacyUrl, type ClientContext, type MatrixContext } from "./template";
 
 /** Unstable spellings, as the host emits them (`docs/parity.md`). */
@@ -140,10 +152,24 @@ export class CompatBridge {
         );
       case "content_loaded":
         return this.onWidgetContentLoaded(m);
+      case UPLOAD_FILE_ACTION:
+        return this.forwardUpload(m);
       default:
         this.fromWidget.set(m.requestId, m);
         this.o.sendToHost(legacyRequestToNew(m));
     }
+  }
+
+  /** `upload_file` carries a `Blob`; the host gets it as base64. */
+  private forwardUpload(m: LegacyMessage): void {
+    const data = (m.data ?? {}) as { file?: unknown };
+    toBase64File(data.file).then(
+      (file) => {
+        this.fromWidget.set(m.requestId, m);
+        this.o.sendToHost(legacyRequestToNew({ ...m, data: { ...data, file } }));
+      },
+      (e: unknown) => this.o.sendToWidget(legacyResponse(m, errorBody(`Could not read the file: ${String(e)}`))),
+    );
   }
 
   private onWidgetContentLoaded(m: LegacyMessage): void {
@@ -171,7 +197,13 @@ export class CompatBridge {
     const request = this.fromWidget.get(m.requestId);
     if (!request) return;
     this.fromWidget.delete(m.requestId);
-    this.o.sendToWidget(legacyResponse(request, m.response));
+    let response = m.response;
+    // `download_file` answers with base64; the legacy widget expects a `Blob`.
+    const file = (response as { file?: unknown } | undefined)?.file;
+    if (request.action === DOWNLOAD_FILE_ACTION && isBase64File(file)) {
+      response = { ...(response as object), file: fromBase64File(file) };
+    }
+    this.o.sendToWidget(legacyResponse(request, response));
   }
 
   // ---- host -> widget ------------------------------------------------------------------------
@@ -201,6 +233,15 @@ export class CompatBridge {
     const request = this.fromHost.get(m.requestId);
     if (!request) return;
     this.fromHost.delete(m.requestId);
+    const screenshot = (m.response as { screenshot?: unknown } | undefined)?.screenshot;
+    if (request.action === SCREENSHOT_ACTION && screenshot !== undefined && !isError(m.response)) {
+      // The widget answers `screenshot` with a `Blob`; the host gets it as base64.
+      toBase64File(screenshot).then(
+        (file) => this.o.sendToHost(newResponse(request, { ...(m.response as object), screenshot: file })),
+        (e: unknown) => this.o.sendToHost(newResponse(request, errorBody(`Could not read the screenshot: ${String(e)}`))),
+      );
+      return;
+    }
     this.o.sendToHost(newResponse(request, m.response));
   }
 
