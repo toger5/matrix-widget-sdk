@@ -20,6 +20,18 @@ use widget_actions::{
 
 use crate::WidgetClientError;
 
+/// `pick!(Variant { response } => expr)` builds the closure that takes the expected variant out
+/// of a [`WidgetResponse`] (see [`WidgetClient::call`]). `pick!(Variant => ())` is for the unit
+/// variants of `{}` replies.
+macro_rules! pick {
+    ($variant:ident $({ $field:ident })? => $out:expr) => {
+        |response| match response {
+            WidgetResponse::$variant $({ $field })? => Some($out),
+            _ => None,
+        }
+    };
+}
+
 /// Callbacks from the [`WidgetClient`] into the widget application / transport.
 ///
 /// Only [`send_to_host`](WidgetDelegate::send_to_host) is mandatory. The others have empty
@@ -117,10 +129,32 @@ impl WidgetClient {
         &self,
         request: WidgetRequest,
     ) -> (String, impl Future<Output = Result<WidgetResponse, WidgetClientError>> + 'static) {
+        let (msg, fut) = self.send_request(request);
+        (msg.request_id, fut)
+    }
+
+    /// Send `request` and take the expected response variant out of the reply with `pick`.
+    /// Any other variant is a [`WidgetClientError::UnexpectedResponse`].
+    fn call<T>(
+        &self,
+        request: WidgetRequest,
+        pick: impl FnOnce(WidgetResponse) -> Option<T> + 'static,
+    ) -> impl Future<Output = Result<T, WidgetClientError>> + 'static {
+        let (msg, fut) = self.send_request(request);
+        let action = msg.action;
+        async move { pick(fut.await?).ok_or(WidgetClientError::UnexpectedResponse { action }) }
+    }
+
+    /// Send `request` to the host. Returns the sent envelope and a future for the reply.
+    fn send_request(
+        &self,
+        request: WidgetRequest,
+    ) -> (WireMessage, impl Future<Output = Result<WidgetResponse, WidgetClientError>> + 'static) {
         let id = (self.next_id)();
         let (tx, rx) = oneshot::channel();
         self.inner.borrow_mut().pending.insert(id.clone(), tx);
-        self.delegate.send_to_host(request.into_wire(id.clone()).to_json());
+        let msg = request.into_wire(id);
+        self.delegate.send_to_host(msg.to_json());
         let fut = async move {
             let msg = rx.await.map_err(|_| WidgetClientError::Cancelled)?;
             match WidgetResponse::from_wire(&msg) {
@@ -129,7 +163,7 @@ impl WidgetClient {
                 Err(other) => Err(other.into()),
             }
         };
-        (id, fut)
+        (msg, fut)
     }
 
     /// Ask the host for an OpenID token (MSC1960). Resolves with the token once the host (and
@@ -142,10 +176,7 @@ impl WidgetClient {
         let inner: Weak<RefCell<Inner>> = Rc::downgrade(&self.inner);
         async move {
             let unexpected = || WidgetClientError::UnexpectedResponse { action: "get_openid".into() };
-            let response = match fut.await? {
-                WidgetResponse::GetOpenId { response } => response,
-                _ => return Err(unexpected()),
-            };
+            let response = pick!(GetOpenId { response } => response)(fut.await?).ok_or_else(unexpected)?;
             if response.state != OpenIdState::PendingUserConfirmation {
                 if let Some(inner) = inner.upgrade() {
                     inner.borrow_mut().openid_waiters.remove(&id);
@@ -169,7 +200,7 @@ impl WidgetClient {
     pub fn content_loaded(&self) -> impl Future<Output = Result<(), WidgetClientError>> + 'static {
         // Only a weak handle: dropping the client must cancel the future, not keep state alive.
         let inner: Weak<RefCell<Inner>> = Rc::downgrade(&self.inner);
-        let fut = self.request(WidgetRequest::ContentLoaded);
+        let fut = self.call(WidgetRequest::ContentLoaded, pick!(ContentLoaded => ()));
         async move {
             fut.await?;
             if let Some(inner) = inner.upgrade() {
@@ -183,13 +214,7 @@ impl WidgetClient {
     pub fn get_client_context(
         &self,
     ) -> impl Future<Output = Result<ClientContextResponse, WidgetClientError>> + 'static {
-        let fut = self.request(WidgetRequest::ClientContext);
-        async move {
-            match fut.await? {
-                WidgetResponse::ClientContext { response } => Ok(response),
-                _ => Err(WidgetClientError::UnexpectedResponse { action: "client_context".into() }),
-            }
-        }
+        self.call(WidgetRequest::ClientContext, pick!(ClientContext { response } => response))
     }
 
     /// Ask the host who and where this widget is on Matrix (user, device, room, display name,
@@ -197,13 +222,7 @@ impl WidgetClient {
     pub fn get_matrix_context(
         &self,
     ) -> impl Future<Output = Result<MatrixContextResponse, WidgetClientError>> + 'static {
-        let fut = self.request(WidgetRequest::MatrixContext);
-        async move {
-            match fut.await? {
-                WidgetResponse::MatrixContext { response } => Ok(response),
-                _ => Err(WidgetClientError::UnexpectedResponse { action: "matrix_context".into() }),
-            }
-        }
+        self.call(WidgetRequest::MatrixContext, pick!(MatrixContext { response } => response))
     }
 
     /// Ask the host for capabilities. Resolves when the host *acknowledged* the request; the
@@ -214,9 +233,8 @@ impl WidgetClient {
         capabilities: Vec<Capability>,
     ) -> impl Future<Output = Result<(), WidgetClientError>> + 'static {
         self.inner.borrow_mut().state.pending_requested = capabilities.clone();
-        let fut =
-            self.request(WidgetRequest::RequestCapabilities { request: RequestCapabilitiesRequest { capabilities } });
-        async move { fut.await.map(|_| ()) }
+        let request = WidgetRequest::RequestCapabilities { request: RequestCapabilitiesRequest { capabilities } };
+        self.call(request, pick!(RequestCapabilities => ()))
     }
 
     /// Send a timeline event. Needs an approved `send.event:<type>` capability.
@@ -265,6 +283,7 @@ impl WidgetClient {
         request.state_key = state_key;
         request.delay = Some(delay_ms);
         let fut = self.send_event_request(request);
+        // A delayed send is answered with a `delay_id` instead of an `event_id`.
         async move { fut.await?.delay_id.ok_or(WidgetClientError::UnexpectedResponse { action: "send_event".into() }) }
     }
 
@@ -274,15 +293,12 @@ impl WidgetClient {
         delay_id: impl Into<String>,
         action: UpdateDelayedEventAction,
     ) -> impl Future<Output = Result<(), WidgetClientError>> + 'static {
-        let fut = self.request(WidgetRequest::UpdateDelayedEvent {
-            request: UpdateDelayedEventRequest { delay_id: delay_id.into(), action },
-        });
-        async move {
-            match fut.await? {
-                WidgetResponse::UpdateDelayedEvent => Ok(()),
-                _ => Err(WidgetClientError::UnexpectedResponse { action: "update_delayed_event".into() }),
-            }
-        }
+        self.call(
+            WidgetRequest::UpdateDelayedEvent {
+                request: UpdateDelayedEventRequest { delay_id: delay_id.into(), action },
+            },
+            pick!(UpdateDelayedEvent => ()),
+        )
     }
 
     /// Send any `send_event` request as is (every MSC2762 / MSC4157 / MSC4407 field).
@@ -290,13 +306,7 @@ impl WidgetClient {
         &self,
         request: SendEventRequest,
     ) -> impl Future<Output = Result<SendEventResponse, WidgetClientError>> + 'static {
-        let fut = self.request(WidgetRequest::SendEvent { request });
-        async move {
-            match fut.await? {
-                WidgetResponse::SendEvent { response } => Ok(response),
-                _ => Err(WidgetClientError::UnexpectedResponse { action: "send_event".into() }),
-            }
-        }
+        self.call(WidgetRequest::SendEvent { request }, pick!(SendEvent { response } => response))
     }
 
     /// Read recent timeline events of a type. Needs `receive.event:<type>`.
@@ -330,21 +340,18 @@ impl WidgetClient {
             .into_iter()
             .map(|(user, devices)| (user, devices.into_iter().map(|(d, c)| (d, JsonValue::from(c))).collect()))
             .collect();
-        let fut = self.request(WidgetRequest::SendToDevice {
-            request: SendToDeviceRequest { event_type: event_type.into(), encrypted, messages },
-        });
-        async move {
-            match fut.await? {
-                WidgetResponse::SendToDevice => Ok(()),
-                _ => Err(WidgetClientError::UnexpectedResponse { action: "send_to_device".into() }),
-            }
-        }
+        self.call(
+            WidgetRequest::SendToDevice {
+                request: SendToDeviceRequest { event_type: event_type.into(), encrypted, messages },
+            },
+            pick!(SendToDevice => ()),
+        )
     }
 
     /// Ask the client to open a `https://matrix.to/#/` permalink (MSC2931). Needs
     /// `org.matrix.msc2931.navigate`.
     pub fn navigate(&self, uri: impl Into<String>) -> impl Future<Output = Result<(), WidgetClientError>> + 'static {
-        self.unit_request(WidgetRequest::Navigate { request: NavigateRequest { uri: uri.into() } }, "navigate")
+        self.call(WidgetRequest::Navigate { request: NavigateRequest { uri: uri.into() } }, pick!(Navigate => ()))
     }
 
     /// Ask the client to send a sticker (`m.sticker`). Needs `m.sticker`.
@@ -352,44 +359,33 @@ impl WidgetClient {
         &self,
         sticker: StickerRequest,
     ) -> impl Future<Output = Result<(), WidgetClientError>> + 'static {
-        self.unit_request(WidgetRequest::SendSticker { request: sticker }, "m.sticker")
+        self.call(WidgetRequest::SendSticker { request: sticker }, pick!(SendSticker => ()))
     }
 
     /// Ask the client to keep the widget on screen (or stop). Resolves with whether it will.
     /// Needs `m.always_on_screen`.
     pub fn set_always_on_screen(&self, value: bool) -> impl Future<Output = Result<bool, WidgetClientError>> + 'static {
-        let fut = self.request(WidgetRequest::SetAlwaysOnScreen { request: SetAlwaysOnScreenRequest { value } });
-        async move {
-            match fut.await? {
-                WidgetResponse::SetAlwaysOnScreen { response } => Ok(response.success),
-                _ => Err(WidgetClientError::UnexpectedResponse { action: "set_always_on_screen".into() }),
-            }
-        }
+        self.call(
+            WidgetRequest::SetAlwaysOnScreen { request: SetAlwaysOnScreenRequest { value } },
+            pick!(SetAlwaysOnScreen { response } => response.success),
+        )
     }
 
     /// Start receiving TURN credentials through [`WidgetDelegate::on_turn_server`] (MSC3846).
     /// Needs `town.robin.msc3846.turn_servers`.
     pub fn watch_turn_servers(&self) -> impl Future<Output = Result<(), WidgetClientError>> + 'static {
-        self.unit_request(WidgetRequest::WatchTurnServers, "watch_turn_servers")
+        self.call(WidgetRequest::WatchTurnServers, pick!(WatchTurnServers => ()))
     }
 
     /// Stop receiving TURN credentials.
     pub fn unwatch_turn_servers(&self) -> impl Future<Output = Result<(), WidgetClientError>> + 'static {
-        self.unit_request(WidgetRequest::UnwatchTurnServers, "unwatch_turn_servers")
+        self.call(WidgetRequest::UnwatchTurnServers, pick!(UnwatchTurnServers => ()))
     }
 
     /// The homeserver's MatrixRTC transports (MSC4515), each `{ "type": ..., ... }`. Needs
     /// `org.matrix.msc4515.rtc_transports`.
     pub fn get_rtc_transports(&self) -> impl Future<Output = Result<Vec<Value>, WidgetClientError>> + 'static {
-        let fut = self.request(WidgetRequest::GetRtcTransports);
-        async move {
-            match fut.await? {
-                WidgetResponse::GetRtcTransports { response } => {
-                    Ok(response.rtc_transports.into_iter().map(JsonValue::into_inner).collect())
-                }
-                _ => Err(WidgetClientError::UnexpectedResponse { action: "get_rtc_transports".into() }),
-            }
-        }
+        self.call(WidgetRequest::GetRtcTransports, pick!(GetRtcTransports { response } => response.rtc_transports.into_iter().map(JsonValue::into_inner).collect()))
     }
 
     /// Search the user directory (MSC3973). Needs `org.matrix.msc3973.user_directory_search`.
@@ -398,26 +394,17 @@ impl WidgetClient {
         search_term: impl Into<String>,
         limit: Option<u32>,
     ) -> impl Future<Output = Result<UserDirectorySearchResponse, WidgetClientError>> + 'static {
-        let fut = self.request(WidgetRequest::UserDirectorySearch {
-            request: UserDirectorySearchRequest { search_term: search_term.into(), limit },
-        });
-        async move {
-            match fut.await? {
-                WidgetResponse::UserDirectorySearch { response } => Ok(response),
-                _ => Err(WidgetClientError::UnexpectedResponse { action: "user_directory_search".into() }),
-            }
-        }
+        self.call(
+            WidgetRequest::UserDirectorySearch {
+                request: UserDirectorySearchRequest { search_term: search_term.into(), limit },
+            },
+            pick!(UserDirectorySearch { response } => response),
+        )
     }
 
     /// The homeserver's media config (MSC4039). Needs `org.matrix.msc4039.upload_file`.
     pub fn get_media_config(&self) -> impl Future<Output = Result<MediaConfigResponse, WidgetClientError>> + 'static {
-        let fut = self.request(WidgetRequest::GetMediaConfig);
-        async move {
-            match fut.await? {
-                WidgetResponse::GetMediaConfig { response } => Ok(response),
-                _ => Err(WidgetClientError::UnexpectedResponse { action: "get_media_config".into() }),
-            }
-        }
+        self.call(WidgetRequest::GetMediaConfig, pick!(GetMediaConfig { response } => response))
     }
 
     /// Upload a file to the media repository and get its `mxc://` URI. Needs
@@ -426,13 +413,10 @@ impl WidgetClient {
         &self,
         file: Base64File,
     ) -> impl Future<Output = Result<UploadFileResponse, WidgetClientError>> + 'static {
-        let fut = self.request(WidgetRequest::UploadFile { request: UploadFileRequest { file } });
-        async move {
-            match fut.await? {
-                WidgetResponse::UploadFile { response } => Ok(response),
-                _ => Err(WidgetClientError::UnexpectedResponse { action: "upload_file".into() }),
-            }
-        }
+        self.call(
+            WidgetRequest::UploadFile { request: UploadFileRequest { file } },
+            pick!(UploadFile { response } => response),
+        )
     }
 
     /// Download an `mxc://` URI. Needs `org.matrix.msc4039.download_file`.
@@ -440,14 +424,10 @@ impl WidgetClient {
         &self,
         content_uri: impl Into<String>,
     ) -> impl Future<Output = Result<Base64File, WidgetClientError>> + 'static {
-        let fut = self
-            .request(WidgetRequest::DownloadFile { request: DownloadFileRequest { content_uri: content_uri.into() } });
-        async move {
-            match fut.await? {
-                WidgetResponse::DownloadFile { response } => Ok(response.file),
-                _ => Err(WidgetClientError::UnexpectedResponse { action: "download_file".into() }),
-            }
-        }
+        self.call(
+            WidgetRequest::DownloadFile { request: DownloadFileRequest { content_uri: content_uri.into() } },
+            pick!(DownloadFile { response } => response.file),
+        )
     }
 
     /// Read room account data of `event_type`. Needs
@@ -456,15 +436,12 @@ impl WidgetClient {
         &self,
         event_type: impl Into<String>,
     ) -> impl Future<Output = Result<Vec<RoomAccountData>, WidgetClientError>> + 'static {
-        let fut = self.request(WidgetRequest::ReadRoomAccountData {
-            request: ReadRoomAccountDataRequest { event_type: event_type.into(), room_ids: None },
-        });
-        async move {
-            match fut.await? {
-                WidgetResponse::ReadRoomAccountData { response } => Ok(response.events),
-                _ => Err(WidgetClientError::UnexpectedResponse { action: "read_room_account_data".into() }),
-            }
-        }
+        self.call(
+            WidgetRequest::ReadRoomAccountData {
+                request: ReadRoomAccountDataRequest { event_type: event_type.into(), room_ids: None },
+            },
+            pick!(ReadRoomAccountData { response } => response.events),
+        )
     }
 
     /// A LiveKit JWT from the client (MSC4533). Needs `org.matrix.msc4533.rtc_livekit_get_token`.
@@ -472,13 +449,7 @@ impl WidgetClient {
         &self,
         request: RtcLivekitGetTokenRequest,
     ) -> impl Future<Output = Result<String, WidgetClientError>> + 'static {
-        let fut = self.request(WidgetRequest::RtcLivekitGetToken { request });
-        async move {
-            match fut.await? {
-                WidgetResponse::RtcLivekitGetToken { response } => Ok(response.jwt),
-                _ => Err(WidgetClientError::UnexpectedResponse { action: "rtc_livekit_get_token".into() }),
-            }
-        }
+        self.call(WidgetRequest::RtcLivekitGetToken { request }, pick!(RtcLivekitGetToken { response } => response.jwt))
     }
 
     /// Hand a delayed leave to the client's LiveKit service (MSC4533). Needs
@@ -487,25 +458,10 @@ impl WidgetClient {
         &self,
         request: RtcLivekitDelegateDelayedLeaveRequest,
     ) -> impl Future<Output = Result<(), WidgetClientError>> + 'static {
-        self.unit_request(
+        self.call(
             WidgetRequest::RtcLivekitDelegateDelayedLeave { request },
-            "rtc_livekit_delegate_delayed_leave",
+            pick!(RtcLivekitDelegateDelayedLeave => ()),
         )
-    }
-
-    /// A request whose success response is `{}`.
-    fn unit_request(
-        &self,
-        request: WidgetRequest,
-        action: &'static str,
-    ) -> impl Future<Output = Result<(), WidgetClientError>> + 'static {
-        let fut = self.request(request);
-        async move {
-            match fut.await? {
-                WidgetResponse::Unknown => Err(WidgetClientError::UnexpectedResponse { action: action.into() }),
-                _ => Ok(()),
-            }
-        }
     }
 
     /// Read the events relating to `request.event_id` (MSC3869). The host filters the page by
@@ -514,13 +470,7 @@ impl WidgetClient {
         &self,
         request: ReadRelationsRequest,
     ) -> impl Future<Output = Result<ReadRelationsResponse, WidgetClientError>> + 'static {
-        let fut = self.request(WidgetRequest::ReadRelations { request });
-        async move {
-            match fut.await? {
-                WidgetResponse::ReadRelations { response } => Ok(response),
-                _ => Err(WidgetClientError::UnexpectedResponse { action: "read_relations".into() }),
-            }
-        }
+        self.call(WidgetRequest::ReadRelations { request }, pick!(ReadRelations { response } => response))
     }
 
     /// Send any `read_events` request as is (`msgtype`, `room_ids`, `since`, ...).
@@ -528,13 +478,7 @@ impl WidgetClient {
         &self,
         request: ReadEventsRequest,
     ) -> impl Future<Output = Result<Vec<MatrixEvent>, WidgetClientError>> + 'static {
-        let fut = self.request(WidgetRequest::ReadEvents { request });
-        async move {
-            match fut.await? {
-                WidgetResponse::ReadEvents { response } => Ok(response.events),
-                _ => Err(WidgetClientError::UnexpectedResponse { action: "read_events".into() }),
-            }
-        }
+        self.call(WidgetRequest::ReadEvents { request }, pick!(ReadEvents { response } => response.events))
     }
 
     // ---- incoming ---------------------------------------------------------------------------

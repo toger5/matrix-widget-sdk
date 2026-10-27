@@ -23,6 +23,7 @@ use std::future::Future;
 use std::rc::Rc;
 
 use js_sys::{Function, Promise};
+use serde::de::DeserializeOwned;
 use serde::Serialize;
 use serde_json::Value;
 use wasm_bindgen::prelude::*;
@@ -129,6 +130,14 @@ impl WidgetDelegate for JsDelegate {
 
 fn js_error(err: impl std::fmt::Display) -> JsValue {
     js_sys::Error::new(&err.to_string()).into()
+}
+
+/// Deserialize a JavaScript argument and pass it to `f`. A value of the wrong shape rejects.
+fn with_arg<T: DeserializeOwned>(value: JsValue, f: impl FnOnce(T) -> Promise) -> Promise {
+    match serde_wasm_bindgen::from_value(value) {
+        Ok(value) => f(value),
+        Err(e) => Promise::reject(&js_error(e)),
+    }
 }
 
 fn promise<T: Serialize>(fut: impl Future<Output = Result<T, WidgetClientError>> + 'static) -> Promise {
@@ -284,28 +293,19 @@ impl WidgetApi {
     /// Resolves with `{ room_id, event_id }`.
     #[wasm_bindgen(js_name = sendEvent)]
     pub fn send_event(&self, event_type: String, content: JsValue) -> Promise {
-        match serde_wasm_bindgen::from_value(content) {
-            Ok(content) => promise(self.client.send_event(event_type, content)),
-            Err(e) => Promise::reject(&js_error(e)),
-        }
+        with_arg(content, |content| promise(self.client.send_event(event_type, content)))
     }
 
     /// Resolves with `{ room_id, event_id }`.
     #[wasm_bindgen(js_name = sendStateEvent)]
     pub fn send_state_event(&self, event_type: String, state_key: String, content: JsValue) -> Promise {
-        match serde_wasm_bindgen::from_value(content) {
-            Ok(content) => promise(self.client.send_state_event(event_type, state_key, content)),
-            Err(e) => Promise::reject(&js_error(e)),
-        }
+        with_arg(content, |content| promise(self.client.send_state_event(event_type, state_key, content)))
     }
 
     /// Send a sticky event (MSC4407) kept for `durationMs`. Resolves with `{ room_id, event_id }`.
     #[wasm_bindgen(js_name = sendStickyEvent)]
     pub fn send_sticky_event(&self, event_type: String, content: JsValue, duration_ms: u32) -> Promise {
-        match serde_wasm_bindgen::from_value(content) {
-            Ok(content) => promise(self.client.send_sticky_event(event_type, content, duration_ms.into())),
-            Err(e) => Promise::reject(&js_error(e)),
-        }
+        with_arg(content, |content| promise(self.client.send_sticky_event(event_type, content, duration_ms.into())))
     }
 
     /// Schedule an event (MSC4157), a state event when `stateKey` is a string. Resolves with
@@ -318,10 +318,9 @@ impl WidgetApi {
         content: JsValue,
         delay_ms: u32,
     ) -> Promise {
-        match serde_wasm_bindgen::from_value(content) {
-            Ok(content) => promise(self.client.send_delayed_event(event_type, state_key, content, delay_ms.into())),
-            Err(e) => Promise::reject(&js_error(e)),
-        }
+        with_arg(content, |content| {
+            promise(self.client.send_delayed_event(event_type, state_key, content, delay_ms.into()))
+        })
     }
 
     /// `action` is `"cancel"`, `"restart"` or `"send"` (MSC4157).
@@ -339,10 +338,7 @@ impl WidgetApi {
     /// Send a to-device message (MSC3819). `messages` is `{ [userId]: { [deviceId]: content } }`.
     #[wasm_bindgen(js_name = sendToDevice)]
     pub fn send_to_device(&self, event_type: String, encrypted: bool, messages: JsValue) -> Promise {
-        match serde_wasm_bindgen::from_value(messages) {
-            Ok(messages) => promise(self.client.send_to_device(event_type, encrypted, messages)),
-            Err(e) => Promise::reject(&js_error(e)),
-        }
+        with_arg(messages, |messages| promise(self.client.send_to_device(event_type, encrypted, messages)))
     }
 
     /// Resolves with an array of timeline events; `msgtype` narrows `m.room.message` reads.
@@ -378,10 +374,7 @@ impl WidgetApi {
     /// Ask the client to send a sticker: `{ name, description?, content: { url, info? } }`.
     #[wasm_bindgen(js_name = sendSticker)]
     pub fn send_sticker(&self, sticker: JsValue) -> Promise {
-        match serde_wasm_bindgen::from_value::<StickerRequest>(sticker) {
-            Ok(sticker) => promise(self.client.send_sticker(sticker)),
-            Err(e) => Promise::reject(&js_error(e)),
-        }
+        with_arg(sticker, |sticker: StickerRequest| promise(self.client.send_sticker(sticker)))
     }
 
     /// Ask the client to keep the widget on screen. Resolves with whether it will.
@@ -455,20 +448,16 @@ impl WidgetApi {
     /// `{ server_name, url, room_id, slot_id, member_id }`.
     #[wasm_bindgen(js_name = rtcLivekitGetToken)]
     pub fn rtc_livekit_get_token(&self, request: JsValue) -> Promise {
-        match serde_wasm_bindgen::from_value::<RtcLivekitGetTokenRequest>(request) {
-            Ok(request) => promise(self.client.rtc_livekit_get_token(request)),
-            Err(e) => Promise::reject(&js_error(e)),
-        }
+        with_arg(request, |request: RtcLivekitGetTokenRequest| promise(self.client.rtc_livekit_get_token(request)))
     }
 
     /// Hand a delayed leave to the client's LiveKit service (MSC4533). `request` is
     /// `{ url, room_id, slot_id, member_id, delay_id }`.
     #[wasm_bindgen(js_name = rtcLivekitDelegateDelayedLeave)]
     pub fn rtc_livekit_delegate_delayed_leave(&self, request: JsValue) -> Promise {
-        match serde_wasm_bindgen::from_value::<RtcLivekitDelegateDelayedLeaveRequest>(request) {
-            Ok(request) => promise(self.client.rtc_livekit_delegate_delayed_leave(request)),
-            Err(e) => Promise::reject(&js_error(e)),
-        }
+        with_arg(request, |request: RtcLivekitDelegateDelayedLeaveRequest| {
+            promise(self.client.rtc_livekit_delegate_delayed_leave(request))
+        })
     }
 
     /// Resolves with `{ access_token, token_type, matrix_server_name, expires_in }` once the host

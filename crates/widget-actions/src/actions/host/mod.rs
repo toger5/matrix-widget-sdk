@@ -1,5 +1,5 @@
-//! Actions initiated by the host (`source: host`): one file per action plus the two enums that
-//! dispatch over them. See the `widget` module for the conventions; they are identical.
+//! Actions the host starts (`source: host`): one file per action, plus the two enums below that
+//! list them all. The conventions are those of the `widget` module.
 
 use serde::{Deserialize, Serialize};
 
@@ -18,10 +18,6 @@ pub(crate) mod theme_change;
 pub(crate) mod update_state;
 pub(crate) mod update_turn_servers;
 pub(crate) mod visibility;
-
-// ----- Enums -----
-// The two enums are the source of truth for all host actions (actions where: `source: "host"`)
-// To keep this list easy to read each type for the different request gets their own file.
 
 /// A request sent by the host (`source: host`, has `request`).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -101,9 +97,6 @@ pub enum HostResponse {
     #[serde(other)]
     Unknown,
 }
-
-// ---- Implementations ----
-// Just used to convert from and to wire
 
 impl HostRequest {
     /// Wrap into a wire envelope with the given request id.

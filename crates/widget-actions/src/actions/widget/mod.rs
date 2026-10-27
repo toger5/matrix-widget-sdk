@@ -1,20 +1,20 @@
-//! Actions initiated by the widget (`source: widget`): one file per action plus the two enums
-//! that dispatch over them.
+//! Actions the widget starts (`source: widget`): one file per action, plus the two enums below
+//! that list them all.
 //!
-//! The enums are serde *internally tagged* on `action`; their serde shape is the action part of
-//! the envelope (`{ "action": ..., "request": ... }` or `"response"`), not the full
-//! [`WireMessage`]. Converting between the two goes through `from_wire` / `into_wire`.
+//! The enums are serde-tagged on `action`. Their serde shape is only the action part of the
+//! envelope, `{ "action": ..., "request" | "response": ... }`; `from_wire` / `into_wire` convert
+//! to and from the full [`WireMessage`].
 //!
-//! Conventions that keep this file free of per-action logic:
+//! Conventions (the host enums follow them too):
 //!
-//! * one variant per action, `#[serde(rename = "<action>")]`, a unit variant when the body is `{}`.
-//!   The `rename` is the name **emitted** on the wire: the MSC's unstable spelling where the
-//!   action has one (`org.matrix.msc2876.read_events`), so that a wrongly designed action can be
-//!   renamed later. Other spellings (the prefix-less future stable name, a legacy name) are
-//!   accepted on input through `alias`;
-//! * a trailing `#[serde(other)] Unknown` unit variant catches unknown *tags* only, so a known
-//!   action with a malformed body is still an [`ActionError::InvalidBody`];
-//! * no `#[serde(untagged)]` anywhere: it would swallow body errors.
+//! * One variant per action. A body of `{}` is a unit variant.
+//! * `#[serde(rename = "...")]` is the name this crate **sends**. That is the MSC's unstable
+//!   spelling where there is one (`org.matrix.msc2876.read_events`), so the action can still
+//!   change before the MSC is merged.
+//! * `alias` lists the other names it **accepts**: the future stable name and legacy names.
+//! * The last variant, `#[serde(other)] Unknown`, catches unknown action names only. A known
+//!   action with a broken body is still an [`ActionError::InvalidBody`].
+//! * No `#[serde(untagged)]`: it would hide body errors.
 
 use serde::{Deserialize, Serialize};
 

@@ -35,10 +35,8 @@ impl std::fmt::Display for Source {
     }
 }
 
-/// Classification of a [`WireMessage`] by direction and role.
-///
-/// This enum is only used as the return type of the `kind(&self)`
-/// Its not stored as state anywhere.
+/// The four kinds of message: who started the exchange (`source`) and whether this is the request
+/// or the response. Returned by [`WireMessage::kind`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
 pub enum MessageKind {
