@@ -1,17 +1,20 @@
 /** Browser glue: read the configuration from the URL, create the inner iframe, route messages. */
 import { CompatBridge } from "./bridge";
 
+/** The wrapper's query parameters, parsed. The README describes each parameter. */
 export interface WrapperConfig {
-  /** Untemplated legacy widget URL. */
+  /** The legacy widget URL with its template variables still in it. */
   legacyWidgetUrl: string;
   widgetId: string;
-  /** Accessible name of the inner iframe; the legacy widget's name. */
+  /** Accessible name of the inner iframe: the legacy widget's name. */
   widgetName: string;
   waitForIframeLoad: boolean;
   widgetData?: Record<string, unknown>;
+  /** Target origin for messages to the host. */
   clientOrigin: string;
 }
 
+/** Read the configuration from the wrapper's query parameters. Throws when a required one is missing. */
 export function parseConfig(params: URLSearchParams): WrapperConfig {
   const legacyWidgetUrl = params.get("legacy_widget_url");
   if (!legacyWidgetUrl) throw new Error("missing `legacy_widget_url` query parameter");
@@ -28,10 +31,15 @@ export function parseConfig(params: URLSearchParams): WrapperConfig {
   };
 }
 
+/**
+ * Create the inner iframe in `container`, connect it and `parent` through a {@link CompatBridge}
+ * and start the bootstrap. The iframe is added once the bridge knows the templated URL.
+ */
 export function startWrapper(config: WrapperConfig, container: HTMLElement, parent: Window = window.parent): CompatBridge {
   const iframe = document.createElement("iframe");
   iframe.allow = "camera; microphone; display-capture; autoplay; clipboard-write";
   iframe.title = config.widgetName;
+  // The legacy widget's origin, known once its URL is. Messages to the widget are posted to it.
   let widgetOrigin = "*";
 
   const bridge = new CompatBridge({

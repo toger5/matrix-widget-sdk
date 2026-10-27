@@ -1,14 +1,18 @@
 /**
  * Legacy URL templating, moved from the host into the wrapper.
  *
- * Legacy clients substituted `$matrix_user_id` & co. into the widget URL before loading it. An
- * MSC4412 host passes the URL untouched; the wrapper obtains the same facts through the
- * `matrix_context` / `client_context` actions and substitutes them here. Variable names and
- * semantics follow matrix-widget-api's `runTemplate`: values are URI-encoded, unknown
- * variables are left alone, keys of the state event's `data` are variables too and explicit
- * variables win over `data`.
+ * Legacy clients replaced `$matrix_user_id` & co. in the widget URL before loading it. An MSC4412
+ * host loads the URL as it is. The wrapper gets the same facts from the `matrix_context` and
+ * `client_context` actions and fills them in here.
+ *
+ * The rules are those of matrix-widget-api's `runTemplate`:
+ * - values are URI-encoded;
+ * - unknown variables stay as they are;
+ * - every key of the state event's `data` is a variable too;
+ * - the built-in variables win over `data`.
  */
 
+/** The `matrix_context` response (see the Rust `MatrixContextResponse`). */
 export interface MatrixContext {
   user_id: string;
   device_id: string;
@@ -18,22 +22,26 @@ export interface MatrixContext {
   matrix_base_url: string;
 }
 
+/** The `client_context` response (see the Rust `ClientContextResponse`). */
 export interface ClientContext {
   client_id?: string;
   client_theme?: string;
   client_language?: string;
 }
 
+/** Everything the template variables are filled from. */
 export interface TemplateInput {
   widgetId: string;
   /** Set as the legacy `parentUrl` query parameter: the widget's parent is the wrapper. */
   wrapperUrl: string;
+  /** Partial: a context the host refused leaves its variables empty. */
   matrix: Partial<MatrixContext>;
   client: ClientContext;
   /** `content.data` of the legacy state event. */
   data?: Record<string, unknown>;
 }
 
+/** Every template variable by name (without the `$`). Missing facts are empty strings. */
 export function templateVariables({ widgetId, matrix, client, data }: TemplateInput): Record<string, string> {
   return {
     ...Object.fromEntries(Object.entries(data ?? {}).map(([k, v]) => [k, String(v)])),
@@ -50,7 +58,10 @@ export function templateVariables({ widgetId, matrix, client, data }: TemplateIn
   };
 }
 
-/** Substitute the template variables and add the `widgetId` / `parentUrl` query parameters. */
+/**
+ * Fill in the template variables of a legacy widget URL, then add the query parameters legacy
+ * clients added: `widgetId` (unless already there) and `parentUrl` (always the wrapper).
+ */
 export function renderLegacyUrl(url: string, input: TemplateInput): string {
   const vars = templateVariables(input);
   const templated = url.replace(/\$([\w.]+)/g, (match, key: string) => (key in vars ? encodeURIComponent(vars[key]) : match));

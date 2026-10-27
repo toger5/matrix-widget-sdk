@@ -1,11 +1,14 @@
 /**
- * File payloads: legacy widgets carry files as `Blob` (more generally `XMLHttpRequestBodyInit`)
- * through structured cloning, which survives `postMessage` but not the JSON string boundary every
- * MSC4412 host has (UniFFI, Android / iOS WebView bridges). Towards the host a file is always
+ * File payloads.
+ *
+ * Legacy widgets send files as `Blob` (more generally any `XMLHttpRequestBodyInit`). A `Blob`
+ * survives `postMessage`, but not the JSON strings every MSC4412 host passes them through (UniFFI,
+ * the Android / iOS WebView bridges). So towards the host a file is always
  *
  *   { "mimetype": "image/png", "base64": "iVBORw0…" }
  *
- * and the wrapper converts on the two actions that carry one (`upload_file`, `download_file`).
+ * Two actions carry a file: `upload_file` (widget → host, in the request) and `download_file`
+ * (host → widget, in the response).
  */
 
 /** A file as it travels between the wrapper and an MSC4412 host. */
@@ -20,10 +23,24 @@ export const DOWNLOAD_FILE_ACTION = "org.matrix.msc4039.download_file";
 export const isBase64File = (v: unknown): v is Base64File =>
   typeof v === "object" && v !== null && typeof (v as Base64File).base64 === "string";
 
+/** The body of a legacy `upload_file` request, with its `file` converted to base64. */
+export async function uploadRequestToNew(data: unknown): Promise<Record<string, unknown>> {
+  const body = (data ?? {}) as Record<string, unknown>;
+  return { ...body, file: await toBase64File(body.file) };
+}
+
+/** The body of a host's `download_file` response, with its base64 `file` converted to a `Blob`. */
+export function downloadResponseToLegacy(response: unknown): unknown {
+  const file = (response as { file?: unknown } | undefined)?.file;
+  return isBase64File(file) ? { ...(response as object), file: fromBase64File(file) } : response;
+}
+
 /**
- * Any `XMLHttpRequestBodyInit` (Blob, ArrayBuffer, typed array, string, URLSearchParams,
- * FormData) to base64. `Response` does the reading and picks the content type the browser would
- * send for the same body; a value that already is a `Base64File` is returned as is.
+ * Convert any `XMLHttpRequestBodyInit` (Blob, ArrayBuffer, typed array, string, URLSearchParams,
+ * FormData) to base64.
+ *
+ * `Response` reads the body and picks the content type a browser would send for it. A value that
+ * already is a `Base64File` is returned unchanged.
  */
 export async function toBase64File(value: unknown): Promise<Base64File> {
   if (isBase64File(value)) return value;
@@ -33,13 +50,13 @@ export async function toBase64File(value: unknown): Promise<Base64File> {
   return mimetype ? { mimetype, base64: bytesToBase64(bytes) } : { base64: bytesToBase64(bytes) };
 }
 
-/** The `Blob` a legacy widget expects back. */
+/** Convert a base64 file back to the `Blob` a legacy widget expects. */
 export function fromBase64File(file: Base64File): Blob {
   return new Blob([base64ToBytes(file.base64)], file.mimetype ? { type: file.mimetype } : undefined);
 }
 
 function bytesToBase64(bytes: Uint8Array): string {
-  // Chunked: String.fromCharCode(...bytes) overflows the argument limit for large files.
+  // In chunks: `String.fromCharCode(...bytes)` exceeds the argument limit for large files.
   let binary = "";
   for (let i = 0; i < bytes.length; i += 0x8000) {
     binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
