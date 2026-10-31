@@ -209,9 +209,6 @@ const platform: WidgetHostPlatform = {
   navigate(uri) {
     log("info", `widget asks to navigate to ${uri} (a real client would open it)`);
   },
-  sendSticker(sticker) {
-    log("info", `widget asks to send sticker ${stringify(sticker)} (a real client would send m.sticker)`);
-  },
   setAlwaysOnScreen(value) {
     log("info", `widget asks always-on-screen = ${value}; honoured`);
     return true;

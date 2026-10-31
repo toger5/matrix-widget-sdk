@@ -1,4 +1,4 @@
-use widget_actions::{Capability, StickerRequest};
+use widget_actions::Capability;
 
 use crate::PlatformError;
 
@@ -37,10 +37,6 @@ pub trait WidgetHostPlatform: Send + Sync {
     /// Open `uri` (`org.matrix.msc2931.navigate`). The driver has checked that it is a
     /// `https://matrix.to/#/` permalink. An error is passed on to the widget.
     fn navigate(&self, uri: String) -> Result<(), PlatformError>;
-
-    /// Build and send an `m.sticker` event for a sticker picker widget. An error is passed on to
-    /// the widget.
-    fn send_sticker(&self, sticker: StickerRequest) -> Result<(), PlatformError>;
 
     /// Keep the widget on screen (`value: true`) or stop doing so. Returns whether the client
     /// honours the request.

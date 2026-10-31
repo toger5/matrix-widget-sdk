@@ -27,7 +27,6 @@ pub(super) fn required_capability(request: &WidgetRequest) -> Option<Capability>
         R::RtcLivekitGetToken { .. } => Capability::RtcLivekitGetToken,
         R::RtcLivekitDelegateDelayedLeave { .. } => Capability::RtcLivekitDelegateDelayedLeave,
         R::Navigate { .. } => Capability::Navigate,
-        R::SendSticker { .. } => Capability::Sticker,
         R::SetAlwaysOnScreen { .. } => Capability::AlwaysOnScreen,
         R::MatrixContext => Capability::MatrixContext,
         R::ClientContext => Capability::ClientContext,

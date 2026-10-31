@@ -61,7 +61,6 @@ const DOWNLOAD_FILE: &str = "download_file";
 const NAVIGATE: &str = "navigate";
 const RTC_LIVEKIT_GET_TOKEN: &str = "rtc_livekit_get_token";
 const RTC_LIVEKIT_DELEGATE_DELAYED_LEAVE: &str = "rtc_livekit_delegate_delayed_leave";
-const STICKER: &str = "sticker";
 const ALWAYS_ON_SCREEN: &str = "always_on_screen";
 const CLIENT_CONTEXT: &str = "client_context";
 const MATRIX_CONTEXT: &str = "matrix_context";
@@ -146,8 +145,6 @@ pub enum Capability {
     RtcLivekitGetToken,
     /// May hand delayed leave events to the client's LiveKit service (MSC4533).
     RtcLivekitDelegateDelayedLeave,
-    /// May send stickers (`m.sticker`).
-    Sticker,
     /// May ask to stay on screen (`m.always_on_screen`).
     AlwaysOnScreen,
     /// May call `client_context`.
@@ -261,7 +258,6 @@ impl Capability {
             NAVIGATE => Self::Navigate,
             RTC_LIVEKIT_GET_TOKEN => Self::RtcLivekitGetToken,
             RTC_LIVEKIT_DELEGATE_DELAYED_LEAVE => Self::RtcLivekitDelegateDelayedLeave,
-            STICKER => Self::Sticker,
             ALWAYS_ON_SCREEN => Self::AlwaysOnScreen,
             CLIENT_CONTEXT => Self::ClientContext,
             MATRIX_CONTEXT => Self::MatrixContext,
@@ -299,7 +295,6 @@ impl Capability {
             Capability::Navigate => NAVIGATE.to_owned(),
             Capability::RtcLivekitGetToken => RTC_LIVEKIT_GET_TOKEN.to_owned(),
             Capability::RtcLivekitDelegateDelayedLeave => RTC_LIVEKIT_DELEGATE_DELAYED_LEAVE.to_owned(),
-            Capability::Sticker => STICKER.to_owned(),
             Capability::AlwaysOnScreen => ALWAYS_ON_SCREEN.to_owned(),
             Capability::ClientContext => CLIENT_CONTEXT.to_owned(),
             Capability::MatrixContext => MATRIX_CONTEXT.to_owned(),
@@ -308,7 +303,7 @@ impl Capability {
     }
 
     /// The prefix of this capability's unstable form. Capabilities that only exist in a stable
-    /// spelling (`m.sticker`, ...) return the stable prefix.
+    /// spelling (`m.always_on_screen`) return the stable prefix.
     pub fn unstable_prefix(&self) -> &'static str {
         match self {
             Capability::SendEvent { .. }
@@ -327,7 +322,7 @@ impl Capability {
             Capability::Navigate => MSC2931_PREFIX,
             Capability::RtcLivekitGetToken | Capability::RtcLivekitDelegateDelayedLeave => MSC4533_PREFIX,
             Capability::ClientContext | Capability::MatrixContext => MSC4412_PREFIX,
-            Capability::Sticker | Capability::AlwaysOnScreen | Capability::Other { .. } => STABLE_PREFIX,
+            Capability::AlwaysOnScreen | Capability::Other { .. } => STABLE_PREFIX,
         }
     }
 
@@ -466,7 +461,7 @@ pub trait CapabilitySet {
     fn allows_send_to_device(&self, event_type: &str) -> bool;
     fn allows_receive_to_device(&self, event_type: &str) -> bool;
     fn allows_receive_room_account_data(&self, event_type: &str) -> bool;
-    /// Is this unit capability (`m.sticker`, `org.matrix.msc2931.navigate`, ...) in the set?
+    /// Is this unit capability (`m.always_on_screen`, `org.matrix.msc2931.navigate`, ...) in the set?
     fn has(&self, capability: &Capability) -> bool;
 }
 
@@ -537,7 +532,8 @@ mod tests {
             ("org.matrix.msc2931.navigate", Capability::Navigate),
             ("org.matrix.msc4533.rtc_livekit_get_token", Capability::RtcLivekitGetToken),
             ("org.matrix.msc4533.rtc_livekit_delegate_delayed_leave", Capability::RtcLivekitDelegateDelayedLeave),
-            ("m.sticker", Capability::Sticker),
+            // stickers are intentionally not supported
+            ("m.sticker", Capability::Other { raw: "m.sticker".into() }),
             ("m.always_on_screen", Capability::AlwaysOnScreen),
             ("org.matrix.msc4412.matrix_context", Capability::MatrixContext),
             ("m.matrix_context", Capability::MatrixContext),
@@ -569,7 +565,7 @@ mod tests {
         );
         assert_eq!(Capability::send_event("x").to_stable_string(), "m.send.event:x");
         assert_eq!(Capability::MatrixContext.to_string(), "org.matrix.msc4412.matrix_context");
-        assert_eq!(Capability::Sticker.to_string(), "m.sticker");
+        assert_eq!(Capability::AlwaysOnScreen.to_string(), "m.always_on_screen");
         assert_eq!(Capability::parse("custom.cap").to_stable_string(), "custom.cap");
     }
 
@@ -603,7 +599,7 @@ mod tests {
         assert!(!caps.allows_receive_to_device("m.key"));
         assert!(caps.allows_receive_room_account_data("m.tag"));
         assert!(caps.has(&Capability::Navigate));
-        assert!(!caps.has(&Capability::Sticker));
+        assert!(!caps.has(&Capability::AlwaysOnScreen));
     }
 
     #[test]

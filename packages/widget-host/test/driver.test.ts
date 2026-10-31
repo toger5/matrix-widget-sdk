@@ -34,7 +34,6 @@ function setup() {
     navigate(uri) {
       this.navigated.push(uri);
     },
-    sendSticker: () => {},
     setAlwaysOnScreen: (value) => value,
     clientId: () => "vitest",
     clientTheme: () => "dark",

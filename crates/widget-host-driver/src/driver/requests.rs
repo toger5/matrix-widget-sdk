@@ -129,10 +129,6 @@ impl WidgetHostDriver {
                 self.platform.navigate(request.uri).map_err(platform_error("Error handling navigation"))?;
                 W::Navigate
             }
-            R::SendSticker { request } => {
-                self.platform.send_sticker(request).map_err(platform_error("Error sending sticker"))?;
-                W::SendSticker
-            }
             R::SetAlwaysOnScreen { request } => W::SetAlwaysOnScreen {
                 response: SetAlwaysOnScreenResponse { success: self.platform.set_always_on_screen(request.value) },
             },

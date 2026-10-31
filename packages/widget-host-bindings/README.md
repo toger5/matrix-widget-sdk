@@ -60,7 +60,6 @@ const platform: WidgetHostPlatform = {
   onContentLoaded: () => (iframe.hidden = false),
   onOpenidRequested: () => queueMicrotask(() => driver.resolveOpenid(true)),   // or prompt first
   navigate: (uri) => { location.href = uri; },
-  sendSticker: (sticker) => { /* send the m.sticker event */ },
   setAlwaysOnScreen: (value) => value,
   clientId: () => "io.example.client", clientTheme: () => "light", clientLanguage: () => "en",
 };

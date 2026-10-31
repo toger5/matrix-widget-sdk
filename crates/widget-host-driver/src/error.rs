@@ -27,7 +27,7 @@ pub enum DriverError {
 }
 
 /// A failure reported by the [`WidgetHostPlatform`](crate::WidgetHostPlatform) for an action it
-/// performs on the widget's behalf (navigation, sending a sticker). The driver answers the widget
+/// performs on the widget's behalf (navigation). The driver answers the widget
 /// with `reason`.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Error))]

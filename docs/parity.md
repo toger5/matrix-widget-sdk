@@ -48,7 +48,7 @@ marker shows what changed) · ⛔ raised, not built · ➖ dropped by MSC4412.
 | `org.matrix.msc4039.upload_file` / `download_file` | same (aliases `upload_file` / `download_file`) | `org.matrix.msc4039.upload_file` / `download_file` | 🔨 file as base64, see §6 | `backend.upload_media` / `download_media` |
 | `com.beeper.read_room_account_data` | `com.beeper.read_room_account_data` (alias `read_room_account_data`) | `com.beeper.capabilities.receive.room_account_data:<type>` | 🔨 | `backend.read_room_account_data` |
 | `org.matrix.msc2931.navigate` | `org.matrix.msc2931.navigate` (alias `navigate`) | `org.matrix.msc2931.navigate` | 🔨 | `platform.navigate` |
-| `m.sticker` | `m.sticker` | `m.sticker` | 🔨 | `platform.send_sticker` |
+| `m.sticker` | – | `m.sticker` | ⛔ not supported | – |
 | `org.matrix.msc4533.rtc_livekit_get_token` | same (alias `rtc_livekit_get_token`) | `org.matrix.msc4533.rtc_livekit_get_token` | 🔨 | `backend.rtc_livekit_get_token` |
 | `org.matrix.msc4533.rtc_livekit_delegate_delayed_leave` | same (alias `rtc_livekit_delegate_delayed_leave`) | `org.matrix.msc4533.rtc_livekit_delegate_delayed_leave` | 🔨 | `backend.rtc_livekit_delegate_delayed_leave` |
 | `set_always_on_screen` | `set_always_on_screen` | `m.always_on_screen` | 🔨 | `platform.set_always_on_screen` |
@@ -98,9 +98,9 @@ All of these parse into a `Capability` variant (unknown ones stay `Capability::O
 | `org.matrix.msc4039.upload_file` / `download_file` | `UploadFile` / `DownloadFile` |
 | `org.matrix.msc2931.navigate` | `Navigate` |
 | `org.matrix.msc4533.rtc_livekit_get_token` / `rtc_livekit_delegate_delayed_leave` | `RtcLivekitGetToken` / `RtcLivekitDelegateDelayedLeave` |
-| `m.sticker` | `Sticker` |
 | `m.always_on_screen` | `AlwaysOnScreen` |
 | `io.element.requires_client` | `Other` (deprecated Element hint, passed through) |
+| `m.sticker` | `Other` (stickers are not supported) |
 | `m.capability.screenshot` | `Other` (screenshots are intentionally not supported) |
 | `org.matrix.msc4412.matrix_context` (`m.matrix_context` alias) | `MatrixContext` |
 | `org.matrix.msc4412.client_context` (`m.client_context` alias) | `ClientContext` |
@@ -169,8 +169,8 @@ the method here has the same name and parameter order, so one adapter per Matrix
    it stays sync. No change.
 6. **Delayed events: `send` action.** MSC4140 has `restart`, `cancel` and `send`; rtc implements
    the first two only. Added here as `send_delayed_event_now`; rtc may want the same name.
-7. **Platform actions have results.** `navigate` and `m.sticker` can fail on the client side, so
-   the platform methods return `Result<(), PlatformError>` (one uniffi error variant with a
+7. **Platform actions have results.** `navigate` can fail on the client side, so
+   the platform method returns `Result<(), PlatformError>` (one uniffi error variant with a
    `reason`); `set_always_on_screen` returns the `success` flag the response needs. The other
    platform callbacks stay fire-and-forget.
 8. **TURN watch acknowledgement.** matrix-widget-api waits for the first TURN server before

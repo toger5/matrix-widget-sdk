@@ -27,7 +27,7 @@ impl WidgetHostPlatform for Platform {
     fn on_capabilities_requested(&self, requested: Vec<Capability>) { /* prompt the user */ }
     fn on_content_loaded(&self) { /* hide the spinner */ }
     fn on_openid_requested(&self) { /* prompt, then driver.resolve_openid(allowed) */ }
-    // navigate, send_sticker, set_always_on_screen, client_id / client_theme / client_language
+    // navigate, set_always_on_screen, client_id / client_theme / client_language
 }
 
 let backend: Arc<dyn MatrixBackend> = Arc::new(MySdkBackend::new(room));

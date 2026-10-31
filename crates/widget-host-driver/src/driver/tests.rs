@@ -11,8 +11,8 @@ use widget_actions::{
     HostRequest, JsonValue, MatrixContextResponse, MatrixEvent, NotifyCapabilitiesRequest, OpenIdCredentialsRequest,
     ReadEventsRequest, ReadRelationsRequest, ReadRoomAccountDataRequest, RequestCapabilitiesRequest, RoomSelector,
     RtcLivekitGetTokenResponse, RtcTransportsResponse, SendEventRequest, SendToDeviceRequest,
-    SetAlwaysOnScreenResponse, Source, StateKeySelector, StickerRequest, ToDeviceEvent, TurnServer,
-    UpdateDelayedEventAction, UploadFileRequest, WidgetRequest, WidgetResponse, WireMessage,
+    SetAlwaysOnScreenResponse, Source, StateKeySelector, ToDeviceEvent, TurnServer, UpdateDelayedEventAction,
+    UploadFileRequest, WidgetRequest, WidgetResponse, WireMessage,
 };
 use widget_matrix_backend::{BackendError, InMemoryBackend, MatrixBackend, MediaFile};
 
@@ -25,7 +25,6 @@ struct RecordingPlatform {
     loaded: AtomicBool,
     openid_requests: AtomicUsize,
     navigated: Mutex<Vec<String>>,
-    stickers: Mutex<Vec<StickerRequest>>,
     always_on_screen: Mutex<Option<bool>>,
 }
 
@@ -53,10 +52,6 @@ impl WidgetHostPlatform for RecordingPlatform {
             return Err(PlatformError::new("no such room"));
         }
         self.navigated.lock().unwrap().push(uri);
-        Ok(())
-    }
-    fn send_sticker(&self, sticker: StickerRequest) -> Result<(), PlatformError> {
-        self.stickers.lock().unwrap().push(sticker);
         Ok(())
     }
     fn set_always_on_screen(&self, value: bool) -> bool {
@@ -765,7 +760,7 @@ fn platform_actions_and_pushes() {
         platform.drain().pop().unwrap()
     };
     assert!(navigate("https://matrix.to/#/#a:x", "n0").error().unwrap().message.contains("msc2931.navigate"));
-    grant(&driver, &platform, vec![Capability::Navigate, Capability::Sticker, Capability::AlwaysOnScreen]);
+    grant(&driver, &platform, vec![Capability::Navigate, Capability::AlwaysOnScreen]);
     assert!(navigate("https://example.org", "n1").error().unwrap().message.contains("Invalid matrix.to URI"));
     assert!(navigate("https://matrix.to/#/broken", "n2").error().unwrap().message.contains("no such room"));
     assert_eq!(
@@ -773,11 +768,6 @@ fn platform_actions_and_pushes() {
         WidgetResponse::Navigate
     );
     assert_eq!(platform.navigated.lock().unwrap().as_slice(), &["https://matrix.to/#/#a:x".to_string()]);
-
-    let sticker = StickerRequest { name: "cat".into(), description: None, content: json!({"url": "mxc://x/c"}).into() };
-    block(feed(&driver, WidgetRequest::SendSticker { request: sticker.clone() }, "s1")).unwrap();
-    assert_eq!(WidgetResponse::from_wire(&platform.drain()[0]).unwrap(), WidgetResponse::SendSticker);
-    assert_eq!(platform.stickers.lock().unwrap().as_slice(), std::slice::from_ref(&sticker));
 
     block(feed(
         &driver,

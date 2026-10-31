@@ -106,7 +106,6 @@ Actions implemented here:
 | `org.matrix.msc4533.rtc_livekit_get_token` | widget | `{ server_name, url, room_id, slot_id, member_id }` → `{ jwt }` | `org.matrix.msc4533.rtc_livekit_get_token` |
 | `org.matrix.msc4533.rtc_livekit_delegate_delayed_leave` | widget | `{ url, room_id, slot_id, member_id, delay_id }` → `{}` | `org.matrix.msc4533.rtc_livekit_delegate_delayed_leave` |
 | `org.matrix.msc2931.navigate` | widget | `{ uri }` (a `matrix.to` permalink) → `WidgetHostPlatform::navigate` | `org.matrix.msc2931.navigate` |
-| `m.sticker` | widget | `{ name, description?, content }` → `WidgetHostPlatform::send_sticker` | `m.sticker` |
 | `set_always_on_screen` | widget | `{ value }` → `{ success }` via `WidgetHostPlatform::set_always_on_screen` | `m.always_on_screen` |
 | `theme_change` / `language_change` / `visibility` | host | pushed by `driver.notify_theme_change / notify_language_change / notify_visibility` | – |
 | `org.matrix.msc4412.matrix_context` | widget | `{ user_id, device_id, room_id, display_name, avatar_url, matrix_base_url }`, replaces the legacy URL template parameters | `org.matrix.msc4412.matrix_context` |
@@ -176,7 +175,6 @@ impl WidgetHostPlatform for Platform {
     fn on_content_loaded(&self) { /* hide spinner */ }
     fn on_openid_requested(&self) { /* prompt user, then driver.resolve_openid(allowed).await */ }
     fn navigate(&self, uri: String) -> Result<(), PlatformError> { /* open the matrix.to link */ Ok(()) }
-    fn send_sticker(&self, sticker: StickerRequest) -> Result<(), PlatformError> { /* send m.sticker */ Ok(()) }
     fn set_always_on_screen(&self, value: bool) -> bool { value }
     // reported to widgets through `client_context`
     fn client_id(&self) -> Option<String> { Some("io.example.client".into()) }
@@ -215,7 +213,6 @@ const driver = new WidgetHostDriver(new InMemoryBackend(roomId, userId).asBacken
   onContentLoaded: () => (iframe.hidden = false),
   onOpenidRequested: () => queueMicrotask(() => driver.resolveOpenid(true)),
   navigate: (uri) => { location.href = uri; },
-  sendSticker: (sticker) => { /* send m.sticker */ },
   setAlwaysOnScreen: (value) => value,
   clientId: () => "io.example.client", clientTheme: () => "light", clientLanguage: () => "en",
 });
@@ -260,6 +257,8 @@ receive → read → state update). It is the best place to see the whole protoc
 * **`screenshot`** (host → widget, `m.capability.screenshot`): **intentionally not supported**
   and will not be added. The capability is no longer modelled (it parses as `Capability::Other`)
   and neither the driver nor the compat wrapper handles the action.
+* **`m.sticker`** (widget → host, `m.sticker`): **not supported**. The action is unknown to the
+  driver and `m.sticker` parses as `Capability::Other`.
 * **Modal widgets** (`open_modal`, `close_modal`, `set_button_enabled`, `button_clicked`,
   `widget_config`): client UI only, not in MSC4412.
 * **Receiving sticky events** (`org.matrix.msc4407.receive.sticky_event`): the capability parses,

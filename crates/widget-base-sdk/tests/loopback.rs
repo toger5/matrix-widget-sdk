@@ -7,7 +7,7 @@ use std::rc::Rc;
 use std::sync::{Arc, Mutex};
 
 use serde_json::json;
-use widget_actions::{Capability, MatrixEvent, StateKeySelector, StickerRequest};
+use widget_actions::{Capability, MatrixEvent, StateKeySelector};
 use widget_base_sdk::{WidgetClient, WidgetDelegate};
 use widget_host_driver::{PlatformError, WidgetHostDriver, WidgetHostPlatform};
 use widget_matrix_backend::InMemoryBackend;
@@ -56,9 +56,6 @@ impl WidgetHostPlatform for HostSide {
     }
     fn on_openid_requested(&self) {}
     fn navigate(&self, _uri: String) -> Result<(), PlatformError> {
-        Ok(())
-    }
-    fn send_sticker(&self, _sticker: StickerRequest) -> Result<(), PlatformError> {
         Ok(())
     }
     fn set_always_on_screen(&self, value: bool) -> bool {

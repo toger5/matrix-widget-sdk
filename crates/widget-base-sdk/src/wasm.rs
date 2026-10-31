@@ -30,8 +30,8 @@ use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::future_to_promise;
 use widget_actions::{
     Base64File, Capability, MatrixEvent, ReadEventsRequest, ReadRelationsRequest,
-    RtcLivekitDelegateDelayedLeaveRequest, RtcLivekitGetTokenRequest, StateKeySelector, StickerRequest, ToDeviceEvent,
-    TurnServer, UpdateDelayedEventAction,
+    RtcLivekitDelegateDelayedLeaveRequest, RtcLivekitGetTokenRequest, StateKeySelector, ToDeviceEvent, TurnServer,
+    UpdateDelayedEventAction,
 };
 
 use crate::{WidgetClient, WidgetClientError, WidgetDelegate};
@@ -369,12 +369,6 @@ impl WidgetApi {
     #[wasm_bindgen(js_name = navigate)]
     pub fn navigate(&self, uri: String) -> Promise {
         promise(self.client.navigate(uri))
-    }
-
-    /// Ask the client to send a sticker: `{ name, description?, content: { url, info? } }`.
-    #[wasm_bindgen(js_name = sendSticker)]
-    pub fn send_sticker(&self, sticker: JsValue) -> Promise {
-        with_arg(sticker, |sticker: StickerRequest| promise(self.client.send_sticker(sticker)))
     }
 
     /// Ask the client to keep the widget on screen. Resolves with whether it will.

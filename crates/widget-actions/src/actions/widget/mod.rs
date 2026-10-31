@@ -25,8 +25,8 @@ use crate::{
     ReadRelationsRequest, ReadRelationsResponse, ReadRoomAccountDataRequest, ReadRoomAccountDataResponse,
     RequestCapabilitiesRequest, RtcLivekitDelegateDelayedLeaveRequest, RtcLivekitGetTokenRequest,
     RtcLivekitGetTokenResponse, RtcTransportsResponse, SendEventRequest, SendEventResponse, SendToDeviceRequest,
-    SetAlwaysOnScreenRequest, SetAlwaysOnScreenResponse, Source, StickerRequest, UpdateDelayedEventRequest,
-    UploadFileRequest, UploadFileResponse, UserDirectorySearchRequest, UserDirectorySearchResponse, WireMessage,
+    SetAlwaysOnScreenRequest, SetAlwaysOnScreenResponse, Source, UpdateDelayedEventRequest, UploadFileRequest,
+    UploadFileResponse, UserDirectorySearchRequest, UserDirectorySearchResponse, WireMessage,
 };
 
 pub(crate) mod client_context;
@@ -45,7 +45,6 @@ pub(crate) mod rtc_livekit;
 pub(crate) mod send_event;
 pub(crate) mod send_to_device;
 pub(crate) mod set_always_on_screen;
-pub(crate) mod sticker;
 pub(crate) mod turn_servers;
 pub(crate) mod update_delayed_event;
 pub(crate) mod upload_file;
@@ -117,9 +116,6 @@ pub enum WidgetRequest {
     /// Ask the client to open a `matrix.to` permalink. Requires `org.matrix.msc2931.navigate`.
     #[serde(rename = "org.matrix.msc2931.navigate", alias = "navigate")]
     Navigate { request: NavigateRequest },
-    /// Ask the client to send a sticker. Requires `m.sticker`.
-    #[serde(rename = "m.sticker")]
-    SendSticker { request: StickerRequest },
     /// Ask the client to keep the widget on screen. Requires `m.always_on_screen`.
     #[serde(rename = "set_always_on_screen")]
     SetAlwaysOnScreen { request: SetAlwaysOnScreenRequest },
@@ -189,9 +185,6 @@ pub enum WidgetResponse {
     /// `{}`
     #[serde(rename = "org.matrix.msc2931.navigate", alias = "navigate")]
     Navigate,
-    /// `{}`
-    #[serde(rename = "m.sticker")]
-    SendSticker,
     #[serde(rename = "set_always_on_screen")]
     SetAlwaysOnScreen { response: SetAlwaysOnScreenResponse },
     #[serde(rename = "org.matrix.msc4412.matrix_context", alias = "matrix_context")]

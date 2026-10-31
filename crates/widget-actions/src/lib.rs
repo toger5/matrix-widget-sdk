@@ -49,7 +49,6 @@ pub use actions::widget::rtc_livekit::{
 pub use actions::widget::send_event::{SendEventRequest, SendEventResponse};
 pub use actions::widget::send_to_device::SendToDeviceRequest;
 pub use actions::widget::set_always_on_screen::{SetAlwaysOnScreenRequest, SetAlwaysOnScreenResponse};
-pub use actions::widget::sticker::StickerRequest;
 pub use actions::widget::update_delayed_event::{UpdateDelayedEventAction, UpdateDelayedEventRequest};
 pub use actions::widget::upload_file::{UploadFileRequest, UploadFileResponse};
 pub use actions::widget::user_directory_search::{

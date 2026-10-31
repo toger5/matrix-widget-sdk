@@ -13,7 +13,7 @@ use widget_actions::{
     OpenIdState, OpenIdToken, ReadEventsRequest, ReadRelationsRequest, ReadRelationsResponse,
     ReadRoomAccountDataRequest, RequestCapabilitiesRequest, RoomAccountData, RtcLivekitDelegateDelayedLeaveRequest,
     RtcLivekitGetTokenRequest, SendEventRequest, SendEventResponse, SendToDeviceRequest, SetAlwaysOnScreenRequest,
-    StateKeySelector, StickerRequest, ToDeviceEvent, TurnServer, UpdateDelayedEventAction, UpdateDelayedEventRequest,
+    StateKeySelector, ToDeviceEvent, TurnServer, UpdateDelayedEventAction, UpdateDelayedEventRequest,
     UploadFileRequest, UploadFileResponse, UserDirectorySearchRequest, UserDirectorySearchResponse, WidgetError,
     WidgetRequest, WidgetResponse, WireMessage, API_VERSION_V1,
 };
@@ -352,14 +352,6 @@ impl WidgetClient {
     /// `org.matrix.msc2931.navigate`.
     pub fn navigate(&self, uri: impl Into<String>) -> impl Future<Output = Result<(), WidgetClientError>> + 'static {
         self.call(WidgetRequest::Navigate { request: NavigateRequest { uri: uri.into() } }, pick!(Navigate => ()))
-    }
-
-    /// Ask the client to send a sticker (`m.sticker`). Needs `m.sticker`.
-    pub fn send_sticker(
-        &self,
-        sticker: StickerRequest,
-    ) -> impl Future<Output = Result<(), WidgetClientError>> + 'static {
-        self.call(WidgetRequest::SendSticker { request: sticker }, pick!(SendSticker => ()))
     }
 
     /// Ask the client to keep the widget on screen (or stop). Resolves with whether it will.
