@@ -49,3 +49,9 @@ Core is the MSC4412 handshake plus media download / media config. Experimental i
 ## 7. Test host, test widgets and the in-memory store
 
 ![Test setup](07-test-setup.svg)
+
+## Widget use cases
+
+Why the working group works on Iframe + Widget API first: the result of the widget clinic meeting
+on 27 October 2026, with two diagrams that rank the solutions for extending Matrix beyond chat and
+sort the collected use cases. See [widget-usecases/README.md](widget-usecases/README.md).

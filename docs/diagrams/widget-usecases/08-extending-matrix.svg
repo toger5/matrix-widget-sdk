@@ -1,0 +1,276 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1540 1384" width="1540" height="1384" font-family="-apple-system, 'Segoe UI', Helvetica, Arial, sans-serif">
+<style>
+  text { fill: #1f2937; white-space: pre; }
+  .h1 { font-size: 24px; font-weight: 700; }
+  .h2 { font-size: 16px; font-weight: 700; }
+  .h3 { font-size: 14px; font-weight: 700; }
+  .b { font-size: 13px; }
+  .s { font-size: 12px; fill: #4b5563; }
+  .chip { font-size: 13px; font-weight: 600; }
+  .sub { font-size: 11px; font-weight: 600; }
+  .rank { font-size: 13px; font-weight: 700; fill: #ffffff; }
+  .sign { font-size: 15px; font-weight: 800; }
+  .note { font-size: 12.5px; fill: #374151; }
+  .exlabel { font-size: 12px; font-weight: 700; fill: #374151; letter-spacing: 0.3px; }
+  .example { font-size: 12.5px; font-style: italic; fill: #374151; }
+</style>
+<rect width="1540" height="1384" fill="#ffffff"/>
+<text x="40" y="48" class="h1" >Extending Matrix beyond chat: what fits best where</text>
+<text x="40" y="76" class="b" >Each cell ranks the solutions for one case, best first.</text>
+<text x="372" y="76" class="b" style="fill:#6d28d9" font-weight="700">Highlighted: options built on Iframe + Widget API.</text>
+<rect x="285" y="104" width="600" height="96" rx="12" fill="#f1f5f9" stroke="#64748b" stroke-width="1.5"/>
+<g transform="translate(303,120) scale(1.0833333333333333)" fill="none" stroke="#334155" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="7.5" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></g>
+<text x="339" y="140" class="h2" >Just for the active user</text>
+<text x="303" y="168" class="s" >Each user decides what they see; other room members may see</text>
+<text x="303" y="185" class="s" >something different or nothing at all.</text>
+<rect x="900" y="104" width="600" height="96" rx="12" fill="#dcfce7" stroke="#15803d" stroke-width="1.5"/>
+<g transform="translate(918,120) scale(1.0833333333333333)" fill="none" stroke="#15803d" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><circle cx="17" cy="9" r="3"/><path d="M15.5 14.3A5.5 5.5 0 0 1 22 19.5"/></g>
+<text x="954" y="140" class="h2" style="fill:#14532d">Same experience for anyone in one Matrix room</text>
+<text x="918" y="168" class="s" style="fill:#166534">Note: the room (state + events) is the only primitive that guarantees</text>
+<text x="918" y="185" class="s" style="fill:#166534">that every member sees the same thing.</text>
+<rect x="40" y="212" width="230" height="236" rx="12" fill="#f9fafb" stroke="#9ca3af"/>
+<g transform="translate(56,230) scale(1.0833333333333333)" fill="none" stroke="#374151" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3H3v18h3M18 3h3v18h-3"/><path d="M7.5 16v-7M7.5 11a2.2 2.2 0 0 1 4.5 0v5M12 11a2.2 2.2 0 0 1 4.5 0v5"/></g>
+<text x="56" y="282" class="h2" >Matrix as the</text>
+<text x="56" y="302" class="h2" >backend is enough</text>
+<rect x="285" y="212" width="600" height="236" rx="12" fill="#ffffff" stroke="#cbd5e1"/>
+<line x1="301" y1="408" x2="869" y2="408" stroke="#cbd5e1" stroke-dasharray="4 4"/>
+<text x="303" y="430" class="exlabel" >Example</text>
+<text x="369" y="430" class="example" >A calendar overview spanning all events in all rooms.</text>
+<circle cx="313" cy="245.0" r="12" fill="#1f2937"/>
+<text x="313" y="250.0" class="rank" text-anchor="middle">1</text>
+<rect x="333" y="228.0" width="304" height="34" rx="17" fill="#dbeafe" stroke="#1d4ed8" stroke-width="1.6"/>
+<g transform="translate(345,235.0) scale(0.8333333333333334)" fill="none" stroke="#1d4ed8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="5" width="16" height="11" rx="1.5"/><path d="M2 19h20"/></g>
+<text x="373" y="250.0" class="chip" style="fill:#1d4ed8">Native client impl</text>
+<text x="651" y="249.0" class="sign" style="fill:#15803d">+</text>
+<text x="665" y="249.0" class="note" >most coherent, most integrated</text>
+<circle cx="313" cy="292.0" r="12" fill="#1f2937"/>
+<text x="313" y="297.0" class="rank" text-anchor="middle">2</text>
+<rect x="333" y="275.0" width="304" height="34" rx="17" fill="#dbeafe" stroke="#1d4ed8" stroke-width="1.6"/>
+<g transform="translate(345,282.0) scale(0.8333333333333334)" fill="none" stroke="#1d4ed8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h4a2.2 2.2 0 1 1 4.4 0H17v4.6a2.2 2.2 0 1 1 0 4.4V20h-4.6a2.2 2.2 0 1 0-4.4 0H4v-4a2.2 2.2 0 1 0 0-4.4z"/></g>
+<text x="373" y="297.0" class="chip" style="fill:#1d4ed8">Module for specific client</text>
+<text x="651" y="288.0" class="sign" style="fill:#15803d">+</text>
+<text x="665" y="288.0" class="note" >more flexible, easier to maintain</text>
+<text x="651" y="304.0" class="sign" style="fill:#b91c1c">–</text>
+<text x="665" y="304.0" class="note" >less deep integration</text>
+<rect x="291" y="316" width="588" height="64" rx="10" fill="#f5f3ff" stroke="#8b5cf6" stroke-width="1.6"/>
+<circle cx="313" cy="348.0" r="12" fill="#1f2937"/>
+<text x="313" y="353.0" class="rank" text-anchor="middle">3</text>
+<rect x="333" y="331.0" width="304" height="34" rx="17" fill="#ede9fe" stroke="#6d28d9" stroke-width="1.6" stroke-dasharray="6 4"/>
+<g transform="translate(345,338.0) scale(0.8333333333333334)" fill="none" stroke="#6d28d9" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><ellipse cx="12" cy="12" rx="4" ry="9"/><line x1="3" y1="12" x2="21" y2="12"/></g>
+<text x="373" y="353.0" class="chip" style="fill:#6d28d9">Client-wide widget</text>
+<rect x="512.4" y="338.0" width="49.599999999999994" height="20" rx="10" fill="#ffffff" stroke="#6d28d9"/>
+<text x="517.4" y="352.0" class="sub" style="fill:#6d28d9">Iframe</text>
+<rect x="567.0" y="338.0" width="36.4" height="20" rx="10" fill="#ffffff" stroke="#0f766e"/>
+<text x="572.0" y="352.0" class="sub" style="fill:#0f766e">A2UI</text>
+<circle cx="616.4" cy="348.0" r="10" fill="#b91c1c"/>
+<text x="616.4" y="353.0" class="rank" text-anchor="middle">!</text>
+<text x="651" y="336.0" class="sign" style="fill:#15803d">+</text>
+<text x="665" y="336.0" class="note" >easiest to maintain and adopt</text>
+<text x="651" y="352.0" class="sign" style="fill:#15803d">+</text>
+<text x="665" y="352.0" class="note" >shared by all clients</text>
+<text x="651" y="368.0" class="sign" style="fill:#b91c1c">–</text>
+<text x="665" y="368.0" class="note" >least integrated</text>
+<rect x="900" y="212" width="600" height="236" rx="12" fill="#f7fef9" stroke="#86efac"/>
+<line x1="916" y1="408" x2="1484" y2="408" stroke="#cbd5e1" stroke-dasharray="4 4"/>
+<text x="918" y="430" class="exlabel" >Example</text>
+<text x="984" y="430" class="example" >A shared document: HedgeDoc with Matrix as the data backend.</text>
+<rect x="906" y="222" width="588" height="46" rx="10" fill="#f5f3ff" stroke="#8b5cf6" stroke-width="1.6"/>
+<circle cx="928" cy="245.0" r="12" fill="#1f2937"/>
+<text x="928" y="250.0" class="rank" text-anchor="middle">1</text>
+<rect x="948" y="228.0" width="304" height="34" rx="17" fill="#ede9fe" stroke="#6d28d9" stroke-width="1.6"/>
+<g transform="translate(960,235.0) scale(0.8333333333333334)" fill="none" stroke="#6d28d9" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><path d="M10 12.5l-2.5 2.5 2.5 2.5M14 12.5l2.5 2.5-2.5 2.5"/></g>
+<text x="988" y="250.0" class="chip" style="fill:#6d28d9">Iframe + Widget API</text>
+<text x="1266" y="249.0" class="sign" style="fill:#15803d">+</text>
+<text x="1280" y="249.0" class="note" >covers all use cases</text>
+<circle cx="928" cy="292.0" r="12" fill="#1f2937"/>
+<text x="928" y="297.0" class="rank" text-anchor="middle">2</text>
+<rect x="948" y="275.0" width="304" height="34" rx="17" fill="#ccfbf1" stroke="#0f766e" stroke-width="1.6"/>
+<g transform="translate(960,282.0) scale(0.8333333333333334)" fill="none" stroke="#0f766e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="8" height="8" rx="1.5"/><rect x="13" y="3" width="8" height="8" rx="1.5"/><rect x="3" y="13" width="8" height="8" rx="1.5"/><rect x="13" y="13" width="8" height="8" rx="1.5"/></g>
+<g transform="translate(984,282.0) scale(0.8333333333333334)" fill="none" stroke="#0f766e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="6" width="12" height="12" rx="2"/><rect x="9.5" y="9.5" width="5" height="5"/><path d="M9 2v4M15 2v4M9 18v4M15 18v4M2 9h4M2 15h4M18 9h4M18 15h4"/></g>
+<text x="1012" y="297.0" class="chip" style="fill:#0f766e">A2UI + wasm + Widget API</text>
+<text x="1266" y="288.0" class="sign" style="fill:#15803d">+</text>
+<text x="1280" y="288.0" class="note" >looks more native</text>
+<text x="1266" y="304.0" class="sign" style="fill:#b91c1c">–</text>
+<text x="1280" y="304.0" class="note" >covers fewer use cases</text>
+<circle cx="928" cy="356.0" r="12" fill="#1f2937"/>
+<text x="928" y="361.0" class="rank" text-anchor="middle">3</text>
+<rect x="948" y="339.0" width="304" height="34" rx="17" fill="#dbeafe" stroke="#1d4ed8" stroke-width="1.6"/>
+<g transform="translate(960,346.0) scale(0.8333333333333334)" fill="none" stroke="#1d4ed8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="5" width="16" height="11" rx="1.5"/><path d="M2 19h20"/></g>
+<text x="988" y="361.0" class="chip" style="fill:#1d4ed8">Native client impl</text>
+<text x="1266" y="336.0" class="sign" style="fill:#15803d">+</text>
+<text x="1280" y="336.0" class="note" >most integrated, most coherent</text>
+<text x="1266" y="352.0" class="sign" style="fill:#b91c1c">–</text>
+<text x="1280" y="352.0" class="note" >spec is very expensive</text>
+<text x="1266" y="368.0" class="sign" style="fill:#b91c1c">–</text>
+<text x="1280" y="368.0" class="note" >huge adoption effort</text>
+<text x="1266" y="384.0" class="sign" style="fill:#b91c1c"></text>
+<text x="1280" y="384.0" class="note" >(every client has to implement it)</text>
+<rect x="40" y="458" width="230" height="284" rx="12" fill="#f9fafb" stroke="#9ca3af"/>
+<g transform="translate(56,476) scale(1.0833333333333333)" fill="none" stroke="#374151" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 19h10.5a4.5 4.5 0 0 0 .5-9 6.5 6.5 0 0 0-12.6 1.7A3.7 3.7 0 0 0 7 19z"/></g>
+<text x="56" y="528" class="h2" >External backend</text>
+<text x="56" y="578" class="s" >By nature: weaker integration,</text>
+<text x="56" y="595" class="s" >more work to set up,</text>
+<text x="56" y="612" class="s" >less secure.</text>
+<rect x="285" y="458" width="600" height="284" rx="12" fill="#ffffff" stroke="#cbd5e1"/>
+<line x1="301" y1="686" x2="869" y2="686" stroke="#cbd5e1" stroke-dasharray="4 4"/>
+<text x="303" y="708" class="exlabel" >Example</text>
+<text x="369" y="708" class="example" >A Nextcloud sharing integration.</text>
+<circle cx="313" cy="491.0" r="12" fill="#1f2937"/>
+<text x="313" y="496.0" class="rank" text-anchor="middle">1</text>
+<rect x="333" y="474.0" width="304" height="34" rx="17" fill="#dbeafe" stroke="#1d4ed8" stroke-width="1.6"/>
+<g transform="translate(345,481.0) scale(0.8333333333333334)" fill="none" stroke="#1d4ed8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="5" width="16" height="11" rx="1.5"/><path d="M2 19h20"/></g>
+<text x="373" y="496.0" class="chip" style="fill:#1d4ed8">Native client impl</text>
+<text x="651" y="495.0" class="sign" style="fill:#15803d">+</text>
+<text x="665" y="495.0" class="note" >most integrated, most coherent</text>
+<circle cx="313" cy="538.0" r="12" fill="#1f2937"/>
+<text x="313" y="543.0" class="rank" text-anchor="middle">2</text>
+<rect x="333" y="521.0" width="304" height="34" rx="17" fill="#dbeafe" stroke="#1d4ed8" stroke-width="1.6"/>
+<g transform="translate(345,528.0) scale(0.8333333333333334)" fill="none" stroke="#1d4ed8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h4a2.2 2.2 0 1 1 4.4 0H17v4.6a2.2 2.2 0 1 1 0 4.4V20h-4.6a2.2 2.2 0 1 0-4.4 0H4v-4a2.2 2.2 0 1 0 0-4.4z"/></g>
+<text x="373" y="543.0" class="chip" style="fill:#1d4ed8">Module for specific client</text>
+<text x="651" y="534.0" class="sign" style="fill:#15803d">+</text>
+<text x="665" y="534.0" class="note" >easier to maintain</text>
+<text x="651" y="550.0" class="sign" style="fill:#b91c1c">–</text>
+<text x="665" y="550.0" class="note" >less deep integration</text>
+<rect x="291" y="562" width="588" height="64" rx="10" fill="#f5f3ff" stroke="#8b5cf6" stroke-width="1.6"/>
+<circle cx="313" cy="594.0" r="12" fill="#1f2937"/>
+<text x="313" y="599.0" class="rank" text-anchor="middle">3</text>
+<rect x="333" y="577.0" width="304" height="34" rx="17" fill="#ede9fe" stroke="#6d28d9" stroke-width="1.6" stroke-dasharray="6 4"/>
+<g transform="translate(345,584.0) scale(0.8333333333333334)" fill="none" stroke="#6d28d9" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><ellipse cx="12" cy="12" rx="4" ry="9"/><line x1="3" y1="12" x2="21" y2="12"/></g>
+<text x="373" y="599.0" class="chip" style="fill:#6d28d9">Client-wide widget</text>
+<rect x="512.4" y="584.0" width="49.599999999999994" height="20" rx="10" fill="#ffffff" stroke="#6d28d9"/>
+<text x="517.4" y="598.0" class="sub" style="fill:#6d28d9">Iframe</text>
+<rect x="567.0" y="584.0" width="36.4" height="20" rx="10" fill="#ffffff" stroke="#0f766e"/>
+<text x="572.0" y="598.0" class="sub" style="fill:#0f766e">A2UI</text>
+<circle cx="616.4" cy="594.0" r="10" fill="#b91c1c"/>
+<text x="616.4" y="599.0" class="rank" text-anchor="middle">!</text>
+<text x="651" y="582.0" class="sign" style="fill:#15803d">+</text>
+<text x="665" y="582.0" class="note" >easiest to maintain and adopt</text>
+<text x="651" y="598.0" class="sign" style="fill:#15803d">+</text>
+<text x="665" y="598.0" class="note" >shared by all clients</text>
+<text x="651" y="614.0" class="sign" style="fill:#b91c1c">–</text>
+<text x="665" y="614.0" class="note" >least integrated</text>
+<rect x="291" y="626" width="588" height="48" rx="10" fill="#f5f3ff" stroke="#8b5cf6" stroke-width="1.6"/>
+<circle cx="313" cy="650.0" r="12" fill="#1f2937"/>
+<text x="313" y="655.0" class="rank" text-anchor="middle">4</text>
+<rect x="333" y="633.0" width="304" height="34" rx="17" fill="#ffedd5" stroke="#c2410c" stroke-width="1.6"/>
+<g transform="translate(345,640.0) scale(0.8333333333333334)" fill="none" stroke="#c2410c" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="8" width="16" height="12" rx="3"/><line x1="12" y1="4" x2="12" y2="8"/><circle cx="12" cy="3" r="1.3"/><circle cx="9" cy="13.5" r="1.3"/><circle cx="15" cy="13.5" r="1.3"/><line x1="9.5" y1="17" x2="14.5" y2="17"/></g>
+<text x="373" y="655.0" class="chip" style="fill:#c2410c">Bot DM</text>
+<rect x="424.8" y="640.0" width="36.4" height="20" rx="10" fill="#ffffff" stroke="#0f766e"/>
+<text x="429.8" y="654.0" class="sub" style="fill:#0f766e">A2UI</text>
+<rect x="466.2" y="640.0" width="49.599999999999994" height="20" rx="10" fill="#ffffff" stroke="#6d28d9"/>
+<text x="471.2" y="654.0" class="sub" style="fill:#6d28d9">Widget</text>
+<text x="651" y="646.0" class="sign" style="fill:#15803d">+</text>
+<text x="665" y="646.0" class="note" >easiest to deploy and maintain</text>
+<text x="651" y="662.0" class="sign" style="fill:#b91c1c">–</text>
+<text x="665" y="662.0" class="note" >a room for a client feature is a hack</text>
+<rect x="900" y="458" width="600" height="284" rx="12" fill="#f7fef9" stroke="#86efac"/>
+<line x1="916" y1="686" x2="1484" y2="686" stroke="#cbd5e1" stroke-dasharray="4 4"/>
+<text x="918" y="708" class="exlabel" >Example</text>
+<text x="984" y="708" class="example" >Shared management of an external resource (Jira, GitHub) with</text>
+<text x="984" y="724" class="example" >interactions: close a ticket, reply in the app, ...</text>
+<circle cx="928" cy="492.0" r="12" fill="#1f2937"/>
+<text x="928" y="497.0" class="rank" text-anchor="middle">1</text>
+<rect x="948" y="475.0" width="304" height="34" rx="17" fill="#ffedd5" stroke="#c2410c" stroke-width="1.6"/>
+<g transform="translate(960,482.0) scale(0.8333333333333334)" fill="none" stroke="#c2410c" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="8" width="16" height="12" rx="3"/><line x1="12" y1="4" x2="12" y2="8"/><circle cx="12" cy="3" r="1.3"/><circle cx="9" cy="13.5" r="1.3"/><circle cx="15" cy="13.5" r="1.3"/><line x1="9.5" y1="17" x2="14.5" y2="17"/></g>
+<g transform="translate(984,482.0) scale(0.8333333333333334)" fill="none" stroke="#c2410c" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="8" height="8" rx="1.5"/><rect x="13" y="3" width="8" height="8" rx="1.5"/><rect x="3" y="13" width="8" height="8" rx="1.5"/><rect x="13" y="13" width="8" height="8" rx="1.5"/></g>
+<text x="1012" y="497.0" class="chip" style="fill:#c2410c">Bot + A2UI</text>
+<text x="1266" y="488.0" class="sign" style="fill:#15803d">+</text>
+<text x="1280" y="488.0" class="note" >native; the backend is needed anyhow</text>
+<text x="1266" y="504.0" class="sign" style="fill:#15803d">+</text>
+<text x="1280" y="504.0" class="note" >little work on the client</text>
+<rect x="906" y="516" width="588" height="48" rx="10" fill="#f5f3ff" stroke="#8b5cf6" stroke-width="1.6"/>
+<circle cx="928" cy="540.0" r="12" fill="#1f2937"/>
+<text x="928" y="545.0" class="rank" text-anchor="middle">2</text>
+<rect x="948" y="523.0" width="304" height="34" rx="17" fill="#ede9fe" stroke="#6d28d9" stroke-width="1.6"/>
+<g transform="translate(960,530.0) scale(0.8333333333333334)" fill="none" stroke="#6d28d9" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="8" width="16" height="12" rx="3"/><line x1="12" y1="4" x2="12" y2="8"/><circle cx="12" cy="3" r="1.3"/><circle cx="9" cy="13.5" r="1.3"/><circle cx="15" cy="13.5" r="1.3"/><line x1="9.5" y1="17" x2="14.5" y2="17"/></g>
+<g transform="translate(984,530.0) scale(0.8333333333333334)" fill="none" stroke="#6d28d9" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><path d="M10 12.5l-2.5 2.5 2.5 2.5M14 12.5l2.5 2.5-2.5 2.5"/></g>
+<text x="1012" y="545.0" class="chip" style="fill:#6d28d9">Bot + Widget</text>
+<text x="1266" y="536.0" class="sign" style="fill:#15803d">+</text>
+<text x="1280" y="536.0" class="note" >very custom UX, possible today</text>
+<text x="1266" y="552.0" class="sign" style="fill:#b91c1c">–</text>
+<text x="1280" y="552.0" class="note" >less native</text>
+<circle cx="928" cy="588.0" r="12" fill="#1f2937"/>
+<text x="928" y="593.0" class="rank" text-anchor="middle">3</text>
+<rect x="948" y="571.0" width="304" height="34" rx="17" fill="#ffedd5" stroke="#c2410c" stroke-width="1.6"/>
+<g transform="translate(960,578.0) scale(0.8333333333333334)" fill="none" stroke="#c2410c" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="8" width="16" height="12" rx="3"/><line x1="12" y1="4" x2="12" y2="8"/><circle cx="12" cy="3" r="1.3"/><circle cx="9" cy="13.5" r="1.3"/><circle cx="15" cy="13.5" r="1.3"/><line x1="9.5" y1="17" x2="14.5" y2="17"/></g>
+<text x="988" y="593.0" class="chip" style="fill:#c2410c">Bot</text>
+<text x="1266" y="584.0" class="sign" style="fill:#15803d">+</text>
+<text x="1280" y="584.0" class="note" >possible today</text>
+<text x="1266" y="600.0" class="sign" style="fill:#b91c1c">–</text>
+<text x="1280" y="600.0" class="note" >less native, can be cumbersome</text>
+<rect x="40" y="756" width="230" height="108" rx="12" fill="#f9fafb" stroke="#9ca3af"/>
+<text x="56" y="784" class="h2" >Takeaway</text>
+<text x="56" y="808" class="b" style="fill:#6d28d9" font-weight="700">Iframe + Widget API is</text>
+<text x="56" y="826" class="b" style="fill:#6d28d9" font-weight="700">an option in every cell.</text>
+<rect x="285" y="756" width="600" height="108" rx="12" fill="#1d4ed8"/>
+<g transform="translate(303,772) scale(1.0)" fill="none" stroke="#ffffff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="5" width="16" height="11" rx="1.5"/><path d="M2 19h20"/></g>
+<g transform="translate(333,772) scale(1.0)" fill="none" stroke="#ffffff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h4a2.2 2.2 0 1 1 4.4 0H17v4.6a2.2 2.2 0 1 1 0 4.4V20h-4.6a2.2 2.2 0 1 0-4.4 0H4v-4a2.2 2.2 0 1 0 0-4.4z"/></g>
+<text x="369" y="790" class="h2" style="fill:#ffffff">For one user: build it into the client</text>
+<text x="305" y="816" class="b" style="fill:#dbeafe">A native client implementation or a module for a specific client gives the deepest,</text>
+<text x="305" y="833" class="b" style="fill:#dbeafe">most coherent integration. A widget is not really needed here: a feature for a</text>
+<text x="305" y="850" class="b" style="fill:#dbeafe">single user does not have to look the same across clients.</text>
+<rect x="900" y="756" width="600" height="108" rx="12" fill="#6d28d9"/>
+<g transform="translate(918,772) scale(1.0)" fill="none" stroke="#ffffff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><path d="M10 12.5l-2.5 2.5 2.5 2.5M14 12.5l2.5 2.5-2.5 2.5"/></g>
+<text x="954" y="790" class="h2" style="fill:#ffffff">For a room: Iframe + Widget API</text>
+<text x="920" y="816" class="b" style="fill:#ede9fe">It covers every use case, every member runs the same app in every client, and it</text>
+<text x="920" y="833" class="b" style="fill:#ede9fe">works today. One Widget API implementation per client serves all room features, with</text>
+<text x="920" y="850" class="b" style="fill:#ede9fe">no new spec per feature.</text>
+<line x1="40" y1="896" x2="1500" y2="896" stroke="#e5e7eb"/>
+<text x="40" y="930" class="h2" >The solutions</text>
+<text x="160" y="930" class="s" >Colour = where the code runs:</text>
+<rect x="340" y="918" width="14" height="14" rx="4" fill="#dbeafe" stroke="#1d4ed8" stroke-width="1.4"/>
+<text x="360" y="930" class="s" >inside one client</text>
+<rect x="482.8" y="918" width="14" height="14" rx="4" fill="#ede9fe" stroke="#6d28d9" stroke-width="1.4"/>
+<text x="502.8" y="930" class="s" >web view on the Widget API (iframe)</text>
+<rect x="740.8" y="918" width="14" height="14" rx="4" fill="#ccfbf1" stroke="#0f766e" stroke-width="1.4"/>
+<text x="760.8" y="930" class="s" >native A2UI + local wasm</text>
+<rect x="928.4" y="918" width="14" height="14" rx="4" fill="#ffedd5" stroke="#c2410c" stroke-width="1.4"/>
+<text x="948.4" y="930" class="s" >server (bot)</text>
+<rect x="40" y="956" width="720" height="92" rx="12" fill="#dbeafe" fill-opacity="0.45" stroke="#1d4ed8" stroke-width="1.4"/>
+<g transform="translate(54,968) scale(0.9166666666666666)" fill="none" stroke="#1d4ed8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="5" width="16" height="11" rx="1.5"/><path d="M2 19h20"/></g>
+<text x="84" y="985" class="h3" style="fill:#1d4ed8">Native client impl</text>
+<text x="56" y="1006.0" class="s" style="fill:#374151">A feature specified in a Matrix spec and built into each client natively. The most integrated and coherent result, but</text>
+<text x="56" y="1021.5" class="s" style="fill:#374151">every feature needs a spec and an implementation in every client.</text>
+<rect x="780" y="956" width="720" height="92" rx="12" fill="#dbeafe" fill-opacity="0.45" stroke="#1d4ed8" stroke-width="1.4"/>
+<g transform="translate(794,968) scale(0.9166666666666666)" fill="none" stroke="#1d4ed8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h4a2.2 2.2 0 1 1 4.4 0H17v4.6a2.2 2.2 0 1 1 0 4.4V20h-4.6a2.2 2.2 0 1 0-4.4 0H4v-4a2.2 2.2 0 1 0 0-4.4z"/></g>
+<text x="824" y="985" class="h3" style="fill:#1d4ed8">Module for specific client</text>
+<text x="796" y="1006.0" class="s" style="fill:#374151">A native extension of one client (Element Web module API, Robrix mini apps). Full UI and client access, but only for</text>
+<text x="796" y="1021.5" class="s" style="fill:#374151">users of that client, so never a guaranteed shared view.</text>
+<rect x="40" y="1058" width="720" height="92" rx="12" fill="#ede9fe" fill-opacity="0.45" stroke="#6d28d9" stroke-width="1.4"/>
+<g transform="translate(54,1070) scale(0.9166666666666666)" fill="none" stroke="#6d28d9" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><path d="M10 12.5l-2.5 2.5 2.5 2.5M14 12.5l2.5 2.5-2.5 2.5"/></g>
+<text x="84" y="1087" class="h3" style="fill:#6d28d9">Iframe + Widget API</text>
+<text x="56" y="1108.0" class="s" style="fill:#374151">A web app that talks to the Matrix client over a standardised postMessage API, without access to the client-server API</text>
+<text x="56" y="1123.5" class="s" style="fill:#374151">or encryption keys. For one shared room experience, one member picks the app and everyone runs it locally. Use with</text>
+<text x="56" y="1139.0" class="s" style="fill:#374151">caution: &quot;I run JS on my machine that someone else in the room has chosen.&quot;</text>
+<rect x="780" y="1058" width="720" height="92" rx="12" fill="#ccfbf1" fill-opacity="0.45" stroke="#0f766e" stroke-width="1.4"/>
+<g transform="translate(794,1070) scale(0.9166666666666666)" fill="none" stroke="#0f766e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="8" height="8" rx="1.5"/><rect x="13" y="3" width="8" height="8" rx="1.5"/><rect x="3" y="13" width="8" height="8" rx="1.5"/><rect x="13" y="13" width="8" height="8" rx="1.5"/></g>
+<g transform="translate(820,1070) scale(0.9166666666666666)" fill="none" stroke="#0f766e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="6" width="12" height="12" rx="2"/><rect x="9.5" y="9.5" width="5" height="5"/><path d="M9 2v4M15 2v4M9 18v4M15 18v4M2 9h4M2 15h4M18 9h4M18 15h4"/></g>
+<text x="850" y="1087" class="h3" style="fill:#0f766e">A2UI + wasm + Widget API</text>
+<text x="796" y="1108.0" class="s" style="fill:#374151">The UI is described in JSON building blocks (A2UI, extensible events) and rendered natively by the client. The logic</text>
+<text x="796" y="1123.5" class="s" style="fill:#374151">runs as a sandboxed wasm process inside the client (a background widget) that talks to the client over the Widget API.</text>
+<rect x="40" y="1160" width="720" height="92" rx="12" fill="#ede9fe" fill-opacity="0.45" stroke="#6d28d9" stroke-width="1.4" stroke-dasharray="6 4"/>
+<g transform="translate(54,1172) scale(0.9166666666666666)" fill="none" stroke="#6d28d9" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><ellipse cx="12" cy="12" rx="4" ry="9"/><line x1="3" y1="12" x2="21" y2="12"/></g>
+<text x="84" y="1189" class="h3" style="fill:#6d28d9">Client-wide widget</text>
+<circle cx="242.4" cy="1184" r="10" fill="#b91c1c"/>
+<text x="242.4" y="1189" class="rank" text-anchor="middle">!</text>
+<text x="258.4" y="1189" class="h3" style="fill:#b91c1c">third-party JS with full client access</text>
+<text x="56" y="1210.0" class="s" style="fill:#374151">A widget that is not bound to one room (cross-room, per space, whole client), shown as an iframe or as an A2UI</text>
+<text x="56" y="1225.5" class="s" style="fill:#374151">surface. Written once for every client, but every client has to support the interface.</text>
+<rect x="780" y="1160" width="720" height="92" rx="12" fill="#ffedd5" fill-opacity="0.45" stroke="#c2410c" stroke-width="1.4"/>
+<g transform="translate(794,1172) scale(0.9166666666666666)" fill="none" stroke="#c2410c" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="8" width="16" height="12" rx="3"/><line x1="12" y1="4" x2="12" y2="8"/><circle cx="12" cy="3" r="1.3"/><circle cx="9" cy="13.5" r="1.3"/><circle cx="15" cy="13.5" r="1.3"/><line x1="9.5" y1="17" x2="14.5" y2="17"/></g>
+<g transform="translate(820,1172) scale(0.9166666666666666)" fill="none" stroke="#c2410c" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="8" height="8" rx="1.5"/><rect x="13" y="3" width="8" height="8" rx="1.5"/><rect x="3" y="13" width="8" height="8" rx="1.5"/><rect x="13" y="13" width="8" height="8" rx="1.5"/></g>
+<text x="850" y="1189" class="h3" style="fill:#c2410c">Bot + A2UI</text>
+<text x="796" y="1210.0" class="s" style="fill:#374151">A bot in the room posts A2UI messages and handles the interactions (relations to the A2UI event, visible to the whole</text>
+<text x="796" y="1225.5" class="s" style="fill:#374151">room). Logic and secrets stay on the server.</text>
+<rect x="40" y="1262" width="720" height="92" rx="12" fill="#ede9fe" fill-opacity="0.45" stroke="#6d28d9" stroke-width="1.4"/>
+<g transform="translate(54,1274) scale(0.9166666666666666)" fill="none" stroke="#6d28d9" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="8" width="16" height="12" rx="3"/><line x1="12" y1="4" x2="12" y2="8"/><circle cx="12" cy="3" r="1.3"/><circle cx="9" cy="13.5" r="1.3"/><circle cx="15" cy="13.5" r="1.3"/><line x1="9.5" y1="17" x2="14.5" y2="17"/></g>
+<g transform="translate(80,1274) scale(0.9166666666666666)" fill="none" stroke="#6d28d9" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><path d="M10 12.5l-2.5 2.5 2.5 2.5M14 12.5l2.5 2.5-2.5 2.5"/></g>
+<text x="110" y="1291" class="h3" style="fill:#6d28d9">Bot + Widget</text>
+<text x="56" y="1312.0" class="s" style="fill:#374151">A bot keeps the logic and the external connection; a room widget shows its UI. Works today with any UX, but looks less</text>
+<text x="56" y="1327.5" class="s" style="fill:#374151">native. In a DM with the bot (Bot DM) it serves a single user.</text>
+<rect x="780" y="1262" width="720" height="92" rx="12" fill="#ffedd5" fill-opacity="0.45" stroke="#c2410c" stroke-width="1.4"/>
+<g transform="translate(794,1274) scale(0.9166666666666666)" fill="none" stroke="#c2410c" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="8" width="16" height="12" rx="3"/><line x1="12" y1="4" x2="12" y2="8"/><circle cx="12" cy="3" r="1.3"/><circle cx="9" cy="13.5" r="1.3"/><circle cx="15" cy="13.5" r="1.3"/><line x1="9.5" y1="17" x2="14.5" y2="17"/></g>
+<text x="824" y="1291" class="h3" style="fill:#c2410c">Bot</text>
+<text x="796" y="1312.0" class="s" style="fill:#374151">Classic bot or appservice: text, commands, reactions, notices (e.g. Hookshot). Works in every client today; the UI is</text>
+<text x="796" y="1327.5" class="s" style="fill:#374151">limited to what the timeline can show.</text>
+</svg>

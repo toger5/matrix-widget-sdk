@@ -1,0 +1,200 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1540 1234" width="1540" height="1234" font-family="-apple-system, 'Segoe UI', Helvetica, Arial, sans-serif">
+<style>
+  text { fill: #1f2937; white-space: pre; }
+  .h1 { font-size: 24px; font-weight: 700; }
+  .h2 { font-size: 16px; font-weight: 700; }
+  .h3 { font-size: 14px; font-weight: 700; }
+  .b { font-size: 13px; }
+  .s { font-size: 12px; fill: #4b5563; }
+  .chip { font-size: 13px; font-weight: 600; }
+  .case { font-size: 12px; fill: #1f2937; }
+  .rank { font-size: 12px; font-weight: 700; fill: #ffffff; }
+</style>
+<rect width="1540" height="1234" fill="#ffffff"/>
+<text x="40" y="48" class="h1" >Beyond chat use cases: where they belong and what solves them best</text>
+<text x="40" y="76" class="b" >Each cell names the ideal solution and the use cases it fits. Solutions and their trade-offs: see 08-extending-matrix.svg.</text>
+<text x="40" y="96" class="b" style="fill:#6d28d9" font-weight="700">Highlighted: use cases solved with Iframe + Widget API.</text>
+<rect x="285" y="116" width="600" height="70" rx="12" fill="#f1f5f9" stroke="#64748b" stroke-width="1.5"/>
+<g transform="translate(303,130) scale(1.0833333333333333)" fill="none" stroke="#334155" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="7.5" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></g>
+<text x="339" y="150" class="h2" >Just for the active user</text>
+<text x="339" y="171" class="s" >Others may see something different or nothing.</text>
+<rect x="900" y="116" width="600" height="70" rx="12" fill="#dcfce7" stroke="#15803d" stroke-width="1.5"/>
+<g transform="translate(918,130) scale(1.0833333333333333)" fill="none" stroke="#15803d" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><circle cx="17" cy="9" r="3"/><path d="M15.5 14.3A5.5 5.5 0 0 1 22 19.5"/></g>
+<text x="954" y="150" class="h2" style="fill:#14532d">Same experience for anyone in one Matrix room</text>
+<text x="954" y="171" class="s" style="fill:#166534">Only the room guarantees that every member sees the same thing.</text>
+<rect x="40" y="198" width="230" height="436" rx="12" fill="#f9fafb" stroke="#9ca3af"/>
+<g transform="translate(56,216) scale(1.0833333333333333)" fill="none" stroke="#374151" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3H3v18h3M18 3h3v18h-3"/><path d="M7.5 16v-7M7.5 11a2.2 2.2 0 0 1 4.5 0v5M12 11a2.2 2.2 0 0 1 4.5 0v5"/></g>
+<text x="56" y="268" class="h2" >Matrix as the</text>
+<text x="56" y="288" class="h2" >backend is enough</text>
+<rect x="285" y="198" width="600" height="436" rx="12" fill="#ffffff" stroke="#cbd5e1"/>
+<rect x="301" y="216" width="185.4" height="32" rx="16" fill="#dbeafe" stroke="#1d4ed8" stroke-width="1.5"/>
+<g transform="translate(313,222) scale(0.8333333333333334)" fill="none" stroke="#1d4ed8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="5" width="16" height="11" rx="1.5"/><path d="M2 19h20"/></g>
+<text x="341" y="237" class="chip" style="fill:#1d4ed8">Native client impl</text>
+<text x="496.4" y="237" class="h3" style="fill:#4b5563">or</text>
+<rect x="520.4" y="216" width="243.79999999999998" height="32" rx="16" fill="#dbeafe" stroke="#1d4ed8" stroke-width="1.5"/>
+<g transform="translate(532.4,222) scale(0.8333333333333334)" fill="none" stroke="#1d4ed8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h4a2.2 2.2 0 1 1 4.4 0H17v4.6a2.2 2.2 0 1 1 0 4.4V20h-4.6a2.2 2.2 0 1 0-4.4 0H4v-4a2.2 2.2 0 1 0 0-4.4z"/></g>
+<text x="560.4" y="237" class="chip" style="fill:#1d4ed8">Module for specific client</text>
+<rect x="311" y="256" width="125.6" height="24" rx="12" fill="#ffffff" stroke="#9ca3af"/>
+<text x="321" y="272.5" class="case" >Full text search</text>
+<rect x="444.6" y="256" width="277.4" height="24" rx="12" fill="#ffffff" stroke="#9ca3af"/>
+<text x="454.6" y="272.5" class="case" >Matrix-backed calendar view (all rooms)</text>
+<rect x="900" y="198" width="600" height="436" rx="12" fill="#f7fef9" stroke="#86efac"/>
+<rect x="908" y="210" width="584" height="140" rx="10" fill="#f5f3ff" stroke="#8b5cf6" stroke-width="1.6"/>
+<rect x="916" y="216" width="192.7" height="32" rx="16" fill="#ede9fe" stroke="#6d28d9" stroke-width="1.5"/>
+<g transform="translate(928,222) scale(0.8333333333333334)" fill="none" stroke="#6d28d9" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><path d="M10 12.5l-2.5 2.5 2.5 2.5M14 12.5l2.5 2.5-2.5 2.5"/></g>
+<text x="956" y="237" class="chip" style="fill:#6d28d9">Iframe + Widget API</text>
+<rect x="926" y="256" width="277.4" height="24" rx="12" fill="#ffffff" stroke="#9ca3af"/>
+<text x="936" y="272.5" class="case" >Shared text editor (HedgeDoc, Etherpad)</text>
+<rect x="1211.4" y="256" width="158.6" height="24" rx="12" fill="#ffffff" stroke="#9ca3af"/>
+<text x="1221.4" y="272.5" class="case" >Whiteboard (Neoboard)</text>
+<rect x="926" y="288" width="244.39999999999998" height="24" rx="12" fill="#ffffff" stroke="#9ca3af"/>
+<text x="936" y="304.5" class="case" >Games (FloorItIpsum, Flappy Royal)</text>
+<rect x="1178.4" y="288" width="59.599999999999994" height="24" rx="12" fill="#ffffff" stroke="#9ca3af"/>
+<text x="1188.4" y="304.5" class="case" >Kanban</text>
+<rect x="1246.0" y="288" width="152.0" height="24" rx="12" fill="#ffffff" stroke="#9ca3af"/>
+<text x="1256.0" y="304.5" class="case" >Shared route planner</text>
+<rect x="926" y="320" width="125.6" height="24" rx="12" fill="#ffffff" stroke="#9ca3af"/>
+<text x="936" y="336.5" class="case" >Barcamp planning</text>
+<rect x="1059.6" y="320" width="158.6" height="24" rx="12" fill="#ffffff" stroke="#9ca3af"/>
+<text x="1069.6" y="336.5" class="case" >WebXDC apps (bridged)</text>
+<rect x="1226.1999999999998" y="320" width="138.8" height="24" rx="12" fill="#ffffff" stroke="#9ca3af"/>
+<text x="1236.1999999999998" y="336.5" class="case" >PDF signature tool</text>
+<rect x="908" y="360" width="584" height="172" rx="10" fill="#f5f3ff" stroke="#8b5cf6" stroke-width="1.6" stroke-dasharray="6 4"/>
+<rect x="916" y="366" width="253.2" height="32" rx="16" fill="#ccfbf1" stroke="#0f766e" stroke-width="1.5"/>
+<g transform="translate(928,372) scale(0.8333333333333334)" fill="none" stroke="#0f766e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="8" height="8" rx="1.5"/><rect x="13" y="3" width="8" height="8" rx="1.5"/><rect x="3" y="13" width="8" height="8" rx="1.5"/><rect x="13" y="13" width="8" height="8" rx="1.5"/></g>
+<g transform="translate(952,372) scale(0.8333333333333334)" fill="none" stroke="#0f766e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="6" width="12" height="12" rx="2"/><rect x="9.5" y="9.5" width="5" height="5"/><path d="M9 2v4M15 2v4M9 18v4M15 18v4M2 9h4M2 15h4M18 9h4M18 15h4"/></g>
+<text x="980" y="387" class="chip" style="fill:#0f766e">A2UI + wasm + Widget API</text>
+<text x="1179.2" y="387" class="h3" style="fill:#4b5563">or</text>
+<rect x="1203.2" y="366" width="192.7" height="32" rx="16" fill="#ede9fe" stroke="#6d28d9" stroke-width="1.5"/>
+<g transform="translate(1215.2,372) scale(0.8333333333333334)" fill="none" stroke="#6d28d9" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><path d="M10 12.5l-2.5 2.5 2.5 2.5M14 12.5l2.5 2.5-2.5 2.5"/></g>
+<text x="1243.2" y="387" class="chip" style="fill:#6d28d9">Iframe + Widget API</text>
+<rect x="926" y="406" width="132.2" height="24" rx="12" fill="#ffffff" stroke="#9ca3af"/>
+<text x="936" y="422.5" class="case" >Polls (NeoChoice)</text>
+<rect x="1066.2" y="406" width="198.2" height="24" rx="12" fill="#ffffff" stroke="#9ca3af"/>
+<text x="1076.2" y="422.5" class="case" >Meeting finder (NeoDateFix)</text>
+<rect x="1272.4" y="406" width="185.0" height="24" rx="12" fill="#ffffff" stroke="#9ca3af"/>
+<text x="1282.4" y="422.5" class="case" >To-do list (UltimateList)</text>
+<rect x="926" y="438" width="79.4" height="24" rx="12" fill="#ffffff" stroke="#9ca3af"/>
+<text x="936" y="454.5" class="case" >Pack list</text>
+<rect x="1013.4" y="438" width="119.0" height="24" rx="12" fill="#ffffff" stroke="#9ca3af"/>
+<text x="1023.4" y="454.5" class="case" >Expense sharing</text>
+<rect x="1140.4" y="438" width="171.79999999999998" height="24" rx="12" fill="#ffffff" stroke="#9ca3af"/>
+<text x="1150.4" y="454.5" class="case" >Shared travel itinerary</text>
+<rect x="1320.2" y="438" width="99.19999999999999" height="24" rx="12" fill="#ffffff" stroke="#9ca3af"/>
+<text x="1330.2" y="454.5" class="case" >Forms (FHIR)</text>
+<rect x="926" y="470" width="185.0" height="24" rx="12" fill="#ffffff" stroke="#9ca3af"/>
+<text x="936" y="486.5" class="case" >Matrix conference browser</text>
+<rect x="1119.0" y="470" width="185.0" height="24" rx="12" fill="#ffffff" stroke="#9ca3af"/>
+<text x="1129.0" y="486.5" class="case" >Shared room data renderer</text>
+<rect x="926" y="502" width="218.0" height="24" rx="12" fill="#ffffff" stroke="#9ca3af"/>
+<text x="936" y="518.5" class="case" >Renderer for custom event data</text>
+<rect x="1152.0" y="502" width="218.0" height="24" rx="12" fill="#ffffff" stroke="#9ca3af"/>
+<text x="1162.0" y="518.5" class="case" >Local per-room LLM integration</text>
+<rect x="1378.0" y="502" width="105.8" height="24" rx="12" fill="#ffffff" stroke="#9ca3af"/>
+<text x="1388.0" y="518.5" class="case" >Room devtools</text>
+<rect x="916" y="548" width="185.4" height="32" rx="16" fill="#dbeafe" stroke="#1d4ed8" stroke-width="1.5"/>
+<g transform="translate(928,554) scale(0.8333333333333334)" fill="none" stroke="#1d4ed8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="5" width="16" height="11" rx="1.5"/><path d="M2 19h20"/></g>
+<text x="956" y="569" class="chip" style="fill:#1d4ed8">Native client impl</text>
+<text x="1111.4" y="569" class="h3" style="fill:#4b5563">or</text>
+<rect x="1135.4" y="548" width="243.79999999999998" height="32" rx="16" fill="#dbeafe" stroke="#1d4ed8" stroke-width="1.5"/>
+<g transform="translate(1147.4,554) scale(0.8333333333333334)" fill="none" stroke="#1d4ed8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h4a2.2 2.2 0 1 1 4.4 0H17v4.6a2.2 2.2 0 1 1 0 4.4V20h-4.6a2.2 2.2 0 1 0-4.4 0H4v-4a2.2 2.2 0 1 0 0-4.4z"/></g>
+<text x="1175.4" y="569" class="chip" style="fill:#1d4ed8">Module for specific client</text>
+<rect x="926" y="588" width="198.2" height="24" rx="12" fill="#ffffff" stroke="#9ca3af"/>
+<text x="936" y="604.5" class="case" >Calendar events in the room</text>
+<rect x="1132.2" y="588" width="138.8" height="24" rx="12" fill="#ffffff" stroke="#9ca3af"/>
+<text x="1142.2" y="604.5" class="case" >Time zone resolver</text>
+<rect x="40" y="644" width="230" height="222" rx="12" fill="#f9fafb" stroke="#9ca3af"/>
+<g transform="translate(56,662) scale(1.0833333333333333)" fill="none" stroke="#374151" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 19h10.5a4.5 4.5 0 0 0 .5-9 6.5 6.5 0 0 0-12.6 1.7A3.7 3.7 0 0 0 7 19z"/></g>
+<text x="56" y="714" class="h2" >External backend</text>
+<text x="56" y="762" class="s" >Weaker integration, more work</text>
+<text x="56" y="779" class="s" >to set up, less secure.</text>
+<rect x="285" y="644" width="600" height="222" rx="12" fill="#ffffff" stroke="#cbd5e1"/>
+<rect x="301" y="662" width="185.4" height="32" rx="16" fill="#dbeafe" stroke="#1d4ed8" stroke-width="1.5"/>
+<g transform="translate(313,668) scale(0.8333333333333334)" fill="none" stroke="#1d4ed8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="5" width="16" height="11" rx="1.5"/><path d="M2 19h20"/></g>
+<text x="341" y="683" class="chip" style="fill:#1d4ed8">Native client impl</text>
+<rect x="311" y="702" width="92.6" height="24" rx="12" fill="#ffffff" stroke="#9ca3af"/>
+<text x="321" y="718.5" class="case" >Translation</text>
+<rect x="411.6" y="702" width="442.4" height="24" rx="12" fill="#ffffff" stroke="#9ca3af"/>
+<text x="421.6" y="718.5" class="case" >Send enhanced / rich messages (e.g. auto-populated weather data)</text>
+<rect x="311" y="734" width="270.79999999999995" height="24" rx="12" fill="#ffffff" stroke="#9ca3af"/>
+<text x="321" y="750.5" class="case" >Calendar view from an external service</text>
+<rect x="301" y="780" width="243.79999999999998" height="32" rx="16" fill="#dbeafe" stroke="#1d4ed8" stroke-width="1.5"/>
+<g transform="translate(313,786) scale(0.8333333333333334)" fill="none" stroke="#1d4ed8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h4a2.2 2.2 0 1 1 4.4 0H17v4.6a2.2 2.2 0 1 1 0 4.4V20h-4.6a2.2 2.2 0 1 0-4.4 0H4v-4a2.2 2.2 0 1 0 0-4.4z"/></g>
+<text x="341" y="801" class="chip" style="fill:#1d4ed8">Module for specific client</text>
+<rect x="311" y="820" width="277.4" height="24" rx="12" fill="#ffffff" stroke="#9ca3af"/>
+<text x="321" y="836.5" class="case" >Local per-user-account LLM integrations</text>
+<rect x="900" y="644" width="600" height="222" rx="12" fill="#f7fef9" stroke="#86efac"/>
+<rect x="908" y="656" width="584" height="76" rx="10" fill="#f5f3ff" stroke="#8b5cf6" stroke-width="1.6"/>
+<rect x="916" y="662" width="192.7" height="32" rx="16" fill="#ede9fe" stroke="#6d28d9" stroke-width="1.5"/>
+<g transform="translate(928,668) scale(0.8333333333333334)" fill="none" stroke="#6d28d9" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><path d="M10 12.5l-2.5 2.5 2.5 2.5M14 12.5l2.5 2.5-2.5 2.5"/></g>
+<text x="956" y="683" class="chip" style="fill:#6d28d9">Iframe + Widget API</text>
+<text x="1120.7" y="683" class="s" font-style="italic">hybrid: Matrix for membership + MatrixRTC, own server for the rest</text>
+<rect x="926" y="702" width="178.39999999999998" height="24" rx="12" fill="#ffffff" stroke="#9ca3af"/>
+<text x="936" y="718.5" class="case" >WorkAdventure (2D world)</text>
+<rect x="1112.4" y="702" width="198.2" height="24" rx="12" fill="#ffffff" stroke="#9ca3af"/>
+<text x="1122.4" y="718.5" class="case" >Video calls (BigBlueButton)</text>
+<rect x="908" y="742" width="584" height="108" rx="10" fill="#f5f3ff" stroke="#8b5cf6" stroke-width="1.6" stroke-dasharray="6 4"/>
+<rect x="916" y="748" width="75.9" height="32" rx="16" fill="#ffedd5" stroke="#c2410c" stroke-width="1.5"/>
+<g transform="translate(928,754) scale(0.8333333333333334)" fill="none" stroke="#c2410c" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="8" width="16" height="12" rx="3"/><line x1="12" y1="4" x2="12" y2="8"/><circle cx="12" cy="3" r="1.3"/><circle cx="9" cy="13.5" r="1.3"/><circle cx="15" cy="13.5" r="1.3"/><line x1="9.5" y1="17" x2="14.5" y2="17"/></g>
+<text x="956" y="769" class="chip" style="fill:#c2410c">Bot</text>
+<text x="1001.9" y="769" class="h3" style="fill:#4b5563">or</text>
+<rect x="1025.9" y="748" width="151.0" height="32" rx="16" fill="#ccfbf1" stroke="#0f766e" stroke-width="1.5"/>
+<g transform="translate(1037.9,754) scale(0.8333333333333334)" fill="none" stroke="#0f766e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="8" width="16" height="12" rx="3"/><line x1="12" y1="4" x2="12" y2="8"/><circle cx="12" cy="3" r="1.3"/><circle cx="9" cy="13.5" r="1.3"/><circle cx="15" cy="13.5" r="1.3"/><line x1="9.5" y1="17" x2="14.5" y2="17"/></g>
+<g transform="translate(1061.9,754) scale(0.8333333333333334)" fill="none" stroke="#0f766e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="8" height="8" rx="1.5"/><rect x="13" y="3" width="8" height="8" rx="1.5"/><rect x="3" y="13" width="8" height="8" rx="1.5"/><rect x="13" y="13" width="8" height="8" rx="1.5"/></g>
+<text x="1089.9" y="769" class="chip" style="fill:#0f766e">Bot + A2UI</text>
+<text x="1186.9" y="769" class="h3" style="fill:#4b5563">or</text>
+<rect x="1210.9" y="748" width="260.5" height="32" rx="16" fill="#ede9fe" stroke="#6d28d9" stroke-width="1.5"/>
+<g transform="translate(1222.9,754) scale(0.8333333333333334)" fill="none" stroke="#6d28d9" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="8" width="16" height="12" rx="3"/><line x1="12" y1="4" x2="12" y2="8"/><circle cx="12" cy="3" r="1.3"/><circle cx="9" cy="13.5" r="1.3"/><circle cx="15" cy="13.5" r="1.3"/><line x1="9.5" y1="17" x2="14.5" y2="17"/></g>
+<g transform="translate(1246.9,754) scale(0.8333333333333334)" fill="none" stroke="#6d28d9" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><path d="M10 12.5l-2.5 2.5 2.5 2.5M14 12.5l2.5 2.5-2.5 2.5"/></g>
+<text x="1274.9" y="769" class="chip" style="fill:#6d28d9">Bot + Iframe + Widget API</text>
+<rect x="926" y="788" width="72.8" height="24" rx="12" fill="#ffffff" stroke="#9ca3af"/>
+<text x="936" y="804.5" class="case" >Hookshot</text>
+<rect x="1006.8" y="788" width="178.39999999999998" height="24" rx="12" fill="#ffffff" stroke="#9ca3af"/>
+<text x="1016.8" y="804.5" class="case" >Jira / GitHub management</text>
+<rect x="1193.1999999999998" y="788" width="231.2" height="24" rx="12" fill="#ffffff" stroke="#9ca3af"/>
+<text x="1203.1999999999998" y="804.5" class="case" >Approvals, Zapier-like workflows</text>
+<rect x="926" y="820" width="158.6" height="24" rx="12" fill="#ffffff" stroke="#9ca3af"/>
+<text x="936" y="836.5" class="case" >Lab equipment control</text>
+<rect x="1092.6" y="820" width="237.79999999999998" height="24" rx="12" fill="#ffffff" stroke="#9ca3af"/>
+<text x="1102.6" y="836.5" class="case" >UI for bots and external services</text>
+<rect x="40" y="880" width="230" height="108" rx="12" fill="#f9fafb" stroke="#9ca3af"/>
+<text x="56" y="908" class="h2" >Takeaway</text>
+<text x="56" y="930" class="s" >35 use cases from the</text>
+<text x="56" y="947" class="s" >widget clinic meeting.</text>
+<rect x="285" y="880" width="600" height="108" rx="12" fill="#1d4ed8"/>
+<text x="305" y="910" class="h2" style="fill:#ffffff">6 are personal: build them into the client</text>
+<text x="305" y="934" class="b" style="fill:#dbeafe">Almost all of them fit best as native client features or modules. Their</text>
+<text x="305" y="951" class="b" style="fill:#dbeafe">functionality does not rely on every room member having access to them, so they need</text>
+<text x="305" y="968" class="b" style="fill:#dbeafe">neither support in all clients nor a cross-client widget.</text>
+<rect x="900" y="880" width="600" height="108" rx="12" fill="#6d28d9"/>
+<text x="920" y="910" class="h2" style="fill:#ffffff">29 are room features: 10 of them on Iframe + Widget API</text>
+<text x="920" y="934" class="b" style="fill:#ede9fe">Another 17 (polls, lists, forms, renderers, bot workflows, ...) use A2UI or a bot,</text>
+<text x="920" y="951" class="b" style="fill:#ede9fe">but can be built on Iframe + Widget API too. 2 (calendar events, time zone resolver)</text>
+<text x="920" y="968" class="b" style="fill:#ede9fe">are best built into the client.</text>
+<line x1="40" y1="1018" x2="1500" y2="1018" stroke="#e5e7eb"/>
+<text x="40" y="1048" class="h2" >Open questions (follow-up MSCs)</text>
+<text x="330" y="1048" class="s" >Topics that need a decision beyond picking one of the solutions above.</text>
+<rect x="40" y="1070" width="480" height="140" rx="12" fill="#f8fafc" stroke="#64748b" stroke-dasharray="6 4"/>
+<g transform="translate(54,1082) scale(0.9166666666666666)" fill="none" stroke="#334155" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6v.6"/><circle cx="12" cy="17" r="0.6"/></g>
+<text x="86" y="1099" class="h3" >Layout of beyond-chat content</text>
+<text x="56" y="1122" class="s" style="fill:#374151">How much control over the layout of beyond-chat content should the client</text>
+<text x="56" y="1138" class="s" style="fill:#374151">developer own, and how much the Matrix spec? Example: cross-client layout</text>
+<text x="56" y="1154" class="s" style="fill:#374151">sharing, where a moderator sets a layout (timeline in the centre, widget X</text>
+<text x="56" y="1170" class="s" style="fill:#374151">left, widget Y right) and users opt in.</text>
+<rect x="530" y="1070" width="480" height="140" rx="12" fill="#f8fafc" stroke="#64748b" stroke-dasharray="6 4"/>
+<g transform="translate(544,1082) scale(0.9166666666666666)" fill="none" stroke="#334155" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6v.6"/><circle cx="12" cy="17" r="0.6"/></g>
+<text x="576" y="1099" class="h3" >Widget discovery</text>
+<text x="546" y="1122" class="s" style="fill:#374151">How do users find and add widgets (widget browser, Modular integration</text>
+<text x="546" y="1138" class="s" style="fill:#374151">manager)? The one case where a client-wide widget makes sense, but it is</text>
+<text x="546" y="1154" class="s" style="fill:#374151">tricky security-wise, so a custom client may fit best. Long term: a</text>
+<text x="546" y="1170" class="s" style="fill:#374151">specced discovery format that clients support. Room widgets are an easy</text>
+<text x="546" y="1186" class="s" style="fill:#374151">fallback.</text>
+<rect x="1020" y="1070" width="480" height="140" rx="12" fill="#f8fafc" stroke="#64748b" stroke-dasharray="6 4"/>
+<g transform="translate(1034,1082) scale(0.9166666666666666)" fill="none" stroke="#334155" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6v.6"/><circle cx="12" cy="17" r="0.6"/></g>
+<text x="1066" y="1099" class="h3" >All-client implementation of event composer extensions</text>
+<text x="1036" y="1122" class="s" style="fill:#374151">Examples: send enhanced / rich messages, such as auto-populated weather</text>
+<text x="1036" y="1138" class="s" style="fill:#374151">data; create new calendar events from the composer. Does this need a spec,</text>
+<text x="1036" y="1154" class="s" style="fill:#374151">or is a native client implementation without a shared approach enough? A</text>
+<text x="1036" y="1170" class="s" style="fill:#374151">bot can do it by enhancing the input: the bot fetches the weather and</text>
+<text x="1036" y="1186" class="s" style="fill:#374151">replies to the message (or adds a custom A2UI edit rendering).</text>
+</svg>
