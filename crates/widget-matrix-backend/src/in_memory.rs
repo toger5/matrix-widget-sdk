@@ -26,27 +26,82 @@ pub struct InMemoryBackend {
     base_url: String,
     counter: AtomicU64,
     inner: Mutex<Inner>,
-    subscriptions: Mutex<Vec<Arc<InMemorySubscription>>>,
-    to_device_subscriptions: Mutex<Vec<Arc<InMemoryToDeviceSubscription>>>,
-    turn_subscriptions: Mutex<Vec<Arc<InMemoryTurnSubscription>>>,
+    room_subscribers: Subscribers<RoomSubscriber>,
+    to_device_subscribers: Subscribers<ToDeviceSubscriber>,
+    turn_subscribers: Subscribers<Arc<dyn TurnServerSink>>,
 }
 
-/// One live `subscribe_turn_servers` call.
+/// The subscriptions of one kind, each with what its subscriber asked for (`T`).
 #[derive(Debug)]
-struct InMemoryTurnSubscription {
-    sink: Arc<dyn TurnServerSink>,
+struct Subscribers<T>(Mutex<Vec<Arc<Subscriber<T>>>>);
+
+/// One subscription. It is also the handle the subscriber gets back to cancel it.
+#[derive(Debug)]
+struct Subscriber<T> {
+    target: T,
     active: AtomicBool,
+}
+
+impl<T> Default for Subscribers<T> {
+    fn default() -> Self {
+        Self(Mutex::new(Vec::new()))
+    }
+}
+
+impl<T> Subscribers<T> {
+    fn add(&self, target: T) -> Arc<Subscriber<T>> {
+        let subscriber = Arc::new(Subscriber { target, active: AtomicBool::new(true) });
+        self.0.lock().unwrap_or_else(|p| p.into_inner()).push(subscriber.clone());
+        subscriber
+    }
+
+    /// The subscriptions that are not cancelled, oldest first. Cancelled ones are removed here.
+    ///
+    /// Returns a copy, so the caller can call sinks without holding the lock: a sink is the
+    /// driver, which may call straight back into the backend.
+    fn live(&self) -> Vec<Arc<Subscriber<T>>> {
+        let mut list = self.0.lock().unwrap_or_else(|p| p.into_inner());
+        list.retain(|s| s.active.load(Ordering::SeqCst));
+        list.clone()
+    }
+}
+
+impl<T: Send + Sync> Subscription for Subscriber<T> {
+    fn cancel(&self) {
+        self.active.store(false, Ordering::SeqCst);
+    }
+}
+
+/// What a `subscribe_room` caller asked for.
+#[derive(Debug)]
+struct RoomSubscriber {
+    subjects: RoomSubjects,
+    sink: Arc<dyn RoomSink>,
+}
+
+/// What a `subscribe_to_device` caller asked for.
+#[derive(Debug)]
+struct ToDeviceSubscriber {
+    event_types: Vec<String>,
+    sink: Arc<dyn ToDeviceSink>,
+}
+
+// The sinks are foreign objects without a useful `Debug`; these let the types above derive it.
+impl std::fmt::Debug for dyn RoomSink {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("RoomSink")
+    }
+}
+
+impl std::fmt::Debug for dyn ToDeviceSink {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("ToDeviceSink")
+    }
 }
 
 impl std::fmt::Debug for dyn TurnServerSink {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str("TurnServerSink")
-    }
-}
-
-impl Subscription for InMemoryTurnSubscription {
-    fn cancel(&self) {
-        self.active.store(false, Ordering::SeqCst);
     }
 }
 
@@ -119,47 +174,6 @@ pub struct DelayedEvent {
     pub event: MatrixEvent,
 }
 
-/// One live `subscribe_room` call. Cancelling flips `active`; the backend drops cancelled
-/// entries the next time it looks at the list.
-#[derive(Debug)]
-struct InMemorySubscription {
-    subjects: RoomSubjects,
-    sink: Arc<dyn RoomSink>,
-    active: AtomicBool,
-}
-
-impl std::fmt::Debug for dyn RoomSink {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str("RoomSink")
-    }
-}
-
-impl Subscription for InMemorySubscription {
-    fn cancel(&self) {
-        self.active.store(false, Ordering::SeqCst);
-    }
-}
-
-/// One live `subscribe_to_device` call.
-#[derive(Debug)]
-struct InMemoryToDeviceSubscription {
-    event_types: Vec<String>,
-    sink: Arc<dyn ToDeviceSink>,
-    active: AtomicBool,
-}
-
-impl std::fmt::Debug for dyn ToDeviceSink {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str("ToDeviceSink")
-    }
-}
-
-impl Subscription for InMemoryToDeviceSubscription {
-    fn cancel(&self) {
-        self.active.store(false, Ordering::SeqCst);
-    }
-}
-
 #[cfg_attr(feature = "uniffi", uniffi::export)]
 impl InMemoryBackend {
     /// A room `room_id` seen by `user_id`, with placeholder device id, display name (the user
@@ -195,9 +209,9 @@ impl InMemoryBackend {
             base_url,
             counter: AtomicU64::new(1),
             inner: Default::default(),
-            subscriptions: Default::default(),
-            to_device_subscriptions: Default::default(),
-            turn_subscriptions: Default::default(),
+            room_subscribers: Default::default(),
+            to_device_subscribers: Default::default(),
+            turn_subscribers: Default::default(),
         })
     }
 
@@ -224,13 +238,8 @@ impl InMemoryBackend {
     /// Set the TURN credentials and push them to every widget watching them.
     pub fn set_turn_server(&self, server: TurnServer) {
         self.inner().turn_server = Some(server.clone());
-        let subs = {
-            let mut subs = self.turn_subscriptions.lock().unwrap_or_else(|p| p.into_inner());
-            subs.retain(|s| s.active.load(Ordering::SeqCst));
-            subs.clone()
-        };
-        for sub in subs {
-            sub.sink.on_turn_server(server.clone());
+        for sub in self.turn_subscribers.live() {
+            sub.target.on_turn_server(server.clone());
         }
     }
 
@@ -268,16 +277,21 @@ impl InMemoryBackend {
     /// Deliver a to-device message as if it had arrived from sync: every live to-device
     /// subscription for its type gets it.
     pub fn inject_to_device(&self, message: ToDeviceEvent) {
-        let subs = {
-            let mut subs = self.to_device_subscriptions.lock().unwrap_or_else(|p| p.into_inner());
-            subs.retain(|s| s.active.load(Ordering::SeqCst));
-            subs.clone()
-        };
-        for sub in subs {
-            if sub.event_types.contains(&message.event_type) {
-                sub.sink.on_to_device_message(message.clone());
+        for sub in self.to_device_subscribers.live() {
+            if sub.target.event_types.contains(&message.event_type) {
+                sub.target.sink.on_to_device_message(message.clone());
             }
         }
+    }
+
+    /// What each live `subscribe_room` subscription asked for, oldest first.
+    pub fn room_subscriptions(&self) -> Vec<RoomSubjects> {
+        self.room_subscribers.live().iter().map(|s| s.target.subjects.clone()).collect()
+    }
+
+    /// The event types of each live `subscribe_to_device` subscription, oldest first.
+    pub fn to_device_subscriptions(&self) -> Vec<Vec<String>> {
+        self.to_device_subscribers.live().iter().map(|s| s.target.event_types.clone()).collect()
     }
 
     /// Fire a scheduled event as if its delay had elapsed. The host side of
@@ -305,9 +319,9 @@ impl InMemoryBackend {
             inner.room_account_data.clear();
             inner.delegated_leaves.clear();
         }
-        for sub in self.live_subscriptions() {
-            for event_type in &sub.subjects.state_event_types {
-                sub.sink.on_state_events(event_type.clone(), Vec::new());
+        for sub in self.room_subscribers.live() {
+            for event_type in &sub.target.subjects.state_event_types {
+                sub.target.sink.on_state_events(event_type.clone(), Vec::new());
             }
         }
     }
@@ -357,26 +371,20 @@ impl InMemoryBackend {
         Ok(())
     }
 
-    /// Snapshot of the subscriptions that are still active; cancelled ones are dropped here.
-    fn live_subscriptions(&self) -> Vec<Arc<InMemorySubscription>> {
-        let mut subs = self.subscriptions.lock().unwrap_or_else(|p| p.into_inner());
-        subs.retain(|s| s.active.load(Ordering::SeqCst));
-        subs.clone()
-    }
-
     fn state_of_type(&self, event_type: &str) -> Vec<MatrixEvent> {
         self.inner().state.iter().filter(|((t, _), _)| t == event_type).map(|(_, e)| e.clone()).collect()
     }
 
-    /// Tell every live subscription about a stored event. Called with no lock held: the sink is
-    /// the driver, which may call straight back into this backend.
+    /// Tell every room subscription about a stored event. Must be called with no lock held: the
+    /// sink is the driver, which may call straight back into this backend.
     fn notify(&self, event: &MatrixEvent) {
-        for sub in self.live_subscriptions() {
-            if sub.subjects.timeline_event_types.contains(&event.event_type) {
-                sub.sink.on_timeline_events(vec![event.clone()]);
+        for sub in self.room_subscribers.live() {
+            let RoomSubscriber { subjects, sink } = &sub.target;
+            if subjects.timeline_event_types.contains(&event.event_type) {
+                sink.on_timeline_events(vec![event.clone()]);
             }
-            if event.is_state() && sub.subjects.state_event_types.contains(&event.event_type) {
-                sub.sink.on_state_events(event.event_type.clone(), self.state_of_type(&event.event_type));
+            if event.is_state() && subjects.state_event_types.contains(&event.event_type) {
+                sink.on_state_events(event.event_type.clone(), self.state_of_type(&event.event_type));
             }
         }
     }
@@ -775,17 +783,14 @@ impl MatrixBackend for InMemoryBackend {
         event_types: Vec<String>,
         sink: Arc<dyn ToDeviceSink>,
     ) -> Result<Arc<dyn Subscription>, BackendError> {
-        let subscription = Arc::new(InMemoryToDeviceSubscription { event_types, sink, active: AtomicBool::new(true) });
-        self.to_device_subscriptions.lock().unwrap_or_else(|p| p.into_inner()).push(subscription.clone());
-        Ok(subscription)
+        Ok(self.to_device_subscribers.add(ToDeviceSubscriber { event_types, sink }))
     }
 
     fn subscribe_turn_servers(&self, sink: Arc<dyn TurnServerSink>) -> Result<Arc<dyn Subscription>, BackendError> {
-        let subscription = Arc::new(InMemoryTurnSubscription { sink, active: AtomicBool::new(true) });
-        self.turn_subscriptions.lock().unwrap_or_else(|p| p.into_inner()).push(subscription.clone());
+        let subscription = self.turn_subscribers.add(sink);
         let current = self.inner().turn_server.clone();
         if let Some(server) = current {
-            subscription.sink.on_turn_server(server);
+            subscription.target.on_turn_server(server);
         }
         Ok(subscription)
     }
@@ -797,11 +802,11 @@ impl MatrixBackend for InMemoryBackend {
         sink: Arc<dyn RoomSink>,
     ) -> Result<Arc<dyn Subscription>, BackendError> {
         self.check_room(&room_id)?;
-        let subscription = Arc::new(InMemorySubscription { subjects, sink, active: AtomicBool::new(true) });
-        self.subscriptions.lock().unwrap_or_else(|p| p.into_inner()).push(subscription.clone());
-        // Initial sets, delivered with no lock held.
-        for event_type in &subscription.subjects.state_event_types {
-            subscription.sink.on_state_events(event_type.clone(), self.state_of_type(event_type));
+        let subscription = self.room_subscribers.add(RoomSubscriber { subjects, sink });
+        // The current set of every subscribed state type, delivered with no lock held.
+        let RoomSubscriber { subjects, sink } = &subscription.target;
+        for event_type in &subjects.state_event_types {
+            sink.on_state_events(event_type.clone(), self.state_of_type(event_type));
         }
         Ok(subscription)
     }
@@ -1203,7 +1208,7 @@ mod tests {
         sub.cancel();
         b.inject(event("m.room.message", None, "2"));
         assert!(sink.drain().is_empty());
-        assert!(b.live_subscriptions().is_empty());
+        assert!(b.room_subscriptions().is_empty());
     }
 
     #[test]
