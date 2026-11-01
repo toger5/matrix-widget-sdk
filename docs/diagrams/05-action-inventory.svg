@@ -129,9 +129,9 @@
   <text x="1403" y="227" class="m">org.matrix.msc3973.user_directory_search</text>
   <text x="1403" y="243" class="s">msc3973.user_directory_search · exposes the directory</text>
   <rect x="1759" y="232" width="36" height="16" rx="8" fill="#7c3aed"/><text x="1777" y="244" class="chip" text-anchor="middle" style="font-size:9.5px">W→H</text>
-  <rect x="1393" y="256" width="416" height="40" rx="6" fill="#ffffff" stroke="#d1d5db"/>
+  <rect x="1393" y="256" width="416" height="40" rx="6" fill="#ffffff" stroke="#d1d5db" stroke-dasharray="4 3"/>
   <text x="1403" y="273" class="m">m.sticker</text>
-  <text x="1403" y="289" class="s">m.sticker · platform.send_sticker</text>
+  <text x="1403" y="289" class="s">m.sticker · not supported</text>
   <rect x="1759" y="278" width="36" height="16" rx="8" fill="#7c3aed"/><text x="1777" y="290" class="chip" text-anchor="middle" style="font-size:9.5px">W→H</text>
   <rect x="1393" y="302" width="416" height="40" rx="6" fill="#ffffff" stroke="#d1d5db"/>
   <text x="1403" y="319" class="m">set_always_on_screen</text>
@@ -143,7 +143,7 @@
   <rect x="1759" y="370" width="36" height="16" rx="8" fill="#7c3aed"/><text x="1777" y="382" class="chip" text-anchor="middle" style="font-size:9.5px">W→H</text>
   <rect x="1393" y="394" width="416" height="40" rx="6" fill="#ffffff" stroke="#d1d5db" stroke-dasharray="4 3"/>
   <text x="1403" y="411" class="m">screenshot</text>
-  <text x="1403" y="427" class="s">m.capability.screenshot · binary payload</text>
+  <text x="1403" y="427" class="s">m.capability.screenshot · intentionally not supported</text>
   <rect x="1759" y="416" width="36" height="16" rx="8" fill="#2563eb"/><text x="1777" y="428" class="chip" text-anchor="middle" style="font-size:9.5px">H→W</text>
   <rect x="1393" y="440" width="416" height="40" rx="6" fill="#ffffff" stroke="#d1d5db" stroke-dasharray="4 3"/>
   <text x="1403" y="457" class="m">open_modal · close_modal · set_button_enabled</text>
