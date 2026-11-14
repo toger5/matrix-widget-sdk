@@ -15,9 +15,10 @@ pub enum WidgetClientError {
     /// The host answered with a body of the wrong shape for the action.
     #[error("unexpected response for action `{action}`")]
     UnexpectedResponse { action: String },
-    /// The message has no / an unsupported `version`.
-    #[error("unsupported widget api version `{version}`")]
-    UnsupportedVersion { version: String },
+    /// The host did not answer within 10 seconds (MSC4412 "Action timeouts"). The request has
+    /// failed; a response that still arrives is ignored.
+    #[error("the host did not answer `{action}` in time")]
+    Timeout { action: String },
     /// The message was a widget-sourced request or host-sourced response, which a widget never receives.
     #[error("message direction does not fit the widget side: {message}")]
     WrongDirection { message: String },

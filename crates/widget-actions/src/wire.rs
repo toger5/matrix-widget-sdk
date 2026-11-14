@@ -5,8 +5,20 @@ use serde_json::Value;
 
 use crate::{ActionError, JsonValue};
 
-/// The protocol version carried in every message. MSC4412 only defines `v1`.
-pub const API_VERSION_V1: &str = "v1";
+/// Unstable namespace of everything MSC4412 itself defines: the core actions and the base error
+/// codes.
+pub const MSC4412_NAMESPACE: &str = "org.matrix.msc4412";
+/// Unstable namespace of everything that has no MSC (number) of its own yet.
+pub const PLACEHOLDER_NAMESPACE: &str = "org.matrix.mscXXXX";
+/// The stable namespace. Accepted when parsing, never emitted.
+pub const STABLE_NAMESPACE: &str = "m";
+
+/// How long a request may stay unanswered (MSC4412 "Action timeouts"). After that the request has
+/// failed and a late response is ignored.
+pub const ACTION_TIMEOUT_MS: u64 = 10_000;
+/// How long a host should wait for `notify_ready` before it shows an error (MSC4412
+/// recommendation).
+pub const NOTIFY_READY_TIMEOUT_MS: u64 = 15_000;
 
 /// Who *initiated* the exchange that a message belongs to.
 ///
@@ -55,24 +67,21 @@ pub enum MessageKind {
 /// ```json5
 /// {
 ///  source: "widget" | "host",
-///  action: "...",
-///  requestId: "<uuid v4>",
-///  version: "v1",
+///  action: "<namespace>.<name>",
+///  request_id: "<uuid v4>",
 ///  request: { ... } /* or */ response: { ... }
 /// }
 /// ```
 ///
-/// Exactly one of `request` / `response` is present. `version` is `None` for messages from
-/// pre-MSC4412 ("legacy") widgets; hosts use that to pick the legacy code path.
+/// A message is a response if and only if `response` is present. There is no version property:
+/// legacy (matrix-widget-api) messages have `api` instead of `source` and do not parse as a
+/// `WireMessage` at all.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct WireMessage {
     pub source: Source,
     pub action: String,
-    #[serde(rename = "requestId")]
     pub request_id: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub version: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub request: Option<JsonValue>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -80,26 +89,24 @@ pub struct WireMessage {
 }
 
 impl WireMessage {
-    /// Build a `v1` request envelope.
+    /// Build a request envelope.
     pub fn request(source: Source, action: impl Into<String>, request_id: impl Into<String>, body: Value) -> Self {
         Self {
             source,
             action: action.into(),
             request_id: request_id.into(),
-            version: Some(API_VERSION_V1.to_owned()),
             request: Some(JsonValue(body)),
             response: None,
         }
     }
 
-    /// Build the response envelope for this request. `source`, `action`, `requestId` and
-    /// `version` are copied; the `request` body is dropped as mandated by MSC4412.
+    /// Build the response envelope for this request. `source`, `action` and `request_id` are
+    /// copied; the `request` body is not repeated (MSC4412 allows but does not require it).
     pub fn response_to(&self, body: Value) -> Self {
         Self {
             source: self.source,
             action: self.action.clone(),
             request_id: self.request_id.clone(),
-            version: self.version.clone(),
             request: None,
             response: Some(JsonValue(body)),
         }
@@ -121,10 +128,6 @@ impl WireMessage {
 
     pub fn is_response(&self) -> bool {
         self.response.is_some()
-    }
-
-    pub fn is_v1(&self) -> bool {
-        self.version.as_deref() == Some(API_VERSION_V1)
     }
 
     pub fn kind(&self) -> MessageKind {
@@ -169,22 +172,85 @@ impl WireMessage {
     }
 }
 
-/// An error returned instead of a regular response body.
-///
-/// MSC4412 does not (yet) define an error shape; this uses the one established by the existing
-/// widget implementations (matrix-widget-api `IWidgetApiErrorResponseData`):
+/// What an error `code` means to this crate, see [`WidgetError::kind`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
+pub enum ErrorKind {
+    /// `unknown_action`: the receiver does not know or support the action.
+    UnknownAction,
+    /// `missing_capability`: the capability the action needs has not been granted.
+    MissingCapability,
+    /// `invalid_request`: the request misses required properties or has invalid values.
+    InvalidRequest,
+    /// `matrix_api_error`: a Matrix API request made for the widget failed;
+    /// [`WidgetError::matrix_api_error`] carries the homeserver's answer.
+    MatrixApiError,
+    /// `unknown`, and every code this crate does not recognise.
+    Unknown,
+}
+
+impl ErrorKind {
+    /// `(namespace, name)` of the code this kind is sent as.
+    fn parts(self) -> (&'static str, &'static str) {
+        match self {
+            Self::UnknownAction => (MSC4412_NAMESPACE, "unknown_action"),
+            Self::MissingCapability => (MSC4412_NAMESPACE, "missing_capability"),
+            Self::InvalidRequest => (MSC4412_NAMESPACE, "invalid_request"),
+            Self::MatrixApiError => (PLACEHOLDER_NAMESPACE, "matrix_api_error"),
+            Self::Unknown => (MSC4412_NAMESPACE, "unknown"),
+        }
+    }
+
+    /// The (unstable) code this kind is sent as, e.g. `org.matrix.msc4412.missing_capability`.
+    pub fn code(self) -> String {
+        let (namespace, name) = self.parts();
+        format!("{namespace}.{name}")
+    }
+
+    /// The kind of `code`. Both the unstable and the stable (`m.`) spelling are recognised; any
+    /// other code is [`ErrorKind::Unknown`], as MSC4412 demands.
+    pub fn of(code: &str) -> Self {
+        [Self::UnknownAction, Self::MissingCapability, Self::InvalidRequest, Self::MatrixApiError]
+            .into_iter()
+            .find(|kind| {
+                let (namespace, name) = kind.parts();
+                [namespace, STABLE_NAMESPACE]
+                    .iter()
+                    .any(|ns| code.strip_prefix(ns).and_then(|rest| rest.strip_prefix('.')) == Some(name))
+            })
+            .unwrap_or(Self::Unknown)
+    }
+}
+
+/// An error returned instead of a regular response body (MSC4412 "Errors"):
 ///
 /// ```json5
-/// { "error": { "message": "...", "matrix_api_error": { /* optional, see MatrixApiError */ } } }
+/// { "error": {
+///     "code": "org.matrix.msc4412.missing_capability",
+///     "message": "Missing capability: ...",
+///     "matrix_api_error": { /* only with the code `…matrix_api_error`, see MatrixApiError */ }
+/// } }
 /// ```
+///
+/// A response is an error response if and only if `response.error` is an object.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct WidgetError {
-    /// A user-friendly description.
+    /// Namespaced, machine readable kind of the error; see [`ErrorKind`]. A sender that leaves it
+    /// out (it is required) is read as `unknown`.
+    #[serde(default = "unknown_code")]
+    pub code: String,
+    /// A description for developers. Never parse it.
+    #[serde(default)]
     pub message: String,
-    /// Set when the error came from a Matrix API request the host made on the widget's behalf.
+    /// Additional property of the code `org.matrix.mscXXXX.matrix_api_error`: the failed Matrix
+    /// API request the host made on the widget's behalf.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub matrix_api_error: Option<MatrixApiError>,
+}
+
+fn unknown_code() -> String {
+    ErrorKind::Unknown.code()
 }
 
 /// The Matrix API failure behind a [`WidgetError`], as matrix-widget-api defines it.
@@ -217,8 +283,34 @@ struct ErrorEnvelope {
 }
 
 impl WidgetError {
+    /// An error of the given kind.
+    pub fn of(kind: ErrorKind, message: impl Into<String>) -> Self {
+        Self { code: kind.code(), message: message.into(), matrix_api_error: None }
+    }
+
+    /// An `unknown` error: the request failed for a reason no other code covers.
     pub fn new(message: impl Into<String>) -> Self {
-        Self { message: message.into(), matrix_api_error: None }
+        Self::of(ErrorKind::Unknown, message)
+    }
+
+    /// `unknown_action`: the receiver does not know `action`.
+    pub fn unknown_action(action: &str) -> Self {
+        Self::of(ErrorKind::UnknownAction, format!("Unknown action `{action}`"))
+    }
+
+    /// `missing_capability`: `capability` (a capability string) has not been granted.
+    pub fn missing_capability(capability: impl std::fmt::Display) -> Self {
+        Self::of(ErrorKind::MissingCapability, format!("Missing capability: {capability}"))
+    }
+
+    /// `invalid_request`: the request body is incomplete or invalid.
+    pub fn invalid_request(message: impl Into<String>) -> Self {
+        Self::of(ErrorKind::InvalidRequest, message)
+    }
+
+    /// What the `code` means; unrecognised codes are [`ErrorKind::Unknown`].
+    pub fn kind(&self) -> ErrorKind {
+        ErrorKind::of(&self.code)
     }
 
     /// An error caused by a Matrix API failure. `errcode` / `status` may be unknown; when both
@@ -234,6 +326,7 @@ impl WidgetError {
             return Self::new(message);
         }
         Self {
+            code: ErrorKind::MatrixApiError.code(),
             message,
             matrix_api_error: Some(MatrixApiError {
                 http_status: status.unwrap_or(0),
@@ -251,7 +344,11 @@ impl WidgetError {
         serde_json::to_value(ErrorEnvelope { error: self }).expect("WidgetError is serializable")
     }
 
+    /// The error in a response body, if `body.error` is an object.
     pub fn from_response_body(body: &Value) -> Option<Self> {
+        if !body.get("error")?.is_object() {
+            return None;
+        }
         serde_json::from_value::<ErrorEnvelope>(body.clone()).ok().map(|e| e.error)
     }
 }
@@ -271,48 +368,56 @@ mod tests {
 
     #[test]
     fn roundtrip_request() {
-        let msg = WireMessage::request(Source::Widget, "send_event", "id-1", json!({"type": "m.room.message"}));
+        let msg = WireMessage::request(
+            Source::Widget,
+            "org.matrix.mscXXXX.send_event",
+            "id-1",
+            json!({"type": "m.room.message"}),
+        );
         let json = msg.to_json();
         let parsed = WireMessage::from_json(&json).unwrap();
         assert_eq!(parsed, msg);
         assert_eq!(parsed.kind(), MessageKind::WidgetRequest);
-        assert!(parsed.is_v1());
 
         let value = parsed.to_value();
-        assert_eq!(value["requestId"], "id-1");
-        assert_eq!(value["version"], "v1");
+        assert_eq!(value["request_id"], "id-1");
+        assert!(value.get("version").is_none());
+        assert!(value.get("requestId").is_none());
         assert_eq!(value["source"], "widget");
         assert!(value.get("response").is_none());
     }
 
     #[test]
     fn response_copies_envelope_and_drops_request() {
-        let req = WireMessage::request(Source::Host, "send_event", "abc", json!({"x": 1}));
+        let req = WireMessage::request(Source::Host, "m.send_event", "abc", json!({"x": 1}));
         let res = req.response_to(json!({}));
         assert_eq!(res.kind(), MessageKind::HostResponse);
         assert_eq!(res.request_id, "abc");
-        assert_eq!(res.action, "send_event");
+        assert_eq!(res.action, "m.send_event");
         assert!(res.request.is_none());
         assert_eq!(res.response_body(), json!({}));
     }
 
     #[test]
-    fn legacy_message_without_version() {
+    fn legacy_messages_are_not_wire_messages() {
+        // Legacy messages have `api` instead of `source`.
         let legacy = json!({"api": "fromWidget", "action": "supported_api_versions", "requestId": "x", "data": {}});
-        // Not an MSC4412 envelope at all -> malformed (no `source`).
         assert!(WireMessage::from_value(legacy).is_err());
-
-        let v_less = json!({"source": "widget", "action": "content_loaded", "requestId": "x", "request": {}});
-        let msg = WireMessage::from_value(v_less).unwrap();
-        assert!(!msg.is_v1());
+        // The old spelling of the request id is not accepted either.
+        let old = json!({"source": "widget", "action": "a.b", "requestId": "x", "request": {}});
+        assert!(WireMessage::from_value(old).is_err());
+        // A response may repeat the request.
+        let both = json!({"source": "widget", "action": "a.b", "request_id": "x", "request": {}, "response": {}});
+        assert_eq!(WireMessage::from_value(both).unwrap().kind(), MessageKind::WidgetResponse);
     }
 
     #[test]
     fn error_response() {
-        let req = WireMessage::request(Source::Widget, "send_event", "abc", json!({}));
+        let req = WireMessage::request(Source::Widget, "m.send_event", "abc", json!({}));
         let res = req.error_response_to(WidgetError::new("nope"));
         assert_eq!(res.error(), Some(WidgetError::new("nope")));
         assert_eq!(res.to_value()["response"]["error"]["message"], "nope");
+        assert_eq!(res.to_value()["response"]["error"]["code"], "org.matrix.msc4412.unknown");
         assert!(res.to_value()["response"]["error"].get("matrix_api_error").is_none());
         assert!(req.error().is_none());
 
@@ -321,9 +426,34 @@ mod tests {
         let res = req.error_response_to(matrix.clone());
         assert_eq!(res.error(), Some(matrix));
         let body = res.to_value()["response"]["error"].clone();
+        assert_eq!(body["code"], "org.matrix.mscXXXX.matrix_api_error");
         assert_eq!(body["matrix_api_error"]["http_status"], 403);
         assert_eq!(body["matrix_api_error"]["response"]["errcode"], "M_FORBIDDEN");
         assert!(body["matrix_api_error"].get("http_headers").is_none());
         assert_eq!(WidgetError::with_matrix_error("x", None, None, "y"), WidgetError::new("x"));
+    }
+
+    #[test]
+    fn error_codes() {
+        let cap = "widget:org.matrix.mscXXXX.send_event.timeline:m.room.message";
+        let missing = WidgetError::missing_capability(cap);
+        assert_eq!(missing.code, "org.matrix.msc4412.missing_capability");
+        assert_eq!(missing.message, format!("Missing capability: {cap}"));
+        assert_eq!(missing.kind(), ErrorKind::MissingCapability);
+        assert_eq!(WidgetError::unknown_action("a.b").code, "org.matrix.msc4412.unknown_action");
+        assert_eq!(WidgetError::invalid_request("x").code, "org.matrix.msc4412.invalid_request");
+
+        // Stable spellings are recognised; anything else is `unknown`.
+        assert_eq!(ErrorKind::of("m.unknown_action"), ErrorKind::UnknownAction);
+        assert_eq!(ErrorKind::of("m.matrix_api_error"), ErrorKind::MatrixApiError);
+        assert_eq!(ErrorKind::of("org.example.out_of_coffee"), ErrorKind::Unknown);
+        assert_eq!(ErrorKind::of("unknown_action"), ErrorKind::Unknown);
+
+        // `error` must be an object; a missing `code` reads as `unknown`.
+        assert_eq!(WidgetError::from_response_body(&json!({"error": "nope"})), None);
+        assert_eq!(WidgetError::from_response_body(&json!({"error": null})), None);
+        assert_eq!(WidgetError::from_response_body(&json!({"error": {"message": "m"}})), Some(WidgetError::new("m")));
+        let custom = WidgetError::from_response_body(&json!({"error": {"code": "org.x.y", "message": "m", "z": 1}}));
+        assert_eq!(custom.unwrap().kind(), ErrorKind::Unknown);
     }
 }

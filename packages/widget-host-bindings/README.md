@@ -57,7 +57,7 @@ await uniffiInitAsync();                                   // once, before anyth
 const platform: WidgetHostPlatform = {
   sendToWidget: (json) => iframe.contentWindow!.postMessage(JSON.parse(json), widgetOrigin),
   onCapabilitiesRequested: (requested) => queueMicrotask(() => driver.approveCapabilities(requested)),
-  onContentLoaded: () => (iframe.hidden = false),
+  onReady: () => (iframe.hidden = false),
   onOpenidRequested: () => queueMicrotask(() => driver.resolveOpenid(true)),   // or prompt first
   navigate: (uri) => { location.href = uri; },
   setAlwaysOnScreen: (value) => value,

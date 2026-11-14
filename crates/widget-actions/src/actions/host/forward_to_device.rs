@@ -19,7 +19,7 @@ mod tests {
             encrypted: false,
         };
         let wire = HostRequest::ForwardToDevice { message: message.clone() }.into_wire("d");
-        assert_eq!(wire.action, "forward_to_device");
+        assert_eq!(wire.action, "org.matrix.mscXXXX.forward_to_device");
         assert_eq!(
             wire.to_value()["request"],
             json!({"type": "org.example.ping", "sender": "@a:x", "content": {"k": 1}, "encrypted": false})

@@ -27,7 +27,7 @@ mod matrix;
 mod wire;
 
 pub use actions::host::forward_openid_credentials::ForwardOpenIdCredentialsRequest;
-pub use actions::host::notify_capabilities::NotifyCapabilitiesRequest;
+pub use actions::host::update_capabilities::UpdateCapabilitiesRequest;
 pub use actions::host::update_language::UpdateLanguageRequest;
 pub use actions::host::update_state::UpdateStateRequest;
 pub use actions::host::update_visibility::UpdateVisibilityRequest;
@@ -64,7 +64,10 @@ pub use matrix::{
     matrix_event_from_json, matrix_event_to_json, MatrixEvent, OpenIdToken, RoomAccountData, StateKeySelector,
     ToDeviceEvent, TurnServer,
 };
-pub use wire::{MatrixApiError, MatrixErrorResponse, MessageKind, Source, WidgetError, WireMessage, API_VERSION_V1};
+pub use wire::{
+    ErrorKind, MatrixApiError, MatrixErrorResponse, MessageKind, Source, WidgetError, WireMessage, ACTION_TIMEOUT_MS,
+    MSC4412_NAMESPACE, NOTIFY_READY_TIMEOUT_MS, PLACEHOLDER_NAMESPACE, STABLE_NAMESPACE,
+};
 
 #[cfg(feature = "uniffi")]
 uniffi::setup_scaffolding!();

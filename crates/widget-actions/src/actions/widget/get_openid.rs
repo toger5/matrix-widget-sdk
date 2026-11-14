@@ -96,7 +96,7 @@ mod tests {
     #[test]
     fn roundtrip() {
         let wire = WidgetRequest::GetOpenId.into_wire("o");
-        assert_eq!(wire.action, "get_openid");
+        assert_eq!(wire.action, "org.matrix.mscXXXX.get_openid");
         assert_eq!(wire.to_value()["request"], json!({}));
         assert_eq!(WidgetRequest::from_wire(&wire).unwrap(), WidgetRequest::GetOpenId);
 

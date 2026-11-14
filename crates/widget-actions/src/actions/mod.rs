@@ -11,14 +11,16 @@
 //! [`Capability`](crate::Capability), [`StateKeySelector`](crate::StateKeySelector)) lives at the
 //! crate root next to the wire types.
 //!
-//! `source` + `action` identify a message type. No action name is used by both sources: the
-//! widget's request to send an event is `send_event`, the host's delivery of one is `forward_event`.
+//! `source` + `action` identify a message type. Every action is `<namespace>.<name>`, and no name
+//! is used by both sources: the widget's request to send an event is `…send_event`, the host's
+//! delivery of one is `…forward_event`.
 //!
 //! To add an action:
 //!
 //! 1. create `actions/<source>/<action>.rs` with its body types and a roundtrip test;
 //! 2. in that source's `mod.rs`: declare it (`pub(crate) mod`) and add one variant per enum it
-//!    appears in, with `#[serde(rename = "<action>")]` (a unit variant when the body is `{}`);
+//!    appears in, with `#[serde(rename = "<unstable name>", alias = "m.<name>")]` (a unit variant
+//!    when the body is `{}`);
 //!    the serde literal is the single place the wire name lives;
 //! 3. re-export the body types from `lib.rs`.
 
@@ -128,11 +130,11 @@ mod tests {
 
     #[test]
     fn root_dispatch() {
-        let req = WidgetRequest::ContentLoaded.into_wire("a");
-        assert_eq!(Action::from_wire(&req).unwrap(), Action::WidgetRequest { request: WidgetRequest::ContentLoaded });
+        let req = WidgetRequest::NotifyReady.into_wire("a");
+        assert_eq!(Action::from_wire(&req).unwrap(), Action::WidgetRequest { request: WidgetRequest::NotifyReady });
         assert_eq!(
             Action::from_wire(&req.ack()).unwrap(),
-            Action::WidgetResponse { response: WidgetResponse::ContentLoaded }
+            Action::WidgetResponse { response: WidgetResponse::NotifyReady }
         );
         let host = HostRequest::ForwardEvent { event: test_event() }.into_wire("b");
         let parsed = Action::from_wire(&host).unwrap();

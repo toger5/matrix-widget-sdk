@@ -110,7 +110,7 @@ mod tests {
             request: SendEventRequest::room_event("m.room.message", json!({"body": "hi", "msgtype": "m.text"}).into()),
         };
         let wire = req.clone().into_wire("r1");
-        assert_eq!(wire.action, "send_event");
+        assert_eq!(wire.action, "org.matrix.mscXXXX.send_event");
         assert_eq!(wire.to_value()["request"]["type"], "m.room.message");
         let body = wire.to_value()["request"].clone();
         for absent in ["state_key", "room_id", "delay", "sticky_duration_ms"] {

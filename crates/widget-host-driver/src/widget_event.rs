@@ -14,7 +14,7 @@ pub const WIDGET_EVENT_TYPE_UNSTABLE: &str = "org.matrix.msc4411.widget";
 /// Legacy event type still used by Element and friends.
 pub const WIDGET_EVENT_TYPE_LEGACY: &str = "im.vector.modular.widgets";
 
-/// Content of an `m.widget` state event (MSC4411 + the `usesWidgetAPI` field from MSC4412).
+/// Content of an `m.widget` state event (MSC4411 + the `uses_widget_api` property from MSC4412).
 ///
 /// The `state_key` of the event is the opaque widget id (a client generated uuid v4). An event
 /// whose content does not match this shape (e.g. `{}`) denotes a *removed* widget; use
@@ -29,9 +29,9 @@ pub struct WidgetStateEventContent {
     /// Optional `mxc://` avatar.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub avatar_url: Option<String>,
-    /// When `true` the host waits for `content_loaded` before showing the widget and sets up
-    /// the widget API. Defaults to `false` (the widget is a plain embedded web page).
-    #[serde(rename = "usesWidgetAPI", default, skip_serializing_if = "std::ops::Not::not")]
+    /// When `true` the host sets up the widget API and waits for `notify_ready` before showing
+    /// the widget. Defaults to `false`: no listeners, the iframe is shown immediately.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub uses_widget_api: bool,
 }
 
@@ -61,16 +61,16 @@ mod tests {
     #[test]
     fn widget_content() {
         let c = WidgetStateEventContent::parse(&json!({
-            "name": "Notes", "url": "https://w.example/notes", "usesWidgetAPI": true
+            "name": "Notes", "url": "https://w.example/notes", "uses_widget_api": true
         }))
         .unwrap();
         assert!(c.uses_widget_api);
         assert!(c.has_valid_url());
-        assert_eq!(serde_json::to_value(&c).unwrap()["usesWidgetAPI"], true);
+        assert_eq!(serde_json::to_value(&c).unwrap()["uses_widget_api"], true);
 
         let plain = WidgetStateEventContent::parse(&json!({"name": "n", "url": "https://x"})).unwrap();
         assert!(!plain.uses_widget_api);
-        assert!(serde_json::to_value(&plain).unwrap().get("usesWidgetAPI").is_none());
+        assert!(serde_json::to_value(&plain).unwrap().get("uses_widget_api").is_none());
 
         assert!(WidgetStateEventContent::parse(&json!({})).is_none());
         assert!(!WidgetStateEventContent::parse(&json!({"name": "n", "url": "javascript:alert(1)"}))

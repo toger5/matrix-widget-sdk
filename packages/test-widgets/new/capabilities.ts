@@ -1,12 +1,30 @@
 /**
- * The capabilities the MSC4412 test widget requests, one per action
- * (`docs/spec-appendix/capability-naming-proposal.md`):
+ * The capabilities the MSC4412 test widget requests, one per action (MSC4412 "Capability format",
+ * `docs/spec-appendix/capability-naming-proposal.md`). A capability embeds the wire name of its
+ * action, unstable namespace included:
  *
- *     source ":" namespace "." action [ "." modifier ] [ ":" data ]
+ *     source ":" action [ "." modifier ] [ ":" data ]          action = namespace "." name
  */
 
-const widget = (rest: string): string => `widget:org.matrix.mscXXXX.${rest}`;
-const host = (rest: string): string => `host:org.matrix.mscXXXX.${rest}`;
+/** Unstable namespace of each action that has an MSC; every other action uses the placeholder. */
+const NAMESPACES: Record<string, string> = {
+  read_events: "org.matrix.msc2876",
+  read_relations: "org.matrix.msc3869",
+  update_delayed_event: "org.matrix.msc4157",
+  get_rtc_transports: "org.matrix.msc4515",
+  search_user_directory: "org.matrix.msc3973",
+  get_media_config: "org.matrix.msc4039",
+  upload_file: "org.matrix.msc4039",
+  download_file: "org.matrix.msc4039",
+  get_rtc_livekit_token: "org.matrix.msc4533",
+  delegate_rtc_livekit_delayed_leave: "org.matrix.msc4533",
+  navigate: "org.matrix.msc2931",
+  read_room_account_data: "com.beeper",
+};
+const namespace = (rest: string): string => NAMESPACES[/^[^.:]*/.exec(rest)![0]] ?? "org.matrix.mscXXXX";
+
+const widget = (rest: string): string => `widget:${namespace(rest)}.${rest}`;
+const host = (rest: string): string => `host:${namespace(rest)}.${rest}`;
 
 /** Messages and the room topic: send, read, and be told about new ones. */
 export const DEFAULT_CAPABILITIES = [

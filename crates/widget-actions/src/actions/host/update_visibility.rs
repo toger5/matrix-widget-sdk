@@ -23,7 +23,7 @@ mod tests {
     fn roundtrip() {
         let req = HostRequest::UpdateVisibility { request: UpdateVisibilityRequest { visible: false } };
         let wire = req.clone().into_wire("v");
-        assert_eq!(wire.action, "update_visibility");
+        assert_eq!(wire.action, "org.matrix.mscXXXX.update_visibility");
         assert_eq!(wire.to_value()["request"], json!({"visible": false}));
         assert_eq!(HostRequest::from_wire(&wire).unwrap(), req);
         assert_eq!(HostResponse::from_wire(&wire.ack()).unwrap(), HostResponse::UpdateVisibility);

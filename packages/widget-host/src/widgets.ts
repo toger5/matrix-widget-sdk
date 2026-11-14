@@ -10,7 +10,7 @@ export interface ResolvedWidget {
   url: string;
   name: string;
   legacy: boolean;
-  /** Hide the iframe until `content_loaded` arrives. */
+  /** `uses_widget_api` (MSC4412): set up the widget API and hide the iframe until `notify_ready` arrives. */
   usesWidgetApi: boolean;
 }
 
@@ -28,7 +28,7 @@ export function resolveWidget(event: StateEvent, wrapperUrl: string): ResolvedWi
   const name = typeof content.name === "string" ? content.name : event.state_key;
 
   if (NEW_TYPES.includes(event.type)) {
-    return { url: content.url, name, legacy: false, usesWidgetApi: content.usesWidgetAPI === true };
+    return { url: content.url, name, legacy: false, usesWidgetApi: content.uses_widget_api === true };
   }
   if (!LEGACY_TYPES.includes(event.type)) throw new Error(`not a widget state event: ${event.type}`);
 

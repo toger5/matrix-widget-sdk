@@ -33,18 +33,18 @@ parameters the page was loaded with: when embedded through the compat wrapper th
 wrapper's templating result (`userId`, `baseUrl`, `parentUrl`, ...). The same object is written
 to the console once on load, so headless runs can read it.
 
-New (`/new/`): `request_capabilities`, `content_loaded`, send `m.room.message`, send state
+New (`/new/`): `request_capabilities`, `notify_ready`, send `m.room.message`, send state
 `m.room.topic`, read `m.room.message`, read state `m.room.topic`, `get_matrix_context`,
 `get_client_context`. The default capability list (`new/capabilities.ts`) uses the names of
 `docs/spec-appendix/capability-naming-proposal.md`, one capability per action, e.g.
 `widget:org.matrix.mscXXXX.send_event.timeline:m.room.message`. Incoming `forward_event`,
-`update_state` and `notify_capabilities` are logged and the state panel shows the SDK's state.
+`update_state` and `update_capabilities` are logged and the state panel shows the SDK's state.
 
 ## URL parameters
 
 | page | parameter | meaning |
 |---|---|---|
-| both | `autostart=0` | Do nothing on load. Default: the legacy widget requests capabilities and starts; the new widget sends `request_capabilities` and `content_loaded`. |
+| both | `autostart=0` | Do nothing on load. Default: the legacy widget requests capabilities and starts; the new widget sends `request_capabilities` and `notify_ready`. |
 | legacy | `widgetId` | The widget id, as legacy clients pass it. Required for the legacy transport. |
 | legacy | `parentUrl` | The widget only posts to this origin (as Element widgets do). Without it, `*`. The compat wrapper always sets it to itself. |
 

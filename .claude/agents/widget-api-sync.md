@@ -27,7 +27,8 @@ still exists before relying on it, and say so in your report if the checklist is
    - the compat wrapper (`packages/widget-compat-wrapper/src/capabilities.ts` and
      `src/envelope.ts`): does a legacy widget still reach the action, under its legacy name and
      with its legacy capability?
-   - the capability namespace and strings repeated in TypeScript,
+   - the action → namespace table and the capability strings repeated in TypeScript (a
+     capability embeds the wire name of its action, namespace included),
    - doc comments, READMEs, `docs/parity.md`, the naming proposal and the diagrams,
    - tests that assert on capability strings or error messages.
 4. **Search for leftovers** of every old name with the grep from the checklist, and compare the
@@ -36,8 +37,9 @@ still exists before relying on it, and say so in your report if the checklist is
 
 ## Rules
 
-- The naming proposal's "The schema" section is the source of truth for capability strings. If
-  the requested change contradicts it, stop and report the contradiction instead of picking a side.
+- MSC4412 (envelope, core actions, error codes, capability format) and the naming proposal's
+  "The schema" section are the source of truth for names; MSC4412 wins where they differ. If the
+  requested change contradicts them, stop and report the contradiction instead of picking a side.
 - No aliases for old names in the driver or the SDK. Legacy names are translated only in the
   compat wrapper.
 - Do not touch the legacy side: `packages/test-widgets/legacy/` and the wrapper code facing the

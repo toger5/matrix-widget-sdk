@@ -1,7 +1,7 @@
 # widget-host-driver
 
 **Responsibility:** the host side of the widget API. Everything a Matrix client must do
-to support widgets. It runs the setup (capabilities and content_loaded), checks every request
+to support widgets. It runs the setup (capabilities and `notify_ready`), checks every request
 against the approved capabilities, calls the `MatrixBackend`, answers the widget, and pushes
 events the widget is allowed to receive. It does not know about UI (`WidgetHostPlatform`) or
 the matrix CS api (`MatrixBackend`); the client provides both.
@@ -25,7 +25,7 @@ struct Platform { /* handle to the iframe + UI */ }
 impl WidgetHostPlatform for Platform {
     fn send_to_widget(&self, json: String) { /* iframe.postMessage(json, widgetOrigin) */ }
     fn on_capabilities_requested(&self, requested: Vec<Capability>) { /* prompt the user */ }
-    fn on_content_loaded(&self) { /* hide the spinner */ }
+    fn on_ready(&self) { /* hide the loading state */ }
     fn on_openid_requested(&self) { /* prompt, then driver.resolve_openid(allowed) */ }
     // navigate, set_always_on_screen, client_id / client_theme / client_language
 }
@@ -37,6 +37,8 @@ let driver = WidgetHostDriver::new(backend, Arc::new(Platform { /* … */ }));
 driver.handle_message_from_widget(json).await?;   // Err(LegacyWidgetApi) → use the compat wrapper
 // 2. after the user decided:
 driver.approve_capabilities(approved);
+// 3. whenever the user takes a permission away:
+driver.revoke_capabilities(revoked);
 ```
 
 The driver subscribes to the backend itself once `host:…forward_event.*`, `host:…update_state` or

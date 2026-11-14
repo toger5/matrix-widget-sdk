@@ -31,7 +31,7 @@ mod tests {
     fn roundtrip() {
         let req = WidgetRequest::SetAlwaysOnScreen { request: SetAlwaysOnScreenRequest { value: true } };
         let wire = req.clone().into_wire("a");
-        assert_eq!(wire.action, "set_always_on_screen");
+        assert_eq!(wire.action, "org.matrix.mscXXXX.set_always_on_screen");
         assert_eq!(wire.to_value()["request"], json!({"value": true}));
         assert_eq!(WidgetRequest::from_wire(&wire).unwrap(), req);
         assert_eq!(

@@ -2,11 +2,38 @@ use std::fmt;
 
 use serde::{Deserialize, Serialize};
 
-/// The unstable namespace of the capability naming scheme. One for all capabilities; a literal
-/// placeholder until the scheme has an MSC number. Emitted by [`Display`](fmt::Display).
-pub const UNSTABLE_NAMESPACE: &str = "org.matrix.mscXXXX";
-/// The stable namespace. Accepted when parsing, emitted by [`Capability::to_stable_string`].
-pub const STABLE_NAMESPACE: &str = "m";
+use crate::{PLACEHOLDER_NAMESPACE, STABLE_NAMESPACE};
+
+/// The unstable namespace of the action a capability head (`action[.modifier]`) belongs to.
+///
+/// A capability embeds the wire name of its action (MSC4412 "Capability format"), so this is the
+/// namespace of the `#[serde(rename = ...)]` of that action in `actions/*/mod.rs`; the test
+/// `capabilities_embed_the_action_name` keeps the two in step.
+fn namespace_of(head: &str) -> &'static str {
+    match head.split('.').next().unwrap_or(head) {
+        "read_events" => "org.matrix.msc2876",
+        "read_relations" => "org.matrix.msc3869",
+        "update_delayed_event" => "org.matrix.msc4157",
+        "get_rtc_transports" => "org.matrix.msc4515",
+        "search_user_directory" => "org.matrix.msc3973",
+        "get_media_config" | "upload_file" | "download_file" => "org.matrix.msc4039",
+        "get_rtc_livekit_token" | "delegate_rtc_livekit_delayed_leave" => "org.matrix.msc4533",
+        "navigate" => "org.matrix.msc2931",
+        "read_room_account_data" => "com.beeper",
+        _ => PLACEHOLDER_NAMESPACE,
+    }
+}
+
+/// Split `<namespace>.<action>[.<modifier>]` and return the head (`action[.modifier]`) if the
+/// namespace is the stable one or the unstable one of that action.
+fn strip_namespace(full: &str) -> Option<&str> {
+    // Action and modifier contain no `.`, so the head is the last segment or the last two.
+    let mut dots = full.rmatch_indices('.').map(|(i, _)| i);
+    [dots.next(), dots.next()].into_iter().flatten().find_map(|i| {
+        let (namespace, head) = (&full[..i], &full[i + 1..]);
+        (namespace == STABLE_NAMESPACE || namespace == namespace_of(head)).then_some(head)
+    })
+}
 
 // Sources: who sends the action the capability is about.
 const WIDGET: &str = "widget";
@@ -55,22 +82,25 @@ const ROOM_MESSAGE: &str = "m.room.message";
 
 /// A widget capability.
 ///
-/// Capabilities are plain strings on the wire, one (or more) per action, following
-/// `docs/spec-appendix/capability-naming-proposal.md`:
+/// Capabilities are plain strings on the wire, one (or more) per action, following MSC4412
+/// "Capability format" and `docs/spec-appendix/capability-naming-proposal.md`:
 ///
 /// ```text
-/// source ":" namespace "." action [ "." modifier ] [ ":" data ]
+/// source ":" action [ "." modifier ] [ ":" data ]        action = namespace "." name
 ///
 /// widget:org.matrix.mscXXXX.send_event.timeline:m.room.message#m.text
-/// widget:org.matrix.mscXXXX.navigate
+/// widget:org.matrix.msc2876.read_events.state:m.room.topic
+/// widget:org.matrix.msc2931.navigate
 /// host:org.matrix.mscXXXX.update_state:m.room.member#@a:x
 /// ```
 ///
 /// * `source` is who sends the action: `widget` (a request the widget may make) or `host` (a
 ///   subscription: the host sends the action whenever there is something to send). Either way the
 ///   capability is held by the widget.
-/// * `namespace` is [`UNSTABLE_NAMESPACE`] (emitted by `Display`) or [`STABLE_NAMESPACE`]
-///   (accepted when parsing, emitted by [`Capability::to_stable_string`]).
+/// * `action` is the value of the `action` property of the action the capability is about: the
+///   unstable name of the MSC that defines it (emitted by `Display`) or the stable `m.<name>`
+///   (accepted when parsing, emitted by [`Capability::to_stable_string`]). The same name under
+///   any other namespace is a different action and not a capability of this crate.
 /// * `send_event`, `read_events` and `forward_event` always carry a `timeline` or `state`
 ///   modifier; there is no bare `widget:m.send_event:<type>`.
 /// * The data is an event type. For timeline events `m.room.message#<msgtype>` narrows to one
@@ -237,14 +267,14 @@ impl Capability {
 
     fn parse_known(raw: &str) -> Option<Self> {
         let (source, rest) = raw.split_once(':')?;
-        let rest = [UNSTABLE_NAMESPACE, STABLE_NAMESPACE]
-            .iter()
-            .find_map(|namespace| rest.strip_prefix(namespace)?.strip_prefix('.'))?;
-        // The head contains no `:`, the data may (`m.room.member#@a:x`).
+        // The action and modifier contain no `:`, the data may (`m.room.member#@a:x`).
         match rest.split_once(':') {
-            Some((head, data)) if !data.is_empty() => Self::with_data(source, head, data),
+            Some((action, data)) if !data.is_empty() => Self::with_data(source, strip_namespace(action)?, data),
             Some(_) => None,
-            None => UNIT_CAPABILITIES.iter().find(|(s, h, _)| *s == source && *h == rest).map(|(_, _, c)| c.clone()),
+            None => {
+                let head = strip_namespace(rest)?;
+                UNIT_CAPABILITIES.iter().find(|(s, h, _)| *s == source && *h == head).map(|(_, _, c)| c.clone())
+            }
         }
     }
 
@@ -318,8 +348,14 @@ impl Capability {
         }
     }
 
-    fn format(&self, namespace: &str) -> String {
-        match (self, self.parts()) {
+    /// Format with the stable namespace, or with the unstable one of the capability's action.
+    fn format(&self, stable: bool) -> String {
+        let parts = self.parts();
+        let namespace = match &parts {
+            Some((_, head, _)) if !stable => namespace_of(head),
+            _ => STABLE_NAMESPACE,
+        };
+        match (self, parts) {
             (_, Some((source, head, Some(data)))) => format!("{source}:{namespace}.{head}:{data}"),
             (_, Some((source, head, None))) => format!("{source}:{namespace}.{head}"),
             (Self::Other { raw }, None) => raw.clone(),
@@ -328,15 +364,15 @@ impl Capability {
     }
 
     /// The unstable representation, e.g. `widget:org.matrix.mscXXXX.send_event.timeline:m.room.message`
-    /// (or the raw string for `Other`).
+    /// or `widget:org.matrix.msc2931.navigate` (or the raw string for `Other`).
     pub fn to_unstable_string(&self) -> String {
-        self.format(UNSTABLE_NAMESPACE)
+        self.format(false)
     }
 
     /// The stable representation, e.g. `widget:m.send_event.timeline:m.room.message` (or the raw
     /// string for `Other`).
     pub fn to_stable_string(&self) -> String {
-        self.format(STABLE_NAMESPACE)
+        self.format(true)
     }
 
     /// Does this capability allow *sending* the given event with `send_event`?
@@ -596,10 +632,68 @@ mod tests {
             assert_eq!(Capability::parse(stable), expected, "{stable}");
             assert_eq!(expected.to_stable_string(), stable);
 
-            let unstable = stable.replacen(":m.", ":org.matrix.mscXXXX.", 1);
+            let (_, head, _) = expected.parts().unwrap();
+            let unstable = stable.replacen(":m.", &format!(":{}.", namespace_of(head)), 1);
+            assert_ne!(unstable, stable);
             assert_eq!(Capability::parse(&unstable), expected, "{unstable}");
             assert_eq!(expected.to_unstable_string(), unstable);
             assert_eq!(expected.to_string(), unstable, "Display emits the unstable namespace");
+        }
+    }
+
+    #[test]
+    fn unstable_capabilities_use_the_namespace_of_their_action() {
+        let cases = [
+            ("widget:org.matrix.mscXXXX.send_event.timeline:m.x", Capability::send_event("m.x")),
+            ("widget:org.matrix.mscXXXX.send_event.delayed", Capability::SendDelayedEvent),
+            ("widget:org.matrix.msc4157.update_delayed_event", Capability::UpdateDelayedEvent),
+            ("widget:org.matrix.msc2876.read_events.timeline:m.x", Capability::read_events("m.x")),
+            ("widget:org.matrix.msc3869.read_relations:m.x", Capability::read_relations("m.x")),
+            ("widget:com.beeper.read_room_account_data:m.tag", Capability::read_room_account_data("m.tag")),
+            ("widget:org.matrix.msc4039.upload_file", Capability::UploadFile),
+            ("widget:org.matrix.msc4533.get_rtc_livekit_token", Capability::GetRtcLivekitToken),
+            ("widget:org.matrix.msc2931.navigate", Capability::Navigate),
+            ("widget:org.matrix.mscXXXX.get_matrix_context", Capability::GetMatrixContext),
+            ("host:org.matrix.mscXXXX.forward_event.state:m.room.member", {
+                Capability::forward_state_event("m.room.member", None::<&str>)
+            }),
+            ("host:org.matrix.mscXXXX.update_theme", Capability::UpdateTheme),
+        ];
+        for (raw, expected) in cases {
+            assert_eq!(Capability::parse(raw), expected, "{raw}");
+            assert_eq!(expected.to_string(), raw);
+        }
+    }
+
+    /// MSC4412: the action part of a capability is the value of the `action` property. Every
+    /// capability's action must therefore be a known action of its source, in both spellings.
+    #[test]
+    fn capabilities_embed_the_action_name() {
+        use crate::{HostRequest, Source, WidgetRequest, WireMessage};
+        use serde_json::json;
+
+        for (stable, capability) in all() {
+            for raw in [stable.to_owned(), capability.to_unstable_string()] {
+                let (source, rest) = raw.split_once(':').unwrap();
+                let action = rest.split(':').next().unwrap();
+                let (_, head, _) = capability.parts().unwrap();
+                // Without the modifier, if the capability has one.
+                let action = match head.split_once('.') {
+                    Some((_, modifier)) => action.strip_suffix(modifier).unwrap().trim_end_matches('.'),
+                    None => action,
+                };
+                let known = match source {
+                    "widget" => {
+                        let wire = WireMessage::request(Source::Widget, action, "r", json!({}));
+                        WidgetRequest::from_wire(&wire) != Ok(WidgetRequest::Unknown)
+                    }
+                    _ => {
+                        let wire = WireMessage::request(Source::Host, action, "r", json!({}));
+                        HostRequest::from_wire(&wire) != Ok(HostRequest::Unknown)
+                    }
+                };
+                assert!(known, "`{action}` (from `{raw}`) is not an action sent by the {source}");
+            }
         }
     }
 
@@ -643,8 +737,15 @@ mod tests {
             "widget:m.send_to_device",
             "widget:m.navigate:somewhere",
             "widget:m.send_event.delayed:m.room.message",
-            // Wrong namespace or shape.
+            // Wrong namespace or shape. The same name under another namespace is another action.
             "widget:org.matrix.msc4412.navigate",
+            "widget:org.matrix.mscXXXX.navigate",
+            "widget:org.matrix.mscXXXX.read_events.timeline:m.room.message",
+            "widget:org.matrix.msc2876.send_event.timeline:m.room.message",
+            "widget:org.matrix.msc4412.get_matrix_context",
+            "host:org.matrix.msc2762.forward_event.timeline:m.room.message",
+            "widget:org.matrix.msc2876.read_events",
+            "widget:.navigate",
             "widget:navigate",
             "widget.m.navigate",
             "m.widget.navigate",
@@ -694,8 +795,8 @@ mod tests {
         );
         // The stable namespace is `m`, so an `m.`-prefixed unstable-looking rest is still stable.
         assert_eq!(
-            Capability::parse("widget:m.send_to_device:org.matrix.mscXXXX.navigate"),
-            Capability::send_to_device("org.matrix.mscXXXX.navigate")
+            Capability::parse("widget:m.send_to_device:org.matrix.msc2931.navigate"),
+            Capability::send_to_device("org.matrix.msc2931.navigate")
         );
     }
 

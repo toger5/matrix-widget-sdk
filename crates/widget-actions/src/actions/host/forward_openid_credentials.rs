@@ -2,7 +2,7 @@
 //! answered with `state: request` (the user had to be asked).
 //!
 //! Body: [`ForwardOpenIdCredentialsRequest`], acknowledged with `{}`. `original_request_id` is the
-//! `requestId` of the widget's `get_openid`.
+//! `request_id` of the widget's `get_openid`.
 
 use serde::{Deserialize, Serialize};
 
@@ -14,7 +14,7 @@ use crate::{OpenIdState, OpenIdToken};
 pub struct ForwardOpenIdCredentialsRequest {
     /// `allowed` or `blocked` (never `request` here).
     pub state: OpenIdState,
-    /// The `requestId` of the `get_openid` this answers.
+    /// The `request_id` of the `get_openid` this answers.
     pub original_request_id: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub access_token: Option<String>,
@@ -80,7 +80,7 @@ mod tests {
             request: ForwardOpenIdCredentialsRequest::allowed("o1", token.clone()),
         };
         let wire = req.clone().into_wire("c");
-        assert_eq!(wire.action, "forward_openid_credentials");
+        assert_eq!(wire.action, "org.matrix.mscXXXX.forward_openid_credentials");
         assert_eq!(
             wire.to_value()["request"],
             json!({"state": "allowed", "original_request_id": "o1", "access_token": "tok", "token_type": "Bearer",

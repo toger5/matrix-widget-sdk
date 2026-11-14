@@ -1,6 +1,6 @@
 /**
  * MSC4412 test widget on widget-base-sdk (wasm). Connects to the parent on load; requesting
- * capabilities and `content_loaded` are buttons (clicked automatically unless `?autostart=0`).
+ * capabilities and `notify_ready` are buttons (clicked automatically unless `?autostart=0`).
  */
 import init, { WidgetApi } from "widget-base-sdk";
 
@@ -39,7 +39,7 @@ api.onTurnServer((server: unknown) => log("update_turn_servers", server));
 api.onThemeChange((theme: unknown) => log("update_theme", theme));
 api.onLanguageChange((lang: string) => log("update_language", lang));
 api.onVisibilityChange((visible: boolean) => log("update_visibility", visible));
-api.onCapabilitiesChanged((requested: string[], approved: string[]) => (log("notify_capabilities", { requested, approved }), refresh()));
+api.onCapabilitiesChanged((allowed: string[]) => (log("update_capabilities", { allowed }), refresh()));
 
 const content = () => ({ msgtype: "m.text", body: valueOf("body") });
 mount("MSC4412 test widget (widget-base-sdk)", [
@@ -49,7 +49,7 @@ mount("MSC4412 test widget (widget-base-sdk)", [
     "capabilities",
   ),
   button("request_capabilities", () => api.requestCapabilities(capabilityList()).finally(refresh)),
-  button("content_loaded", () => api.contentLoaded().finally(refresh)),
+  button("notify_ready", () => api.notifyReady().finally(refresh)),
   input("body", "hello from the new widget", "message body"),
   button("send m.room.message", () => api.sendEvent("m.room.message", content()).then(rememberEvent)),
   button("react 👍 to last message", () => api.sendEvent("m.reaction", reactionTo(lastEvent.id, "👍"))),
@@ -90,7 +90,7 @@ mount("MSC4412 test widget (widget-base-sdk)", [
 ]);
 refresh();
 if (new URLSearchParams(location.search).get("autostart") !== "0") {
-  const [requestCaps, contentLoaded] = document.querySelectorAll<HTMLButtonElement>("#controls button");
+  const [requestCaps, notifyReady] = document.querySelectorAll<HTMLButtonElement>("#controls button");
   requestCaps.click();
-  contentLoaded.click();
+  notifyReady.click();
 }

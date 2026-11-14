@@ -2,11 +2,13 @@
  * Capability translation between a legacy widget and an MSC4412 host.
  *
  * A legacy widget asks for matrix-widget-api capabilities (`org.matrix.msc2762.send.event:<type>`,
- * `town.robin.msc3846.turn_servers`, ...). The host only knows the capabilities of the naming
- * proposal (`docs/spec-appendix/capability-naming-proposal.md`), one per action:
+ * `town.robin.msc3846.turn_servers`, ...). The host only knows the capabilities of MSC4412 and
+ * the naming proposal (`docs/spec-appendix/capability-naming-proposal.md`), one per action. A
+ * capability embeds the wire name of its action, namespace included:
  *
- *     source ":" namespace "." action [ "." modifier ] [ ":" data ]
+ *     source ":" action [ "." modifier ] [ ":" data ]          action = namespace "." name
  *     widget:org.matrix.mscXXXX.send_event.timeline:m.room.message
+ *     widget:org.matrix.msc2876.read_events.timeline:m.room.message
  *
  * Every legacy capability maps to a fixed set of new ones ({@link expandLegacyCapability}). The
  * wrapper requests that set from the host, and reports a legacy capability to the widget as
@@ -15,15 +17,41 @@
  * Pure functions without state.
  */
 
-/** The namespace the wrapper puts into the capabilities it requests. The host emits the same. */
-export const UNSTABLE_NAMESPACE = "org.matrix.mscXXXX";
+/** The namespace of actions that have no MSC of their own yet. */
+export const PLACEHOLDER_NAMESPACE = "org.matrix.mscXXXX";
 /** The stable namespace. A host may answer with it; {@link normalizeCapability} folds it away. */
 export const STABLE_NAMESPACE = "m";
 
-/** A capability for an action the widget sends. */
-export const widgetCapability = (rest: string): string => `widget:${UNSTABLE_NAMESPACE}.${rest}`;
+/**
+ * The unstable namespace of each action that has an MSC: the prefix the host sends the action
+ * with. Every other action uses {@link PLACEHOLDER_NAMESPACE}. Must match `namespace_of` in
+ * `crates/widget-actions/src/capabilities.rs`.
+ */
+const ACTION_NAMESPACES: Record<string, string> = {
+  read_events: "org.matrix.msc2876",
+  read_relations: "org.matrix.msc3869",
+  update_delayed_event: "org.matrix.msc4157",
+  get_rtc_transports: "org.matrix.msc4515",
+  search_user_directory: "org.matrix.msc3973",
+  get_media_config: "org.matrix.msc4039",
+  upload_file: "org.matrix.msc4039",
+  download_file: "org.matrix.msc4039",
+  get_rtc_livekit_token: "org.matrix.msc4533",
+  delegate_rtc_livekit_delayed_leave: "org.matrix.msc4533",
+  navigate: "org.matrix.msc2931",
+  read_room_account_data: "com.beeper",
+};
+
+/** The unstable namespace of the action that `rest` (`action[.modifier][:data]`) starts with. */
+export function namespaceOf(rest: string): string {
+  const action = /^[^.:]*/.exec(rest)![0];
+  return Object.hasOwn(ACTION_NAMESPACES, action) ? ACTION_NAMESPACES[action] : PLACEHOLDER_NAMESPACE;
+}
+
+/** A capability for an action the widget sends; `rest` is `action[.modifier][:data]`. */
+export const widgetCapability = (rest: string): string => `widget:${namespaceOf(rest)}.${rest}`;
 /** A capability for an action the host sends (a subscription). */
-export const hostCapability = (rest: string): string => `host:${UNSTABLE_NAMESPACE}.${rest}`;
+export const hostCapability = (rest: string): string => `host:${namespaceOf(rest)}.${rest}`;
 
 /**
  * Capabilities the wrapper always requests for a legacy widget.
@@ -137,17 +165,19 @@ export function capabilitiesToRequest(legacy: readonly string[]): string[] {
 }
 
 /**
- * A capability with the stable namespace rewritten to the unstable one, so that the spellings
- * `widget:m.navigate` and `widget:org.matrix.mscXXXX.navigate` compare equal. Strings that are
- * not capabilities of the naming scheme are returned unchanged.
+ * A capability with the stable namespace rewritten to the unstable one of its action, so that the
+ * spellings `widget:m.navigate` and `widget:org.matrix.msc2931.navigate` compare equal. Strings
+ * that are not capabilities of the naming scheme are returned unchanged.
  */
 export function normalizeCapability(capability: string): string {
   const match = /^(widget|host):m\./.exec(capability);
-  return match ? `${match[1]}:${UNSTABLE_NAMESPACE}.${capability.slice(match[0].length)}` : capability;
+  if (!match) return capability;
+  const rest = capability.slice(match[0].length);
+  return `${match[1]}:${namespaceOf(rest)}.${rest}`;
 }
 
 /**
- * The legacy capabilities out of `legacyRequested` that the host's `approved` list grants.
+ * The legacy capabilities out of `legacyRequested` that the host's `allowed` list grants.
  *
  * A legacy capability is granted only when **every** capability of its expansion is approved: a
  * widget that was told it holds `receive.event:<type>` expects to read, to read relations and to

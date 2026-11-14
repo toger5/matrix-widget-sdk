@@ -35,7 +35,7 @@ mod tests {
     #[test]
     fn roundtrip() {
         let wire = WidgetRequest::GetClientContext.into_wire("x");
-        assert_eq!(wire.action, "org.matrix.msc4412.get_client_context");
+        assert_eq!(wire.action, "org.matrix.mscXXXX.get_client_context");
         assert_eq!(wire.to_value()["request"], json!({}));
         assert_eq!(WidgetRequest::from_wire(&wire).unwrap(), WidgetRequest::GetClientContext);
 

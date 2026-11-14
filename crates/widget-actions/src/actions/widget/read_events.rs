@@ -127,14 +127,14 @@ mod tests {
 
         let wire = WireMessage::request(
             Source::Widget,
-            "read_events",
+            "m.read_events",
             "r",
             json!({"type": "m.room.member", "state_key": "@a:b"}),
         );
         let WidgetRequest::ReadEvents { request } = WidgetRequest::from_wire(&wire).unwrap() else { panic!() };
         assert_eq!(request.state_key, Some(StateKeySelector::key("@a:b")));
 
-        let bad = WireMessage::request(Source::Widget, "read_events", "r", json!({"type": "x", "state_key": 5}));
+        let bad = WireMessage::request(Source::Widget, "m.read_events", "r", json!({"type": "x", "state_key": 5}));
         assert!(matches!(WidgetRequest::from_wire(&bad), Err(ActionError::InvalidBody { .. })));
     }
 
@@ -142,7 +142,7 @@ mod tests {
     fn room_ids_msgtype_since() {
         let wire = WireMessage::request(
             Source::Widget,
-            "read_events",
+            "m.read_events",
             "r",
             json!({"type": "m.room.message", "msgtype": "m.text", "room_ids": "*", "since": "s1"}),
         );
@@ -154,7 +154,7 @@ mod tests {
 
         let wire = WireMessage::request(
             Source::Widget,
-            "read_events",
+            "m.read_events",
             "r",
             json!({"type": "m.room.message", "room_ids": ["!a:x", "!b:x"]}),
         );
@@ -162,7 +162,7 @@ mod tests {
         assert_eq!(request.room_ids, Some(RoomSelector::Rooms { room_ids: vec!["!a:x".into(), "!b:x".into()] }));
         assert_eq!(serde_json::to_value(&request).unwrap()["room_ids"], json!(["!a:x", "!b:x"]));
 
-        let bad = WireMessage::request(Source::Widget, "read_events", "r", json!({"type": "x", "room_ids": "!a:x"}));
+        let bad = WireMessage::request(Source::Widget, "m.read_events", "r", json!({"type": "x", "room_ids": "!a:x"}));
         assert!(matches!(WidgetRequest::from_wire(&bad), Err(ActionError::InvalidBody { .. })));
     }
 

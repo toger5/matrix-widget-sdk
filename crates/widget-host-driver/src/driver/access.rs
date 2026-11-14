@@ -38,7 +38,7 @@ pub(super) fn required_capability(request: &WidgetRequest) -> Option<Capability>
         R::GetMatrixContext => Capability::GetMatrixContext,
         R::GetClientContext => Capability::GetClientContext,
         // The handshake works before any capability exists.
-        R::ContentLoaded | R::RequestCapabilities { .. } | R::Unknown => return None,
+        R::NotifyReady | R::RequestCapabilities { .. } | R::Unknown => return None,
         // Checked against the body by the handler.
         R::SendEvent { .. }
         | R::SendToDevice { .. }
@@ -62,7 +62,7 @@ pub(super) fn push_capability(request: &HostRequest) -> Option<Capability> {
         H::UpdateLanguage { .. } => Capability::UpdateLanguage,
         H::UpdateVisibility { .. } => Capability::UpdateVisibility,
         // The handshake, and the late reply to a `get_openid` that was already allowed.
-        H::NotifyCapabilities { .. } | H::ForwardOpenIdCredentials { .. } | H::Unknown => return None,
+        H::UpdateCapabilities { .. } | H::ForwardOpenIdCredentials { .. } | H::Unknown => return None,
         // Checked against the event by the forwarding code.
         H::ForwardEvent { .. } | H::UpdateState { .. } | H::ForwardToDevice { .. } => return None,
     })
@@ -70,7 +70,7 @@ pub(super) fn push_capability(request: &HostRequest) -> Option<Capability> {
 
 /// The error for a request that lacks `capability`.
 pub(super) fn missing(capability: &Capability) -> WidgetError {
-    WidgetError::new(format!("Missing capability for {capability}"))
+    WidgetError::missing_capability(capability)
 }
 
 /// Check a room the widget named explicitly (`room_id` in a request).
@@ -78,7 +78,7 @@ pub(super) fn missing(capability: &Capability) -> WidgetError {
 /// One widget, one room: no capability reaches another room, and naming the own room needs none.
 pub(super) fn check_room(own_room: &str, room_id: &str) -> Result<(), WidgetError> {
     if room_id != own_room {
-        return Err(WidgetError::new(format!(
+        return Err(WidgetError::invalid_request(format!(
             "Unable to access room {room_id}: a widget can only act in its own room ({own_room})"
         )));
     }
@@ -113,7 +113,7 @@ pub(super) fn check_send_event(
         return Err(missing(&Capability::SendStickyEvent));
     }
     if request.is_sticky() && request.is_state() {
-        return Err(WidgetError::new("Cannot send a state event with a sticky duration"));
+        return Err(WidgetError::invalid_request("Cannot send a state event with a sticky duration"));
     }
     if !approved.allows_send(&request.event_type, request.state_key.as_deref(), msgtype(&request.content)) {
         return Err(missing(&match &request.state_key {
@@ -177,15 +177,15 @@ mod tests {
         assert_eq!(required_capability(&WidgetRequest::UnwatchTurnServers), Some(Capability::UpdateTurnServers));
         assert_eq!(required_capability(&WidgetRequest::GetMatrixContext), Some(Capability::GetMatrixContext));
         // The handshake needs none.
-        assert_eq!(required_capability(&WidgetRequest::ContentLoaded), None);
-        assert_eq!(missing(&Capability::Navigate).message, "Missing capability for widget:org.matrix.mscXXXX.navigate");
+        assert_eq!(required_capability(&WidgetRequest::NotifyReady), None);
+        assert_eq!(missing(&Capability::Navigate).message, "Missing capability: widget:org.matrix.msc2931.navigate");
     }
 
     #[test]
     fn pushes_need_their_capability() {
         let theme = HostRequest::UpdateTheme { theme: json!({}).into() };
         assert_eq!(push_capability(&theme), Some(Capability::UpdateTheme));
-        let notify = HostRequest::NotifyCapabilities { request: Default::default() };
+        let notify = HostRequest::UpdateCapabilities { request: Default::default() };
         assert_eq!(push_capability(&notify), None);
     }
 

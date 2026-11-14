@@ -48,13 +48,17 @@ mod tests {
 
         let plain = WireMessage::request(
             Source::Widget,
-            "update_delayed_event",
+            "m.update_delayed_event",
             "u",
             json!({"delay_id": "d", "action": "send"}),
         );
         assert!(matches!(WidgetRequest::from_wire(&plain).unwrap(), WidgetRequest::UpdateDelayedEvent { .. }));
-        let bad =
-            WireMessage::request(Source::Widget, "update_delayed_event", "u", json!({"delay_id": "d", "action": "x"}));
+        let bad = WireMessage::request(
+            Source::Widget,
+            "m.update_delayed_event",
+            "u",
+            json!({"delay_id": "d", "action": "x"}),
+        );
         assert!(matches!(WidgetRequest::from_wire(&bad), Err(ActionError::InvalidBody { .. })));
     }
 }

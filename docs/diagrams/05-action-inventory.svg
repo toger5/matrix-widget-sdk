@@ -11,27 +11,30 @@
   </style>
   <rect width="1849" height="790" fill="#ffffff"/>
   <text x="30" y="42" class="h1">The actions, grouped</text>
-  <text x="30" y="66" class="s" style="font-size:12px">Wire names and capabilities as the code emits them ("…" abbreviates org.matrix. in action names and org.matrix.mscXXXX. in capabilities). The grouping is a proposal for the MSC discussion; the code treats all actions the same.</text>
+  <text x="30" y="66" class="s" style="font-size:12px">Every action is &lt;namespace&gt;.&lt;name&gt;: a name shown without a namespace is sent as org.matrix.mscXXXX.&lt;name&gt; (Core: org.matrix.msc4412.&lt;name&gt;). "…" in a capability is the namespace of its action. The grouping is a proposal; the code treats all actions the same.</text>
   <rect x="30" y="80" width="40" height="18" rx="9" fill="#7c3aed"/><text x="50" y="93" class="chip" text-anchor="middle">W→H</text><text x="78" y="93" class="s">widget-initiated</text>
   <rect x="190" y="80" width="40" height="18" rx="9" fill="#2563eb"/><text x="210" y="93" class="chip" text-anchor="middle">H→W</text><text x="238" y="93" class="s">host-initiated</text>
   <rect x="340" y="80" width="40" height="18" rx="9" fill="#ffffff" stroke="#6b7280" stroke-width="1.6" stroke-dasharray="6 4"/><text x="388" y="93" class="s">dashed: not implemented or not supported</text>
   <rect x="30" y="110" width="436" height="576" rx="12" fill="#eff6ff" stroke="#2563eb" stroke-width="1.5"/>
   <text x="46" y="134" class="h2" style="fill:#2563eb">Core</text>
-  <text x="46" y="152" class="s">The MSC4412 handshake.</text>
+  <text x="46" y="152" class="s">The MSC4412 core actions, sent as org.matrix.msc4412.&lt;name&gt;.</text>
   <rect x="40" y="164" width="416" height="40" rx="6" fill="#ffffff" stroke="#d1d5db"/>
-  <text x="50" y="181" class="m">content_loaded</text>
-  <text x="50" y="197" class="s">no capability: widget may be shown</text>
+  <text x="50" y="181" class="m">notify_ready</text>
+  <text x="50" y="197" class="s">no capability: widget may be shown (host waits 15 s)</text>
   <rect x="406" y="186" width="36" height="16" rx="8" fill="#7c3aed"/><text x="424" y="198" class="chip" text-anchor="middle" style="font-size:9.5px">W→H</text>
   <rect x="40" y="210" width="416" height="40" rx="6" fill="#ffffff" stroke="#d1d5db"/>
   <text x="50" y="227" class="m">request_capabilities</text>
-  <text x="50" y="243" class="s">no capability: the widget asks</text>
+  <text x="50" y="243" class="s">no capability: the widget asks for more, at any time</text>
   <rect x="406" y="232" width="36" height="16" rx="8" fill="#7c3aed"/><text x="424" y="244" class="chip" text-anchor="middle" style="font-size:9.5px">W→H</text>
   <rect x="40" y="256" width="416" height="40" rx="6" fill="#ffffff" stroke="#d1d5db"/>
-  <text x="50" y="273" class="m">notify_capabilities</text>
-  <text x="50" y="289" class="s">the host&#x27;s decision, { requested, approved }</text>
+  <text x="50" y="273" class="m">update_capabilities</text>
+  <text x="50" y="289" class="s">{ allowed }: the full list held now; the host may shrink it</text>
   <rect x="406" y="278" width="36" height="16" rx="8" fill="#2563eb"/><text x="424" y="290" class="chip" text-anchor="middle" style="font-size:9.5px">H→W</text>
   <text x="46" y="326" class="bb">Note</text>
-  <text x="46" y="346" class="s" style="font-size:12px">The handshake is all MSC4412 specs today.</text>
+  <text x="46" y="346" class="s" style="font-size:12px">These three are all MSC4412 specs, plus the envelope, the error</text>
+  <text x="46" y="362" class="s" style="font-size:12px">codes (unknown_action, missing_capability, invalid_request,</text>
+  <text x="46" y="378" class="s" style="font-size:12px">unknown) and the 10 s action timeout. Everything else is defined</text>
+  <text x="46" y="394" class="s" style="font-size:12px">by other MSCs on top, each action behind a capability.</text>
   <rect x="481" y="110" width="887" height="576" rx="12" fill="#fffbeb" stroke="#d97706" stroke-width="1.5"/>
   <text x="497" y="134" class="h2" style="fill:#d97706">Experimental</text>
   <text x="497" y="152" class="s">Implemented and capability-gated, but not specced in MSC4412 yet. Shapes may still change.</text>
@@ -78,11 +81,11 @@
   <rect x="857" y="600" width="36" height="16" rx="8" fill="#2563eb"/><text x="875" y="612" class="chip" text-anchor="middle" style="font-size:9.5px">H→W</text>
   <rect x="817" y="554" width="36" height="16" rx="8" fill="#7c3aed"/><text x="835" y="566" class="chip" text-anchor="middle" style="font-size:9.5px">W→H</text>
   <rect x="942" y="164" width="416" height="40" rx="6" fill="#ffffff" stroke="#d1d5db"/>
-  <text x="952" y="181" class="m">org.matrix.msc4412.get_matrix_context</text>
+  <text x="952" y="181" class="m">get_matrix_context</text>
   <text x="952" y="197" class="s">widget:…get_matrix_context · replaces URL templating</text>
   <rect x="1308" y="186" width="36" height="16" rx="8" fill="#7c3aed"/><text x="1326" y="198" class="chip" text-anchor="middle" style="font-size:9.5px">W→H</text>
   <rect x="942" y="210" width="416" height="40" rx="6" fill="#ffffff" stroke="#d1d5db"/>
-  <text x="952" y="227" class="m">org.matrix.msc4412.get_client_context</text>
+  <text x="952" y="227" class="m">get_client_context</text>
   <text x="952" y="243" class="s">widget:…get_client_context · client id, theme, language</text>
   <rect x="1308" y="232" width="36" height="16" rx="8" fill="#7c3aed"/><text x="1326" y="244" class="chip" text-anchor="middle" style="font-size:9.5px">W→H</text>
   <rect x="942" y="256" width="416" height="40" rx="6" fill="#ffffff" stroke="#d1d5db"/>
@@ -159,7 +162,7 @@
   <rect x="1759" y="508" width="36" height="16" rx="8" fill="#2563eb"/><text x="1777" y="520" class="chip" text-anchor="middle" style="font-size:9.5px">H→W</text>
   <rect x="30" y="710" width="1789" height="58" rx="10" fill="#f9fafb" stroke="#9ca3af" stroke-dasharray="6 4"/>
   <text x="46" y="734" class="bb">Dropped by MSC4412</text>
-  <text x="46" y="754" class="m">supported_api_versions</text><text x="226" y="754" class="s">→ version: "v1" in every envelope</text>
+  <text x="46" y="754" class="m">supported_api_versions</text><text x="226" y="754" class="s">→ no versions: namespaces + capabilities</text>
   <text x="520" y="754" class="m">toWidget capabilities</text><text x="690" y="754" class="s">→ widget-initiated request_capabilities</text>
   <text x="1010" y="754" class="m">URL $templates</text><text x="1125" y="754" class="s">→ get_matrix_context / get_client_context</text>
 </svg>

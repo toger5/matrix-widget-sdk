@@ -46,7 +46,7 @@ mod tests {
         );
 
         // A legacy `Blob` that reached the host unconverted is an invalid body, not a silent `{}`.
-        let blob = crate::WireMessage::request(crate::Source::Widget, "upload_file", "b", json!({"file": {}}));
+        let blob = crate::WireMessage::request(crate::Source::Widget, "m.upload_file", "b", json!({"file": {}}));
         assert!(matches!(WidgetRequest::from_wire(&blob), Err(crate::ActionError::InvalidBody { .. })));
     }
 }

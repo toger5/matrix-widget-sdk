@@ -15,7 +15,7 @@ mod tests {
     fn roundtrip() {
         let theme = json!({"name": "dark", "is_dark": true});
         let wire = HostRequest::UpdateTheme { theme: theme.clone().into() }.into_wire("t");
-        assert_eq!(wire.action, "update_theme");
+        assert_eq!(wire.action, "org.matrix.mscXXXX.update_theme");
         assert_eq!(wire.to_value()["request"], theme);
         assert_eq!(HostRequest::from_wire(&wire).unwrap(), HostRequest::UpdateTheme { theme: theme.into() });
         assert_eq!(HostResponse::from_wire(&wire.ack()).unwrap(), HostResponse::UpdateTheme);

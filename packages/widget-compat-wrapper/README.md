@@ -5,8 +5,9 @@ look like an **MSC4412 widget** to its host. The host embeds the wrapper; the wr
 widget in an inner iframe and translates between the two protocols.
 
 It contains **no action logic**. It translates envelopes, action names and capability names,
-forwards every other body untouched (including error responses in both directions) except file
-payloads (converted between `Blob` and base64, see below), and implements only two things itself:
+forwards every other body untouched except file payloads (converted between `Blob` and base64,
+see below) and the error responses of the legacy widget (which get the `code` MSC4412 requires),
+and implements only two things itself:
 the legacy **URL templating** (`$matrix_user_id` & co., fed by the `get_matrix_context` /
 `get_client_context` actions) and the startup handshake, where the two protocols are structurally
 different.
@@ -51,8 +52,8 @@ gone, delete it and the wrapper. The host keeps no template engine at all.
 
 Before the inner iframe exists the wrapper sends `request_capabilities` for
 `widget:org.matrix.mscXXXX.get_matrix_context` and `widget:org.matrix.mscXXXX.get_client_context`,
-waits for the host's `notify_capabilities`, requests both contexts
-(`org.matrix.msc4412.get_matrix_context`, `org.matrix.msc4412.get_client_context`) and
+waits for the host's `update_capabilities`, requests both contexts
+(`org.matrix.mscXXXX.get_matrix_context`, `org.matrix.mscXXXX.get_client_context`) and
 renders the URL:
 
 | variable | source |
@@ -65,7 +66,8 @@ renders the URL:
 
 Values are URI-encoded, unknown variables stay as they are, and if the host denies a capability
 or does not implement an action the corresponding variables are empty (the widget still loads).
-Any other host request during this phase is answered with an error, since there is no widget yet.
+Any other host request during this phase is answered with an `invalid_request` error, since there
+is no widget yet.
 
 This means a host prompts twice for a wrapped widget: once for the wrapper's context
 capabilities, once for the capabilities the legacy widget itself asks for. A host may of course
@@ -77,29 +79,44 @@ grant the context capabilities without prompting.
 |---|---|
 | `api: "fromWidget"` / `"toWidget"` | `source: "widget"` / `"host"` |
 | `widgetId` | absent; added from `legacy_widget_id` |
-| absent | `version: "v1"` |
 | `data` | `request` |
 | response = echo of the request + `response` | response = header + `response` |
-| `requestId` | unchanged, so responses correlate without extra state |
-| `response.error.message` | unchanged |
+| `requestId` | `request_id`, same value, so responses correlate without extra state |
+| `response.error: { message }` from the widget | `response.error: { code: "org.matrix.msc4412.unknown", message }` |
+| `response.error` from the host | unchanged: the widget reads `message` (and `matrix_api_error`) and ignores `code` |
+
+Neither format has a version. They are told apart by `api` versus `source`; the wrapper routes by
+window (`event.source`) and ignores a message of the wrong format.
 
 ### Action names (`src/envelope.ts`)
 
-The host does not accept the legacy names of the actions below, so the wrapper renames them. The
+The host does not accept the legacy names of the actions below, so the wrapper renames them.
+MSC4412 demands a namespace on every action, so that includes every legacy name without one. The
 table depends on the direction, because `send_event` and `send_to_device` are legacy names in both.
+
+`…` is `org.matrix.mscXXXX.`, the placeholder namespace of actions without an MSC of their own.
 
 | direction | legacy widget | host |
 |---|---|---|
-| widget → host | `org.matrix.msc2974.request_capabilities` | `request_capabilities` |
+| widget → host | `content_loaded` | `org.matrix.msc4412.notify_ready` (sent by the wrapper itself, see the handshake) |
+| widget → host | `org.matrix.msc2974.request_capabilities` | `org.matrix.msc4412.request_capabilities` |
+| widget → host | `send_event` | `…send_event` |
+| widget → host | `send_to_device` | `…send_to_device` |
+| widget → host | `get_openid` | `…get_openid` |
+| widget → host | `watch_turn_servers` / `unwatch_turn_servers` | `…watch_turn_servers` / `…unwatch_turn_servers` |
+| widget → host | `set_always_on_screen` | `…set_always_on_screen` |
 | widget → host | `org.matrix.msc3973.user_directory_search` | `org.matrix.msc3973.search_user_directory` |
 | widget → host | `org.matrix.msc4533.rtc_livekit_get_token` | `org.matrix.msc4533.get_rtc_livekit_token` |
 | widget → host | `org.matrix.msc4533.rtc_livekit_delegate_delayed_leave` | `org.matrix.msc4533.delegate_rtc_livekit_delayed_leave` |
-| host → widget | `send_event` | `forward_event` |
-| host → widget | `send_to_device` | `forward_to_device` |
-| host → widget | `openid_credentials` | `forward_openid_credentials` |
-| host → widget | `theme_change` | `update_theme` |
-| host → widget | `language_change` | `update_language` |
-| host → widget | `visibility` | `update_visibility` |
+| host → widget | `notify_capabilities` | `org.matrix.msc4412.update_capabilities` (body rewritten, see below) |
+| host → widget | `send_event` | `…forward_event` |
+| host → widget | `send_to_device` | `…forward_to_device` |
+| host → widget | `openid_credentials` | `…forward_openid_credentials` |
+| host → widget | `update_state` | `…update_state` |
+| host → widget | `update_turn_servers` | `…update_turn_servers` |
+| host → widget | `theme_change` | `…update_theme` |
+| host → widget | `language_change` | `…update_language` |
+| host → widget | `visibility` | `…update_visibility` |
 
 Everything else passes through unchanged (the host emits and accepts the unstable MSC spellings
 such as `org.matrix.msc2876.read_events` itself, see `docs/parity.md`), so an
@@ -112,7 +129,7 @@ A legacy widget asks for matrix-widget-api capabilities; the host grants one cap
 action. Every legacy capability stands for a fixed set of new ones. The wrapper requests that set
 and tells the widget a legacy capability is approved when the host approved **all** of its set.
 
-| legacy capability (its MSC prefix or `m.`) | requested from the host (`widget:` / `host:` + `org.matrix.mscXXXX.`) |
+| legacy capability (its MSC prefix or `m.`) | requested from the host (`…` = the unstable namespace of the action) |
 |---|---|
 | `send.event:<t>` | `widget:…send_event.timeline:<t>` |
 | `send.state_event:<t>` | `widget:…send_event.state:<t>` |
@@ -135,15 +152,26 @@ and tells the widget a legacy capability is approved when the host approved **al
 
 `<t>` keeps its `#<msgtype>` / `#<state_key>` suffix.
 
+A capability embeds the wire name of its action, so `…` is the prefix the host sends that action
+with: `org.matrix.msc2876.` (`read_events`), `org.matrix.msc3869.` (`read_relations`),
+`org.matrix.msc4157.` (`update_delayed_event`), `org.matrix.msc4515.` (`get_rtc_transports`),
+`org.matrix.msc3973.` (`search_user_directory`), `org.matrix.msc4039.` (`upload_file`,
+`download_file`, `get_media_config`), `org.matrix.msc4533.` (the LiveKit actions),
+`org.matrix.msc2931.` (`navigate`), `com.beeper.` (`read_room_account_data`) and
+`org.matrix.mscXXXX.` for everything else. A host that answers in the stable spelling
+(`widget:m.navigate`) is understood as well.
+
 - **Always requested**, whatever the widget asks for: `widget:…get_openid`, `host:…update_theme`,
   `host:…update_language`, `host:…update_visibility`. The legacy api has no capability for these;
   a legacy host simply allows them. A host that wants the legacy behaviour grants them without a
   prompt (`setAutoApproved`).
 - **`timeline:<room>` is never granted.** One widget, one room: nothing reaches another room. A
   request that names the widget's own room works without it.
-- **`notify_capabilities` is rewritten** for the widget: `requested` is the widget's own latest
-  list, `approved` every legacy capability it has ever requested whose whole set the host
-  approved. The widget only ever sees legacy names, in the spelling it used.
+- **`update_capabilities { allowed }` becomes `notify_capabilities { requested, approved }`** for
+  the widget: `requested` is the widget's own latest list, `approved` every legacy capability it
+  has ever requested whose whole set is in `allowed`. `allowed` is always the full list, so
+  `approved` shrinks when the host takes capabilities away. The widget only ever sees legacy
+  names, in the spelling it used.
 - A partially approved set (the host grants reading but not `forward_event`, say) is reported as
   **not** approved. The host still holds the partial grant, so the parts that were approved work.
 
@@ -184,10 +212,10 @@ inner iframe:
 `waitForIframeLoad = true` (legacy default)
 
 ```
-inner iframe load  ──► host:   content_loaded           (once per wrapper lifetime)
+inner iframe load  ──► host:   notify_ready             (once per wrapper lifetime)
                    ──► widget: capabilities {}
 widget: { capabilities } ──► host: request_capabilities { capabilities }   (host acks, ignored)
-host: notify_capabilities ──► widget: notify_capabilities (legacy)  ──► widget ack ──► host ack
+host: update_capabilities ──► widget: notify_capabilities (legacy)  ──► widget ack ──► host ack
 ```
 
 A `content_loaded` from the widget in this mode is answered with the legacy error
@@ -197,7 +225,7 @@ A `content_loaded` from the widget in this mode is answered with the legacy erro
 
 ```
 inner iframe load  ──► nothing
-widget: content_loaded ──► widget: {} ack, host: content_loaded, then the same capability round
+widget: content_loaded ──► widget: {} ack, host: notify_ready, then the same capability round
 ```
 
 A second `content_loaded` before a reload is answered with an error, as legacy hosts do.
@@ -209,17 +237,19 @@ Always:
   forwarding it would make the widget believe the host supports nothing (no MSC2871 → `ready`
   before capabilities are approved, no MSC2974 → no renegotiation).
 - Renegotiation (`org.matrix.msc2974.request_capabilities`) is forwarded with its capability list
-  translated like the first round's; the resulting `notify_capabilities` is translated back.
-- On an inner reload the capability round runs again (legacy hosts do the same); `content_loaded`
+  translated like the first round's; the resulting `update_capabilities` is translated back.
+- On an inner reload the capability round runs again (legacy hosts do the same); `notify_ready`
   is sent to the host only once.
 - Messages are routed by `event.source` (parent window vs. inner iframe), never by sniffing the
-  format. Messages with another `widgetId` or an MSC4412 version other than `v1` are ignored
-  or answered with an error respectively.
+  format. Messages with another `widgetId`, and messages from the parent that are not MSC4412
+  (no `source` / `request_id`), are ignored.
 
 ### Parity notes
 
-- `notify_capabilities.approved` must be the **cumulative** set, as legacy hosts send it and
-  legacy widgets overwrite their approved list with it. `widget-host-driver` does this.
+- Legacy widgets overwrite their approved list with `notify_capabilities.approved`, so it must be
+  the full set. MSC4412's `update_capabilities.allowed` is exactly that.
+- The wrapper needs the host to wait for `notify_ready` (`uses_widget_api: true`); the test host
+  always does for a wrapped widget.
 - Legacy widgets built with `new WidgetApi(widgetId, clientOrigin)` only accept a parent at
   `clientOrigin`; widgets derive it from `parentUrl`, which the wrapper sets to itself. A widget
   that passes `null` cannot talk to any parent, wrapper or not.

@@ -8,17 +8,20 @@
 //! 2. Implement [`WidgetHostPlatform::send_to_widget`] to `postMessage` JSON **to** the widget
 //!    window (never with a `*` target origin, see MSC4412).
 //!
-//! The driver takes care of the handshake (`content_loaded`, capability negotiation), checks
+//! The driver takes care of the handshake (`notify_ready`, capability negotiation), checks
 //! capabilities, performs Matrix operations through a [`MatrixBackend`] and answers the widget.
 //! Events arriving from sync come through the backend too: whenever the widget's `host:…`
 //! capabilities change, the driver subscribes to the backend
 //! ([`MatrixBackend::subscribe_room`]) for exactly those event types, pushes the current state as
-//! `update_state` and forwards new events as `send_event`.
+//! `update_state` and forwards new events as `forward_event`. It sends nothing before the widget
+//! has sent its first action.
 //!
 //! Capability approval is the one asynchronous, user-facing step: the driver acknowledges a
 //! `request_capabilities` immediately (as required by MSC4412), asks the platform via
-//! [`WidgetHostPlatform::on_capabilities_requested`], and sends `notify_capabilities` once the
+//! [`WidgetHostPlatform::on_capabilities_requested`], and sends `update_capabilities` (always the full list of what the widget
+//! holds) once the
 //! platform calls [`WidgetHostDriver::approve_capabilities`].
+//! [`WidgetHostDriver::revoke_capabilities`] takes capabilities away again.
 //!
 //! [`WidgetStateEventContent`] describes the `m.widget` state event (MSC4411) the client reads
 //! from room state to know which widgets to render.

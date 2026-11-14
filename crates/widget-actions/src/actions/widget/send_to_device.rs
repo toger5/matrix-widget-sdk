@@ -37,7 +37,7 @@ mod tests {
             request: SendToDeviceRequest { event_type: "org.example.ping".into(), encrypted: true, messages },
         };
         let wire = req.clone().into_wire("t");
-        assert_eq!(wire.action, "send_to_device");
+        assert_eq!(wire.action, "org.matrix.mscXXXX.send_to_device");
         assert_eq!(
             wire.to_value()["request"],
             json!({"type": "org.example.ping", "encrypted": true, "messages": {"@a:x": {"DEV": {"k": 1}}}})
@@ -45,7 +45,7 @@ mod tests {
         assert_eq!(WidgetRequest::from_wire(&wire).unwrap(), req);
         assert_eq!(WidgetResponse::from_wire(&wire.ack()).unwrap(), WidgetResponse::SendToDevice);
 
-        let bad = WireMessage::request(Source::Widget, "send_to_device", "t", json!({"type": "x", "messages": {}}));
+        let bad = WireMessage::request(Source::Widget, "m.send_to_device", "t", json!({"type": "x", "messages": {}}));
         assert!(matches!(WidgetRequest::from_wire(&bad), Err(ActionError::InvalidBody { .. })));
     }
 }

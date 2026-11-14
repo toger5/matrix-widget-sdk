@@ -35,7 +35,7 @@ More diagrams (legacy widgets, wire format, the actions crate, capabilities, tes
 | crate | runs on | purpose |
 |---|---|---|
 | [`widget-actions`](crates/widget-actions) | everywhere, optional UniFFI | Plain data types: the wire envelope, typed `Action` tree (`WidgetRequest`, `HostRequest`, ...), capability strings, `MatrixEvent`. No I/O, no state. |
-| [`widget-base-sdk`](crates/widget-base-sdk) | widget side, wasm + JS | `WidgetClient`: tracks the session (capabilities, `content_loaded`), turns actions into async functions, answers host requests. On `wasm32` also exports the `WidgetApi` JS class wired to `window.parent.postMessage`. |
+| [`widget-base-sdk`](crates/widget-base-sdk) | widget side, wasm + JS | `WidgetClient`: tracks the session (capabilities, `notify_ready`), turns actions into async functions, answers host requests. On `wasm32` also exports the `WidgetApi` JS class wired to `window.parent.postMessage`. |
 | [`widget-host-driver`](crates/widget-host-driver) | host side, optional UniFFI | `WidgetHostDriver`: one instance per rendered widget. Feed it widget messages, it performs the handshake, checks capabilities, calls the backend, subscribes to the room for the approved `receive.*` capabilities and answers. One callback (`send_to_widget`) carries JSON to the iframe. Also defines the `m.widget` state event content (MSC4411). Its `cdylib` carries the UniFFI scaffolding of all three host crates. |
 | [`widget-matrix-backend`](crates/widget-matrix-backend) | host side, optional UniFFI | `MatrixBackend`: the trait a host implements once per Matrix SDK, shaped after matrix-rust-rtc's (send room / state / sticky / delayed / to-device, read events / state / relations / account data, OpenID, TURN, RTC transports, user directory, media config, LiveKit; subscribe to the room, to-device messages and TURN credentials). Ships `InMemoryBackend` for tests and the browser test host. See [`docs/parity.md`](docs/parity.md). |
 | [`uniffi-bindgen`](crates/uniffi-bindgen) | tooling | Binary that generates Kotlin / Swift / Python bindings for the crates above. |
@@ -59,44 +59,58 @@ npm test          # wrapper unit tests
 
 ## Protocol summary (MSC4412)
 
-Every message is one JSON object:
+Every message ("action") is one JSON object, sent with `window.postMessage`:
 
 ```json5
 {
   "source": "widget" | "host",
-  "action": "send_event",
-  "requestId": "<uuid v4>",
-  "version": "v1",
+  "action": "org.matrix.mscXXXX.send_event",
+  "request_id": "<uuid v4>",
   "request": { ... } // or  "response": { ... }
 }
 ```
 
 * `source` names the side that *initiated* the exchange and is the same on request and response
   (`widget` ≙ legacy `fromWidget`, `host` ≙ legacy `toWidget`).
-* Every request gets exactly one response with the same `requestId`; `{}` is a plain ack.
-* Errors are answered with `"response": { "error": { "message": "..." } }`.
-* A message without `version` comes from a pre-MSC4412 widget; the driver reports
-  `DriverError::LegacyWidgetApi` so the host can fall back to its old implementation.
+* `action` is `<namespace>.<name>`: `m` once an action is in the spec, the unstable prefix of the
+  MSC that defines it until then. This repository sends the unstable names and also accepts
+  `m.<name>`. Actions that have no MSC yet use the placeholder `org.matrix.mscXXXX`.
+* Every request gets exactly one response with the same `request_id`; `{}` is a plain ack. A
+  message is a response if and only if it has `response`.
+* Errors are answered with `"response": { "error": { "code": "...", "message": "..." } }`. `code`
+  is machine readable: `org.matrix.msc4412.unknown_action`, `.missing_capability`,
+  `.invalid_request` or `.unknown`; a code the receiver does not know counts as `unknown`. Failed
+  Matrix requests use `org.matrix.mscXXXX.matrix_api_error` and add a `matrix_api_error` object
+  (HTTP status, `errcode`, ...).
+* A request that is not answered within 10 seconds has failed; a later response is ignored.
+  Anything slower (asking the user) is split into two actions that are each acked at once, like
+  `request_capabilities` / `update_capabilities`.
+* There is no version property. A legacy (matrix-widget-api) message has `api` instead of
+  `source`; the driver reports it as `DriverError::LegacyWidgetApi` so the host can load the widget
+  through the compat wrapper or fall back to its old implementation.
+* The host sends nothing before the widget has sent its first action.
+* The widget state event says `uses_widget_api: true` when the widget speaks this API. The host
+  then shows a loading state until `notify_ready` arrives (and an error after 15 seconds).
 
 Actions implemented here:
 
 | action | source | meaning | capability |
 |---|---|---|---|
-| `content_loaded` | widget | widget may be shown | none |
-| `request_capabilities` | widget | ask for capabilities (acked at once, decision comes later) | none |
-| `notify_capabilities` | host | `{ requested, approved }` after the user decided | none |
-| `send_event` | widget | send a timeline/state event; `room_id` (own room only), `delay` (MSC4157, answers with `delay_id`), `sticky_duration_ms` (MSC4407) | `widget:…send_event.timeline:<type>[#<msgtype>]` / `widget:…send_event.state:<type>[#<key>]`, plus `widget:…send_event.delayed` / `widget:…send_event.sticky` |
+| `org.matrix.msc4412.notify_ready` | widget | the widget is ready to be shown | none (core action) |
+| `org.matrix.msc4412.request_capabilities` | widget | `{ capabilities }`: ask for initial or additional capabilities, at any time. The ack grants nothing | none (core action) |
+| `org.matrix.msc4412.update_capabilities` | host | `{ allowed }`: the full list of capabilities the widget holds now. Sent after a request was decided and when the host takes capabilities away (`driver.revoke_capabilities`) | none (core action) |
+| `…send_event` | widget | send a timeline/state event; `room_id` (own room only), `delay` (MSC4157, answers with `delay_id`), `sticky_duration_ms` (MSC4407) | `widget:…send_event.timeline:<type>[#<msgtype>]` / `widget:…send_event.state:<type>[#<key>]`, plus `widget:…send_event.delayed` / `widget:…send_event.sticky` |
 | `org.matrix.msc4157.update_delayed_event` | widget | `{ delay_id, action: cancel \| restart \| send }` | `widget:…update_delayed_event` |
-| `forward_event` | host | a new event from sync (the driver's backend subscription) | `host:…forward_event.timeline:<type>[#<msgtype>]` / `host:…forward_event.state:<type>[#<key>]` |
+| `…forward_event` | host | a new event from sync (the driver's backend subscription) | `host:…forward_event.timeline:<type>[#<msgtype>]` / `host:…forward_event.state:<type>[#<key>]` |
 | `org.matrix.msc2876.read_events` | widget | read timeline (`limit`, `msgtype`, `since`) or state (`state_key`: string or `true`); `room_ids` (own room only) | `widget:…read_events.timeline:<type>[#<msgtype>]` / `widget:…read_events.state:<type>[#<key>]` |
 | `org.matrix.msc3869.read_relations` | widget | `{ event_id, rel_type?, event_type?, limit?, from?, to?, direction? }` → `{ chunk, next_batch?, prev_batch? }` | results filtered by `widget:…read_relations:<type>[#<msgtype>]` |
-| `update_state` | host | `{ state: [...] }` the current permitted state, on approval and after changes | `host:…update_state:<type>[#<key>]` |
-| `send_to_device` | widget | `{ type, encrypted, messages: { user_id: { device_id: content } } }` | `widget:…send_to_device:<type>` |
-| `forward_to_device` | host | `{ type, sender, content, encrypted }` from the backend's to-device subscription | `host:…forward_to_device:<type>` |
-| `get_openid` | widget | `{}` → `{ state: allowed \| blocked \| request, ...token }`; `request` means the user is being asked (`WidgetHostPlatform::on_openid_requested`, then `driver.resolve_openid`) | `widget:…get_openid` (the user may still be asked) |
-| `forward_openid_credentials` | host | `{ state, original_request_id, ...token }` after the user decided | none (the late reply to `get_openid`) |
-| `watch_turn_servers` / `unwatch_turn_servers` | widget | start / stop `update_turn_servers` pushes | `host:…update_turn_servers` |
-| `update_turn_servers` | host | `{ uris, username, password }` from the backend's TURN subscription | `host:…update_turn_servers` |
+| `…update_state` | host | `{ state: [...] }` the current permitted state, on approval and after changes | `host:…update_state:<type>[#<key>]` |
+| `…send_to_device` | widget | `{ type, encrypted, messages: { user_id: { device_id: content } } }` | `widget:…send_to_device:<type>` |
+| `…forward_to_device` | host | `{ type, sender, content, encrypted }` from the backend's to-device subscription | `host:…forward_to_device:<type>` |
+| `…get_openid` | widget | `{}` → `{ state: allowed \| blocked \| request, ...token }`; `request` means the user is being asked (`WidgetHostPlatform::on_openid_requested`, then `driver.resolve_openid`) | `widget:…get_openid` (the user may still be asked) |
+| `…forward_openid_credentials` | host | `{ state, original_request_id, ...token }` after the user decided | none (the late reply to `get_openid`) |
+| `…watch_turn_servers` / `…unwatch_turn_servers` | widget | start / stop `update_turn_servers` pushes | `host:…update_turn_servers` |
+| `…update_turn_servers` | host | `{ uris, username, password }` from the backend's TURN subscription | `host:…update_turn_servers` |
 | `org.matrix.msc4515.get_rtc_transports` | widget | `{}` → `{ rtc_transports: [...] }` | `widget:…get_rtc_transports` |
 | `org.matrix.msc3973.search_user_directory` | widget | `{ search_term, limit? }` → `{ limited, results }` | `widget:…search_user_directory` |
 | `org.matrix.msc4039.get_media_config` | widget | `{}` → `{ "m.upload.size"? }` | `widget:…get_media_config` |
@@ -106,29 +120,34 @@ Actions implemented here:
 | `org.matrix.msc4533.get_rtc_livekit_token` | widget | `{ server_name, url, room_id, slot_id, member_id }` → `{ jwt }` | `widget:…get_rtc_livekit_token` |
 | `org.matrix.msc4533.delegate_rtc_livekit_delayed_leave` | widget | `{ url, room_id, slot_id, member_id, delay_id }` → `{}` | `widget:…delegate_rtc_livekit_delayed_leave` |
 | `org.matrix.msc2931.navigate` | widget | `{ uri }` (a `matrix.to` permalink) → `WidgetHostPlatform::navigate` | `widget:…navigate` |
-| `set_always_on_screen` | widget | `{ value }` → `{ success }` via `WidgetHostPlatform::set_always_on_screen` | `widget:…set_always_on_screen` |
-| `update_theme` / `update_language` / `update_visibility` | host | pushed by `driver.update_theme / update_language / update_visibility` | `host:…update_theme` / `host:…update_language` / `host:…update_visibility` |
-| `org.matrix.msc4412.get_matrix_context` | widget | `{ user_id, device_id, room_id, display_name, avatar_url, matrix_base_url }`, replaces the legacy URL template parameters | `widget:…get_matrix_context` |
-| `org.matrix.msc4412.get_client_context` | widget | `{ client_id?, client_theme?, client_language? }` about the embedding client | `widget:…get_client_context` |
+| `…set_always_on_screen` | widget | `{ value }` → `{ success }` via `WidgetHostPlatform::set_always_on_screen` | `widget:…set_always_on_screen` |
+| `…update_theme` / `…update_language` / `…update_visibility` | host | pushed by `driver.update_theme / update_language / update_visibility` | `host:…update_theme` / `host:…update_language` / `host:…update_visibility` |
+| `…get_matrix_context` | widget | `{ user_id, device_id, room_id, display_name, avatar_url, matrix_base_url }`, replaces the legacy URL template parameters | `widget:…get_matrix_context` |
+| `…get_client_context` | widget | `{ client_id?, client_theme?, client_language? }` about the embedding client | `widget:…get_client_context` |
 
-Capabilities follow the naming proposal in
+`…` in the action column is the placeholder namespace `org.matrix.mscXXXX.` of actions that have
+no MSC of their own yet.
+
+Capabilities follow MSC4412 and the naming proposal in
 [`docs/spec-appendix/capability-naming-proposal.md`](docs/spec-appendix/capability-naming-proposal.md):
-one capability per action, written `source:namespace.action[.modifier][:data]`.
+one capability per action, written `source:action[.modifier][:data]`.
 
 * `source` is who sends the action: `widget` for a request the widget may make, `host` for a
   subscription (the host sends the action whenever there is something to send).
-* `…` in the table is the namespace. Strings are emitted with the unstable placeholder
-  `org.matrix.mscXXXX` (`widget:org.matrix.mscXXXX.navigate`) and parsed with it or with the stable
-  `m` (`widget:m.navigate`).
+* `action` is the value of the action's `action` property, namespace included. `…` in the
+  capability column stands for that namespace:
+  `widget:org.matrix.mscXXXX.send_event.timeline:m.room.message`,
+  `widget:org.matrix.msc2876.read_events.state:m.room.topic`, `widget:org.matrix.msc2931.navigate`.
+  The stable spelling `widget:m.navigate` is accepted as well. The same name under another
+  namespace is another action, so `widget:org.matrix.mscXXXX.navigate` grants nothing.
 * `send_event`, `read_events` and `forward_event` always carry `timeline` or `state`.
 * No capability names a room: a widget acts in the room it is embedded in.
-* The matrix-widget-api capability names (`org.matrix.msc2762.send.event:<type>`, ...) and the
-  action names the proposal renamed (`theme_change`, host `send_event`, ...) are **not** understood
-  by the driver. Legacy widgets run behind the
+* A widget can only ask for more capabilities. Only the host removes them, by sending
+  `update_capabilities` with a shorter list.
+* The matrix-widget-api capability names (`org.matrix.msc2762.send.event:<type>`, ...) and action
+  names (`content_loaded`, `theme_change`, host `send_event`, any name without a namespace) are
+  **not** understood by the driver. Legacy widgets run behind the
   [compat wrapper](packages/widget-compat-wrapper), which translates both.
-
-MSC4412 spells the capability actions inconsistently; this code uses the MSC2974 names
-`request_capabilities` / `notify_capabilities`.
 
 ## Using it
 
@@ -144,15 +163,15 @@ await init();
 
 const api = WidgetApi.connectToParent();            // posts to window.parent, filters by event.source
 api.onEvent((ev) => render(ev));
-api.onCapabilitiesChanged((requested, approved) => console.log(approved));
+api.onCapabilitiesChanged((allowed) => console.log(allowed));   // the full list, also after a revoke
 
 await api.requestCapabilities([
   "widget:org.matrix.mscXXXX.send_event.timeline:m.room.message",
-  "widget:org.matrix.mscXXXX.read_events.timeline:m.room.message",   // readEvents()
+  "widget:org.matrix.msc2876.read_events.timeline:m.room.message",   // readEvents()
   "host:org.matrix.mscXXXX.forward_event.timeline:m.room.message",   // onEvent()
   "widget:org.matrix.mscXXXX.get_matrix_context",
 ]);
-await api.contentLoaded();                          // host removes its spinner
+await api.notifyReady();                            // host removes its spinner
 const { event_id } = await api.sendEvent("m.room.message", { msgtype: "m.text", body: "hi" });
 const history = await api.readEvents("m.room.message", 20);
 const { user_id, room_id } = await api.getMatrixContext();   // the get_matrix_context action
@@ -174,7 +193,7 @@ impl WidgetDelegate for Transport {
 
 let client = WidgetClient::new(Rc::new(Transport));
 client.request_capabilities(vec![/* ... */]).await?;
-client.content_loaded().await?;
+client.notify_ready().await?;
 // incoming:  client.handle_message_from_host(&json)?;
 ```
 
@@ -188,7 +207,7 @@ struct Platform { /* handle to the iframe */ }
 impl WidgetHostPlatform for Platform {
     fn send_to_widget(&self, json: String) { /* iframe.postMessage(JSON.parse(json), widgetOrigin) */ }
     fn on_capabilities_requested(&self, requested: Vec<Capability>) { /* prompt user, then driver.approve_capabilities(..) */ }
-    fn on_content_loaded(&self) { /* hide spinner */ }
+    fn on_ready(&self) { /* hide the loading state */ }
     fn on_openid_requested(&self) { /* prompt user, then driver.resolve_openid(allowed).await */ }
     fn navigate(&self, uri: String) -> Result<(), PlatformError> { /* open the matrix.to link */ Ok(()) }
     fn set_always_on_screen(&self, value: bool) -> bool { value }
@@ -201,7 +220,7 @@ impl WidgetHostPlatform for Platform {
 let backend: Arc<dyn MatrixBackend> = Arc::new(MyRustSdkBackend::new(room));
 let driver = WidgetHostDriver::new(backend, Arc::new(Platform { .. }));
 // granted without a prompt, e.g. for a legacy widget behind the compat wrapper:
-driver.set_auto_approved(vec![Capability::MatrixContext, Capability::ClientContext]);
+driver.set_auto_approved(vec![Capability::GetMatrixContext, Capability::GetClientContext]);
 
 // from the iframe's message handler:
 driver.handle_message_from_widget(json).await?;
@@ -226,7 +245,7 @@ await uniffiInitAsync();
 const driver = new WidgetHostDriver(new InMemoryBackend(roomId, userId).asBackend(), {
   sendToWidget: (json) => iframe.contentWindow.postMessage(JSON.parse(json), widgetOrigin),
   onCapabilitiesRequested: (caps) => queueMicrotask(() => driver.approveCapabilities(caps)),
-  onContentLoaded: () => (iframe.hidden = false),
+  onReady: () => (iframe.hidden = false),
   onOpenidRequested: () => queueMicrotask(() => driver.resolveOpenid(true)),
   navigate: (uri) => { location.href = uri; },
   setAlwaysOnScreen: (value) => value,
@@ -265,7 +284,7 @@ npm run bindings && npm run build --workspaces --if-present   # ubrn bindings + 
 ```
 
 `crates/widget-base-sdk/tests/loopback.rs` wires a `WidgetClient` to a `WidgetHostDriver` with an
-`InMemoryBackend` and walks through the full lifecycle (capabilities → content_loaded → send →
+`InMemoryBackend` and walks through the full lifecycle (capabilities → notify_ready → send →
 receive → read → state update). It is the best place to see the whole protocol in motion.
 
 ## Not (yet) covered
@@ -277,6 +296,9 @@ receive → read → state update). It is the best place to see the whole protoc
   driver and `m.sticker` parses as `Capability::Other`.
 * **Legacy capability and action names**: every matrix-widget-api capability string parses as
   `Capability::Other` and grants nothing; the compat wrapper translates them.
+* **Timeouts on the host side**: the widget SDK fails a request the host does not answer within
+  10 seconds. The driver does not time out its own requests to the widget (they are only acked,
+  nothing waits for them), and the compat wrapper does not time out its bootstrap requests.
 * **Modal widgets** (`open_modal`, `close_modal`, `set_button_enabled`, `button_clicked`,
   `widget_config`): client UI only, not in MSC4412.
 * **Receiving sticky events** (`host:…forward_event.sticky`): the capability parses,
@@ -288,8 +310,8 @@ receive → read → state update). It is the best place to see the whole protoc
   exists. An implementation is a thin adapter around `Room::send_raw`,
   `Room::get_state_events`, a room event handler for `subscribe_room`, ...
 
-Legacy (`im.vector.modular.widgets`) widgets are covered: the driver rejects versionless
-messages with `DriverError::LegacyWidgetApi`, and `packages/widget-compat-wrapper` runs them on
+Legacy (`im.vector.modular.widgets`) widgets are covered: the driver rejects their messages
+(`api` instead of `source`) with `DriverError::LegacyWidgetApi`, and `packages/widget-compat-wrapper` runs them on
 an MSC4412 host. Smaller gaps (`redact_event`, `parent_delay_id`, `\#` escaping in msgtype
 capabilities, the order of the TURN watch acknowledgement) and the full comparison with
 matrix-widget-api and matrix-rust-rtc are in [`docs/parity.md`](docs/parity.md). Unknown

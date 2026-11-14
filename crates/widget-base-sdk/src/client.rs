@@ -1,5 +1,5 @@
 use std::cell::RefCell;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::future::Future;
 use std::rc::{Rc, Weak};
 
@@ -15,7 +15,7 @@ use widget_actions::{
     RequestCapabilitiesRequest, RoomAccountData, SearchUserDirectoryRequest, SearchUserDirectoryResponse,
     SendEventRequest, SendEventResponse, SendToDeviceRequest, SetAlwaysOnScreenRequest, StateKeySelector,
     ToDeviceEvent, TurnServer, UpdateDelayedEventAction, UpdateDelayedEventRequest, UploadFileRequest,
-    UploadFileResponse, WidgetError, WidgetRequest, WidgetResponse, WireMessage, API_VERSION_V1,
+    UploadFileResponse, WidgetError, WidgetRequest, WidgetResponse, WireMessage,
 };
 
 use crate::WidgetClientError;
@@ -40,13 +40,19 @@ pub trait WidgetDelegate {
     /// Deliver a JSON encoded message to the host, e.g. `window.parent.postMessage(...)`.
     fn send_to_host(&self, json: String);
 
-    /// A room event the host forwarded to this widget (`send_event` from the host).
+    /// A request was sent to the host. MSC4412 gives the host 10 seconds
+    /// ([`ACTION_TIMEOUT_MS`](widget_actions::ACTION_TIMEOUT_MS)) to answer: start a timer and
+    /// call [`WidgetClient::timeout_request`] with `request_id` when it fires. The client has no
+    /// clock of its own; without this the request waits for as long as the host takes.
+    fn on_request_sent(&self, _request_id: &str) {}
+
+    /// A room event the host forwarded to this widget (`forward_event`).
     fn on_matrix_event(&self, _event: MatrixEvent) {}
 
     /// The host pushed (part of) the current room state (`update_state`).
     fn on_state_update(&self, _state: Vec<MatrixEvent>) {}
 
-    /// A to-device message the host forwarded to this widget (`send_to_device` from the host).
+    /// A to-device message the host forwarded to this widget (`forward_to_device`).
     fn on_to_device_message(&self, _message: ToDeviceEvent) {}
 
     /// New TURN credentials while watching them (`update_turn_servers`).
@@ -61,26 +67,30 @@ pub trait WidgetDelegate {
     /// The client started or stopped showing the widget (`update_visibility`).
     fn on_visibility_change(&self, _visible: bool) {}
 
-    /// A capability negotiation finished. `approved` is the complete set now held.
-    fn on_capabilities_changed(&self, _requested: Vec<Capability>, _approved: Vec<Capability>) {}
+    /// The host sent `update_capabilities`. `allowed` is the complete set the widget holds now:
+    /// it may have grown (a request was granted) or shrunk (the host took capabilities away).
+    fn on_capabilities_changed(&self, _allowed: Vec<Capability>) {}
 }
 
 /// Snapshot of what the client knows about its session with the host.
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct WidgetState {
-    /// `content_loaded` was sent and acknowledged.
-    pub content_loaded: bool,
-    /// Capabilities of the most recent `request_capabilities` that is still unanswered.
+    /// `notify_ready` was sent and acknowledged.
+    pub ready: bool,
+    /// Capabilities requested since the host's last `update_capabilities`.
     pub pending_requested: Vec<Capability>,
-    /// All capabilities the host has approved so far.
+    /// The capabilities the widget holds: `allowed` of the host's last `update_capabilities`.
     pub approved: Vec<Capability>,
 }
 
 #[derive(Default)]
 struct Inner {
     state: WidgetState,
-    pending: HashMap<String, oneshot::Sender<WireMessage>>,
+    /// Requests waiting for their response, with the action for error messages.
+    pending: HashMap<String, (String, oneshot::Sender<Result<WireMessage, WidgetClientError>>)>,
+    /// Requests that timed out; their late responses are ignored.
+    timed_out: HashSet<String>,
     /// `get_openid` requests answered with `state: request`, waiting for `forward_openid_credentials`.
     openid_waiters: HashMap<String, oneshot::Sender<ForwardOpenIdCredentialsRequest>>,
 }
@@ -152,11 +162,12 @@ impl WidgetClient {
     ) -> (WireMessage, impl Future<Output = Result<WidgetResponse, WidgetClientError>> + 'static) {
         let id = (self.next_id)();
         let (tx, rx) = oneshot::channel();
-        self.inner.borrow_mut().pending.insert(id.clone(), tx);
-        let msg = request.into_wire(id);
+        let msg = request.into_wire(id.clone());
+        self.inner.borrow_mut().pending.insert(id.clone(), (msg.action.clone(), tx));
         self.delegate.send_to_host(msg.to_json());
+        self.delegate.on_request_sent(&id);
         let fut = async move {
-            let msg = rx.await.map_err(|_| WidgetClientError::Cancelled)?;
+            let msg = rx.await.map_err(|_| WidgetClientError::Cancelled)??;
             match WidgetResponse::from_wire(&msg) {
                 Ok(response) => Ok(response),
                 Err(ActionError::ErrorResponse { error }) => Err(WidgetClientError::Host(error)),
@@ -164,6 +175,19 @@ impl WidgetClient {
             }
         };
         (msg, fut)
+    }
+
+    /// Fail the request `request_id` with [`WidgetClientError::Timeout`] if it is still
+    /// unanswered. A response that arrives later is ignored. Returns whether the request was
+    /// waiting. See [`WidgetDelegate::on_request_sent`].
+    pub fn timeout_request(&self, request_id: &str) -> bool {
+        let mut inner = self.inner.borrow_mut();
+        let Some((action, tx)) = inner.pending.remove(request_id) else {
+            return false;
+        };
+        inner.timed_out.insert(request_id.to_owned());
+        let _ = tx.send(Err(WidgetClientError::Timeout { action }));
+        true
     }
 
     /// Ask the host for an OpenID token (MSC1960). Resolves with the token once the host (and
@@ -175,7 +199,8 @@ impl WidgetClient {
         self.inner.borrow_mut().openid_waiters.insert(id.clone(), tx);
         let inner: Weak<RefCell<Inner>> = Rc::downgrade(&self.inner);
         async move {
-            let unexpected = || WidgetClientError::UnexpectedResponse { action: "get_openid".into() };
+            let unexpected =
+                || WidgetClientError::UnexpectedResponse { action: "org.matrix.mscXXXX.get_openid".into() };
             let response = pick!(GetOpenId { response } => response)(fut.await?).ok_or_else(unexpected)?;
             if response.state != OpenIdState::PendingUserConfirmation {
                 if let Some(inner) = inner.upgrade() {
@@ -195,16 +220,18 @@ impl WidgetClient {
         }
     }
 
-    /// Tell the host the widget is ready to be shown. Required when the widget state event has
-    /// `usesWidgetAPI: true`; the host shows a spinner until this arrives.
-    pub fn content_loaded(&self) -> impl Future<Output = Result<(), WidgetClientError>> + 'static {
+    /// Tell the host the widget is ready to be shown (`notify_ready`). Required when the widget
+    /// state event has `uses_widget_api: true`; the host shows a loading state until this arrives
+    /// and an error if it does not (after about 15 seconds). Do the initial loading before
+    /// (capabilities, theme, first events), anything longer behind an own loading indicator.
+    pub fn notify_ready(&self) -> impl Future<Output = Result<(), WidgetClientError>> + 'static {
         // Only a weak handle: dropping the client must cancel the future, not keep state alive.
         let inner: Weak<RefCell<Inner>> = Rc::downgrade(&self.inner);
-        let fut = self.call(WidgetRequest::ContentLoaded, pick!(ContentLoaded => ()));
+        let fut = self.call(WidgetRequest::NotifyReady, pick!(NotifyReady => ()));
         async move {
             fut.await?;
             if let Some(inner) = inner.upgrade() {
-                inner.borrow_mut().state.content_loaded = true;
+                inner.borrow_mut().state.ready = true;
             }
             Ok(())
         }
@@ -225,14 +252,22 @@ impl WidgetClient {
         self.call(WidgetRequest::GetMatrixContext, pick!(GetMatrixContext { response } => response))
     }
 
-    /// Ask the host for capabilities. Resolves when the host *acknowledged* the request; the
-    /// actual decision arrives later through [`WidgetDelegate::on_capabilities_changed`] and
-    /// is visible in [`state`](Self::state).
+    /// Ask the host for initial or additional capabilities, at any time. Resolves when the host
+    /// *acknowledged* the request, which grants nothing; what the widget holds arrives later
+    /// through [`WidgetDelegate::on_capabilities_changed`] and is visible in
+    /// [`state`](Self::state). A widget cannot give capabilities back.
     pub fn request_capabilities(
         &self,
         capabilities: Vec<Capability>,
     ) -> impl Future<Output = Result<(), WidgetClientError>> + 'static {
-        self.inner.borrow_mut().state.pending_requested = capabilities.clone();
+        {
+            let mut inner = self.inner.borrow_mut();
+            for capability in &capabilities {
+                if !inner.state.pending_requested.contains(capability) {
+                    inner.state.pending_requested.push(capability.clone());
+                }
+            }
+        }
         let request = WidgetRequest::RequestCapabilities { request: RequestCapabilitiesRequest { capabilities } };
         self.call(request, pick!(RequestCapabilities => ()))
     }
@@ -284,7 +319,11 @@ impl WidgetClient {
         request.delay = Some(delay_ms);
         let fut = self.send_event_request(request);
         // A delayed send is answered with a `delay_id` instead of an `event_id`.
-        async move { fut.await?.delay_id.ok_or(WidgetClientError::UnexpectedResponse { action: "send_event".into() }) }
+        async move {
+            fut.await?
+                .delay_id
+                .ok_or(WidgetClientError::UnexpectedResponse { action: "org.matrix.mscXXXX.send_event".into() })
+        }
     }
 
     /// Cancel, restart or fire a delayed event. Needs `widget:…update_delayed_event`.
@@ -483,10 +522,6 @@ impl WidgetClient {
 
     /// Like [`handle_message_from_host`](Self::handle_message_from_host) for an already parsed envelope.
     pub fn handle_message(&self, msg: WireMessage) -> Result<(), WidgetClientError> {
-        match msg.version.as_deref() {
-            Some(API_VERSION_V1) => {}
-            other => return Err(WidgetClientError::UnsupportedVersion { version: other.unwrap_or("").to_owned() }),
-        }
         // Responses are parsed by the future awaiting them (see `request`), so a malformed body
         // is reported to the caller instead of failing here.
         match msg.kind() {
@@ -497,11 +532,18 @@ impl WidgetClient {
     }
 
     fn resolve_response(&self, msg: WireMessage) -> Result<(), WidgetClientError> {
-        let sender = self.inner.borrow_mut().pending.remove(&msg.request_id);
+        let sender = {
+            let mut inner = self.inner.borrow_mut();
+            // A response to a request that timed out is ignored.
+            if inner.timed_out.remove(&msg.request_id) {
+                return Ok(());
+            }
+            inner.pending.remove(&msg.request_id)
+        };
         match sender {
-            Some(tx) => {
+            Some((_, tx)) => {
                 // The receiver may have been dropped; that is not an error.
-                let _ = tx.send(msg);
+                let _ = tx.send(Ok(msg));
                 Ok(())
             }
             None => Err(WidgetClientError::UnknownRequestId { request_id: msg.request_id }),
@@ -512,25 +554,23 @@ impl WidgetClient {
         let request = match HostRequest::from_wire(&msg) {
             Ok(r) => r,
             Err(ActionError::InvalidBody { message, .. }) => {
-                self.send(msg.error_response_to(WidgetError::new(format!("Invalid request body: {message}"))));
+                let error = WidgetError::invalid_request(format!("Invalid request body: {message}"));
+                self.send(msg.error_response_to(error));
                 return Ok(());
             }
             Err(e) => return Err(e.into()),
         };
         match request {
-            HostRequest::NotifyCapabilities { request } => {
-                let approved = {
+            HostRequest::UpdateCapabilities { request } => {
+                {
+                    // `allowed` is the full list: it replaces what the widget held, so the host
+                    // can also take capabilities away.
                     let mut inner = self.inner.borrow_mut();
                     inner.state.pending_requested.clear();
-                    for cap in request.approved {
-                        if !inner.state.approved.contains(&cap) {
-                            inner.state.approved.push(cap);
-                        }
-                    }
-                    inner.state.approved.clone()
-                };
+                    inner.state.approved = request.allowed.clone();
+                }
                 self.send(msg.ack());
-                self.delegate.on_capabilities_changed(request.requested, approved);
+                self.delegate.on_capabilities_changed(request.allowed);
             }
             HostRequest::ForwardEvent { event } => {
                 self.send(msg.ack());
@@ -568,7 +608,7 @@ impl WidgetClient {
                 }
             }
             HostRequest::Unknown => {
-                self.send(msg.error_response_to(WidgetError::new(format!("Unknown action `{}`", msg.action))));
+                self.send(msg.error_response_to(WidgetError::unknown_action(&msg.action)));
             }
         }
         Ok(())
@@ -584,7 +624,7 @@ mod tests {
     use std::cell::Cell;
 
     use serde_json::json;
-    use widget_actions::{NotifyCapabilitiesRequest, Source};
+    use widget_actions::{ErrorKind, Source, UpdateCapabilitiesRequest};
 
     use super::*;
 
@@ -608,7 +648,7 @@ mod tests {
         fn on_matrix_event(&self, event: MatrixEvent) {
             self.events.borrow_mut().push(event);
         }
-        fn on_capabilities_changed(&self, _requested: Vec<Capability>, _approved: Vec<Capability>) {
+        fn on_capabilities_changed(&self, _allowed: Vec<Capability>) {
             self.caps_changed.set(self.caps_changed.get() + 1);
         }
     }
@@ -628,20 +668,40 @@ mod tests {
     }
 
     #[test]
-    fn content_loaded_roundtrip() {
+    fn notify_ready_roundtrip() {
         let (client, rec) = setup();
-        let fut = client.content_loaded();
+        let fut = client.notify_ready();
         let sent = rec.drain();
         assert_eq!(sent.len(), 1);
-        assert_eq!(sent[0].action, "content_loaded");
+        assert_eq!(sent[0].action, "org.matrix.msc4412.notify_ready");
         assert_eq!(sent[0].request_id, "req-1");
         assert_eq!(sent[0].source, Source::Widget);
-        assert!(sent[0].is_v1());
-        assert!(!client.state().content_loaded);
+        assert!(!client.state().ready);
 
         client.handle_message_from_host(&sent[0].ack().to_json()).unwrap();
         block(fut).unwrap();
-        assert!(client.state().content_loaded);
+        assert!(client.state().ready);
+    }
+
+    #[test]
+    fn unanswered_requests_time_out() {
+        let (client, rec) = setup();
+        let fut = client.notify_ready();
+        let sent = rec.drain();
+        assert!(!client.timeout_request("someone-else"));
+        assert!(client.timeout_request("req-1"));
+        assert_eq!(block(fut), Err(WidgetClientError::Timeout { action: "org.matrix.msc4412.notify_ready".into() }));
+        assert!(!client.state().ready);
+        // The late response is ignored, once; the request cannot time out twice.
+        assert!(!client.timeout_request("req-1"));
+        assert_eq!(client.handle_message(sent[0].ack()), Ok(()));
+        assert!(matches!(client.handle_message(sent[0].ack()), Err(WidgetClientError::UnknownRequestId { .. })));
+
+        // An answered request does not time out.
+        let fut = client.notify_ready();
+        client.handle_message(rec.drain()[0].ack()).unwrap();
+        assert!(!client.timeout_request("req-2"));
+        block(fut).unwrap();
     }
 
     #[test]
@@ -694,8 +754,8 @@ mod tests {
         client.handle_message(sent[0].ack()).unwrap();
         block(fut).unwrap();
 
-        let notify = HostRequest::NotifyCapabilities {
-            request: NotifyCapabilitiesRequest { requested: caps, approved: vec![Capability::send_event("a")] },
+        let notify = HostRequest::UpdateCapabilities {
+            request: UpdateCapabilitiesRequest { allowed: vec![Capability::send_event("a")] },
         }
         .into_wire("host-1");
         client.handle_message(notify.clone()).unwrap();
@@ -709,16 +769,24 @@ mod tests {
         assert!(!client.has_capability(&Capability::read_events("b")));
         assert!(client.state().pending_requested.is_empty());
 
-        // Re-exchange merges.
-        let notify2 = HostRequest::NotifyCapabilities {
-            request: NotifyCapabilitiesRequest {
-                requested: vec![Capability::read_events("b")],
-                approved: vec![Capability::read_events("b")],
-            },
-        }
-        .into_wire("host-2");
-        client.handle_message(notify2).unwrap();
+        // `allowed` is the full list: it replaces what the widget held ...
+        let update = |allowed: Vec<Capability>, id: &str| {
+            HostRequest::UpdateCapabilities { request: UpdateCapabilitiesRequest { allowed } }.into_wire(id)
+        };
+        client
+            .handle_message(update(vec![Capability::send_event("a"), Capability::read_events("b")], "host-2"))
+            .unwrap();
         assert_eq!(client.state().approved.len(), 2);
+        // ... so the host can take capabilities away again.
+        client.handle_message(update(vec![Capability::read_events("b")], "host-3")).unwrap();
+        assert_eq!(client.state().approved, vec![Capability::read_events("b")]);
+        assert!(!client.has_capability(&Capability::send_event("a")));
+        assert_eq!(rec.caps_changed.get(), 3);
+
+        // Requests add up until the host answers.
+        let _a = client.request_capabilities(vec![Capability::Navigate]);
+        let _b = client.request_capabilities(vec![Capability::Navigate, Capability::UploadFile]);
+        assert_eq!(client.state().pending_requested, vec![Capability::Navigate, Capability::UploadFile]);
     }
 
     #[test]
@@ -733,7 +801,7 @@ mod tests {
         // Allowed right away.
         let fut = client.request_openid_token();
         let sent = rec.drain();
-        assert_eq!(sent[0].action, "get_openid");
+        assert_eq!(sent[0].action, "org.matrix.mscXXXX.get_openid");
         client
             .handle_message(
                 sent[0].response_to(json!({"state": "allowed", "access_token": "t", "token_type": "Bearer",
@@ -790,25 +858,31 @@ mod tests {
 
         let unknown = WireMessage::request(Source::Host, "org.example.x", "u", json!({}));
         client.handle_message(unknown).unwrap();
-        assert!(rec.drain()[0].error().unwrap().message.contains("Unknown action"));
+        let error = rec.drain()[0].error().unwrap();
+        assert!(error.message.contains("Unknown action"));
+        assert_eq!(error.kind(), ErrorKind::UnknownAction);
     }
 
     #[test]
     fn protocol_errors() {
         let (client, rec) = setup();
-        let stray = WireMessage::request(Source::Widget, "content_loaded", "zzz", json!({})).ack();
+        let stray = WireMessage::request(Source::Widget, "m.notify_ready", "zzz", json!({})).ack();
         assert_eq!(client.handle_message(stray), Err(WidgetClientError::UnknownRequestId { request_id: "zzz".into() }));
 
-        let widget_req = WidgetRequest::ContentLoaded.into_wire("w");
+        let widget_req = WidgetRequest::NotifyReady.into_wire("w");
         assert!(matches!(client.handle_message(widget_req), Err(WidgetClientError::WrongDirection { .. })));
 
-        let mut legacy = WidgetRequest::ContentLoaded.into_wire("w").ack();
-        legacy.version = None;
-        assert!(matches!(client.handle_message(legacy), Err(WidgetClientError::UnsupportedVersion { .. })));
+        // A legacy message (`api` instead of `source`) is not a widget API message.
+        let legacy =
+            json!({"api": "toWidget", "widgetId": "w", "requestId": "1", "action": "capabilities", "data": {}});
+        assert!(matches!(
+            client.handle_message_from_host(&legacy.to_string()),
+            Err(WidgetClientError::Protocol(ActionError::Malformed { .. }))
+        ));
         assert!(rec.drain().is_empty());
 
         // Dropping the client cancels outstanding futures.
-        let fut = client.content_loaded();
+        let fut = client.notify_ready();
         drop(client);
         assert_eq!(block(fut), Err(WidgetClientError::Cancelled));
     }

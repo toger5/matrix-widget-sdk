@@ -8,67 +8,87 @@ are marked **decision**; everything marked **raised** is a conflict left for a h
 
 ## 1. Wire names and prefixes
 
-Many action names carry an unstable MSC prefix (`org.matrix.msc2876.read_events`). To keep every
+MSC4412 demands that every action is `<namespace>.<name>`: `m` for actions in the spec, the
+unstable prefix of the defining MSC until then (`org.matrix.msc2876.read_events`). To keep every
 action renameable later, this crate emits the **unstable name** on the wire and accepts the
-**stable (prefix-less) name as an alias** when parsing. The serde `rename` / `alias` attributes in
-`crates/widget-actions/src/actions/*/mod.rs` are the single place a wire name lives.
+**stable name `m.<name>` as an alias** when parsing. A name without a namespace is not an action.
+The serde `rename` / `alias` attributes in `crates/widget-actions/src/actions/*/mod.rs` are the
+single place a wire name lives.
 
-**Decision (2026-11-14):** actions and capabilities follow
+**Decision (2026-11-14, updated for the rewritten MSC4412 on the same day):** actions and
+capabilities follow MSC4412 and
 [`spec-appendix/capability-naming-proposal.md`](spec-appendix/capability-naming-proposal.md).
 
-* **Capabilities** are `source:namespace.action[.modifier][:data]`, one per action. They are
-  emitted with the unstable placeholder namespace `org.matrix.mscXXXX` and parsed with it or with
-  the stable `m` (`widget:m.navigate`). There is one namespace for all capabilities instead of one
-  prefix per MSC. No capability names a room.
+* **Envelope:** `source`, `action`, `request_id`, `request` / `response`. No `version`: legacy
+  messages are recognised by `api` instead of `source`.
+* **Core actions** carry MSC4412's prefix: `org.matrix.msc4412.notify_ready`,
+  `org.matrix.msc4412.request_capabilities`, `org.matrix.msc4412.update_capabilities`
+  (`{ allowed }`, always the full list). They need no capability.
+* **Namespaces:** an action keeps the unstable prefix of the MSC that defines it. Actions that
+  have no MSC of their own yet use the placeholder `org.matrix.mscXXXX`: `send_event`,
+  `send_to_device`, `get_openid`, `watch_turn_servers`, `unwatch_turn_servers`,
+  `set_always_on_screen`, `get_matrix_context`, `get_client_context` and every host action
+  (`forward_event`, `update_state`, `forward_to_device`, `forward_openid_credentials`,
+  `update_turn_servers`, `update_theme`, `update_language`, `update_visibility`).
+* **Capabilities** are `source:action[.modifier][:data]`, one per action, where `action` is the
+  wire name of the action, namespace included (`widget:org.matrix.msc2876.read_events.state:<type>`,
+  `widget:org.matrix.mscXXXX.send_event.timeline:<type>`). The stable spelling
+  (`widget:m.navigate`) is parsed as well. The same name under another namespace is a different
+  action and grants nothing. No capability names a room.
 * **Actions** are verbs, and no name is used by both sources. The proposal's renames are applied
   (`forward_event`, `update_theme`, `get_matrix_context`, ...); a renamed action keeps the prefix
   it had (`org.matrix.msc3973.search_user_directory`).
+* **Errors** are `{ error: { code, message } }` with MSC4412's codes
+  (`org.matrix.msc4412.unknown_action`, `.missing_capability`, `.invalid_request`, `.unknown`).
+  Failed Matrix requests use `org.matrix.mscXXXX.matrix_api_error` with the `matrix_api_error`
+  object as the code's additional property.
 * **No aliases for legacy names.** Neither the old action names nor the matrix-widget-api
   capability strings are understood by the driver or the widget SDK. Nothing is deployed against
   this API yet, and legacy widgets always run behind `packages/widget-compat-wrapper`, which
   translates both.
 
-**Decision:** the two actions this repository invented, `get_matrix_context` and
-`get_client_context`, get the action prefix `org.matrix.msc4412.` because they replace the URL
-templating that MSC4412 removes. Changing the prefix is one constant per action.
+**Decision (2026-11-14):** the two actions this repository invented, `get_matrix_context` and
+`get_client_context`, use the placeholder `org.matrix.mscXXXX.`. They used to carry
+`org.matrix.msc4412.`, but MSC4412 now defines the three core actions only.
 
 ## 2. Action inventory
 
 Legend: ✅ implemented before the parity branch · 🔨 built on the parity branch (all of these are
 in; the marker shows what changed) · ⛔ raised, not built · ➖ dropped by MSC4412.
 
-In the capability column `…` stands for the namespace (`org.matrix.mscXXXX`, or `m`).
+In the capability column `…` stands for the namespace of the action (the prefix in the "wire name
+here" column, or `m`). Every wire name also has the stable alias `m.<name>`.
 
 ### Widget → host (`source: widget`, legacy `fromWidget`)
 
 | legacy action | wire name here | capability | status | backend / platform method |
 |---|---|---|---|---|
 | `supported_api_versions` | – | – | ➖ dropped by MSC4412 (the compat wrapper answers it locally) | – |
-| `content_loaded` | `content_loaded` | none | ✅ | `platform.on_content_loaded` |
-| `org.matrix.msc2974.request_capabilities` | `request_capabilities` | none | ✅ | `platform.on_capabilities_requested` |
-| `send_event` (MSC2762) | `send_event` | `widget:…send_event.timeline:<type>[#msgtype]` / `widget:…send_event.state:<type>[#key]` | ✅ | `backend.send_room_event` / `send_state_event` |
+| `content_loaded` | `org.matrix.msc4412.notify_ready` | none (core action) | ✅ (🔨 renamed by MSC4412) | `platform.on_ready` |
+| `org.matrix.msc2974.request_capabilities` | `org.matrix.msc4412.request_capabilities` | none (core action) | ✅ | `platform.on_capabilities_requested` |
+| `send_event` (MSC2762) | `org.matrix.mscXXXX.send_event` | `widget:…send_event.timeline:<type>[#msgtype]` / `widget:…send_event.state:<type>[#key]` | ✅ | `backend.send_room_event` / `send_state_event` |
 | `send_event` + `room_id` | – | none; only the widget's own room is accepted, see §4 | 🔨 | – |
 | `send_event` + `delay` (MSC4157) | – | + `widget:…send_event.delayed` | 🔨 response carries `delay_id` | `backend.send_delayed_event` |
 | `send_event` + `sticky_duration_ms` (MSC4407 / MSC4354) | – | + `widget:…send_event.sticky` | 🔨 | `backend.send_sticky_event` |
-| `org.matrix.msc4157.update_delayed_event` | `org.matrix.msc4157.update_delayed_event` (alias `update_delayed_event`) | `widget:…update_delayed_event` | 🔨 | `backend.restart_delayed_event` / `cancel_delayed_event` / `send_delayed_event_now` |
-| `org.matrix.msc2876.read_events` | `org.matrix.msc2876.read_events` (alias `read_events`) | `widget:…read_events.timeline:<type>[#msgtype]` / `widget:…read_events.state:<type>[#key]` | ✅ (+ 🔨 `msgtype`, `since`, `room_ids`) | `backend.read_room_events` / `read_room_state` |
-| `org.matrix.msc3869.read_relations` | `org.matrix.msc3869.read_relations` (alias `read_relations`) | results filtered by `widget:…read_relations:<type>[#msgtype]` | 🔨 | `backend.relations` |
-| `send_to_device` (MSC3819) | `send_to_device` | `widget:…send_to_device:<type>` | 🔨 | `backend.send_to_device_message` |
-| `get_openid` (MSC1960) | `get_openid` | `widget:…get_openid` (plus the user prompt) | 🔨 two-phase, see §5 | `platform.on_openid_requested`, `backend.openid_token` |
-| `watch_turn_servers` / `unwatch_turn_servers` (MSC3846) | same | `host:…update_turn_servers` | 🔨 | `backend.subscribe_turn_servers` |
-| `org.matrix.msc4515.get_rtc_transports` | `org.matrix.msc4515.get_rtc_transports` (alias `get_rtc_transports`) | `widget:…get_rtc_transports` | 🔨 | `backend.rtc_transports` |
-| `org.matrix.msc3973.user_directory_search` | `org.matrix.msc3973.search_user_directory` (alias `search_user_directory`) | `widget:…search_user_directory` | 🔨 | `backend.search_user_directory` |
-| `org.matrix.msc4039.get_media_config` | `org.matrix.msc4039.get_media_config` (alias `get_media_config`) | `widget:…get_media_config` | 🔨 | `backend.media_config` |
-| `org.matrix.msc4039.upload_file` / `download_file` | same (aliases `upload_file` / `download_file`) | `widget:…upload_file` / `widget:…download_file` | 🔨 file as base64, see §6 | `backend.upload_media` / `download_media` |
-| `com.beeper.read_room_account_data` | `com.beeper.read_room_account_data` (alias `read_room_account_data`) | `widget:…read_room_account_data:<type>` | 🔨 | `backend.read_room_account_data` |
-| `org.matrix.msc2931.navigate` | `org.matrix.msc2931.navigate` (alias `navigate`) | `widget:…navigate` | 🔨 | `platform.navigate` |
+| `org.matrix.msc4157.update_delayed_event` | `org.matrix.msc4157.update_delayed_event` | `widget:…update_delayed_event` | 🔨 | `backend.restart_delayed_event` / `cancel_delayed_event` / `send_delayed_event_now` |
+| `org.matrix.msc2876.read_events` | `org.matrix.msc2876.read_events` | `widget:…read_events.timeline:<type>[#msgtype]` / `widget:…read_events.state:<type>[#key]` | ✅ (+ 🔨 `msgtype`, `since`, `room_ids`) | `backend.read_room_events` / `read_room_state` |
+| `org.matrix.msc3869.read_relations` | `org.matrix.msc3869.read_relations` | results filtered by `widget:…read_relations:<type>[#msgtype]` | 🔨 | `backend.relations` |
+| `send_to_device` (MSC3819) | `org.matrix.mscXXXX.send_to_device` | `widget:…send_to_device:<type>` | 🔨 | `backend.send_to_device_message` |
+| `get_openid` (MSC1960) | `org.matrix.mscXXXX.get_openid` | `widget:…get_openid` (plus the user prompt) | 🔨 two-phase, see §5 | `platform.on_openid_requested`, `backend.openid_token` |
+| `watch_turn_servers` / `unwatch_turn_servers` (MSC3846) | `org.matrix.mscXXXX.watch_turn_servers` / `org.matrix.mscXXXX.unwatch_turn_servers` | `host:…update_turn_servers` | 🔨 | `backend.subscribe_turn_servers` |
+| `org.matrix.msc4515.get_rtc_transports` | `org.matrix.msc4515.get_rtc_transports` | `widget:…get_rtc_transports` | 🔨 | `backend.rtc_transports` |
+| `org.matrix.msc3973.user_directory_search` | `org.matrix.msc3973.search_user_directory` | `widget:…search_user_directory` | 🔨 | `backend.search_user_directory` |
+| `org.matrix.msc4039.get_media_config` | `org.matrix.msc4039.get_media_config` | `widget:…get_media_config` | 🔨 | `backend.media_config` |
+| `org.matrix.msc4039.upload_file` / `download_file` | same | `widget:…upload_file` / `widget:…download_file` | 🔨 file as base64, see §6 | `backend.upload_media` / `download_media` |
+| `com.beeper.read_room_account_data` | `com.beeper.read_room_account_data` | `widget:…read_room_account_data:<type>` | 🔨 | `backend.read_room_account_data` |
+| `org.matrix.msc2931.navigate` | `org.matrix.msc2931.navigate` | `widget:…navigate` | 🔨 | `platform.navigate` |
 | `m.sticker` | – | – | ⛔ not supported | – |
-| `org.matrix.msc4533.rtc_livekit_get_token` | `org.matrix.msc4533.get_rtc_livekit_token` (alias `get_rtc_livekit_token`) | `widget:…get_rtc_livekit_token` | 🔨 | `backend.rtc_livekit_get_token` |
-| `org.matrix.msc4533.rtc_livekit_delegate_delayed_leave` | `org.matrix.msc4533.delegate_rtc_livekit_delayed_leave` (alias `delegate_rtc_livekit_delayed_leave`) | `widget:…delegate_rtc_livekit_delayed_leave` | 🔨 | `backend.rtc_livekit_delegate_delayed_leave` |
-| `set_always_on_screen` | `set_always_on_screen` | `widget:…set_always_on_screen` | 🔨 | `platform.set_always_on_screen` |
+| `org.matrix.msc4533.rtc_livekit_get_token` | `org.matrix.msc4533.get_rtc_livekit_token` | `widget:…get_rtc_livekit_token` | 🔨 | `backend.rtc_livekit_get_token` |
+| `org.matrix.msc4533.rtc_livekit_delegate_delayed_leave` | `org.matrix.msc4533.delegate_rtc_livekit_delayed_leave` | `widget:…delegate_rtc_livekit_delayed_leave` | 🔨 | `backend.rtc_livekit_delegate_delayed_leave` |
+| `set_always_on_screen` | `org.matrix.mscXXXX.set_always_on_screen` | `widget:…set_always_on_screen` | 🔨 | `platform.set_always_on_screen` |
 | `open_modal` / `close_modal` / `set_button_enabled` | – | – | ⛔ modal widgets, see §6 | – |
-| *(new)* | `org.matrix.msc4412.get_matrix_context` (alias `get_matrix_context`) | `widget:…get_matrix_context` | ✅ (prefix 🔨) | backend identity getters |
-| *(new)* | `org.matrix.msc4412.get_client_context` (alias `get_client_context`) | `widget:…get_client_context` | ✅ (prefix 🔨) | `platform.client_*` |
+| *(new)* | `org.matrix.mscXXXX.get_matrix_context` | `widget:…get_matrix_context` | ✅ (prefix 🔨) | backend identity getters |
+| *(new)* | `org.matrix.mscXXXX.get_client_context` | `widget:…get_client_context` | ✅ (prefix 🔨) | `platform.client_*` |
 
 ### Host → widget (`source: host`, legacy `toWidget`)
 
@@ -76,15 +96,15 @@ In the capability column `…` stands for the namespace (`org.matrix.mscXXXX`, o
 |---|---|---|---|---|
 | `supported_api_versions` | – | – | ➖ dropped | – |
 | `capabilities` | – | – | ➖ capabilities are widget-initiated in MSC4412 | – |
-| `notify_capabilities` | `notify_capabilities` | none | ✅ | `driver.approve_capabilities` |
-| `send_event` | `forward_event` | `host:…forward_event.timeline:<type>[#msgtype]` / `host:…forward_event.state:<type>[#key]` | ✅ | `RoomSink::on_timeline_events` |
-| `update_state` (MSC2762 update_state) | `update_state` | `host:…update_state:<type>[#key]` | ✅ | `RoomSink::on_state_events` |
-| `send_to_device` | `forward_to_device` | `host:…forward_to_device:<type>` | 🔨 | `ToDeviceSink::on_to_device_message` |
-| `openid_credentials` | `forward_openid_credentials` | none (the late reply to `get_openid`) | 🔨 | `driver.resolve_openid` |
-| `update_turn_servers` | `update_turn_servers` | `host:…update_turn_servers` | 🔨 | `TurnServerSink::on_turn_server` |
-| `theme_change` (MSC2873) | `update_theme` | `host:…update_theme` | 🔨 | `driver.update_theme` |
-| `language_change` | `update_language` | `host:…update_language` | 🔨 | `driver.update_language` |
-| `visibility` | `update_visibility` | `host:…update_visibility` | 🔨 | `driver.update_visibility` |
+| `notify_capabilities` | `org.matrix.msc4412.update_capabilities` | none (core action) | ✅ (🔨 `{ allowed }`: always the full list) | `driver.approve_capabilities` / `driver.revoke_capabilities` |
+| `send_event` | `org.matrix.mscXXXX.forward_event` | `host:…forward_event.timeline:<type>[#msgtype]` / `host:…forward_event.state:<type>[#key]` | ✅ | `RoomSink::on_timeline_events` |
+| `update_state` (MSC2762 update_state) | `org.matrix.mscXXXX.update_state` | `host:…update_state:<type>[#key]` | ✅ | `RoomSink::on_state_events` |
+| `send_to_device` | `org.matrix.mscXXXX.forward_to_device` | `host:…forward_to_device:<type>` | 🔨 | `ToDeviceSink::on_to_device_message` |
+| `openid_credentials` | `org.matrix.mscXXXX.forward_openid_credentials` | none (the late reply to `get_openid`) | 🔨 | `driver.resolve_openid` |
+| `update_turn_servers` | `org.matrix.mscXXXX.update_turn_servers` | `host:…update_turn_servers` | 🔨 | `TurnServerSink::on_turn_server` |
+| `theme_change` (MSC2873) | `org.matrix.mscXXXX.update_theme` | `host:…update_theme` | 🔨 | `driver.update_theme` |
+| `language_change` | `org.matrix.mscXXXX.update_language` | `host:…update_language` | 🔨 | `driver.update_language` |
+| `visibility` | `org.matrix.mscXXXX.update_visibility` | `host:…update_visibility` | 🔨 | `driver.update_visibility` |
 | `screenshot` | – | – | ⛔ intentionally not supported, see §6 | – |
 | `widget_config` / `button_clicked` / `close_modal` | – | – | ⛔ modal widgets, see §6 | – |
 
@@ -93,7 +113,7 @@ In the capability column `…` stands for the namespace (`org.matrix.mscXXXX`, o
 All of these parse into a `Capability` variant. Anything else stays `Capability::Other` and grants
 nothing; that includes every matrix-widget-api capability string.
 
-| capability (`…` = `org.matrix.mscXXXX` or `m`) | parsed as | matrix-widget-api capability the compat wrapper maps to it |
+| capability (`…` = the action's namespace, see the list below, or `m`) | parsed as | matrix-widget-api capability the compat wrapper maps to it |
 |---|---|---|
 | `widget:…send_event.timeline:<type>[#msgtype]` | `SendEvent` | `org.matrix.msc2762.send.event:<type>` |
 | `widget:…send_event.state:<type>[#key]` | `SendStateEvent` | `org.matrix.msc2762.send.state_event:<type>` |
@@ -123,6 +143,15 @@ nothing; that includes every matrix-widget-api capability string.
 | `host:…update_theme` / `update_language` / `update_visibility` | `UpdateTheme` / `UpdateLanguage` / `UpdateVisibility` | none (always requested by the wrapper) |
 | `org.matrix.msc2762.timeline:<room_id>` | `Other` | no equivalent: never requested by the wrapper, never granted |
 | `io.element.requires_client`, `m.sticker`, `m.capability.screenshot` | `Other` | passed through unchanged; nothing acts on them |
+
+The namespace of a capability is the one of its action: `org.matrix.msc2876` (`read_events`),
+`org.matrix.msc3869` (`read_relations`), `org.matrix.msc4157` (`update_delayed_event`),
+`org.matrix.msc4515` (`get_rtc_transports`), `org.matrix.msc3973` (`search_user_directory`),
+`org.matrix.msc4039` (`get_media_config`, `upload_file`, `download_file`), `org.matrix.msc4533`
+(`get_rtc_livekit_token`, `delegate_rtc_livekit_delayed_leave`), `org.matrix.msc2931` (`navigate`),
+`com.beeper` (`read_room_account_data`) and `org.matrix.mscXXXX` for everything else. The table
+lives in `namespace_of` (`crates/widget-actions/src/capabilities.rs`) and is repeated in
+`packages/widget-compat-wrapper/src/capabilities.ts` and `packages/test-widgets/new/capabilities.ts`.
 
 ## 3. `MatrixBackend` next to matrix-rust-rtc
 
@@ -183,9 +212,10 @@ the method here has the same name and parameter order, so one adapter per Matrix
    superset with optional parameters and returns `RelationsChunk { chunk, next_batch, prev_batch }`.
    rtc could grow the same optional parameters.
 4. **Error shape.** rtc: one struct `{ errcode?, status?, message }`; here: a four-variant enum.
-   **Decision:** adopt rtc's struct. The driver maps it to the widget error body matrix-widget-api
-   already understands: `{ error: { message, matrix_api_error?: { http_status, response: { errcode,
-   error } } } }`.
+   **Decision:** adopt rtc's struct. The driver maps it to an MSC4412 error with the code
+   `org.matrix.mscXXXX.matrix_api_error` and the additional property matrix-widget-api already
+   understands: `{ error: { code, message, matrix_api_error: { http_status, response: { errcode,
+   error } } } }`. A backend failure without errcode and status is a plain `unknown` error.
 5. **`subscribe_room` sync vs async.** rtc's core trait is async and its uniffi layer sync (uniffi
    cannot return an object from an async foreign method). Here the trait *is* the uniffi layer, so
    it stays sync. No change.

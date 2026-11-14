@@ -9,11 +9,17 @@ both build on it.
 
 It contains:
 
-* `WireMessage`: the generic envelope (`source`, `action`, `requestId`, `version`,
-  `request` / `response`). It parses any MSC4412 message, including unknown actions.
+* `WireMessage`: the generic envelope (`source`, `action`, `request_id`, `request` /
+  `response`). It parses any MSC4412 message, including unknown actions. Legacy messages (`api`
+  instead of `source`) do not parse.
+* `WidgetError` / `ErrorKind`: the error body `{ error: { code, message } }` and MSC4412's codes
+  (`unknown_action`, `missing_capability`, `invalid_request`, `unknown`), plus
+  `matrix_api_error` for failed Matrix requests.
 * `Action` and its four leaf enums `WidgetRequest`, `WidgetResponse`, `HostRequest`,
   `HostResponse`: one variant per action, one file per action under `src/actions/`.
-* `Capability` / `CapabilitySet`: capability strings and the `allows_*` checks.
+* `Capability` / `CapabilitySet`: capability strings and the `allows_*` checks. A capability
+  embeds the wire name of its action (`widget:org.matrix.msc2876.read_events.state:<type>`); the
+  stable `m.` spelling is parsed as well.
 * `MatrixEvent`, `WidgetError` and the other shared payload types.
 
 ![widget-actions: wire vs. typed](../../docs/diagrams/04-actions-crate.svg)
@@ -24,18 +30,17 @@ It contains:
 use widget_actions::{Action, Capability, CapabilitySet, WidgetRequest, WireMessage, WidgetError};
 
 // incoming JSON → envelope → typed action
-let msg = WireMessage::from_json(&json)?;
-if !msg.is_v1() { /* legacy widget */ }
+let msg = WireMessage::from_json(&json)?;              // Err for legacy messages (`api`, no `source`)
 match Action::from_wire(&msg)? {
     Action::WidgetRequest { request: WidgetRequest::SendEvent { request } } => { /* … */ }
     Action::WidgetRequest { request: WidgetRequest::Unknown } => {
-        let reply = msg.error_response_to(WidgetError::new(format!("Unknown action {}", msg.action)));
+        let reply = msg.error_response_to(WidgetError::unknown_action(&msg.action));
     }
     _ => {}
 }
 
 // typed action → envelope → JSON
-let out = WidgetRequest::ContentLoaded.into_wire(uuid).to_json();
+let out = WidgetRequest::NotifyReady.into_wire(uuid).to_json();
 let ack = msg.ack();                                  // `{}` reply to any request
 
 // capabilities

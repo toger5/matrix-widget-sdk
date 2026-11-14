@@ -29,15 +29,15 @@ const el = (tag: string, className: string, text: string) =>
 function envelope(data: unknown) {
   if (typeof data !== "object" || data === null) return undefined;
   const msg = data as Record<string, unknown>;
-  if (typeof msg.action !== "string" || typeof msg.requestId !== "string") return undefined;
+  if (typeof msg.action !== "string" || typeof msg.request_id !== "string") return undefined;
   const direction = "response" in msg ? "response" : "request";
-  return { action: msg.action, direction, requestId: msg.requestId, body: msg[direction] };
+  return { action: msg.action, direction, requestId: msg.request_id, body: msg[direction] };
 }
 
 const EXAMPLE_NEW: StateEvent = {
   type: "m.widget",
   state_key: "widget-1",
-  content: { name: "New test widget", url: "http://localhost:5175/new/", usesWidgetAPI: true },
+  content: { name: "New test widget", url: "http://localhost:5175/new/", uses_widget_api: true },
 };
 const EXAMPLE_LEGACY: StateEvent = {
   type: "im.vector.modular.widgets",
@@ -135,6 +135,9 @@ let driver: WidgetHostDriver | undefined;
 let backend: InMemoryBackend | undefined;
 let iframe: HTMLIFrameElement | undefined;
 let widgetOrigin = "*";
+/** Timer for the widget's `notify_ready`; MSC4412 recommends showing an error after 15 seconds. */
+let readyTimer: number | undefined;
+const NOTIFY_READY_TIMEOUT_MS = 15_000;
 
 const LABELS = { in: "← widget", out: "→ widget", err: "error", info: "info" };
 
@@ -210,7 +213,8 @@ const platform: WidgetHostPlatform = {
     // Decide outside the driver call that reported the request, then call back in.
     queueMicrotask(() => (askCapabilities(requested), refresh()));
   },
-  onContentLoaded() {
+  onReady() {
+    clearTimeout(readyTimer);
     $("spinner").hidden = true;
     if (iframe) iframe.hidden = false;
   },
@@ -250,6 +254,16 @@ async function loadWidget() {
   widgetOrigin = new URL(widget.url).origin;
   iframe = Object.assign(document.createElement("iframe"), { src: widget.url, hidden: widget.usesWidgetApi });
   $("spinner").hidden = !widget.usesWidgetApi;
+  $("spinner").textContent = "waiting for notify_ready…";
+  clearTimeout(readyTimer);
+  if (widget.usesWidgetApi) {
+    const waitingFor = driver;
+    readyTimer = window.setTimeout(() => {
+      if (driver !== waitingFor || waitingFor.snapshot().ready) return;
+      $("spinner").textContent = "The widget did not send notify_ready within 15 seconds.";
+      log("err", "widget did not send notify_ready in time");
+    }, NOTIFY_READY_TIMEOUT_MS);
+  }
   $("frame").querySelector(".fill")!.append(iframe);
   refresh();
 }
@@ -287,6 +301,12 @@ $("injectToDeviceBtn").onclick = () => {
   refresh();
 };
 $("clear").onclick = () => (backend?.clear(), refresh());
+$("revokeAll").onclick = () => {
+  // The host may take capabilities away at any time; the widget gets the reduced list.
+  driver?.revokeCapabilities(driver.snapshot().approved);
+  log("info", "all capabilities revoked; the widget gets update_capabilities with an empty list");
+  refresh();
+};
 let visible = true;
 $("themeChange").onclick = () => driver?.updateTheme({ name: "dark", is_dark: true });
 $("languageChange").onclick = () => driver?.updateLanguage("de");

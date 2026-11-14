@@ -3,9 +3,10 @@
 **Responsibility:** the widget side of the widget API. It runs **only inside the widget's
 webview** and is shipped as wasm with the widget. It is never part of a Matrix client.
 
-`WidgetClient` keeps the widget's session state (requested / approved capabilities,
-`content_loaded`), turns every action into an async function, matches responses to requests, and
-acknowledges what the host pushes. On `wasm32` it exports the JavaScript class `WidgetApi`,
+`WidgetClient` keeps the widget's session state (requested capabilities, the capabilities the
+host allowed, `notify_ready`), turns every action into an async function, matches responses to
+requests, fails requests the host does not answer within 10 seconds, and acknowledges what the
+host pushes. On `wasm32` it exports the JavaScript class `WidgetApi`,
 which talks to `window.parent` via `postMessage`.
 
 ![Architecture](../../docs/diagrams/01-architecture.svg)
@@ -23,13 +24,13 @@ await init();
 const api = WidgetApi.connectToParent("https://client.example");   // target origin of the host
 api.onEvent((event) => render(event));                             // forward_event from the host
 api.onStateUpdate((state) => renderState(state));                  // update_state
-api.onCapabilitiesChanged((requested, approved) => console.log(approved));
+api.onCapabilitiesChanged((allowed) => console.log(allowed));      // the full list, also after a revoke
 
 await api.requestCapabilities([
   "widget:org.matrix.mscXXXX.send_event.timeline:m.room.message",
   "host:org.matrix.mscXXXX.forward_event.timeline:m.room.message",   // onEvent
 ]);
-await api.contentLoaded();                                         // host shows the widget
+await api.notifyReady();                                           // host shows the widget
 
 await api.sendEvent("m.room.message", { msgtype: "m.text", body: "hi" });
 const history = await api.readEvents("m.room.message", 20);

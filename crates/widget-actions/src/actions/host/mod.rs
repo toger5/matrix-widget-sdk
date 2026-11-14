@@ -5,14 +5,14 @@ use serde::{Deserialize, Serialize};
 
 use super::{expect, parse_tagged, split_tagged};
 use crate::{
-    ActionError, ForwardOpenIdCredentialsRequest, JsonValue, MatrixEvent, NotifyCapabilitiesRequest, Source,
-    ToDeviceEvent, TurnServer, UpdateLanguageRequest, UpdateStateRequest, UpdateVisibilityRequest, WireMessage,
+    ActionError, ForwardOpenIdCredentialsRequest, JsonValue, MatrixEvent, Source, ToDeviceEvent, TurnServer,
+    UpdateCapabilitiesRequest, UpdateLanguageRequest, UpdateStateRequest, UpdateVisibilityRequest, WireMessage,
 };
 
 pub(crate) mod forward_event;
 pub(crate) mod forward_openid_credentials;
 pub(crate) mod forward_to_device;
-pub(crate) mod notify_capabilities;
+pub(crate) mod update_capabilities;
 pub(crate) mod update_language;
 pub(crate) mod update_state;
 pub(crate) mod update_theme;
@@ -24,44 +24,44 @@ pub(crate) mod update_visibility;
 #[serde(tag = "action")]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
 pub enum HostRequest {
-    /// Result of a capability negotiation.
-    #[serde(rename = "notify_capabilities")]
-    NotifyCapabilities { request: NotifyCapabilitiesRequest },
+    /// The full list of capabilities the widget holds from now on. (core action)
+    #[serde(rename = "org.matrix.msc4412.update_capabilities", alias = "m.update_capabilities")]
+    UpdateCapabilities { request: UpdateCapabilitiesRequest },
     /// A new room event the widget holds a `host:…forward_event.*` capability for.
-    #[serde(rename = "forward_event")]
+    #[serde(rename = "org.matrix.mscXXXX.forward_event", alias = "m.forward_event")]
     ForwardEvent {
         #[serde(rename = "request")]
         event: MatrixEvent,
     },
     /// Current room state the widget holds `host:…update_state` capabilities for.
-    #[serde(rename = "update_state")]
+    #[serde(rename = "org.matrix.mscXXXX.update_state", alias = "m.update_state")]
     UpdateState { request: UpdateStateRequest },
     /// A to-device message the widget holds a `host:…forward_to_device` capability for.
-    #[serde(rename = "forward_to_device")]
+    #[serde(rename = "org.matrix.mscXXXX.forward_to_device", alias = "m.forward_to_device")]
     ForwardToDevice {
         #[serde(rename = "request")]
         message: ToDeviceEvent,
     },
     /// The late outcome of a `get_openid` (MSC1960); covered by `widget:…get_openid`.
-    #[serde(rename = "forward_openid_credentials")]
+    #[serde(rename = "org.matrix.mscXXXX.forward_openid_credentials", alias = "m.forward_openid_credentials")]
     ForwardOpenIdCredentials { request: ForwardOpenIdCredentialsRequest },
     /// TURN credentials for a widget that is watching them (MSC3846). Needs `host:…update_turn_servers`.
-    #[serde(rename = "update_turn_servers")]
+    #[serde(rename = "org.matrix.mscXXXX.update_turn_servers", alias = "m.update_turn_servers")]
     UpdateTurnServers {
         #[serde(rename = "request")]
         server: TurnServer,
     },
     /// The client's theme changed (MSC2873); the body shape is up to the client. Needs `host:…update_theme`.
-    #[serde(rename = "update_theme")]
+    #[serde(rename = "org.matrix.mscXXXX.update_theme", alias = "m.update_theme")]
     UpdateTheme {
         #[serde(rename = "request")]
         theme: JsonValue,
     },
     /// The client's UI language changed. Needs `host:…update_language`.
-    #[serde(rename = "update_language")]
+    #[serde(rename = "org.matrix.mscXXXX.update_language", alias = "m.update_language")]
     UpdateLanguage { request: UpdateLanguageRequest },
     /// The client started or stopped showing the widget. Needs `host:…update_visibility`.
-    #[serde(rename = "update_visibility")]
+    #[serde(rename = "org.matrix.mscXXXX.update_visibility", alias = "m.update_visibility")]
     UpdateVisibility { request: UpdateVisibilityRequest },
     /// An action this crate does not know; see [`WidgetRequest::Unknown`](crate::WidgetRequest::Unknown).
     #[serde(other)]
@@ -75,23 +75,23 @@ pub enum HostRequest {
 #[serde(tag = "action")]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
 pub enum HostResponse {
-    #[serde(rename = "notify_capabilities")]
-    NotifyCapabilities,
-    #[serde(rename = "forward_event")]
+    #[serde(rename = "org.matrix.msc4412.update_capabilities", alias = "m.update_capabilities")]
+    UpdateCapabilities,
+    #[serde(rename = "org.matrix.mscXXXX.forward_event", alias = "m.forward_event")]
     ForwardEvent,
-    #[serde(rename = "update_state")]
+    #[serde(rename = "org.matrix.mscXXXX.update_state", alias = "m.update_state")]
     UpdateState,
-    #[serde(rename = "forward_to_device")]
+    #[serde(rename = "org.matrix.mscXXXX.forward_to_device", alias = "m.forward_to_device")]
     ForwardToDevice,
-    #[serde(rename = "forward_openid_credentials")]
+    #[serde(rename = "org.matrix.mscXXXX.forward_openid_credentials", alias = "m.forward_openid_credentials")]
     ForwardOpenIdCredentials,
-    #[serde(rename = "update_turn_servers")]
+    #[serde(rename = "org.matrix.mscXXXX.update_turn_servers", alias = "m.update_turn_servers")]
     UpdateTurnServers,
-    #[serde(rename = "update_theme")]
+    #[serde(rename = "org.matrix.mscXXXX.update_theme", alias = "m.update_theme")]
     UpdateTheme,
-    #[serde(rename = "update_language")]
+    #[serde(rename = "org.matrix.mscXXXX.update_language", alias = "m.update_language")]
     UpdateLanguage,
-    #[serde(rename = "update_visibility")]
+    #[serde(rename = "org.matrix.mscXXXX.update_visibility", alias = "m.update_visibility")]
     UpdateVisibility,
     /// A response to an action this crate does not know; the raw body is in the [`WireMessage`].
     #[serde(other)]
@@ -148,21 +148,27 @@ mod tests {
         );
         assert!(matches!(HostRequest::from_wire(&wire.ack()), Err(ActionError::WrongDirection { .. })));
 
-        let bad = WireMessage::request(Source::Host, "update_state", "b", json!({"state": 5}));
+        let bad = WireMessage::request(Source::Host, "m.update_state", "b", json!({"state": 5}));
         assert!(matches!(HostRequest::from_wire(&bad), Err(ActionError::InvalidBody { .. })));
     }
 
-    /// The actions renamed by the capability naming proposal have no aliases: the old names are
-    /// unknown actions. Only the compat wrapper translates them.
+    /// Renamed actions have no aliases: the old names (and names without a namespace) are unknown
+    /// actions. Only the compat wrapper translates them.
     #[test]
     fn renamed_actions_are_only_known_by_their_new_name() {
         let renamed = [
-            ("send_event", "forward_event"),
-            ("send_to_device", "forward_to_device"),
-            ("openid_credentials", "forward_openid_credentials"),
-            ("theme_change", "update_theme"),
-            ("language_change", "update_language"),
-            ("visibility", "update_visibility"),
+            ("notify_capabilities", "org.matrix.msc4412.update_capabilities"),
+            ("org.matrix.msc2974.notify_capabilities", "m.update_capabilities"),
+            ("update_capabilities", "m.update_capabilities"),
+            ("send_event", "org.matrix.mscXXXX.forward_event"),
+            ("forward_event", "m.forward_event"),
+            ("send_to_device", "org.matrix.mscXXXX.forward_to_device"),
+            ("openid_credentials", "org.matrix.mscXXXX.forward_openid_credentials"),
+            ("theme_change", "org.matrix.mscXXXX.update_theme"),
+            ("language_change", "org.matrix.mscXXXX.update_language"),
+            ("visibility", "org.matrix.mscXXXX.update_visibility"),
+            ("update_state", "org.matrix.mscXXXX.update_state"),
+            ("update_turn_servers", "org.matrix.mscXXXX.update_turn_servers"),
         ];
         for (old, new) in renamed {
             let request = |action| HostRequest::from_wire(&WireMessage::request(Source::Host, action, "r", json!({})));

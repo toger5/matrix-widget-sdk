@@ -11,7 +11,7 @@
 //! const api = WidgetApi.connectToParent();
 //! api.onEvent((ev) => console.log("event", ev));
 //! await api.requestCapabilities(["widget:org.matrix.mscXXXX.send_event.timeline:m.room.message"]);
-//! await api.contentLoaded();
+//! await api.notifyReady();
 //! await api.sendEvent("m.room.message", { msgtype: "m.text", body: "hi" });
 //! ```
 //!
@@ -20,7 +20,7 @@
 
 use std::cell::RefCell;
 use std::future::Future;
-use std::rc::Rc;
+use std::rc::{Rc, Weak};
 
 use js_sys::{Function, Promise};
 use serde::de::DeserializeOwned;
@@ -31,6 +31,7 @@ use wasm_bindgen_futures::future_to_promise;
 use widget_actions::{
     Base64File, Capability, DelegateRtcLivekitDelayedLeaveRequest, GetRtcLivekitTokenRequest, MatrixEvent,
     ReadEventsRequest, ReadRelationsRequest, StateKeySelector, ToDeviceEvent, TurnServer, UpdateDelayedEventAction,
+    ACTION_TIMEOUT_MS,
 };
 
 use crate::{WidgetClient, WidgetClientError, WidgetDelegate};
@@ -60,6 +61,8 @@ enum Transport {
 struct JsDelegate {
     transport: Transport,
     callbacks: RefCell<Callbacks>,
+    /// The client this delegate belongs to, for the request timeouts.
+    client: RefCell<Weak<WidgetClient>>,
 }
 
 fn to_js<T: Serialize>(value: &T) -> JsValue {
@@ -91,6 +94,21 @@ impl WidgetDelegate for JsDelegate {
         }
     }
 
+    /// Start the 10 second timeout of MSC4412 with the global `setTimeout` (window or worker).
+    fn on_request_sent(&self, request_id: &str) {
+        let client = self.client.borrow().clone();
+        let request_id = request_id.to_owned();
+        let expire = Closure::once_into_js(move || {
+            if let Some(client) = client.upgrade() {
+                client.timeout_request(&request_id);
+            }
+        });
+        let set_timeout = js_sys::Reflect::get(&js_sys::global(), &JsValue::from_str("setTimeout"));
+        if let Ok(Ok(set_timeout)) = set_timeout.map(|f| f.dyn_into::<Function>()) {
+            let _ = set_timeout.call2(&JsValue::NULL, &expire, &JsValue::from_f64(ACTION_TIMEOUT_MS as f64));
+        }
+    }
+
     fn on_matrix_event(&self, event: MatrixEvent) {
         call(&self.callbacks.borrow().on_event, to_js(&event));
     }
@@ -119,11 +137,9 @@ impl WidgetDelegate for JsDelegate {
         call(&self.callbacks.borrow().on_visibility_change, JsValue::from_bool(visible));
     }
 
-    fn on_capabilities_changed(&self, requested: Vec<Capability>, approved: Vec<Capability>) {
+    fn on_capabilities_changed(&self, allowed: Vec<Capability>) {
         let cb = self.callbacks.borrow().on_capabilities_changed.clone();
-        if let Some(cb) = cb {
-            let _ = cb.call2(&JsValue::NULL, &to_js(&requested), &to_js(&approved));
-        }
+        call(&cb, to_js(&allowed));
     }
 }
 
@@ -155,8 +171,13 @@ pub struct WidgetApi {
 
 impl WidgetApi {
     fn with_transport(transport: Transport) -> WidgetApi {
-        let delegate = Rc::new(JsDelegate { transport, callbacks: RefCell::new(Callbacks::default()) });
+        let delegate = Rc::new(JsDelegate {
+            transport,
+            callbacks: RefCell::new(Callbacks::default()),
+            client: RefCell::new(Weak::new()),
+        });
         let client = Rc::new(WidgetClient::new(delegate.clone()));
+        *delegate.client.borrow_mut() = Rc::downgrade(&client);
         WidgetApi { client, delegate }
     }
 }
@@ -257,14 +278,15 @@ impl WidgetApi {
         self.delegate.callbacks.borrow_mut().on_visibility_change = callback;
     }
 
-    /// Register a callback `(requested: string[], approved: string[]) => void` invoked when a
-    /// capability negotiation completes.
+    /// Register a callback `(allowed: string[]) => void` invoked when the host sends
+    /// `update_capabilities`. `allowed` is the full list the widget holds now; it can grow
+    /// (granted) and shrink (taken away by the host).
     #[wasm_bindgen(js_name = onCapabilitiesChanged)]
     pub fn on_capabilities_changed(&self, callback: Option<Function>) {
         self.delegate.callbacks.borrow_mut().on_capabilities_changed = callback;
     }
 
-    /// `{ contentLoaded, pendingRequested, approved }`.
+    /// `{ ready, pendingRequested, approved }`.
     #[wasm_bindgen(getter)]
     pub fn state(&self) -> JsValue {
         to_js(&self.client.state())
@@ -275,10 +297,11 @@ impl WidgetApi {
         self.client.has_capability(&Capability::parse(&capability))
     }
 
-    /// Resolves once the host acknowledged `content_loaded`.
-    #[wasm_bindgen(js_name = contentLoaded)]
-    pub fn content_loaded(&self) -> Promise {
-        promise(self.client.content_loaded())
+    /// Tell the host that the widget is ready to be shown. Resolves once the host acknowledged
+    /// `notify_ready`.
+    #[wasm_bindgen(js_name = notifyReady)]
+    pub fn notify_ready(&self) -> Promise {
+        promise(self.client.notify_ready())
     }
 
     /// Resolves once the host acknowledged the request (not when it decided!). Listen with

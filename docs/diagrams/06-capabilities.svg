@@ -33,17 +33,18 @@
   <rect x="504" y="118" width="210" height="38" rx="6" fill="#fef3c7" stroke="#d97706"/>
   <text x="609" y="142" class="big" style="font-size:15px" text-anchor="middle">:m.room.message#m.text</text>
   <text x="68" y="176" class="s" text-anchor="middle">source</text>
-  <text x="202" y="176" class="s" text-anchor="middle">namespace, one for all</text>
-  <text x="350" y="176" class="s" text-anchor="middle">action</text>
+  <text x="202" y="176" class="s" text-anchor="middle">namespace of the action</text>
+  <text x="350" y="176" class="s" text-anchor="middle">action name</text>
   <text x="453" y="176" class="s" text-anchor="middle">modifier</text>
   <text x="609" y="176" class="s" text-anchor="middle">data: type, #msgtype or #state_key</text>
-  <text x="30" y="198" class="s">source: widget = the widget may send it · host = the host sends it (a subscription). No capability names a room.</text>
+  <text x="30" y="198" class="s">source: widget = the widget may send it · host = the host sends it (a subscription). No capability names a room. Below, … stands for the action's namespace.</text>
 
-  <text x="736" y="128" class="b">• the unstable namespace is <tspan font-weight="700">emitted</tspan>, the stable</text>
-  <text x="750" y="146" class="b"><tspan font-family="ui-monospace, Menlo, monospace">m</tspan> is <tspan font-weight="700">accepted</tspan>: both parse to the same value</text>
-  <text x="736" y="168" class="b">• parsed into <tspan font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="12">SendEvent { event_type, msgtype }</tspan></text>
-  <text x="736" y="190" class="b">• other strings (every legacy name) survive as</text>
-  <text x="750" y="208" class="b"><tspan font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="12">Capability::Other { raw }</tspan> and grant nothing</text>
+  <text x="736" y="124" class="b">• namespace + name = the action as sent, so each action</text>
+  <text x="750" y="140" class="b">brings its MSC's prefix: <tspan font-family="ui-monospace, Menlo, monospace" font-size="12">widget:org.matrix.msc2931.navigate</tspan></text>
+  <text x="736" y="158" class="b">• unstable is <tspan font-weight="700">emitted</tspan>, stable <tspan font-family="ui-monospace, Menlo, monospace">m.</tspan> is <tspan font-weight="700">accepted</tspan>: same value</text>
+  <text x="736" y="176" class="b">• parsed into <tspan font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="12">SendEvent { event_type, msgtype }</tspan></text>
+  <text x="736" y="194" class="b">• other strings (legacy names, another namespace) survive</text>
+  <text x="750" y="210" class="b">as <tspan font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="12">Capability::Other { raw }</tspan> and grant nothing</text>
 
   <!-- ================= lifecycle ================= -->
   <text x="30" y="232" class="h2">2 · Negotiation (widget-initiated)</text>
@@ -74,24 +75,24 @@
 
   <rect x="790" y="248" width="380" height="96" rx="8" fill="#dbeafe" stroke="#2563eb"/>
   <text x="806" y="272" class="bb">Driver grants requested ∩ (approved ∪ auto)</text>
-  <text x="806" y="292" class="b">adds them to the cumulative approved set, sends</text>
-  <text x="806" y="310" class="m">notify_capabilities { requested, approved }</text>
+  <text x="806" y="292" class="b">adds them to the approved set, sends the full list:</text>
+  <text x="806" y="310" class="m">update_capabilities { allowed }</text>
   <text x="806" y="332" class="b">and if the set grew: <tspan font-family="ui-monospace, Menlo, monospace" font-size="12">resubscribe()</tspan> (see 4)</text>
 
-  <text x="30" y="370" class="s">Asking again later (renegotiation) runs the same round; approved only grows. Never requested ⇒ never granted, whatever the platform returns.</text>
+  <text x="30" y="370" class="s">Asking again later runs the same round. Only the host can take capabilities away: revoke_capabilities → update_capabilities with the shorter list. Never requested ⇒ never granted.</text>
 
   <!-- ================= gates ================= -->
   <text x="30" y="412" class="h2">3 · How a request is gated</text>
-  <text x="270" y="412" class="s">a failed check is answered with an error response: "Missing capability for …"</text>
+  <text x="270" y="412" class="s">a failed check is answered with an error: code org.matrix.msc4412.missing_capability, message "Missing capability: …"</text>
 
   <!-- card A -->
   <rect x="30" y="426" width="270" height="290" rx="10" fill="#f9fafb" stroke="#9ca3af"/>
   <circle cx="52" cy="450" r="12" fill="#6b7280"/><text x="52" y="455" class="num" text-anchor="middle">A</text>
   <text x="72" y="455" class="bb">No capability</text>
-  <text x="46" y="482" class="m">content_loaded</text>
+  <text x="46" y="482" class="m">notify_ready</text>
   <text x="46" y="500" class="m">request_capabilities</text>
-  <text x="46" y="518" class="m">notify_capabilities</text>
-  <text x="46" y="540" class="s">only the handshake: it has to work</text>
+  <text x="46" y="518" class="m">update_capabilities</text>
+  <text x="46" y="540" class="s">the MSC4412 core actions: they work</text>
   <text x="46" y="556" class="s">before any capability exists</text>
   <text x="46" y="584" class="s">replies need none either, including</text>
   <text x="46" y="600" class="m">forward_openid_credentials</text>
@@ -119,7 +120,7 @@
   <text x="331" y="663" class="m">widget:…get_client_context</text>
   <text x="331" y="682" class="s">watch / unwatch_turn_servers need</text>
   <text x="331" y="696" class="m">host:…update_turn_servers</text>
-  <text x="331" y="710" class="s">capability = action name, body ignored</text>
+  <text x="331" y="710" class="s">capability = source:action, body ignored</text>
 
   <!-- card C -->
   <rect x="600" y="426" width="570" height="290" rx="10" fill="#f9fafb" stroke="#9ca3af"/>
@@ -189,7 +190,7 @@
 
   <rect x="30" y="934" width="1140" height="100" rx="10" fill="#fffbeb" stroke="#d97706"/>
   <text x="46" y="960" class="h2">In short</text>
-  <text x="46" y="984" class="b">• Capabilities are the only permission model, one (or more) per action: the capability is derived from the action's name.</text>
+  <text x="46" y="984" class="b">• Capabilities are the only permission model, one (or more) per action: the capability embeds the action's wire name, namespace included.</text>
   <text x="46" y="1004" class="b">• widget:… capabilities gate <tspan font-weight="700">requests</tspan> (widget → host); host:… capabilities gate <tspan font-weight="700">pushes</tspan> (host → widget) and drive the backend subscription.</text>
   <text x="46" y="1024" class="b">• The host side is authoritative: the widget's own copy of the approved set (WidgetClient) is only for its UI.</text>
 </svg>

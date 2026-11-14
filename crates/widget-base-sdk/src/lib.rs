@@ -5,8 +5,10 @@
 //! * builds and sends `source: widget` requests and resolves the matching responses,
 //! * answers `source: host` requests (acknowledgements) and surfaces their payload through a
 //!   [`WidgetDelegate`],
-//! * remembers which capabilities have been requested and approved and whether
-//!   `content_loaded` was sent.
+//! * remembers which capabilities have been requested and which it holds (the host's last
+//!   `update_capabilities`), and whether `notify_ready` was sent,
+//! * fails requests the host does not answer in time ([`WidgetClient::timeout_request`]; the
+//!   `WidgetApi` class starts the 10 second timer itself).
 //!
 //! It does **not** do any I/O itself: the delegate's `send_to_host` delivers outgoing JSON and
 //! the embedding code feeds incoming JSON into [`WidgetClient::handle_message_from_host`].

@@ -14,8 +14,16 @@ mod tests {
     #[test]
     fn roundtrip() {
         for (request, response, action) in [
-            (WidgetRequest::WatchTurnServers, WidgetResponse::WatchTurnServers, "watch_turn_servers"),
-            (WidgetRequest::UnwatchTurnServers, WidgetResponse::UnwatchTurnServers, "unwatch_turn_servers"),
+            (
+                WidgetRequest::WatchTurnServers,
+                WidgetResponse::WatchTurnServers,
+                "org.matrix.mscXXXX.watch_turn_servers",
+            ),
+            (
+                WidgetRequest::UnwatchTurnServers,
+                WidgetResponse::UnwatchTurnServers,
+                "org.matrix.mscXXXX.unwatch_turn_servers",
+            ),
         ] {
             let wire = request.clone().into_wire("t");
             assert_eq!(wire.action, action);

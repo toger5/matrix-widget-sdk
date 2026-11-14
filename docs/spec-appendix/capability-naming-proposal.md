@@ -1,6 +1,13 @@
 # Proposal: one capability per action
 
-Status: draft for discussion.
+Status: draft for discussion. The scheme itself (the capability format, the verbs, one
+capability per action) is now part of
+[MSC4412](https://github.com/matrix-org/matrix-spec-proposals/pull/4412); this document keeps the
+full list of actions, their capabilities and the migration from today's names. Where the two
+differ, MSC4412 wins.
+
+The tables below use the stable spelling (`m.`). Until an action is in the spec, the `m` is
+replaced by the unstable prefix of the MSC that defines the action, see [The schema](#the-schema).
 
 Today's capability names grew one MSC at a time. Each MSC picked its own prefix and shape
 (`org.matrix.msc2762.receive.event:<type>`, `town.robin.msc3846.turn_servers`,
@@ -31,13 +38,14 @@ action can be derived from the action's name, in both directions.
 ## The schema
 
 ```text
-capability    = source ":" namespace "." action [ "." modifier ] [ ":" modifier_data ]
+capability    = source ":" action [ "." modifier ] [ ":" modifier_data ]
 
 source        = "widget"                           ; the widget sends this action (a request)
               / "host"                             ; the host sends this action (a subscription)
-namespace     = "m"                                ; stable
-              / "org.matrix.mscXXXX"               ; unstable prefix of this proposal, one for all
-action        = the action's stable name, a verb, e.g. "send_event", "read_events", "forward_event"
+action        = namespace "." name                 ; the value of the action's `action` property
+namespace     = "m"                                ; the action is part of the spec
+              / unstable prefix of the MSC that defines the action, e.g. "org.matrix.msc2876"
+name          = the action's name, a verb, e.g. "send_event", "read_events", "forward_event"
 modifier      = a variant (clearly defined enum) of the action, a descriptive word:
                 "timeline", "state", "delayed", "sticky"
 modifier_data = additional constraints that are arbitrary data outside the modifier enum.
@@ -49,11 +57,17 @@ modifier_data = additional constraints that are arbitrary data outside the modif
 - `source` is the value of the `source` field of the MSC4412 envelope: `widget` for messages the
   widget starts, `host` for messages the host starts. All capabilities are held by the widget;
   `source` only says who sends the action.
-- The action part is always the **stable** action name, even while the action itself is sent with
-  an unstable name (`org.matrix.msc2876.read_events` → `widget:m.read_events.timeline:<type>`). The
-  unstable prefix lives in `namespace` only, and there is one for the whole schema instead of one
-  per MSC. Until this proposal has an MSC number the unstable namespace is the literal placeholder
-  `org.matrix.mscXXXX`.
+- The action part is **exactly the string in the `action` property** of the action, namespace
+  included. While an action is sent as `org.matrix.msc2876.read_events`, its capability is
+  `widget:org.matrix.msc2876.read_events.timeline:<type>`; once it is `m.read_events`, the
+  capability is `widget:m.read_events.timeline:<type>`. There is no separate namespace for
+  capabilities.
+- The same name under two namespaces is two independent actions with two capabilities. This is
+  how an action evolves: a new iteration gets a new namespace, a widget requests the capabilities
+  of the iterations it knows, and the host grants the ones it knows. No version is negotiated.
+- Actions that have no MSC of their own yet use the literal placeholder `org.matrix.mscXXXX` in
+  this repository (`send_event`, `get_openid`, every host action, ...). The three core actions of
+  MSC4412 use `org.matrix.msc4412`.
 - **An action that defines modifiers has no capability without one.** `send_event`, `read_events`
   and `forward_event` always say `timeline` or `state`; `widget:m.send_event:m.room.message` is not
   a capability. Otherwise a widget holding the bare form would silently gain power whenever a new
@@ -67,9 +81,10 @@ modifier_data = additional constraints that are arbitrary data outside the modif
 - `#` in an event type keeps today's parsing rules: for timeline events it narrows `m.room.message`
   to one `msgtype` (any other type is taken whole, since `#` may appear in event types); for state
   events it narrows to one state key; a trailing `#` means the empty state key.
-- Parsing: `source` ends at the first `:`. The namespace is one of the two known strings. The
-  action and modifier contain no `:`, so the `modifier_data` starts after the next `:` and runs to
-  the end (it may contain `:` itself, as in the state key `@a:x`).
+- Parsing: `source` ends at the first `:`. The action and modifier contain no `:`, so the
+  `modifier_data` starts after the next `:` and runs to the end (it may contain `:` itself, as in
+  the state key `@a:x`). Name and modifier contain no `.`, so they are the last one or two
+  `.`-separated parts before the data and everything in front of them is the namespace.
 
 ### Read as sentences
 
@@ -116,19 +131,29 @@ compatibility wrapper translates them for legacy widgets.
 | widget → host | `user_directory_search` | `search_user_directory` |
 | widget → host | `rtc_livekit_get_token` | `get_rtc_livekit_token` |
 | widget → host | `rtc_livekit_delegate_delayed_leave` | `delegate_rtc_livekit_delayed_leave` |
+| widget → host | `content_loaded` | `notify_ready` (renamed by MSC4412) |
+| host → widget | `notify_capabilities` | `update_capabilities` (renamed by MSC4412) |
 
 Unchanged because they already read as a sentence: `update_state`, `update_turn_servers`,
-`notify_capabilities` and every other widget action.
+`request_capabilities` and every other widget action.
+
+MSC4412 recommends these verbs. Widget → host: `send` (the host sends something Matrix related on
+the widget's behalf), `request` (the widget asks for a change in the host), `notify` (the widget
+informs the host about its own state). Host → widget: `update` (the current, full state of
+something; it replaces what was sent before) and `forward` (something that happened elsewhere;
+every action is a separate occurrence). The older actions `read_*`, `get_*`, `search_*`,
+`navigate`, ... keep their names.
 
 ## Exceptions
 
-Only the handshake needs no capability, because it has to work before any capability exists:
+Only the core actions of MSC4412 need no capability, because they have to work before any
+capability exists:
 
 | action | why it needs no capability |
 |---|---|
-| `content_loaded` (widget → host) | part of the startup handshake |
+| `notify_ready` (widget → host) | the widget is ready to be shown |
 | `request_capabilities` (widget → host) | asks for capabilities in the first place |
-| `notify_capabilities` (host → widget) | the answer to `request_capabilities` |
+| `update_capabilities` (host → widget) | tells the widget which capabilities it holds (the full list, also when the host takes some away) |
 
 Replies are part of the action they answer and need nothing extra. That includes
 `forward_openid_credentials`, the late answer to `get_openid`, which is covered by
@@ -158,8 +183,8 @@ Replies are part of the action they answer and need nothing extra. That includes
 | `delegate_rtc_livekit_delayed_leave` | `widget:m.delegate_rtc_livekit_delayed_leave` | `msc4533.rtc_livekit_delegate_delayed_leave` |
 | `navigate` | `widget:m.navigate` | `msc2931.navigate` |
 | `set_always_on_screen` | `widget:m.set_always_on_screen` | `m.always_on_screen` |
-| `get_matrix_context` | `widget:m.get_matrix_context` | `msc4412.matrix_context` |
-| `get_client_context` | `widget:m.get_client_context` | `msc4412.client_context` |
+| `get_matrix_context` | `widget:m.get_matrix_context` | none (URL template parameters) |
+| `get_client_context` | `widget:m.get_client_context` | none (URL template parameters) |
 | `watch_turn_servers` / `unwatch_turn_servers` | replaced by `host:m.update_turn_servers` (see open questions) | `msc3846.turn_servers` (shared) |
 
 "(shared)" marks today's capabilities that govern more than one action; rule 1 splits them.
@@ -228,7 +253,8 @@ always requests `host:m.update_theme`, `host:m.update_language`, `host:m.update_
 `widget:m.get_openid` on behalf of a legacy widget, to keep today's behaviour.
 
 The wrapper also translates the renamed actions: a legacy widget keeps sending and receiving the
-old action names.
+old action names, including the ones without a namespace. It turns the host's
+`update_capabilities { allowed }` into the legacy `notify_capabilities { requested, approved }`.
 
 ## Open questions
 
@@ -240,7 +266,7 @@ old action names.
   all capabilities belong to the widget; the docs need to say so clearly. `runtime` instead of
   `host` was suggested as an alternative word.
 - **How the parts are concatenated.** The scheme has three dimensions: source, action and
-  modifier (plus its data). `source:namespace.action.modifier:data` is one way to write them down;
+  modifier (plus its data). `source:action.modifier:data` is one way to write them down;
   an object representation (`{ source, action, modifier, data }`) would avoid the parsing rules
   altogether.
 - **Should `update_delayed_event` be narrowed** by its `action` (`#cancel`, `#restart`, `#send`)?

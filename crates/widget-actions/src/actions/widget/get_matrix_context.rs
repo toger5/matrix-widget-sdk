@@ -39,10 +39,10 @@ mod tests {
     #[test]
     fn roundtrip() {
         let wire = WidgetRequest::GetMatrixContext.into_wire("x");
-        assert_eq!(wire.action, "org.matrix.msc4412.get_matrix_context");
+        assert_eq!(wire.action, "org.matrix.mscXXXX.get_matrix_context");
         assert_eq!(wire.to_value()["request"], json!({}));
         assert_eq!(WidgetRequest::from_wire(&wire).unwrap(), WidgetRequest::GetMatrixContext);
-        let plain = WireMessage::request(Source::Widget, "get_matrix_context", "x", json!({}));
+        let plain = WireMessage::request(Source::Widget, "m.get_matrix_context", "x", json!({}));
         assert_eq!(WidgetRequest::from_wire(&plain).unwrap(), WidgetRequest::GetMatrixContext);
 
         let response = wire.response_to(json!({

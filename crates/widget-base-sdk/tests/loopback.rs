@@ -31,7 +31,7 @@ impl WidgetDelegate for WidgetSide {
     fn on_state_update(&self, state: Vec<MatrixEvent>) {
         self.state_updates.borrow_mut().push(state);
     }
-    fn on_capabilities_changed(&self, _requested: Vec<Capability>, approved: Vec<Capability>) {
+    fn on_capabilities_changed(&self, approved: Vec<Capability>) {
         *self.approved.borrow_mut() = approved;
     }
 }
@@ -41,7 +41,7 @@ impl WidgetDelegate for WidgetSide {
 struct HostSide {
     to_widget: Mutex<VecDeque<String>>,
     capability_requests: Mutex<Vec<Vec<Capability>>>,
-    content_loaded: Mutex<bool>,
+    ready: Mutex<bool>,
 }
 
 impl WidgetHostPlatform for HostSide {
@@ -51,8 +51,8 @@ impl WidgetHostPlatform for HostSide {
     fn on_capabilities_requested(&self, requested: Vec<Capability>) {
         self.capability_requests.lock().unwrap().push(requested);
     }
-    fn on_content_loaded(&self) {
-        *self.content_loaded.lock().unwrap() = true;
+    fn on_ready(&self) {
+        *self.ready.lock().unwrap() = true;
     }
     fn on_openid_requested(&self) {}
     fn navigate(&self, _uri: String) -> Result<(), PlatformError> {
@@ -140,12 +140,12 @@ fn full_widget_lifecycle() {
         assert_eq!(l.driver.snapshot().approved, approved);
         assert!(l.widget_side.state_updates.borrow().is_empty());
 
-        // 3. content_loaded
-        let loaded = l.client.content_loaded();
+        // 3. notify_ready
+        let ready = l.client.notify_ready();
         l.pump().await;
-        loaded.await.unwrap();
-        assert!(*l.host_side.content_loaded.lock().unwrap());
-        assert!(l.client.state().content_loaded);
+        ready.await.unwrap();
+        assert!(*l.host_side.ready.lock().unwrap());
+        assert!(l.client.state().ready);
 
         // 4. Widget sends a message; it lands in the backend and, like from a real sync, comes
         //    back to the widget through the subscription.

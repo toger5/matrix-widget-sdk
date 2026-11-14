@@ -13,7 +13,8 @@ page.
 
 - **Loads a widget from a widget state event** you paste in. The event decides how it is embedded:
   - `m.widget` / `org.matrix.msc4411.widget` → `content.url` is loaded directly; the iframe is
-    hidden until `content_loaded` when `usesWidgetAPI` is `true`.
+    hidden until `notify_ready` when `uses_widget_api` is `true`. If the widget does not send it
+    within 15 seconds, the loading state turns into an error.
   - `im.vector.modular.widgets` (legacy) → `content.url` is handed **untemplated** to the compat
     wrapper: `<wrapper url>?legacy_widget_url=...&legacy_widget_id=...&legacy_wait_for_iframe_load=...[&legacy_widget_data=...]`.
     The wrapper resolves `$matrix_user_id` & co. itself through the `get_matrix_context` /
@@ -48,7 +49,8 @@ page.
     image in the widget, upload it again, or upload a file chosen from disk, and watch it show
     up here.
   Approving capabilities also pushes the current permitted state (`update_state`) at once.
-- **Driver snapshot**: `content_loaded`, approved and pending capabilities.
+- **Driver snapshot**: `ready`, approved and pending capabilities.
+- **Revoke all capabilities**: the widget gets `update_capabilities` with an empty list.
 
 ## Configuration
 

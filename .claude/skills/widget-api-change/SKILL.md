@@ -14,17 +14,27 @@ your change, top to bottom, then run the checks at the end.
 
 Do not reopen these without asking Timo.
 
-- **Source of truth for names:** `docs/spec-appendix/capability-naming-proposal.md`, and inside it
-  the section "The schema". If the code and the proposal disagree, fix one of them in the same change.
-- **Capabilities** are `source ":" namespace "." action [ "." modifier ] [ ":" data ]`.
+- **Source of truth for names:** MSC4412 (envelope, core actions, error codes, capability format)
+  and `docs/spec-appendix/capability-naming-proposal.md`, and inside it the section "The schema".
+  MSC4412 wins where they differ.
+- **Envelope:** `source`, `action`, `request_id`, `request` / `response`. No `version`; a legacy
+  message is one with `api` instead of `source`.
+- **Errors** are `{ error: { code, message } }`. Use the `WidgetError` constructors
+  (`unknown_action`, `missing_capability`, `invalid_request`, `new` for `unknown`,
+  `with_matrix_error`); do not build a code by hand. If the code and the proposal disagree, fix one of them in the same change.
+- **Capabilities** are `source ":" action [ "." modifier ] [ ":" data ]`, where `action` is the
+  wire name of the action (`namespace "." name`).
   - `source` is `widget` (a request the widget makes) or `host` (a subscription).
-  - The emitted namespace is the placeholder `org.matrix.mscXXXX`; the stable `m` is accepted
-    when parsing. It is one constant per language, see section 2.
+  - The namespace is the one the action is sent with: the unstable prefix of its MSC, the
+    placeholder `org.matrix.mscXXXX` for actions without an MSC, `org.matrix.msc4412` for the
+    three core actions (which have no capability). The stable `m` is accepted when parsing. The
+    action → namespace table is repeated per language, see section 2.
   - One capability per action. `send_event`, `read_events` and `forward_event` always carry
     `timeline` or `state`; they have no bare form.
   - No capability names a room. One widget, one room.
 - **Actions** are verbs, and no name is used by both sources. An action with an MSC keeps that
-  MSC's unstable prefix as the emitted name, with the prefix-less name as serde `alias`.
+  MSC's unstable prefix as the emitted name, with the stable `m.<name>` as serde `alias`. Every
+  action has a namespace; a bare name is not accepted.
 - **No aliases for old names.** A renamed action or capability is not accepted under its old name
   by the driver or the SDK. The compat wrapper is the only place legacy names are understood.
 - **Legacy side is frozen.** `packages/test-widgets/legacy/` and everything in the wrapper that
@@ -53,10 +63,13 @@ A rename also means renaming the file, the variant and the body types, so the co
 - Matching: an `allows_*` method on `Capability` and on the `CapabilitySet` trait and its impl.
 - Tests in the same file: add the string to `all()`; add near-misses to
   `strings_outside_the_scheme_are_other`; extend `matching` / `each_action_has_its_own_capability`.
-- The namespace constants live here (`UNSTABLE_NAMESPACE`, `STABLE_NAMESPACE`). The same value is
-  repeated in `packages/widget-compat-wrapper/src/capabilities.ts`,
-  `packages/test-widgets/new/capabilities.ts`, `packages/widget-host/src/main.ts`
-  (`LEGACY_AUTO_APPROVED`) and in test strings. Changing the namespace means changing all of them.
+- The namespace of each action lives in `namespace_of` here and has to equal the prefix of the
+  action's serde `rename` (the test `capabilities_embed_the_action_name` checks it). The same
+  table is repeated in `packages/widget-compat-wrapper/src/capabilities.ts` (`ACTION_NAMESPACES`),
+  `packages/test-widgets/new/capabilities.ts` (`NAMESPACES`), as literals in
+  `packages/widget-host/src/main.ts` (`LEGACY_AUTO_APPROVED`) and in test strings. Moving an
+  action to another namespace means changing all of them. The constants `MSC4412_NAMESPACE`,
+  `PLACEHOLDER_NAMESPACE` and `STABLE_NAMESPACE` are in `src/wire.rs`.
 
 ## 3. Host driver (`crates/widget-host-driver/src`)
 
@@ -71,7 +84,8 @@ A rename also means renaming the file, the variant and the body types, so the co
 | Platform callbacks | `platform.rs` (`WidgetHostPlatform`) |
 | Tests | unit tests in `access.rs` and `subscriptions.rs`; end to end in `driver/tests.rs` (helpers `setup`, `feed`, `grant`, `grant_and_drain`, `send`, `event`) |
 
-Error messages name the capability (`Missing capability for <string>`); tests assert on them.
+Error messages name the capability (`Missing capability: <string>`, code `…missing_capability`);
+tests assert on them.
 
 ## 4. Backend (`crates/widget-matrix-backend/src`)
 
@@ -113,7 +127,8 @@ Rust, so nothing fails to compile when it is forgotten.
 | Legacy capability → new capabilities | `src/capabilities.ts` `LEGACY_RULES` |
 | Capabilities a legacy host allowed without asking | `src/capabilities.ts` `IMPLICIT_CAPABILITIES` |
 | Legacy action name ↔ host action name, per direction | `src/envelope.ts` `LEGACY_TO_NEW` (`widget` and `host` tables) |
-| Context actions and their capabilities, negotiation, `notify_capabilities` rewrite | `src/bridge.ts` |
+| Context actions and their capabilities, negotiation, `update_capabilities` → legacy `notify_capabilities` rewrite | `src/bridge.ts` |
+| Core action names, error codes, the code added to legacy errors | `src/envelope.ts` |
 | Bodies that need conversion (files) | `src/files.ts`, wired in `src/bridge.ts` |
 | Legacy URL template variables fed by the context actions | `src/template.ts` |
 | Tests | `test/capabilities.test.ts` (the `MIGRATION` table), `test/envelope.test.ts`, `test/bridge.test.ts` |

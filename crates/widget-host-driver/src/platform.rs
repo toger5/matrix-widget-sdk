@@ -18,12 +18,21 @@ pub trait WidgetHostPlatform: Send + Sync {
     ///
     /// Ask the user (or a policy), then call [`WidgetHostDriver::approve_capabilities`] with the
     /// approved subset. An empty list denies everything and still completes the negotiation.
+    /// Clients should remember what was approved, so that the user is not asked again every time
+    /// the widget starts (pass it to [`WidgetHostDriver::set_auto_approved`]).
+    ///
+    /// [`WidgetHostDriver::set_auto_approved`]: crate::WidgetHostDriver::set_auto_approved
     ///
     /// [`WidgetHostDriver::approve_capabilities`]: crate::WidgetHostDriver::approve_capabilities
     fn on_capabilities_requested(&self, requested: Vec<Capability>);
 
-    /// The widget sent `content_loaded`: hide the loading indicator and show the iframe.
-    fn on_content_loaded(&self);
+    /// The widget sent `notify_ready`: hide the loading state and show the iframe.
+    ///
+    /// Until then the client shows a loading state in place of the widget. If this is not called
+    /// in time (MSC4412 recommends 15 seconds,
+    /// [`NOTIFY_READY_TIMEOUT_MS`](widget_actions::NOTIFY_READY_TIMEOUT_MS)), the client should
+    /// show an error instead.
+    fn on_ready(&self);
 
     /// The widget asked for an OpenID token, and the driver told it that the user is being asked.
     ///

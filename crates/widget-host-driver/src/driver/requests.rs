@@ -33,10 +33,10 @@ impl WidgetHostDriver {
         }
         match request {
             // These reply first, so that the widget sees the reply before what the request causes.
-            WidgetRequest::ContentLoaded => {
-                self.lock().content_loaded = true;
+            WidgetRequest::NotifyReady => {
+                self.lock().ready = true;
                 self.send(&msg.ack());
-                self.platform.on_content_loaded();
+                self.platform.on_ready();
             }
             WidgetRequest::RequestCapabilities { request } => self.request_capabilities(&msg, request.capabilities),
             WidgetRequest::GetOpenId if !self.lock().openid_auto_approved => self.ask_for_openid(&msg),
@@ -124,7 +124,7 @@ impl WidgetHostDriver {
             }
             R::Navigate { request } => {
                 if !request.uri.starts_with("https://matrix.to/#") {
-                    return Err(WidgetError::new("Invalid matrix.to URI"));
+                    return Err(WidgetError::invalid_request("Invalid matrix.to URI"));
                 }
                 self.platform.navigate(request.uri).map_err(platform_error("Error handling navigation"))?;
                 W::Navigate
@@ -149,8 +149,8 @@ impl WidgetHostDriver {
                     client_language: self.platform.client_language(),
                 },
             },
-            R::Unknown => return Err(WidgetError::new(format!("Unknown action `{action}`"))),
-            R::ContentLoaded | R::RequestCapabilities { .. } | R::WatchTurnServers => {
+            R::Unknown => return Err(WidgetError::unknown_action(action)),
+            R::NotifyReady | R::RequestCapabilities { .. } | R::WatchTurnServers => {
                 unreachable!("`handle_request` replies to these itself")
             }
         })
@@ -158,11 +158,20 @@ impl WidgetHostDriver {
 
     /// `request_capabilities`: acknowledge, grant the auto-approved capabilities and ask the
     /// platform about the rest. When nothing is left to ask, the negotiation completes at once.
+    ///
+    /// The ack grants nothing. A request that arrives while another one waits for the platform
+    /// adds to it: a widget can only ever ask for more.
     fn request_capabilities(&self, msg: &WireMessage, requested: Vec<Capability>) {
         let to_ask: Vec<Capability> = {
             let mut state = self.lock();
             let to_ask = requested.iter().filter(|c| !state.auto_approved.contains(c)).cloned().collect();
-            state.pending_requested = Some(requested);
+            let mut pending = state.pending_requested.take().unwrap_or_default();
+            for capability in requested {
+                if !pending.contains(&capability) {
+                    pending.push(capability);
+                }
+            }
+            state.pending_requested = Some(pending);
             to_ask
         };
         self.send(&msg.ack());
@@ -340,7 +349,8 @@ impl WidgetHostDriver {
 
     /// `upload_file`: decode the widget's base64 and hand the raw bytes to the backend.
     async fn upload_file(&self, request: UploadFileRequest) -> Result<UploadFileResponse, WidgetError> {
-        let data = request.file.to_bytes().map_err(|e| WidgetError::new(format!("Invalid base64 file: {e}")))?;
+        let data =
+            request.file.to_bytes().map_err(|e| WidgetError::invalid_request(format!("Invalid base64 file: {e}")))?;
         let file = MediaFile { data, mimetype: request.file.mimetype };
         let content_uri = self.backend.upload_media(file).await.map_err(backend_error("Failed to upload the file"))?;
         Ok(UploadFileResponse { content_uri })

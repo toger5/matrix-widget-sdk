@@ -7,11 +7,11 @@ use std::sync::{Arc, Mutex};
 
 use serde_json::{json, Value};
 use widget_actions::{
-    Base64File, Capability, DownloadFileRequest, DownloadFileResponse, ForwardOpenIdCredentialsRequest,
+    Base64File, Capability, DownloadFileRequest, DownloadFileResponse, ErrorKind, ForwardOpenIdCredentialsRequest,
     GetClientContextResponse, GetMatrixContextResponse, GetOpenIdResponse, GetRtcLivekitTokenResponse, HostRequest,
-    JsonValue, MatrixEvent, NotifyCapabilitiesRequest, ReadEventsRequest, ReadRelationsRequest,
-    ReadRoomAccountDataRequest, RequestCapabilitiesRequest, RoomSelector, RtcTransportsResponse, SendEventRequest,
-    SendToDeviceRequest, SetAlwaysOnScreenResponse, Source, StateKeySelector, ToDeviceEvent, TurnServer,
+    JsonValue, MatrixEvent, ReadEventsRequest, ReadRelationsRequest, ReadRoomAccountDataRequest,
+    RequestCapabilitiesRequest, RoomSelector, RtcTransportsResponse, SendEventRequest, SendToDeviceRequest,
+    SetAlwaysOnScreenResponse, Source, StateKeySelector, ToDeviceEvent, TurnServer, UpdateCapabilitiesRequest,
     UpdateDelayedEventAction, UploadFileRequest, WidgetRequest, WidgetResponse, WireMessage,
 };
 use widget_matrix_backend::{BackendError, InMemoryBackend, MatrixBackend, MediaFile};
@@ -22,7 +22,7 @@ use crate::{DriverError, PlatformError, WidgetHostDriver, WidgetHostPlatform};
 struct RecordingPlatform {
     sent: Mutex<Vec<WireMessage>>,
     requested: Mutex<Vec<Vec<Capability>>>,
-    loaded: AtomicBool,
+    ready: AtomicBool,
     openid_requests: AtomicUsize,
     navigated: Mutex<Vec<String>>,
     always_on_screen: Mutex<Option<bool>>,
@@ -41,8 +41,8 @@ impl WidgetHostPlatform for RecordingPlatform {
     fn on_capabilities_requested(&self, requested: Vec<Capability>) {
         self.requested.lock().unwrap().push(requested);
     }
-    fn on_content_loaded(&self) {
-        self.loaded.store(true, Ordering::SeqCst);
+    fn on_ready(&self) {
+        self.ready.store(true, Ordering::SeqCst);
     }
     fn on_openid_requested(&self) {
         self.openid_requests.fetch_add(1, Ordering::SeqCst);
@@ -97,17 +97,22 @@ fn event(event_type: &str, state_key: Option<&str>, content: Value) -> MatrixEve
     }
 }
 
+/// The action name without its namespace.
+fn short(msg: &WireMessage) -> &str {
+    msg.action.rsplit('.').next().unwrap()
+}
+
 #[test]
-fn content_loaded_is_acked_and_reported() {
+fn notify_ready_is_acked_and_reported() {
     let (driver, _, platform) = setup();
-    block(feed(&driver, WidgetRequest::ContentLoaded, "c1")).unwrap();
+    block(feed(&driver, WidgetRequest::NotifyReady, "c1")).unwrap();
     let sent = platform.drain();
     assert_eq!(sent.len(), 1);
     assert_eq!(sent[0].request_id, "c1");
     assert_eq!(sent[0].source, Source::Widget);
     assert_eq!(sent[0].response_body(), json!({}));
-    assert!(platform.loaded.load(Ordering::SeqCst));
-    assert!(driver.snapshot().content_loaded);
+    assert!(platform.ready.load(Ordering::SeqCst));
+    assert!(driver.snapshot().ready);
 }
 
 #[test]
@@ -136,17 +141,14 @@ fn capability_negotiation() {
     let notify = HostRequest::from_wire(&sent[0]).unwrap();
     assert_eq!(
         notify,
-        HostRequest::NotifyCapabilities {
-            request: NotifyCapabilitiesRequest {
-                requested: caps,
-                approved: vec![Capability::send_event("m.room.message")]
-            }
+        HostRequest::UpdateCapabilities {
+            request: UpdateCapabilitiesRequest { allowed: vec![Capability::send_event("m.room.message")] }
         }
     );
     assert_eq!(driver.snapshot().approved, vec![Capability::send_event("m.room.message")]);
     assert!(driver.snapshot().pending_requested.is_empty());
 
-    // Widget acks notify_capabilities.
+    // Widget acks update_capabilities.
     block(driver.handle_message_from_widget(sent[0].ack().to_json())).unwrap();
     // A second ack for the same id is unexpected.
     assert_eq!(
@@ -154,7 +156,7 @@ fn capability_negotiation() {
         Err(DriverError::UnexpectedResponse { request_id: sent[0].request_id.clone() })
     );
 
-    // A second round: `approved` in notify_capabilities is cumulative (legacy compatible).
+    // A second round: `allowed` is always the full list.
     let more = vec![Capability::read_events("m.room.topic")];
     block(feed(
         &driver,
@@ -167,10 +169,9 @@ fn capability_negotiation() {
     let sent = platform.drain();
     assert_eq!(
         HostRequest::from_wire(&sent[0]).unwrap(),
-        HostRequest::NotifyCapabilities {
-            request: NotifyCapabilitiesRequest {
-                requested: more,
-                approved: vec![Capability::send_event("m.room.message"), Capability::read_events("m.room.topic")]
+        HostRequest::UpdateCapabilities {
+            request: UpdateCapabilitiesRequest {
+                allowed: vec![Capability::send_event("m.room.message"), Capability::read_events("m.room.topic")]
             }
         }
     );
@@ -273,10 +274,7 @@ fn msgtype_capabilities_narrow_sends_and_reads() {
     let sent = platform.drain();
     // The text message is echoed through the subscription (forward_event) and answered; the
     // image is refused.
-    assert_eq!(
-        sent.iter().map(|m| m.action.as_str()).collect::<Vec<_>>(),
-        ["forward_event", "send_event", "send_event"]
-    );
+    assert_eq!(sent.iter().map(short).collect::<Vec<_>>(), ["forward_event", "send_event", "send_event"]);
     assert!(sent[1].error().is_none());
     assert!(sent[2].error().unwrap().message.contains("m.room.message"));
     backend.inject(event("m.room.message", None, json!({"msgtype": "m.image", "body": "pic"})));
@@ -495,7 +493,7 @@ fn reading_and_forwarding_are_separate_capabilities() {
     grant(&driver, &platform, vec![Capability::forward_event("m.room.message")]);
     backend.inject(event("m.room.message", None, json!({"body": "1"})));
     let sent = platform.drain();
-    assert_eq!(sent.iter().map(|m| m.action.as_str()).collect::<Vec<_>>(), ["forward_event"]);
+    assert_eq!(sent.iter().map(short).collect::<Vec<_>>(), ["forward_event"]);
     assert!(read("r1").error().unwrap().message.contains("read_events.timeline:m.room.message"));
 
     // `read_events` only (another type): readable, but nothing is pushed.
@@ -551,7 +549,7 @@ fn read_events_filters_by_capability() {
     assert_eq!(response.events[0].content["body"], "2");
 }
 
-/// Request `caps` and approve them, returning what was sent after `notify_capabilities`.
+/// Request `caps` and approve them, returning what was sent after `update_capabilities`.
 fn grant_and_drain(driver: &WidgetHostDriver, platform: &RecordingPlatform, caps: Vec<Capability>) -> Vec<WireMessage> {
     block(feed(
         driver,
@@ -562,7 +560,7 @@ fn grant_and_drain(driver: &WidgetHostDriver, platform: &RecordingPlatform, caps
     platform.drain();
     driver.approve_capabilities(caps);
     let mut sent = platform.drain();
-    assert_eq!(sent.remove(0).action, "notify_capabilities");
+    assert_eq!(short(&sent.remove(0)), "update_capabilities");
     sent
 }
 
@@ -751,7 +749,7 @@ fn read_style_actions_need_their_capabilities() {
         ],
     );
     block(feed(&driver, WidgetRequest::GetMediaConfig, "upload-only")).unwrap();
-    assert!(platform.drain()[0].error().unwrap().message.contains("widget:org.matrix.mscXXXX.get_media_config"));
+    assert!(platform.drain()[0].error().unwrap().message.contains("widget:org.matrix.msc4039.get_media_config"));
     grant(&driver, &platform, vec![Capability::GetMediaConfig]);
     for (request, id) in requests("b") {
         block(feed(&driver, request, &id)).unwrap();
@@ -801,8 +799,8 @@ fn upload_and_download_files() {
     let hello = Base64File::from_bytes(b"hello", Some("text/plain".into()));
 
     // Each direction needs its own capability.
-    assert!(upload(hello.clone(), "u0").error().unwrap().message.contains("widget:org.matrix.mscXXXX.upload_file"));
-    assert!(download("mxc://x/y", "d0").error().unwrap().message.contains("widget:org.matrix.mscXXXX.download_file"));
+    assert!(upload(hello.clone(), "u0").error().unwrap().message.contains("widget:org.matrix.msc4039.upload_file"));
+    assert!(download("mxc://x/y", "d0").error().unwrap().message.contains("widget:org.matrix.msc4039.download_file"));
     grant(&driver, &platform, vec![Capability::UploadFile, Capability::DownloadFile]);
 
     let WidgetResponse::UploadFile { response } = WidgetResponse::from_wire(&upload(hello.clone(), "u1")).unwrap()
@@ -841,7 +839,7 @@ fn platform_actions_and_pushes() {
         .error()
         .unwrap()
         .message
-        .contains("widget:org.matrix.mscXXXX.navigate"));
+        .contains("widget:org.matrix.msc2931.navigate"));
     grant(&driver, &platform, vec![Capability::Navigate, Capability::SetAlwaysOnScreen]);
     assert!(navigate("https://example.org", "n1").error().unwrap().message.contains("Invalid matrix.to URI"));
     assert!(navigate("https://matrix.to/#/broken", "n2").error().unwrap().message.contains("no such room"));
@@ -874,16 +872,13 @@ fn platform_actions_and_pushes() {
     // Each push has its own capability.
     grant(&driver, &platform, vec![Capability::UpdateLanguage]);
     push_all();
-    assert_eq!(platform.drain().iter().map(|m| m.action.as_str()).collect::<Vec<_>>(), ["update_language"]);
+    assert_eq!(platform.drain().iter().map(short).collect::<Vec<_>>(), ["update_language"]);
 
     // With all three they go out and are acknowledged by the widget.
     grant(&driver, &platform, vec![Capability::UpdateTheme, Capability::UpdateVisibility]);
     push_all();
     let sent = platform.drain();
-    assert_eq!(
-        sent.iter().map(|m| m.action.as_str()).collect::<Vec<_>>(),
-        ["update_theme", "update_language", "update_visibility"]
-    );
+    assert_eq!(sent.iter().map(short).collect::<Vec<_>>(), ["update_theme", "update_language", "update_visibility"]);
     assert_eq!(sent[0].request_body()["name"], "dark");
     assert_eq!(sent[1].request_body()["lang"], "de");
     assert_eq!(sent[2].request_body()["visible"], false);
@@ -969,7 +964,7 @@ fn initial_state_and_changes_reach_the_widget() {
     backend.inject(event("m.room.message", None, json!({"body": "old"})));
 
     // Approval delivers the current state the widget may see, synchronously (the in-memory
-    // backend calls the sink from inside `subscribe_room`), right after `notify_capabilities`.
+    // backend calls the sink from inside `subscribe_room`), right after `update_capabilities`.
     let sent = grant_and_drain(
         &driver,
         &platform,
@@ -980,7 +975,7 @@ fn initial_state_and_changes_reach_the_widget() {
         ],
     );
     assert_eq!(sent.len(), 1);
-    assert_eq!(sent[0].action, "update_state");
+    assert_eq!(short(&sent[0]), "update_state");
     let state = sent[0].request_body()["state"].as_array().unwrap().clone();
     assert_eq!(state.len(), 1);
     assert_eq!(state[0]["content"]["topic"], "t1");
@@ -989,9 +984,8 @@ fn initial_state_and_changes_reach_the_widget() {
     // set (`update_state`).
     backend.inject(event("m.room.topic", Some(""), json!({"topic": "t2"})));
     let sent = platform.drain();
-    assert_eq!(sent.iter().map(|m| m.action.as_str()).collect::<Vec<_>>(), ["forward_event", "update_state"]);
+    assert_eq!(sent.iter().map(short).collect::<Vec<_>>(), ["forward_event", "update_state"]);
     assert_eq!(sent[0].source, Source::Host);
-    assert!(sent[0].is_v1());
     assert_eq!(sent[0].request_body()["content"]["topic"], "t2");
     let state = sent[1].request_body()["state"].as_array().unwrap().clone();
     assert_eq!(state.len(), 1);
@@ -1006,7 +1000,7 @@ fn initial_state_and_changes_reach_the_widget() {
     backend.inject(event("m.room.message", None, json!({"body": "x"})));
     let sent = platform.drain();
     assert_eq!(sent.len(), 1);
-    assert_eq!(sent[0].action, "forward_event");
+    assert_eq!(short(&sent[0]), "forward_event");
     assert_eq!(sent[0].request_body()["content"]["body"], "x");
 
     // Emptied state is not pushed as an empty `update_state`.
@@ -1021,7 +1015,7 @@ fn state_key_capability_filters_the_set() {
     backend.inject(event("m.room.member", Some("@other:x"), json!({"membership": "join"})));
     let sent = grant_and_drain(&driver, &platform, vec![Capability::update_state("m.room.member", Some("@me:x"))]);
     assert_eq!(sent.len(), 1);
-    assert_eq!(sent[0].action, "update_state");
+    assert_eq!(short(&sent[0]), "update_state");
     let state = sent[0].request_body()["state"].as_array().unwrap().clone();
     assert_eq!(state.len(), 1);
     assert_eq!(state[0]["state_key"], "@me:x");
@@ -1030,7 +1024,7 @@ fn state_key_capability_filters_the_set() {
     // and never as `forward_event` (no `forward_event.state` capability).
     backend.inject(event("m.room.member", Some("@other:x"), json!({"membership": "leave"})));
     let sent = platform.drain();
-    assert_eq!(sent.iter().map(|m| m.action.as_str()).collect::<Vec<_>>(), ["update_state"]);
+    assert_eq!(sent.iter().map(short).collect::<Vec<_>>(), ["update_state"]);
     let state = sent[0].request_body()["state"].as_array().unwrap().clone();
     assert_eq!(state.len(), 1);
     assert_eq!(state[0]["state_key"], "@me:x");
@@ -1045,7 +1039,7 @@ fn update_state_and_forward_event_state_are_separate() {
     let sent = grant_and_drain(&driver, &platform, vec![Capability::forward_state_event("m.room.topic", Some(""))]);
     assert!(sent.is_empty());
     backend.inject(event("m.room.topic", Some(""), json!({"topic": "t2"})));
-    assert_eq!(platform.drain().iter().map(|m| m.action.as_str()).collect::<Vec<_>>(), ["forward_event"]);
+    assert_eq!(platform.drain().iter().map(short).collect::<Vec<_>>(), ["forward_event"]);
     // Another state key of the same type is not forwarded.
     backend.inject(event("m.room.topic", Some("other"), json!({"topic": "x"})));
     assert!(platform.drain().is_empty());
@@ -1086,7 +1080,7 @@ fn legacy_capability_strings_grant_nothing() {
     .unwrap();
     driver.approve_capabilities(caps);
     let notify = platform.drain().pop().unwrap();
-    assert_eq!(notify.request_body()["approved"], json!(legacy));
+    assert_eq!(notify.request_body()["allowed"], json!(legacy));
 
     // ... but allow nothing: only the compat wrapper translates them.
     let message = SendEventRequest::room_event("m.room.message", json!({"body": "hi"}).into());
@@ -1109,13 +1103,15 @@ fn protocol_errors() {
         block(driver.handle_message_from_widget("not json".into())),
         Err(DriverError::NotAWidgetMessage { .. })
     ));
-    let legacy = json!({"source": "widget", "action": "content_loaded", "requestId": "1", "request": {}});
+    // Legacy messages have `api` instead of `source`.
+    let legacy =
+        json!({"api": "fromWidget", "widgetId": "w", "action": "content_loaded", "requestId": "1", "data": {}});
     assert_eq!(block(driver.handle_message_from_widget(legacy.to_string())), Err(DriverError::LegacyWidgetApi));
-    let v2 = json!({"source": "widget", "action": "x", "requestId": "1", "request": {}, "version": "v2"});
-    assert_eq!(
-        block(driver.handle_message_from_widget(v2.to_string())),
-        Err(DriverError::UnsupportedVersion { version: "v2".into() })
-    );
+    let no_id = json!({"source": "widget", "action": "x", "requestId": "1", "request": {}});
+    assert!(matches!(
+        block(driver.handle_message_from_widget(no_id.to_string())),
+        Err(DriverError::NotAWidgetMessage { .. })
+    ));
     let host_req = HostRequest::ForwardEvent { event: event("m.x", None, json!({})) }.into_wire("h");
     assert!(matches!(
         block(driver.handle_message_from_widget(host_req.to_json())),
@@ -1126,12 +1122,100 @@ fn protocol_errors() {
     // Unknown action and malformed body get error *responses*, not driver errors.
     let unknown = WireMessage::request(Source::Widget, "org.example.nope", "u", json!({}));
     block(driver.handle_message_from_widget(unknown.to_json())).unwrap();
-    let bad = WireMessage::request(Source::Widget, "send_event", "b", json!({"type": 5}));
+    let bad = WireMessage::request(Source::Widget, "m.send_event", "b", json!({"type": 5}));
     block(driver.handle_message_from_widget(bad.to_json())).unwrap();
     let sent = platform.drain();
     assert_eq!(sent.len(), 2);
     assert!(sent[0].error().unwrap().message.contains("Unknown action"));
+    assert_eq!(sent[0].error().unwrap().kind(), ErrorKind::UnknownAction);
     assert!(sent[1].error().unwrap().message.contains("Invalid request body"));
+    assert_eq!(sent[1].error().unwrap().code, "org.matrix.msc4412.invalid_request");
+
+    // An action name without a namespace is unknown, like the pre-MSC4412 names.
+    for (i, action) in ["send_event", "content_loaded", "request_capabilities"].into_iter().enumerate() {
+        let wire = WireMessage::request(Source::Widget, action, format!("o{i}"), json!({}));
+        block(driver.handle_message_from_widget(wire.to_json())).unwrap();
+        assert_eq!(platform.drain()[0].error().unwrap().kind(), ErrorKind::UnknownAction, "{action}");
+    }
+}
+
+#[test]
+fn missing_capability_error_names_the_capability() {
+    let (driver, _, platform) = setup();
+    let message = SendEventRequest::room_event("m.room.message", json!({"body": "hi"}).into());
+    let error = send(&driver, &platform, message).error().unwrap();
+    assert_eq!(error.code, "org.matrix.msc4412.missing_capability");
+    assert_eq!(error.message, "Missing capability: widget:org.matrix.mscXXXX.send_event.timeline:m.room.message");
+}
+
+#[test]
+fn nothing_is_sent_before_the_widget_spoke() {
+    let (driver, _, platform) = setup();
+    // The host must not send an action before it has received the first one from the widget.
+    driver.revoke_capabilities(vec![Capability::Navigate]);
+    driver.update_language("de".into());
+    block(driver.resolve_openid(true));
+    assert!(platform.drain().is_empty());
+
+    grant(&driver, &platform, vec![Capability::UpdateLanguage]);
+    driver.update_language("de".into());
+    assert_eq!(short(&platform.drain()[0]), "update_language");
+}
+
+#[test]
+fn revoking_capabilities() {
+    let (driver, backend, platform) = setup();
+    let message = || SendEventRequest::room_event("m.room.message", json!({"body": "hi"}).into());
+    grant(
+        &driver,
+        &platform,
+        vec![
+            Capability::send_event("m.room.message"),
+            Capability::forward_event("m.room.message"),
+            Capability::Navigate,
+        ],
+    );
+    assert!(send(&driver, &platform, message()).error().is_none());
+    assert_eq!(backend.room_subscriptions().len(), 1);
+
+    // Revoking what the widget does not hold changes nothing and sends nothing.
+    driver.revoke_capabilities(vec![Capability::UploadFile]);
+    assert!(platform.drain().is_empty());
+
+    // The widget is told the full remaining list ...
+    driver.revoke_capabilities(vec![
+        Capability::send_event("m.room.message"),
+        Capability::forward_event("m.room.message"),
+    ]);
+    let sent = platform.drain();
+    assert_eq!(
+        HostRequest::from_wire(&sent[0]).unwrap(),
+        HostRequest::UpdateCapabilities { request: UpdateCapabilitiesRequest { allowed: vec![Capability::Navigate] } }
+    );
+    assert_eq!(driver.snapshot().approved, vec![Capability::Navigate]);
+    // ... its requests fail, and the host stops forwarding.
+    assert_eq!(send(&driver, &platform, message()).error().unwrap().kind(), ErrorKind::MissingCapability);
+    backend.inject(event("m.room.message", None, json!({"body": "x"})));
+    assert!(platform.drain().is_empty());
+
+    // Asking again goes through the platform again.
+    grant(&driver, &platform, vec![Capability::send_event("m.room.message")]);
+    assert!(send(&driver, &platform, message()).error().is_none());
+}
+
+#[test]
+fn requests_while_one_is_pending_add_up() {
+    let (driver, _, platform) = setup();
+    let request = |capability: Capability, id: &str| {
+        let request = RequestCapabilitiesRequest { capabilities: vec![capability] };
+        block(feed(&driver, WidgetRequest::RequestCapabilities { request }, id)).unwrap();
+    };
+    request(Capability::Navigate, "a");
+    request(Capability::UploadFile, "b");
+    assert_eq!(driver.snapshot().pending_requested, vec![Capability::Navigate, Capability::UploadFile]);
+    platform.drain();
+    driver.approve_capabilities(vec![Capability::Navigate, Capability::UploadFile]);
+    assert_eq!(platform.drain()[0].request_body()["allowed"].as_array().unwrap().len(), 2);
 }
 
 #[test]
@@ -1202,11 +1286,8 @@ fn auto_approved_capabilities_skip_the_platform() {
     assert_eq!(sent[0].request_id, "a1");
     assert_eq!(
         HostRequest::from_wire(&sent[1]).unwrap(),
-        HostRequest::NotifyCapabilities {
-            request: NotifyCapabilitiesRequest {
-                requested: vec![Capability::GetMatrixContext],
-                approved: vec![Capability::GetMatrixContext]
-            }
+        HostRequest::UpdateCapabilities {
+            request: UpdateCapabilitiesRequest { allowed: vec![Capability::GetMatrixContext] }
         }
     );
     block(driver.handle_message_from_widget(sent[1].ack().to_json())).unwrap();
@@ -1225,10 +1306,9 @@ fn auto_approved_capabilities_skip_the_platform() {
     let notify = HostRequest::from_wire(&platform.drain()[0]).unwrap();
     assert_eq!(
         notify,
-        HostRequest::NotifyCapabilities {
-            request: NotifyCapabilitiesRequest {
-                requested: vec![Capability::GetClientContext, Capability::send_event("m.room.message")],
-                approved: vec![
+        HostRequest::UpdateCapabilities {
+            request: UpdateCapabilitiesRequest {
+                allowed: vec![
                     Capability::GetMatrixContext,
                     Capability::GetClientContext,
                     Capability::send_event("m.room.message")

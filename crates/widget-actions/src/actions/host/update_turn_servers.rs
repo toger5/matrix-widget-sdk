@@ -17,7 +17,7 @@ mod tests {
             password: "p".into(),
         };
         let wire = HostRequest::UpdateTurnServers { server: server.clone() }.into_wire("u");
-        assert_eq!(wire.action, "update_turn_servers");
+        assert_eq!(wire.action, "org.matrix.mscXXXX.update_turn_servers");
         assert_eq!(
             wire.to_value()["request"],
             json!({"uris": ["turn:turn.example.org:3478?transport=udp"], "username": "u", "password": "p"})

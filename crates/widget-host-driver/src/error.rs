@@ -10,13 +10,11 @@ pub enum DriverError {
     /// The JSON is not an MSC4412 envelope at all (probably not a widget message).
     #[error("not a widget api message: {message}")]
     NotAWidgetMessage { message: String },
-    /// The widget speaks the pre-MSC4412 protocol (no `version` field). The platform should
-    /// route this widget to its legacy implementation, if any.
-    #[error("widget uses the legacy widget api (no version field)")]
+    /// The widget speaks the pre-MSC4412 protocol: its message has an `api` property instead of
+    /// `source`. The platform should route this widget to its legacy implementation or load it
+    /// through the compat wrapper.
+    #[error("widget uses the legacy widget api (`api` instead of `source`)")]
     LegacyWidgetApi,
-    /// The message has a version this driver does not implement.
-    #[error("unsupported widget api version `{version}`")]
-    UnsupportedVersion { version: String },
     /// The widget sent a response for a request the driver never made (or already completed).
     #[error("unexpected response for request id `{request_id}`")]
     UnexpectedResponse { request_id: String },

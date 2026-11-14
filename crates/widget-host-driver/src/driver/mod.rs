@@ -10,8 +10,7 @@ use std::sync::{Arc, Mutex, MutexGuard, Weak};
 
 use widget_actions::{
     Action, ActionError, Capability, ForwardOpenIdCredentialsRequest, HostRequest, JsonValue, MessageKind,
-    NotifyCapabilitiesRequest, UpdateLanguageRequest, UpdateVisibilityRequest, WidgetError, WireMessage,
-    API_VERSION_V1,
+    UpdateCapabilitiesRequest, UpdateLanguageRequest, UpdateVisibilityRequest, WidgetError, WireMessage,
 };
 use widget_matrix_backend::MatrixBackend;
 
@@ -29,8 +28,8 @@ use subscriptions::SubscriptionSlot;
 #[derive(Debug, Clone, PartialEq, Eq, Default, serde::Serialize)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct DriverSnapshot {
-    /// `content_loaded` was received.
-    pub content_loaded: bool,
+    /// `notify_ready` was received.
+    pub ready: bool,
     /// Capabilities currently granted to the widget.
     pub approved: Vec<Capability>,
     /// Capabilities the widget requested that wait for [`WidgetHostDriver::approve_capabilities`].
@@ -46,7 +45,9 @@ pub struct DriverSnapshot {
 
 #[derive(Debug, Default)]
 struct State {
-    content_loaded: bool,
+    /// The widget has sent its first action. The host must not send anything before that.
+    widget_spoke: bool,
+    ready: bool,
     approved: Vec<Capability>,
     /// The capabilities of the open `request_capabilities`, if there is one.
     pending_requested: Option<Vec<Capability>>,
@@ -94,19 +95,28 @@ impl WidgetHostDriver {
     /// Replies to the widget go out through [`WidgetHostPlatform::send_to_widget`] before this
     /// returns. An error means the message does not belong to this protocol; the platform decides
     /// whether to ignore it, log it, or pass it to a legacy implementation.
+    /// [`DriverError::LegacyWidgetApi`] says that the message has the legacy shape (`api` instead
+    /// of `source`): the first action a widget sends tells the two formats apart.
     pub async fn handle_message_from_widget(&self, json: String) -> Result<(), DriverError> {
-        let msg =
-            WireMessage::from_json(&json).map_err(|e| DriverError::NotAWidgetMessage { message: e.to_string() })?;
-        match msg.version.as_deref() {
-            Some(API_VERSION_V1) => {}
-            None => return Err(DriverError::LegacyWidgetApi),
-            Some(other) => return Err(DriverError::UnsupportedVersion { version: other.to_owned() }),
+        let msg = WireMessage::from_json(&json).map_err(|e| {
+            let legacy = serde_json::from_str::<serde_json::Value>(&json)
+                .is_ok_and(|v| v.get("api").is_some() && v.get("source").is_none());
+            if legacy {
+                DriverError::LegacyWidgetApi
+            } else {
+                DriverError::NotAWidgetMessage { message: e.to_string() }
+            }
+        })?;
+        if msg.kind() == MessageKind::WidgetRequest {
+            self.lock().widget_spoke = true;
         }
         let action = match Action::from_wire(&msg) {
             Ok(action) => action,
             // A request with a body of the wrong shape: the widget gets an error reply.
             Err(ActionError::InvalidBody { message, .. }) if msg.kind() == MessageKind::WidgetRequest => {
-                self.send(&msg.error_response_to(WidgetError::new(format!("Invalid request body: {message}"))));
+                self.send(
+                    &msg.error_response_to(WidgetError::invalid_request(format!("Invalid request body: {message}"))),
+                );
                 return Ok(());
             }
             // The widget rejected one of our requests. There is nothing to retry, so it counts
@@ -132,7 +142,7 @@ impl WidgetHostDriver {
     ///
     /// When a widget requests capabilities, these are granted at once, and only the rest reaches
     /// [`WidgetHostPlatform::on_capabilities_requested`]. If nothing is left, the platform is not
-    /// called and `notify_capabilities` goes out immediately.
+    /// called and `update_capabilities` goes out immediately.
     ///
     /// Typical use: `widget:…get_matrix_context` and `widget:…get_client_context` for a legacy
     /// widget behind the compat wrapper, because a legacy client passed the same facts as URL
@@ -147,13 +157,13 @@ impl WidgetHostDriver {
     ///
     /// * Only capabilities the widget requested are granted; the rest of `approved` is ignored.
     /// * Requested capabilities that are auto-approved are granted as well.
-    /// * The widget gets `notify_capabilities`.
+    /// * The widget gets `update_capabilities` with everything it holds now.
     /// * If new capabilities were granted, the driver subscribes to the backend again. The backend
     ///   then delivers the current room state, which reaches the widget as `update_state`.
     ///
     /// Does nothing if no request is pending.
     pub fn approve_capabilities(&self, approved: Vec<Capability>) {
-        let (notify, changed) = {
+        let (update, changed) = {
             let mut state = self.lock();
             let Some(requested) = state.pending_requested.take() else {
                 return;
@@ -165,17 +175,38 @@ impl WidgetHostDriver {
                     state.approved.push(capability.clone());
                 }
             }
-            // `approved` lists everything the widget holds now, not only this round's grants
-            // (as in the legacy api).
-            let notify = HostRequest::NotifyCapabilities {
-                request: NotifyCapabilitiesRequest { requested, approved: state.approved.clone() },
+            // `allowed` is always the full list the widget holds, not only this round's grants.
+            let update = HostRequest::UpdateCapabilities {
+                request: UpdateCapabilitiesRequest { allowed: state.approved.clone() },
             };
-            (notify, state.approved.len() != before)
+            (update, state.approved.len() != before)
         };
-        self.send_request(notify);
+        self.send_request(update);
         if changed {
             self.resubscribe();
         }
+    }
+
+    /// Take capabilities away from the widget, e.g. because the user revoked a permission.
+    ///
+    /// * The widget gets `update_capabilities` with the reduced list.
+    /// * From then on its requests for the revoked actions are answered with
+    ///   `missing_capability`, and the host stops sending the revoked subscriptions.
+    /// * The capabilities stay revoked until the widget requests them again.
+    ///
+    /// Does nothing if the widget holds none of `capabilities`.
+    pub fn revoke_capabilities(&self, capabilities: Vec<Capability>) {
+        let update = {
+            let mut state = self.lock();
+            let before = state.approved.len();
+            state.approved.retain(|capability| !capabilities.contains(capability));
+            if state.approved.len() == before {
+                return;
+            }
+            HostRequest::UpdateCapabilities { request: UpdateCapabilitiesRequest { allowed: state.approved.clone() } }
+        };
+        self.send_request(update);
+        self.resubscribe();
     }
 
     /// Hand out OpenID tokens without asking the platform.
@@ -230,7 +261,7 @@ impl WidgetHostDriver {
     pub fn snapshot(&self) -> DriverSnapshot {
         let s = self.lock();
         DriverSnapshot {
-            content_loaded: s.content_loaded,
+            ready: s.ready,
             approved: s.approved.clone(),
             pending_requested: s.pending_requested.clone().unwrap_or_default(),
             auto_approved: s.auto_approved.clone(),
@@ -266,9 +297,18 @@ impl WidgetHostDriver {
     }
 
     /// Send a host request to the widget and remember it until the widget acknowledges it.
+    ///
+    /// Nothing goes out before the widget has sent its first action (MSC4412): the widget is not
+    /// listening yet, and a legacy widget would not understand it.
     fn send_request(&self, request: HostRequest) {
         let id = uuid::Uuid::new_v4().to_string();
-        self.lock().awaiting_ack.insert(id.clone(), request.clone());
+        {
+            let mut state = self.lock();
+            if !state.widget_spoke {
+                return;
+            }
+            state.awaiting_ack.insert(id.clone(), request.clone());
+        }
         self.send(&request.into_wire(id));
     }
 
