@@ -4,7 +4,8 @@
  *     legacy:  { api: "fromWidget" | "toWidget", widgetId, requestId, action, data }
  *     MSC4412: { source: "widget" | "host", version: "v1", requestId, action, request }
  *
- * Pure functions without state. Bodies are passed through and never inspected.
+ * Pure functions without state. Bodies are passed through and never inspected. Action names are
+ * translated where the two protocols differ.
  */
 
 /** Who started the exchange in the legacy protocol: `fromWidget` = the widget, `toWidget` = the host. */
@@ -38,18 +39,42 @@ export interface NewMessage {
 export const API_VERSION = "v1";
 
 /**
- * Legacy action names that MSC4412 renamed.
+ * Legacy action names that differ from the host's, per source (who sends the action).
  *
- * Only `request_capabilities` is renamed by MSC4412 itself. Every other action passes through:
- * the host already sends and accepts the unstable MSC spellings (`org.matrix.msc2876.read_events`).
+ * - `request_capabilities` is renamed by MSC4412 itself.
+ * - The rest are the renames of the capability naming proposal
+ *   (`docs/spec-appendix/capability-naming-proposal.md`): action names are verbs, and the host's
+ *   deliveries are `forward_*` / `update_*` instead of sharing a name with the widget's requests.
+ *
+ * The host accepts none of the legacy names, so this table is the only place they are understood.
+ * Every other action passes through: the host sends and accepts the unstable MSC spellings
+ * (`org.matrix.msc2876.read_events`) the legacy api uses.
  */
-const LEGACY_TO_NEW: Record<string, string> = {
-  "org.matrix.msc2974.request_capabilities": "request_capabilities",
+const LEGACY_TO_NEW: Record<Source, Record<string, string>> = {
+  widget: {
+    "org.matrix.msc2974.request_capabilities": "request_capabilities",
+    "org.matrix.msc3973.user_directory_search": "org.matrix.msc3973.search_user_directory",
+    "org.matrix.msc4533.rtc_livekit_get_token": "org.matrix.msc4533.get_rtc_livekit_token",
+    "org.matrix.msc4533.rtc_livekit_delegate_delayed_leave": "org.matrix.msc4533.delegate_rtc_livekit_delayed_leave",
+  },
+  host: {
+    send_event: "forward_event",
+    send_to_device: "forward_to_device",
+    openid_credentials: "forward_openid_credentials",
+    theme_change: "update_theme",
+    language_change: "update_language",
+    visibility: "update_visibility",
+  },
 };
-const NEW_TO_LEGACY = Object.fromEntries(Object.entries(LEGACY_TO_NEW).map(([legacy, next]) => [next, legacy]));
+const invert = (table: Record<string, string>) => Object.fromEntries(Object.entries(table).map(([legacy, next]) => [next, legacy]));
+const NEW_TO_LEGACY: Record<Source, Record<string, string>> = { widget: invert(LEGACY_TO_NEW.widget), host: invert(LEGACY_TO_NEW.host) };
 
-export const toNewAction = (action: string): string => LEGACY_TO_NEW[action] ?? action;
-export const toLegacyAction = (action: string): string => NEW_TO_LEGACY[action] ?? action;
+const lookup = (table: Record<string, string>, action: string): string => (Object.hasOwn(table, action) ? table[action] : action);
+
+/** The host's name for the legacy action `action` sent by `source`. */
+export const toNewAction = (action: string, source: Source): string => lookup(LEGACY_TO_NEW[source], action);
+/** The legacy name for the host's action `action` sent by `source`. */
+export const toLegacyAction = (action: string, source: Source): string => lookup(NEW_TO_LEGACY[source], action);
 
 const isRecord = (m: unknown): m is Record<string, unknown> => typeof m === "object" && m !== null;
 
@@ -76,11 +101,12 @@ export function isNewMessage(m: unknown): m is NewMessage {
 
 /** A legacy request becomes an MSC4412 request. `requestId` is kept so responses correlate. */
 export function legacyRequestToNew(m: LegacyMessage): NewMessage {
+  const source: Source = m.api === "fromWidget" ? "widget" : "host";
   return {
-    source: m.api === "fromWidget" ? "widget" : "host",
+    source,
     version: API_VERSION,
     requestId: m.requestId,
-    action: toNewAction(m.action),
+    action: toNewAction(m.action, source),
     request: m.data ?? {},
   };
 }
@@ -91,7 +117,7 @@ export function newRequestToLegacy(m: NewMessage, widgetId: string): LegacyMessa
     api: m.source === "host" ? "toWidget" : "fromWidget",
     widgetId,
     requestId: m.requestId,
-    action: toLegacyAction(m.action),
+    action: toLegacyAction(m.action, m.source),
     data: m.request ?? {},
   };
 }

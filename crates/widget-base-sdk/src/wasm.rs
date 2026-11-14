@@ -10,7 +10,7 @@
 //! await init();
 //! const api = WidgetApi.connectToParent();
 //! api.onEvent((ev) => console.log("event", ev));
-//! await api.requestCapabilities(["org.matrix.msc2762.send.event:m.room.message"]);
+//! await api.requestCapabilities(["widget:org.matrix.mscXXXX.send_event.timeline:m.room.message"]);
 //! await api.contentLoaded();
 //! await api.sendEvent("m.room.message", { msgtype: "m.text", body: "hi" });
 //! ```
@@ -29,9 +29,8 @@ use serde_json::Value;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::future_to_promise;
 use widget_actions::{
-    Base64File, Capability, MatrixEvent, ReadEventsRequest, ReadRelationsRequest,
-    RtcLivekitDelegateDelayedLeaveRequest, RtcLivekitGetTokenRequest, StateKeySelector, ToDeviceEvent, TurnServer,
-    UpdateDelayedEventAction,
+    Base64File, Capability, DelegateRtcLivekitDelayedLeaveRequest, GetRtcLivekitTokenRequest, MatrixEvent,
+    ReadEventsRequest, ReadRelationsRequest, StateKeySelector, ToDeviceEvent, TurnServer, UpdateDelayedEventAction,
 };
 
 use crate::{WidgetClient, WidgetClientError, WidgetDelegate};
@@ -240,19 +239,19 @@ impl WidgetApi {
         self.delegate.callbacks.borrow_mut().on_turn_server = callback;
     }
 
-    /// Register a callback for `theme_change` (receives the client's theme object).
+    /// Register a callback for `update_theme` (receives the client's theme object).
     #[wasm_bindgen(js_name = onThemeChange)]
     pub fn on_theme_change(&self, callback: Option<Function>) {
         self.delegate.callbacks.borrow_mut().on_theme_change = callback;
     }
 
-    /// Register a callback for `language_change` (receives the BCP 47 tag).
+    /// Register a callback for `update_language` (receives the BCP 47 tag).
     #[wasm_bindgen(js_name = onLanguageChange)]
     pub fn on_language_change(&self, callback: Option<Function>) {
         self.delegate.callbacks.borrow_mut().on_language_change = callback;
     }
 
-    /// Register a callback for `visibility` (receives a boolean).
+    /// Register a callback for `update_visibility` (receives a boolean).
     #[wasm_bindgen(js_name = onVisibilityChange)]
     pub fn on_visibility_change(&self, callback: Option<Function>) {
         self.delegate.callbacks.borrow_mut().on_visibility_change = callback;
@@ -440,17 +439,17 @@ impl WidgetApi {
 
     /// Resolves with the LiveKit JWT (MSC4533). `request` is
     /// `{ server_name, url, room_id, slot_id, member_id }`.
-    #[wasm_bindgen(js_name = rtcLivekitGetToken)]
-    pub fn rtc_livekit_get_token(&self, request: JsValue) -> Promise {
-        with_arg(request, |request: RtcLivekitGetTokenRequest| promise(self.client.rtc_livekit_get_token(request)))
+    #[wasm_bindgen(js_name = getRtcLivekitToken)]
+    pub fn get_rtc_livekit_token(&self, request: JsValue) -> Promise {
+        with_arg(request, |request: GetRtcLivekitTokenRequest| promise(self.client.get_rtc_livekit_token(request)))
     }
 
     /// Hand a delayed leave to the client's LiveKit service (MSC4533). `request` is
     /// `{ url, room_id, slot_id, member_id, delay_id }`.
-    #[wasm_bindgen(js_name = rtcLivekitDelegateDelayedLeave)]
-    pub fn rtc_livekit_delegate_delayed_leave(&self, request: JsValue) -> Promise {
-        with_arg(request, |request: RtcLivekitDelegateDelayedLeaveRequest| {
-            promise(self.client.rtc_livekit_delegate_delayed_leave(request))
+    #[wasm_bindgen(js_name = delegateRtcLivekitDelayedLeave)]
+    pub fn delegate_rtc_livekit_delayed_leave(&self, request: JsValue) -> Promise {
+        with_arg(request, |request: DelegateRtcLivekitDelayedLeaveRequest| {
+            promise(self.client.delegate_rtc_livekit_delayed_leave(request))
         })
     }
 
@@ -461,14 +460,14 @@ impl WidgetApi {
         promise(self.client.request_openid_token())
     }
 
-    /// Resolves with `{ client_id?, client_theme?, client_language? }`. Needs `m.client_context`.
+    /// Resolves with `{ client_id?, client_theme?, client_language? }`. Needs `widget:…get_client_context`.
     #[wasm_bindgen(js_name = getClientContext)]
     pub fn get_client_context(&self) -> Promise {
         promise(self.client.get_client_context())
     }
 
     /// Resolves with `{ user_id, device_id, room_id, display_name, avatar_url, matrix_base_url }`.
-    /// Needs `m.matrix_context`.
+    /// Needs `widget:…get_matrix_context`.
     #[wasm_bindgen(js_name = getMatrixContext)]
     pub fn get_matrix_context(&self) -> Promise {
         promise(self.client.get_matrix_context())

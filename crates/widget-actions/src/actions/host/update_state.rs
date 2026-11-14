@@ -1,7 +1,7 @@
 //! `update_state`, host -> widget.
 //!
 //! The host pushes the current room state the widget is allowed to see (it holds
-//! `receive.state_event` capabilities for). Body: [`UpdateStateRequest`], acknowledged with `{}`.
+//! `host:…update_state:<type>` capabilities for). Body: [`UpdateStateRequest`], acknowledged with `{}`.
 
 use serde::{Deserialize, Serialize};
 

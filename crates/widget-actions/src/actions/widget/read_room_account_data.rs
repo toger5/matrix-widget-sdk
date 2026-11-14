@@ -2,8 +2,8 @@
 //! data of one type.
 //!
 //! Body: [`ReadRoomAccountDataRequest`], answered with [`ReadRoomAccountDataResponse`]. Requires
-//! `com.beeper.capabilities.receive.room_account_data:<type>`; `room_ids` needs the
-//! `timeline:<room>` capability per room, as for `read_events`.
+//! `widget:…read_room_account_data:<type>`. `room_ids` may only name the
+//! widget's own room, as for `read_events`.
 
 use serde::{Deserialize, Serialize};
 

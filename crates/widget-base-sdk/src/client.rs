@@ -8,14 +8,14 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 // TODO consider splitting those into widget_actions::widget and widget_actions::host so that they are more explicit here.
 use widget_actions::{
-    ActionError, Base64File, Capability, ClientContextResponse, DownloadFileRequest, HostRequest, JsonValue,
-    MatrixContextResponse, MatrixEvent, MediaConfigResponse, MessageKind, NavigateRequest, OpenIdCredentialsRequest,
-    OpenIdState, OpenIdToken, ReadEventsRequest, ReadRelationsRequest, ReadRelationsResponse,
-    ReadRoomAccountDataRequest, RequestCapabilitiesRequest, RoomAccountData, RtcLivekitDelegateDelayedLeaveRequest,
-    RtcLivekitGetTokenRequest, SendEventRequest, SendEventResponse, SendToDeviceRequest, SetAlwaysOnScreenRequest,
-    StateKeySelector, ToDeviceEvent, TurnServer, UpdateDelayedEventAction, UpdateDelayedEventRequest,
-    UploadFileRequest, UploadFileResponse, UserDirectorySearchRequest, UserDirectorySearchResponse, WidgetError,
-    WidgetRequest, WidgetResponse, WireMessage, API_VERSION_V1,
+    ActionError, Base64File, Capability, DelegateRtcLivekitDelayedLeaveRequest, DownloadFileRequest,
+    ForwardOpenIdCredentialsRequest, GetClientContextResponse, GetMatrixContextResponse, GetRtcLivekitTokenRequest,
+    HostRequest, JsonValue, MatrixEvent, MediaConfigResponse, MessageKind, NavigateRequest, OpenIdState, OpenIdToken,
+    ReadEventsRequest, ReadRelationsRequest, ReadRelationsResponse, ReadRoomAccountDataRequest,
+    RequestCapabilitiesRequest, RoomAccountData, SearchUserDirectoryRequest, SearchUserDirectoryResponse,
+    SendEventRequest, SendEventResponse, SendToDeviceRequest, SetAlwaysOnScreenRequest, StateKeySelector,
+    ToDeviceEvent, TurnServer, UpdateDelayedEventAction, UpdateDelayedEventRequest, UploadFileRequest,
+    UploadFileResponse, WidgetError, WidgetRequest, WidgetResponse, WireMessage, API_VERSION_V1,
 };
 
 use crate::WidgetClientError;
@@ -52,13 +52,13 @@ pub trait WidgetDelegate {
     /// New TURN credentials while watching them (`update_turn_servers`).
     fn on_turn_server(&self, _server: TurnServer) {}
 
-    /// The client's theme changed (`theme_change`); the object's shape is up to the client.
+    /// The client's theme changed (`update_theme`); the object's shape is up to the client.
     fn on_theme_change(&self, _theme: Value) {}
 
-    /// The client's UI language changed (`language_change`); a BCP 47 tag.
+    /// The client's UI language changed (`update_language`); a BCP 47 tag.
     fn on_language_change(&self, _lang: String) {}
 
-    /// The client started or stopped showing the widget (`visibility`).
+    /// The client started or stopped showing the widget (`update_visibility`).
     fn on_visibility_change(&self, _visible: bool) {}
 
     /// A capability negotiation finished. `approved` is the complete set now held.
@@ -81,8 +81,8 @@ pub struct WidgetState {
 struct Inner {
     state: WidgetState,
     pending: HashMap<String, oneshot::Sender<WireMessage>>,
-    /// `get_openid` requests answered with `state: request`, waiting for `openid_credentials`.
-    openid_waiters: HashMap<String, oneshot::Sender<OpenIdCredentialsRequest>>,
+    /// `get_openid` requests answered with `state: request`, waiting for `forward_openid_credentials`.
+    openid_waiters: HashMap<String, oneshot::Sender<ForwardOpenIdCredentialsRequest>>,
 }
 
 /// The widget side state machine. See the crate documentation.
@@ -186,7 +186,7 @@ impl WidgetClient {
                     _ => Err(WidgetClientError::OpenIdBlocked),
                 };
             }
-            // Phase two: the host sends `openid_credentials` once the user decided.
+            // Phase two: the host sends `forward_openid_credentials` once the user decided.
             let credentials = rx.await.map_err(|_| WidgetClientError::Cancelled)?;
             match credentials.state {
                 OpenIdState::Allowed => credentials.token().ok_or_else(unexpected),
@@ -210,19 +210,19 @@ impl WidgetClient {
         }
     }
 
-    /// Ask the host about the embedding client (id, theme, language). Needs `m.client_context`.
+    /// Ask the host about the embedding client (id, theme, language). Needs `widget:…get_client_context`.
     pub fn get_client_context(
         &self,
-    ) -> impl Future<Output = Result<ClientContextResponse, WidgetClientError>> + 'static {
-        self.call(WidgetRequest::ClientContext, pick!(ClientContext { response } => response))
+    ) -> impl Future<Output = Result<GetClientContextResponse, WidgetClientError>> + 'static {
+        self.call(WidgetRequest::GetClientContext, pick!(GetClientContext { response } => response))
     }
 
     /// Ask the host who and where this widget is on Matrix (user, device, room, display name,
-    /// avatar, homeserver). Needs `m.matrix_context`.
+    /// avatar, homeserver). Needs `widget:…get_matrix_context`.
     pub fn get_matrix_context(
         &self,
-    ) -> impl Future<Output = Result<MatrixContextResponse, WidgetClientError>> + 'static {
-        self.call(WidgetRequest::MatrixContext, pick!(MatrixContext { response } => response))
+    ) -> impl Future<Output = Result<GetMatrixContextResponse, WidgetClientError>> + 'static {
+        self.call(WidgetRequest::GetMatrixContext, pick!(GetMatrixContext { response } => response))
     }
 
     /// Ask the host for capabilities. Resolves when the host *acknowledged* the request; the
@@ -237,7 +237,7 @@ impl WidgetClient {
         self.call(request, pick!(RequestCapabilities => ()))
     }
 
-    /// Send a timeline event. Needs an approved `send.event:<type>` capability.
+    /// Send a timeline event. Needs an approved `widget:…send_event.timeline:<type>` capability.
     pub fn send_event(
         &self,
         event_type: impl Into<String>,
@@ -246,7 +246,7 @@ impl WidgetClient {
         self.send_event_request(SendEventRequest::room_event(event_type, content.into()))
     }
 
-    /// Send a state event. Needs an approved `send.state_event:<type>[#<state_key>]` capability.
+    /// Send a state event. Needs an approved `widget:…send_event.state:<type>[#<state_key>]` capability.
     pub fn send_state_event(
         &self,
         event_type: impl Into<String>,
@@ -257,7 +257,7 @@ impl WidgetClient {
     }
 
     /// Send a sticky event (MSC4407) that the homeserver keeps for `duration_ms`. Needs the
-    /// matching `send.event` capability and `org.matrix.msc4407.send.sticky_event`.
+    /// matching `widget:…send_event.timeline` capability and `widget:…send_event.sticky`.
     pub fn send_sticky_event(
         &self,
         event_type: impl Into<String>,
@@ -271,7 +271,7 @@ impl WidgetClient {
 
     /// Schedule an event (MSC4157): a state event with `state_key`, a timeline event without.
     /// Resolves with the **delay id** for [`update_delayed_event`](Self::update_delayed_event).
-    /// Needs the matching `send.*` capability and `org.matrix.msc4157.send.delayed_event`.
+    /// Needs the matching `widget:…send_event.*` capability and `widget:…send_event.delayed`.
     pub fn send_delayed_event(
         &self,
         event_type: impl Into<String>,
@@ -287,7 +287,7 @@ impl WidgetClient {
         async move { fut.await?.delay_id.ok_or(WidgetClientError::UnexpectedResponse { action: "send_event".into() }) }
     }
 
-    /// Cancel, restart or fire a delayed event. Needs `org.matrix.msc4157.update_delayed_event`.
+    /// Cancel, restart or fire a delayed event. Needs `widget:…update_delayed_event`.
     pub fn update_delayed_event(
         &self,
         delay_id: impl Into<String>,
@@ -309,7 +309,7 @@ impl WidgetClient {
         self.call(WidgetRequest::SendEvent { request }, pick!(SendEvent { response } => response))
     }
 
-    /// Read recent timeline events of a type. Needs `receive.event:<type>`.
+    /// Read recent timeline events of a type. Needs `widget:…read_events.timeline:<type>`.
     pub fn read_events(
         &self,
         event_type: impl Into<String>,
@@ -318,7 +318,7 @@ impl WidgetClient {
         self.read_events_request(ReadEventsRequest::timeline(event_type, limit))
     }
 
-    /// Read current state events of a type. Needs `receive.state_event:<type>[#<state_key>]`.
+    /// Read current state events of a type. Needs `widget:…read_events.state:<type>[#<state_key>]`.
     pub fn read_state(
         &self,
         event_type: impl Into<String>,
@@ -329,7 +329,7 @@ impl WidgetClient {
 
     /// Send a to-device message (MSC3819): `messages` is `user_id -> device_id -> content`
     /// (`*` as device id means every device of the user). Needs
-    /// `org.matrix.msc3819.send.to_device:<type>`.
+    /// `widget:…send_to_device:<type>`.
     pub fn send_to_device(
         &self,
         event_type: impl Into<String>,
@@ -349,13 +349,13 @@ impl WidgetClient {
     }
 
     /// Ask the client to open a `https://matrix.to/#/` permalink (MSC2931). Needs
-    /// `org.matrix.msc2931.navigate`.
+    /// `widget:…navigate`.
     pub fn navigate(&self, uri: impl Into<String>) -> impl Future<Output = Result<(), WidgetClientError>> + 'static {
         self.call(WidgetRequest::Navigate { request: NavigateRequest { uri: uri.into() } }, pick!(Navigate => ()))
     }
 
     /// Ask the client to keep the widget on screen (or stop). Resolves with whether it will.
-    /// Needs `m.always_on_screen`.
+    /// Needs `widget:…set_always_on_screen`.
     pub fn set_always_on_screen(&self, value: bool) -> impl Future<Output = Result<bool, WidgetClientError>> + 'static {
         self.call(
             WidgetRequest::SetAlwaysOnScreen { request: SetAlwaysOnScreenRequest { value } },
@@ -364,7 +364,7 @@ impl WidgetClient {
     }
 
     /// Start receiving TURN credentials through [`WidgetDelegate::on_turn_server`] (MSC3846).
-    /// Needs `town.robin.msc3846.turn_servers`.
+    /// Needs `host:…update_turn_servers`.
     pub fn watch_turn_servers(&self) -> impl Future<Output = Result<(), WidgetClientError>> + 'static {
         self.call(WidgetRequest::WatchTurnServers, pick!(WatchTurnServers => ()))
     }
@@ -375,32 +375,32 @@ impl WidgetClient {
     }
 
     /// The homeserver's MatrixRTC transports (MSC4515), each `{ "type": ..., ... }`. Needs
-    /// `org.matrix.msc4515.rtc_transports`.
+    /// `widget:…get_rtc_transports`.
     pub fn get_rtc_transports(&self) -> impl Future<Output = Result<Vec<Value>, WidgetClientError>> + 'static {
         self.call(WidgetRequest::GetRtcTransports, pick!(GetRtcTransports { response } => response.rtc_transports.into_iter().map(JsonValue::into_inner).collect()))
     }
 
-    /// Search the user directory (MSC3973). Needs `org.matrix.msc3973.user_directory_search`.
+    /// Search the user directory (MSC3973). Needs `widget:…search_user_directory`.
     pub fn search_user_directory(
         &self,
         search_term: impl Into<String>,
         limit: Option<u32>,
-    ) -> impl Future<Output = Result<UserDirectorySearchResponse, WidgetClientError>> + 'static {
+    ) -> impl Future<Output = Result<SearchUserDirectoryResponse, WidgetClientError>> + 'static {
         self.call(
-            WidgetRequest::UserDirectorySearch {
-                request: UserDirectorySearchRequest { search_term: search_term.into(), limit },
+            WidgetRequest::SearchUserDirectory {
+                request: SearchUserDirectoryRequest { search_term: search_term.into(), limit },
             },
-            pick!(UserDirectorySearch { response } => response),
+            pick!(SearchUserDirectory { response } => response),
         )
     }
 
-    /// The homeserver's media config (MSC4039). Needs `org.matrix.msc4039.upload_file`.
+    /// The homeserver's media config (MSC4039). Needs `widget:…get_media_config`.
     pub fn get_media_config(&self) -> impl Future<Output = Result<MediaConfigResponse, WidgetClientError>> + 'static {
         self.call(WidgetRequest::GetMediaConfig, pick!(GetMediaConfig { response } => response))
     }
 
     /// Upload a file to the media repository and get its `mxc://` URI. Needs
-    /// `org.matrix.msc4039.upload_file`.
+    /// `widget:…upload_file`.
     pub fn upload_file(
         &self,
         file: Base64File,
@@ -411,7 +411,7 @@ impl WidgetClient {
         )
     }
 
-    /// Download an `mxc://` URI. Needs `org.matrix.msc4039.download_file`.
+    /// Download an `mxc://` URI. Needs `widget:…download_file`.
     pub fn download_file(
         &self,
         content_uri: impl Into<String>,
@@ -423,7 +423,7 @@ impl WidgetClient {
     }
 
     /// Read room account data of `event_type`. Needs
-    /// `com.beeper.capabilities.receive.room_account_data:<type>`.
+    /// `widget:…read_room_account_data:<type>`.
     pub fn read_room_account_data(
         &self,
         event_type: impl Into<String>,
@@ -436,28 +436,28 @@ impl WidgetClient {
         )
     }
 
-    /// A LiveKit JWT from the client (MSC4533). Needs `org.matrix.msc4533.rtc_livekit_get_token`.
-    pub fn rtc_livekit_get_token(
+    /// A LiveKit JWT from the client (MSC4533). Needs `widget:…get_rtc_livekit_token`.
+    pub fn get_rtc_livekit_token(
         &self,
-        request: RtcLivekitGetTokenRequest,
+        request: GetRtcLivekitTokenRequest,
     ) -> impl Future<Output = Result<String, WidgetClientError>> + 'static {
-        self.call(WidgetRequest::RtcLivekitGetToken { request }, pick!(RtcLivekitGetToken { response } => response.jwt))
+        self.call(WidgetRequest::GetRtcLivekitToken { request }, pick!(GetRtcLivekitToken { response } => response.jwt))
     }
 
     /// Hand a delayed leave to the client's LiveKit service (MSC4533). Needs
-    /// `org.matrix.msc4533.rtc_livekit_delegate_delayed_leave`.
-    pub fn rtc_livekit_delegate_delayed_leave(
+    /// `widget:…delegate_rtc_livekit_delayed_leave`.
+    pub fn delegate_rtc_livekit_delayed_leave(
         &self,
-        request: RtcLivekitDelegateDelayedLeaveRequest,
+        request: DelegateRtcLivekitDelayedLeaveRequest,
     ) -> impl Future<Output = Result<(), WidgetClientError>> + 'static {
         self.call(
-            WidgetRequest::RtcLivekitDelegateDelayedLeave { request },
-            pick!(RtcLivekitDelegateDelayedLeave => ()),
+            WidgetRequest::DelegateRtcLivekitDelayedLeave { request },
+            pick!(DelegateRtcLivekitDelayedLeave => ()),
         )
     }
 
     /// Read the events relating to `request.event_id` (MSC3869). The host filters the page by
-    /// the `receive.*` capabilities.
+    /// the `widget:…read_relations:<type>` capabilities.
     pub fn read_relations(
         &self,
         request: ReadRelationsRequest,
@@ -532,7 +532,7 @@ impl WidgetClient {
                 self.send(msg.ack());
                 self.delegate.on_capabilities_changed(request.requested, approved);
             }
-            HostRequest::SendEvent { event } => {
+            HostRequest::ForwardEvent { event } => {
                 self.send(msg.ack());
                 self.delegate.on_matrix_event(event);
             }
@@ -540,7 +540,7 @@ impl WidgetClient {
                 self.send(msg.ack());
                 self.delegate.on_state_update(request.state);
             }
-            HostRequest::SendToDevice { message } => {
+            HostRequest::ForwardToDevice { message } => {
                 self.send(msg.ack());
                 self.delegate.on_to_device_message(message);
             }
@@ -548,19 +548,19 @@ impl WidgetClient {
                 self.send(msg.ack());
                 self.delegate.on_turn_server(server);
             }
-            HostRequest::ThemeChange { theme } => {
+            HostRequest::UpdateTheme { theme } => {
                 self.send(msg.ack());
                 self.delegate.on_theme_change(theme.into_inner());
             }
-            HostRequest::LanguageChange { request } => {
+            HostRequest::UpdateLanguage { request } => {
                 self.send(msg.ack());
                 self.delegate.on_language_change(request.lang);
             }
-            HostRequest::Visibility { request } => {
+            HostRequest::UpdateVisibility { request } => {
                 self.send(msg.ack());
                 self.delegate.on_visibility_change(request.visible);
             }
-            HostRequest::OpenIdCredentials { request } => {
+            HostRequest::ForwardOpenIdCredentials { request } => {
                 self.send(msg.ack());
                 let waiter = self.inner.borrow_mut().openid_waiters.remove(&request.original_request_id);
                 if let Some(tx) = waiter {
@@ -687,7 +687,7 @@ mod tests {
     #[test]
     fn capabilities_flow() {
         let (client, rec) = setup();
-        let caps = vec![Capability::send_event("a"), Capability::receive_event("b")];
+        let caps = vec![Capability::send_event("a"), Capability::read_events("b")];
         let fut = client.request_capabilities(caps.clone());
         assert_eq!(client.state().pending_requested, caps);
         let sent = rec.drain();
@@ -706,14 +706,14 @@ mod tests {
         assert_eq!(sent[0].response_body(), json!({}));
         assert_eq!(rec.caps_changed.get(), 1);
         assert!(client.has_capability(&Capability::send_event("a")));
-        assert!(!client.has_capability(&Capability::receive_event("b")));
+        assert!(!client.has_capability(&Capability::read_events("b")));
         assert!(client.state().pending_requested.is_empty());
 
         // Re-exchange merges.
         let notify2 = HostRequest::NotifyCapabilities {
             request: NotifyCapabilitiesRequest {
-                requested: vec![Capability::receive_event("b")],
-                approved: vec![Capability::receive_event("b")],
+                requested: vec![Capability::read_events("b")],
+                approved: vec![Capability::read_events("b")],
             },
         }
         .into_wire("host-2");
@@ -753,8 +753,10 @@ mod tests {
         let sent = rec.drain();
         let id = sent[0].request_id.clone();
         client.handle_message(sent[0].response_to(json!({"state": "request"}))).unwrap();
-        let creds = HostRequest::OpenIdCredentials { request: OpenIdCredentialsRequest::allowed(id, token.clone()) }
-            .into_wire("h");
+        let creds = HostRequest::ForwardOpenIdCredentials {
+            request: ForwardOpenIdCredentialsRequest::allowed(id, token.clone()),
+        }
+        .into_wire("h");
         client.handle_message(creds).unwrap();
         assert_eq!(rec.drain()[0].response_body(), json!({}));
         assert_eq!(block(fut).unwrap(), token);
@@ -762,7 +764,8 @@ mod tests {
         // Credentials for an unknown request are acknowledged and ignored.
         client
             .handle_message(
-                HostRequest::OpenIdCredentials { request: OpenIdCredentialsRequest::blocked("nope") }.into_wire("h2"),
+                HostRequest::ForwardOpenIdCredentials { request: ForwardOpenIdCredentialsRequest::blocked("nope") }
+                    .into_wire("h2"),
             )
             .unwrap();
         assert_eq!(rec.drain()[0].response_body(), json!({}));
@@ -781,7 +784,7 @@ mod tests {
             content: json!({"body": "hello"}).into(),
             unsigned: None,
         };
-        client.handle_message(HostRequest::SendEvent { event: event.clone() }.into_wire("h")).unwrap();
+        client.handle_message(HostRequest::ForwardEvent { event: event.clone() }.into_wire("h")).unwrap();
         assert_eq!(rec.drain()[0].response_body(), json!({}));
         assert_eq!(rec.events.borrow().as_slice(), &[event]);
 

@@ -20,7 +20,7 @@ const LEGACY_TYPES = ["im.vector.modular.widgets"];
 /**
  * The only transition-specific code a client needs. The host never templates URLs: a legacy
  * widget's `content.url` is handed to the compat wrapper as is, and the wrapper resolves
- * `$matrix_user_id` & co. itself via the `matrix_context` / `client_context` actions.
+ * `$matrix_user_id` & co. itself via the `get_matrix_context` / `get_client_context` actions.
  */
 export function resolveWidget(event: StateEvent, wrapperUrl: string): ResolvedWidget {
   const { content } = event;

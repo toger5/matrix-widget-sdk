@@ -11,6 +11,8 @@ import {
   EXTRA_CAPABILITIES,
   RELATION_CAPABILITIES,
   TO_DEVICE_CAPABILITIES,
+} from "./capabilities";
+import {
   TO_DEVICE_MESSAGES,
   button,
   capabilityList,

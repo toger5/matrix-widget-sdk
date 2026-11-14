@@ -39,13 +39,17 @@ driver.handle_message_from_widget(json).await?;   // Err(LegacyWidgetApi) → us
 driver.approve_capabilities(approved);
 ```
 
-The driver subscribes to the backend itself once `receive.*` capabilities are approved. The
+The driver subscribes to the backend itself once `host:…forward_event.*`, `host:…update_state` or
+`host:…forward_to_device` capabilities are approved. The
 client does not push events anywhere.
 
 * Legacy widgets (`im.vector.modular.widgets`): embed them through
   `packages/widget-compat-wrapper` and call
-  `driver.set_auto_approved(vec![Capability::MatrixContext, Capability::ClientContext])`.
-* Client pushes: `notify_theme_change`, `notify_language_change`, `notify_visibility`.
+  `driver.set_auto_approved(vec![Capability::GetMatrixContext, Capability::GetClientContext])`.
+  The driver understands only the new capability and action names
+  (`docs/spec-appendix/capability-naming-proposal.md`); the wrapper translates the legacy ones.
+* Client pushes: `update_theme`, `update_language`, `update_visibility`. Each is sent only if
+  the widget holds its `host:…` capability.
 * `WidgetStateEventContent` parses the `m.widget` state event (MSC4411).
 
 ### More diagrams

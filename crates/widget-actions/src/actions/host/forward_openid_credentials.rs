@@ -1,17 +1,17 @@
-//! `openid_credentials` (MSC1960), host -> widget: the outcome of a `get_openid` that was
+//! `forward_openid_credentials` (MSC1960), host -> widget: the outcome of a `get_openid` that was
 //! answered with `state: request` (the user had to be asked).
 //!
-//! Body: [`OpenIdCredentialsRequest`], acknowledged with `{}`. `original_request_id` is the
+//! Body: [`ForwardOpenIdCredentialsRequest`], acknowledged with `{}`. `original_request_id` is the
 //! `requestId` of the widget's `get_openid`.
 
 use serde::{Deserialize, Serialize};
 
 use crate::{OpenIdState, OpenIdToken};
 
-/// Body of `openid_credentials`: like `GetOpenIdResponse` plus the request it answers.
+/// Body of `forward_openid_credentials`: like `GetOpenIdResponse` plus the request it answers.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
-pub struct OpenIdCredentialsRequest {
+pub struct ForwardOpenIdCredentialsRequest {
     /// `allowed` or `blocked` (never `request` here).
     pub state: OpenIdState,
     /// The `requestId` of the `get_openid` this answers.
@@ -26,7 +26,7 @@ pub struct OpenIdCredentialsRequest {
     pub expires_in: Option<u64>,
 }
 
-impl OpenIdCredentialsRequest {
+impl ForwardOpenIdCredentialsRequest {
     pub fn allowed(original_request_id: impl Into<String>, token: OpenIdToken) -> Self {
         Self {
             state: OpenIdState::Allowed,
@@ -76,20 +76,22 @@ mod tests {
             matrix_server_name: "example.org".into(),
             expires_in: 60,
         };
-        let req = HostRequest::OpenIdCredentials { request: OpenIdCredentialsRequest::allowed("o1", token.clone()) };
+        let req = HostRequest::ForwardOpenIdCredentials {
+            request: ForwardOpenIdCredentialsRequest::allowed("o1", token.clone()),
+        };
         let wire = req.clone().into_wire("c");
-        assert_eq!(wire.action, "openid_credentials");
+        assert_eq!(wire.action, "forward_openid_credentials");
         assert_eq!(
             wire.to_value()["request"],
             json!({"state": "allowed", "original_request_id": "o1", "access_token": "tok", "token_type": "Bearer",
                    "matrix_server_name": "example.org", "expires_in": 60})
         );
         assert_eq!(HostRequest::from_wire(&wire).unwrap(), req);
-        assert_eq!(HostResponse::from_wire(&wire.ack()).unwrap(), HostResponse::OpenIdCredentials);
-        assert_eq!(OpenIdCredentialsRequest::allowed("o1", token.clone()).token(), Some(token));
+        assert_eq!(HostResponse::from_wire(&wire.ack()).unwrap(), HostResponse::ForwardOpenIdCredentials);
+        assert_eq!(ForwardOpenIdCredentialsRequest::allowed("o1", token.clone()).token(), Some(token));
 
-        let blocked =
-            HostRequest::OpenIdCredentials { request: OpenIdCredentialsRequest::blocked("o2") }.into_wire("c2");
+        let blocked = HostRequest::ForwardOpenIdCredentials { request: ForwardOpenIdCredentialsRequest::blocked("o2") }
+            .into_wire("c2");
         assert_eq!(blocked.to_value()["request"], json!({"state": "blocked", "original_request_id": "o2"}));
     }
 }

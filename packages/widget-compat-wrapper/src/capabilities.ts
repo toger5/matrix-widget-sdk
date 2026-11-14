@@ -1,0 +1,162 @@
+/**
+ * Capability translation between a legacy widget and an MSC4412 host.
+ *
+ * A legacy widget asks for matrix-widget-api capabilities (`org.matrix.msc2762.send.event:<type>`,
+ * `town.robin.msc3846.turn_servers`, ...). The host only knows the capabilities of the naming
+ * proposal (`docs/spec-appendix/capability-naming-proposal.md`), one per action:
+ *
+ *     source ":" namespace "." action [ "." modifier ] [ ":" data ]
+ *     widget:org.matrix.mscXXXX.send_event.timeline:m.room.message
+ *
+ * Every legacy capability maps to a fixed set of new ones ({@link expandLegacyCapability}). The
+ * wrapper requests that set from the host, and reports a legacy capability to the widget as
+ * approved when the host approved the whole set ({@link collapseApproved}).
+ *
+ * Pure functions without state.
+ */
+
+/** The namespace the wrapper puts into the capabilities it requests. The host emits the same. */
+export const UNSTABLE_NAMESPACE = "org.matrix.mscXXXX";
+/** The stable namespace. A host may answer with it; {@link normalizeCapability} folds it away. */
+export const STABLE_NAMESPACE = "m";
+
+/** A capability for an action the widget sends. */
+export const widgetCapability = (rest: string): string => `widget:${UNSTABLE_NAMESPACE}.${rest}`;
+/** A capability for an action the host sends (a subscription). */
+export const hostCapability = (rest: string): string => `host:${UNSTABLE_NAMESPACE}.${rest}`;
+
+/**
+ * Capabilities the wrapper always requests for a legacy widget.
+ *
+ * In the legacy api these actions need no capability: the widget may always ask for an OpenID
+ * token (the user is asked), and the host always sends theme, language and visibility changes.
+ */
+export const IMPLICIT_CAPABILITIES: readonly string[] = [
+  widgetCapability("get_openid"),
+  hostCapability("update_theme"),
+  hostCapability("update_language"),
+  hostCapability("update_visibility"),
+];
+
+/** The stable prefix every legacy capability may be spelled with instead of its MSC's prefix. */
+const LEGACY_STABLE_PREFIX = "m.";
+const MSC2762 = "org.matrix.msc2762.";
+const MSC3819 = "org.matrix.msc3819.";
+const MSC4157 = "org.matrix.msc4157.";
+const MSC4407 = "org.matrix.msc4407.";
+
+interface LegacyRule {
+  /** The legacy capability's unstable prefix (the stable `m.` is accepted as well). */
+  prefix: string;
+  /** What follows the prefix. Ends with `:` when the capability carries data (an event type). */
+  body: string;
+  /** The new capabilities, given the data (empty for capabilities without data). */
+  expand(data: string): string[];
+}
+
+const unit = (prefix: string, body: string, ...expansion: string[]): LegacyRule => ({ prefix, body, expand: () => expansion });
+
+/**
+ * The migration table of the naming proposal. `<type>` keeps its `#<msgtype>` / `#<state_key>`
+ * suffix unchanged: both schemes read it the same way.
+ */
+const LEGACY_RULES: LegacyRule[] = [
+  { prefix: MSC2762, body: "send.event:", expand: (t) => [widgetCapability(`send_event.timeline:${t}`)] },
+  { prefix: MSC2762, body: "send.state_event:", expand: (t) => [widgetCapability(`send_event.state:${t}`)] },
+  {
+    // One legacy capability for reading, reading relations and being sent new events.
+    prefix: MSC2762,
+    body: "receive.event:",
+    expand: (t) => [
+      widgetCapability(`read_events.timeline:${t}`),
+      widgetCapability(`read_relations:${t}`),
+      hostCapability(`forward_event.timeline:${t}`),
+    ],
+  },
+  {
+    // One legacy capability for reading state, state updates and state events in the timeline.
+    prefix: MSC2762,
+    body: "receive.state_event:",
+    expand: (t) => [
+      widgetCapability(`read_events.state:${t}`),
+      hostCapability(`update_state:${t}`),
+      hostCapability(`forward_event.state:${t}`),
+    ],
+  },
+  // One widget, one room: access to other rooms does not exist any more. Expanding to nothing
+  // means it is never requested and never reported as approved.
+  { prefix: MSC2762, body: "timeline:", expand: () => [] },
+  { prefix: MSC3819, body: "send.to_device:", expand: (t) => [widgetCapability(`send_to_device:${t}`)] },
+  { prefix: MSC3819, body: "receive.to_device:", expand: (t) => [hostCapability(`forward_to_device:${t}`)] },
+  {
+    prefix: "com.beeper.capabilities.",
+    body: "receive.room_account_data:",
+    expand: (t) => [widgetCapability(`read_room_account_data:${t}`)],
+  },
+  unit(MSC4157, "send.delayed_event", widgetCapability("send_event.delayed")),
+  unit(MSC4157, "update_delayed_event", widgetCapability("update_delayed_event")),
+  unit(MSC4407, "send.sticky_event", widgetCapability("send_event.sticky")),
+  unit(MSC4407, "receive.sticky_event", hostCapability("forward_event.sticky")),
+  unit("town.robin.msc3846.", "turn_servers", hostCapability("update_turn_servers")),
+  unit("org.matrix.msc4515.", "rtc_transports", widgetCapability("get_rtc_transports")),
+  unit("org.matrix.msc3973.", "user_directory_search", widgetCapability("search_user_directory")),
+  // An uploader needs the media config, so the legacy upload capability covered both.
+  unit("org.matrix.msc4039.", "upload_file", widgetCapability("upload_file"), widgetCapability("get_media_config")),
+  unit("org.matrix.msc4039.", "download_file", widgetCapability("download_file")),
+  unit("org.matrix.msc2931.", "navigate", widgetCapability("navigate")),
+  unit("org.matrix.msc4533.", "rtc_livekit_get_token", widgetCapability("get_rtc_livekit_token")),
+  unit("org.matrix.msc4533.", "rtc_livekit_delegate_delayed_leave", widgetCapability("delegate_rtc_livekit_delayed_leave")),
+  // Only ever had a stable spelling.
+  unit(LEGACY_STABLE_PREFIX, "always_on_screen", widgetCapability("set_always_on_screen")),
+];
+
+/**
+ * The new capabilities one legacy capability stands for.
+ *
+ * - A legacy capability is accepted with its MSC's unstable prefix or with the stable `m.`.
+ * - `timeline:<room>` expands to nothing: it cannot be granted.
+ * - Any other string (a capability this table does not know, `m.sticker`, something custom) is
+ *   passed through unchanged, so the host decides about it.
+ */
+export function expandLegacyCapability(legacy: string): string[] {
+  for (const rule of LEGACY_RULES) {
+    for (const prefix of [rule.prefix, LEGACY_STABLE_PREFIX]) {
+      if (!legacy.startsWith(prefix + rule.body)) continue;
+      const data = legacy.slice(prefix.length + rule.body.length);
+      const typed = rule.body.endsWith(":");
+      // A typed capability needs a type; an untyped one must end right after its body.
+      if (typed ? data !== "" : data === "") return rule.expand(data);
+    }
+  }
+  return [legacy];
+}
+
+/** Everything to request from the host for a legacy widget's capability list, without duplicates. */
+export function capabilitiesToRequest(legacy: readonly string[]): string[] {
+  return [...new Set([...IMPLICIT_CAPABILITIES, ...legacy.flatMap(expandLegacyCapability)])];
+}
+
+/**
+ * A capability with the stable namespace rewritten to the unstable one, so that the spellings
+ * `widget:m.navigate` and `widget:org.matrix.mscXXXX.navigate` compare equal. Strings that are
+ * not capabilities of the naming scheme are returned unchanged.
+ */
+export function normalizeCapability(capability: string): string {
+  const match = /^(widget|host):m\./.exec(capability);
+  return match ? `${match[1]}:${UNSTABLE_NAMESPACE}.${capability.slice(match[0].length)}` : capability;
+}
+
+/**
+ * The legacy capabilities out of `legacyRequested` that the host's `approved` list grants.
+ *
+ * A legacy capability is granted only when **every** capability of its expansion is approved: a
+ * widget that was told it holds `receive.event:<type>` expects to read, to read relations and to
+ * be sent new events. A capability that expands to nothing (`timeline:<room>`) is never granted.
+ */
+export function collapseApproved(legacyRequested: readonly string[], approved: readonly string[]): string[] {
+  const held = new Set(approved.map(normalizeCapability));
+  return [...new Set(legacyRequested)].filter((legacy) => {
+    const expansion = expandLegacyCapability(legacy);
+    return expansion.length > 0 && expansion.every((capability) => held.has(normalizeCapability(capability)));
+  });
+}

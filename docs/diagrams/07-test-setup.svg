@@ -32,9 +32,9 @@
   <rect x="50" y="146" width="660" height="150" rx="10" fill="#ffffff" stroke="#9ca3af"/>
   <text x="66" y="170" class="bb">Page UI (= the WidgetHostPlatform)</text>
   <text x="66" y="194" class="b">• widget state event input + <tspan font-weight="700">Load widget</tspan>: m.widget → iframe, legacy → compat wrapper</text>
-  <text x="66" y="214" class="b">• capability checklist, or auto-approve; legacy widgets get <tspan font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="12">setAutoApproved(context caps)</tspan></text>
+  <text x="66" y="214" class="b">• capability checklist, or auto-approve; legacy: <tspan font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="12">setAutoApproved(context + implicit caps)</tspan></text>
   <text x="66" y="234" class="b">• <tspan font-weight="700">Messages</tspan> log of every envelope in both directions · <tspan font-weight="700">Driver snapshot</tspan></text>
-  <text x="66" y="254" class="b">• client_context answers: widget-test-host / light / en</text>
+  <text x="66" y="254" class="b">• get_client_context answers: widget-test-host / light / en</text>
   <text x="66" y="280" class="s">URL params for e2e: ?event=&lt;json&gt;&amp;autoload=1&amp;autoApprove=1&amp;wrapper=&lt;url&gt;</text>
 
   <!-- driver -->
@@ -91,9 +91,9 @@
   <text x="810" y="136" class="s">widget-base-sdk (wasm)</text>
   <text x="810" y="162" class="b">buttons: request_capabilities, content_loaded,</text>
   <text x="810" y="180" class="b">send m.room.message, send state m.room.topic,</text>
-  <text x="810" y="198" class="b">read message / topic, matrix_context,</text>
-  <text x="810" y="216" class="b">client_context</text>
-  <text x="810" y="240" class="b">logs every push: send_event, update_state,</text>
+  <text x="810" y="198" class="b">read message / topic, get_matrix_context,</text>
+  <text x="810" y="216" class="b">get_client_context</text>
+  <text x="810" y="240" class="b">logs every push: forward_event, update_state,</text>
   <text x="810" y="258" class="b">notify_capabilities, to-device, TURN, theme…</text>
   <text x="810" y="282" class="b">state panel: the SDK's view (approved caps)</text>
   <text x="810" y="310" class="s">autostart: requests caps + content_loaded</text>
@@ -129,12 +129,12 @@
   <rect x="30" y="738" width="370" height="150" rx="10" fill="#ffffff" stroke="#16a34a"/>
   <circle cx="52" cy="760" r="12" fill="#16a34a"/><text x="52" y="764" class="num" text-anchor="middle">1</text>
   <text x="72" y="765" class="bb">Widget sends</text>
-  <text x="46" y="790" class="m">send_event → driver checks send.event</text>
+  <text x="46" y="790" class="m">send_event → driver checks send_event.timeline</text>
   <text x="46" y="808" class="m">→ backend.send_room_event</text>
   <text x="46" y="826" class="m">→ appended to timeline (+ state)</text>
   <text x="46" y="844" class="m">→ reply { room_id, event_id }</text>
   <text x="46" y="862" class="m">→ subscription echoes it back</text>
-  <text x="46" y="878" class="s">   as send_event if receive.* was granted</text>
+  <text x="46" y="878" class="s">   as forward_event if host:…forward_event.* is held</text>
 
   <rect x="415" y="738" width="370" height="150" rx="10" fill="#ffffff" stroke="#ea580c"/>
   <circle cx="437" cy="760" r="12" fill="#ea580c"/><text x="437" y="764" class="num" text-anchor="middle">2</text>
@@ -142,7 +142,7 @@
   <text x="431" y="790" class="m">Inject event (JSON) → backend.inject</text>
   <text x="431" y="808" class="m">→ stored as if from sync</text>
   <text x="431" y="826" class="m">→ RoomSink → driver filters</text>
-  <text x="431" y="844" class="m">→ send_event, and for state</text>
+  <text x="431" y="844" class="m">→ forward_event, and for state</text>
   <text x="431" y="862" class="m">  events also update_state</text>
   <text x="431" y="878" class="s">   shows up in the widget's log</text>
 
@@ -152,7 +152,7 @@
   <text x="816" y="790" class="m">read_events m.room.message</text>
   <text x="816" y="808" class="m">→ backend.read_room_events</text>
   <text x="816" y="826" class="m">→ last `limit` from the store</text>
-  <text x="816" y="844" class="m">→ filtered by receive.*</text>
+  <text x="816" y="844" class="m">→ filtered by widget:…read_events.*</text>
   <text x="816" y="862" class="m">→ reply { events }</text>
   <text x="816" y="878" class="s">   approval itself pushes update_state</text>
 

@@ -1,7 +1,7 @@
 //! `org.matrix.msc2931.navigate` (MSC2931), widget -> host: ask the client to navigate to a
 //! `https://matrix.to/#/...` URI.
 //!
-//! Body: [`NavigateRequest`], acknowledged with `{}`. Requires `org.matrix.msc2931.navigate`.
+//! Body: [`NavigateRequest`], acknowledged with `{}`. Requires `widget:…navigate`.
 
 use serde::{Deserialize, Serialize};
 

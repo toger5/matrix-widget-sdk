@@ -122,10 +122,10 @@
   <text x="411" y="706" class="b">travels host → widget</text>
   <text x="411" y="726" class="s">built by the driver: <tspan font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="12">into_wire(uuid)</tspan></text>
   <text x="411" y="744" class="s">handled by widget-base-sdk (callbacks)</text>
-  <text x="411" y="768" class="m">NotifyCapabilities  SendEvent { event }</text>
-  <text x="411" y="784" class="m">UpdateState  SendToDevice</text>
-  <text x="411" y="800" class="m">OpenIdCredentials  UpdateTurnServers</text>
-  <text x="411" y="816" class="m">ThemeChange  LanguageChange  Visibility</text>
+  <text x="411" y="768" class="m">NotifyCapabilities  ForwardEvent { event }</text>
+  <text x="411" y="784" class="m">UpdateState  ForwardToDevice  UpdateTheme</text>
+  <text x="411" y="800" class="m">ForwardOpenIdCredentials  UpdateTurnServers</text>
+  <text x="411" y="816" class="m">UpdateLanguage  UpdateVisibility</text>
   <text x="411" y="836" class="s">9 actions + Unknown, fed by sinks / platform</text>
 
   <!-- HostResponse -->
@@ -135,7 +135,7 @@
   <text x="751" y="706" class="b">travels widget → host</text>
   <text x="751" y="726" class="s">built by widget-base-sdk: <tspan font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="12">into_wire_reply(&amp;request)</tspan></text>
   <text x="751" y="744" class="s">handled by the driver (clears awaiting_ack)</text>
-  <text x="751" y="768" class="m">NotifyCapabilities  SendEvent  UpdateState …</text>
+  <text x="751" y="768" class="m">NotifyCapabilities  ForwardEvent  UpdateState …</text>
   <text x="751" y="792" class="b">every variant is a unit variant: the body is {}</text>
   <text x="751" y="812" class="s">kept as its own enum so the direction is typed and a</text>
   <text x="751" y="828" class="s">future action can answer with data</text>
@@ -160,9 +160,9 @@
   <text x="628" y="930" class="b"><tspan font-weight="700">source + action</tspan> identifies a message type, not action alone:</text>
   <text x="644" y="950" class="m">WidgetRequest::SendEvent</text>
   <text x="844" y="950" class="s">"please send this event"</text>
-  <text x="644" y="968" class="m">HostRequest::SendEvent</text>
+  <text x="644" y="968" class="m">HostRequest::ForwardEvent</text>
   <text x="844" y="968" class="s">"an event arrived for you"</text>
-  <text x="628" y="990" class="b">share the wire name send_event but are different types.</text>
+  <text x="628" y="990" class="b">are different types, with different wire names per source.</text>
   <text x="628" y="1018" class="b"><tspan font-weight="700">request vs. response</tspan> have different bodies for the same</text>
   <text x="628" y="1036" class="b">action, so each direction gets its own serde enum.</text>
   <text x="628" y="1064" class="b"><tspan font-weight="700">source</tspan> names the initiator and is the same on request and</text>

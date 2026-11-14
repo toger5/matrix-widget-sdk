@@ -2,7 +2,7 @@
 //! repository (`GET /_matrix/client/v1/media/download/...`).
 //!
 //! Body: [`DownloadFileRequest`], answered with [`DownloadFileResponse`]. Requires
-//! `org.matrix.msc4039.download_file`.
+//! `widget:…download_file`.
 
 use serde::{Deserialize, Serialize};
 

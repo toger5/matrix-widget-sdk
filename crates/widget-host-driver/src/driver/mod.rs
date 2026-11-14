@@ -9,8 +9,9 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex, MutexGuard, Weak};
 
 use widget_actions::{
-    Action, ActionError, Capability, HostRequest, JsonValue, LanguageChangeRequest, MessageKind,
-    NotifyCapabilitiesRequest, OpenIdCredentialsRequest, VisibilityRequest, WidgetError, WireMessage, API_VERSION_V1,
+    Action, ActionError, Capability, ForwardOpenIdCredentialsRequest, HostRequest, JsonValue, MessageKind,
+    NotifyCapabilitiesRequest, UpdateLanguageRequest, UpdateVisibilityRequest, WidgetError, WireMessage,
+    API_VERSION_V1,
 };
 use widget_matrix_backend::MatrixBackend;
 
@@ -62,9 +63,9 @@ pub struct WidgetHostDriver {
     backend: Arc<dyn MatrixBackend>,
     platform: Arc<dyn WidgetHostPlatform>,
     state: Mutex<State>,
-    /// Follows the approved `receive.event` / `receive.state_event` capabilities.
+    /// Follows the approved `host:…forward_event.*` / `host:…update_state` capabilities.
     room_subscription: SubscriptionSlot,
-    /// Follows the approved `receive.to_device` capabilities.
+    /// Follows the approved `host:…forward_to_device` capabilities.
     to_device_subscription: SubscriptionSlot,
     /// Set while the widget watches TURN servers (MSC3846).
     turn_subscription: SubscriptionSlot,
@@ -133,8 +134,9 @@ impl WidgetHostDriver {
     /// [`WidgetHostPlatform::on_capabilities_requested`]. If nothing is left, the platform is not
     /// called and `notify_capabilities` goes out immediately.
     ///
-    /// Typical use: `m.matrix_context` and `m.client_context` for a legacy widget behind the compat
-    /// wrapper, because a legacy client passed the same facts as URL parameters.
+    /// Typical use: `widget:…get_matrix_context` and `widget:…get_client_context` for a legacy
+    /// widget behind the compat wrapper, because a legacy client passed the same facts as URL
+    /// parameters.
     /// Replaces the previous list and affects only future requests.
     pub fn set_auto_approved(&self, capabilities: Vec<Capability>) {
         self.lock().auto_approved = capabilities;
@@ -187,7 +189,7 @@ impl WidgetHostDriver {
     /// Answer every `get_openid` reported through [`WidgetHostPlatform::on_openid_requested`].
     ///
     /// With `allowed`, the driver fetches one token from the backend. Each pending request then
-    /// gets `openid_credentials`: `allowed` with the token, or `blocked` if refused or if the
+    /// gets `forward_openid_credentials`: `allowed` with the token, or `blocked` if refused or if the
     /// backend failed. Does nothing if no request is pending.
     pub async fn resolve_openid(&self, allowed: bool) {
         let pending = std::mem::take(&mut self.lock().pending_openid);
@@ -197,30 +199,31 @@ impl WidgetHostDriver {
         let token = if allowed { self.backend.openid_token().await.ok() } else { None };
         for original_request_id in pending {
             let request = match &token {
-                Some(token) => OpenIdCredentialsRequest::allowed(original_request_id, token.clone()),
-                None => OpenIdCredentialsRequest::blocked(original_request_id),
+                Some(token) => ForwardOpenIdCredentialsRequest::allowed(original_request_id, token.clone()),
+                None => ForwardOpenIdCredentialsRequest::blocked(original_request_id),
             };
-            self.send_request(HostRequest::OpenIdCredentials { request });
+            self.send_request(HostRequest::ForwardOpenIdCredentials { request });
         }
     }
 
-    /// Tell the widget that the client's theme changed (`theme_change`, MSC2873).
+    /// Tell the widget that the client's theme changed (`update_theme`, MSC2873).
     ///
-    /// `theme` is a free-form object. Its `name` should be what `client_context` reports as
-    /// `client_theme`.
-    pub fn notify_theme_change(&self, theme: JsonValue) {
-        self.send_request(HostRequest::ThemeChange { theme });
+    /// `theme` is a free-form object. Its `name` should be what `get_client_context` reports as
+    /// `client_theme`. Nothing is sent unless the widget holds `host:…update_theme`.
+    pub fn update_theme(&self, theme: JsonValue) {
+        self.push(HostRequest::UpdateTheme { theme });
     }
 
-    /// Tell the widget that the client's UI language changed (`language_change`). `lang` is a
-    /// BCP 47 tag.
-    pub fn notify_language_change(&self, lang: String) {
-        self.send_request(HostRequest::LanguageChange { request: LanguageChangeRequest { lang } });
+    /// Tell the widget that the client's UI language changed (`update_language`). `lang` is a
+    /// BCP 47 tag. Nothing is sent unless the widget holds `host:…update_language`.
+    pub fn update_language(&self, lang: String) {
+        self.push(HostRequest::UpdateLanguage { request: UpdateLanguageRequest { lang } });
     }
 
-    /// Tell the widget that it became visible or hidden (`visibility`).
-    pub fn notify_visibility(&self, visible: bool) {
-        self.send_request(HostRequest::Visibility { request: VisibilityRequest { visible } });
+    /// Tell the widget that it became visible or hidden (`update_visibility`). Nothing is sent
+    /// unless the widget holds `host:…update_visibility`.
+    pub fn update_visibility(&self, visible: bool) {
+        self.push(HostRequest::UpdateVisibility { request: UpdateVisibilityRequest { visible } });
     }
 
     /// The current state of the driver.
@@ -249,6 +252,17 @@ impl WidgetHostDriver {
 
     fn send(&self, msg: &WireMessage) {
         self.platform.send_to_widget(msg.to_json());
+    }
+
+    /// Send a host request that is a subscription of the widget: it goes out only if the widget
+    /// holds the request's capability (see [`access::push_capability`]).
+    fn push(&self, request: HostRequest) {
+        if let Some(capability) = access::push_capability(&request) {
+            if !self.lock().approved.contains(&capability) {
+                return;
+            }
+        }
+        self.send_request(request);
     }
 
     /// Send a host request to the widget and remember it until the widget acknowledges it.

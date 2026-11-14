@@ -1,8 +1,8 @@
 //! `org.matrix.msc2876.read_events` (MSC2876), widget -> host.
 //!
 //! Read timeline or state events from the room. Body: [`ReadEventsRequest`], answered with
-//! [`ReadEventsResponse`]. Requires a `receive.*` capability; `room_ids` additionally needs the
-//! `org.matrix.msc2762.timeline:<room>` capability per room.
+//! [`ReadEventsResponse`]. Requires a `widget:…read_events.timeline:<type>` or
+//! `widget:…read_events.state:<type>` capability. `room_ids` may only name the widget's own room.
 
 use serde::{de::Error as _, Deserialize, Deserializer, Serialize, Serializer};
 use serde_json::Value;

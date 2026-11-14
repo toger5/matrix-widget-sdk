@@ -21,13 +21,13 @@ import init, { WidgetApi } from "./pkg/widget_base_sdk.js";
 await init();
 
 const api = WidgetApi.connectToParent("https://client.example");   // target origin of the host
-api.onEvent((event) => render(event));                             // send_event from the host
+api.onEvent((event) => render(event));                             // forward_event from the host
 api.onStateUpdate((state) => renderState(state));                  // update_state
 api.onCapabilitiesChanged((requested, approved) => console.log(approved));
 
 await api.requestCapabilities([
-  "org.matrix.msc2762.send.event:m.room.message",
-  "org.matrix.msc2762.receive.event:m.room.message",
+  "widget:org.matrix.mscXXXX.send_event.timeline:m.room.message",
+  "host:org.matrix.mscXXXX.forward_event.timeline:m.room.message",   // onEvent
 ]);
 await api.contentLoaded();                                         // host shows the widget
 

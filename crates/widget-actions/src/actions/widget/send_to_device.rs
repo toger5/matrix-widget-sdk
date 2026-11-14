@@ -1,8 +1,8 @@
 //! `send_to_device` (MSC3819), widget -> host: send a to-device message to a set of devices.
 //!
 //! Body: [`SendToDeviceRequest`], acknowledged with `{}`. Requires
-//! `org.matrix.msc3819.send.to_device:<type>`. The host -> widget action of the same name
-//! (an incoming message) lives in `actions::host::send_to_device`.
+//! `widget:…send_to_device:<type>`. An incoming message is a different
+//! action, `forward_to_device` (`actions::host::forward_to_device`).
 
 use std::collections::HashMap;
 

@@ -84,37 +84,51 @@ Actions implemented here:
 |---|---|---|---|
 | `content_loaded` | widget | widget may be shown | none |
 | `request_capabilities` | widget | ask for capabilities (acked at once, decision comes later) | none |
-| `notify_capabilities` | host | `{ requested, approved }` after the user decided | – |
-| `send_event` | widget | send a timeline/state event; `room_id` (own room only, needs `timeline:<room>`), `delay` (MSC4157, answers with `delay_id`), `sticky_duration_ms` (MSC4407) | `send.event:<type>[#<msgtype>]` / `send.state_event:<type>[#<key>]`, plus `org.matrix.msc4157.send.delayed_event` / `org.matrix.msc4407.send.sticky_event` |
-| `org.matrix.msc4157.update_delayed_event` | widget | `{ delay_id, action: cancel \| restart \| send }` | `org.matrix.msc4157.update_delayed_event` |
-| `send_event` | host | an event from sync (the driver's backend subscription) | `receive.event:<type>` / `receive.state_event:<type>[#<key>]` |
-| `org.matrix.msc2876.read_events` | widget | read timeline (`limit`, `msgtype`, `since`) or state (`state_key`: string or `true`); `room_ids` (own room only) | `receive.*` (+ `timeline:<room>` for `room_ids`) |
-| `org.matrix.msc3869.read_relations` | widget | `{ event_id, rel_type?, event_type?, limit?, from?, to?, direction? }` → `{ chunk, next_batch?, prev_batch? }` | results filtered by `receive.*` |
-| `update_state` | host | `{ state: [...] }` the current permitted state, on approval and after changes | `receive.state_event:*` |
-| `send_to_device` | widget | `{ type, encrypted, messages: { user_id: { device_id: content } } }` | `org.matrix.msc3819.send.to_device:<type>` |
-| `send_to_device` | host | `{ type, sender, content, encrypted }` from the backend's to-device subscription | `org.matrix.msc3819.receive.to_device:<type>` |
-| `get_openid` | widget | `{}` → `{ state: allowed \| blocked \| request, ...token }`; `request` means the user is being asked (`WidgetHostPlatform::on_openid_requested`, then `driver.resolve_openid`) | none (user consent) |
-| `openid_credentials` | host | `{ state, original_request_id, ...token }` after the user decided | – |
-| `watch_turn_servers` / `unwatch_turn_servers` | widget | start / stop `update_turn_servers` pushes | `town.robin.msc3846.turn_servers` |
-| `update_turn_servers` | host | `{ uris, username, password }` from the backend's TURN subscription | `town.robin.msc3846.turn_servers` |
-| `org.matrix.msc4515.get_rtc_transports` | widget | `{}` → `{ rtc_transports: [...] }` | `org.matrix.msc4515.rtc_transports` |
-| `org.matrix.msc3973.user_directory_search` | widget | `{ search_term, limit? }` → `{ limited, results }` | `org.matrix.msc3973.user_directory_search` |
-| `org.matrix.msc4039.get_media_config` | widget | `{}` → `{ "m.upload.size"? }` | `org.matrix.msc4039.upload_file` |
-| `org.matrix.msc4039.upload_file` | widget | `{ file: { mimetype?, base64 } }` → `{ content_uri }`; the backend gets raw bytes (`upload_media`) | `org.matrix.msc4039.upload_file` |
-| `org.matrix.msc4039.download_file` | widget | `{ content_uri }` → `{ file: { mimetype?, base64 } }` (`download_media`) | `org.matrix.msc4039.download_file` |
-| `com.beeper.read_room_account_data` | widget | `{ type, room_ids? }` → `{ events }` | `com.beeper.capabilities.receive.room_account_data:<type>` |
-| `org.matrix.msc4533.rtc_livekit_get_token` | widget | `{ server_name, url, room_id, slot_id, member_id }` → `{ jwt }` | `org.matrix.msc4533.rtc_livekit_get_token` |
-| `org.matrix.msc4533.rtc_livekit_delegate_delayed_leave` | widget | `{ url, room_id, slot_id, member_id, delay_id }` → `{}` | `org.matrix.msc4533.rtc_livekit_delegate_delayed_leave` |
-| `org.matrix.msc2931.navigate` | widget | `{ uri }` (a `matrix.to` permalink) → `WidgetHostPlatform::navigate` | `org.matrix.msc2931.navigate` |
-| `set_always_on_screen` | widget | `{ value }` → `{ success }` via `WidgetHostPlatform::set_always_on_screen` | `m.always_on_screen` |
-| `theme_change` / `language_change` / `visibility` | host | pushed by `driver.notify_theme_change / notify_language_change / notify_visibility` | – |
-| `org.matrix.msc4412.matrix_context` | widget | `{ user_id, device_id, room_id, display_name, avatar_url, matrix_base_url }`, replaces the legacy URL template parameters | `org.matrix.msc4412.matrix_context` |
-| `org.matrix.msc4412.client_context` | widget | `{ client_id?, client_theme?, client_language? }` about the embedding client | `org.matrix.msc4412.client_context` |
+| `notify_capabilities` | host | `{ requested, approved }` after the user decided | none |
+| `send_event` | widget | send a timeline/state event; `room_id` (own room only), `delay` (MSC4157, answers with `delay_id`), `sticky_duration_ms` (MSC4407) | `widget:…send_event.timeline:<type>[#<msgtype>]` / `widget:…send_event.state:<type>[#<key>]`, plus `widget:…send_event.delayed` / `widget:…send_event.sticky` |
+| `org.matrix.msc4157.update_delayed_event` | widget | `{ delay_id, action: cancel \| restart \| send }` | `widget:…update_delayed_event` |
+| `forward_event` | host | a new event from sync (the driver's backend subscription) | `host:…forward_event.timeline:<type>[#<msgtype>]` / `host:…forward_event.state:<type>[#<key>]` |
+| `org.matrix.msc2876.read_events` | widget | read timeline (`limit`, `msgtype`, `since`) or state (`state_key`: string or `true`); `room_ids` (own room only) | `widget:…read_events.timeline:<type>[#<msgtype>]` / `widget:…read_events.state:<type>[#<key>]` |
+| `org.matrix.msc3869.read_relations` | widget | `{ event_id, rel_type?, event_type?, limit?, from?, to?, direction? }` → `{ chunk, next_batch?, prev_batch? }` | results filtered by `widget:…read_relations:<type>[#<msgtype>]` |
+| `update_state` | host | `{ state: [...] }` the current permitted state, on approval and after changes | `host:…update_state:<type>[#<key>]` |
+| `send_to_device` | widget | `{ type, encrypted, messages: { user_id: { device_id: content } } }` | `widget:…send_to_device:<type>` |
+| `forward_to_device` | host | `{ type, sender, content, encrypted }` from the backend's to-device subscription | `host:…forward_to_device:<type>` |
+| `get_openid` | widget | `{}` → `{ state: allowed \| blocked \| request, ...token }`; `request` means the user is being asked (`WidgetHostPlatform::on_openid_requested`, then `driver.resolve_openid`) | `widget:…get_openid` (the user may still be asked) |
+| `forward_openid_credentials` | host | `{ state, original_request_id, ...token }` after the user decided | none (the late reply to `get_openid`) |
+| `watch_turn_servers` / `unwatch_turn_servers` | widget | start / stop `update_turn_servers` pushes | `host:…update_turn_servers` |
+| `update_turn_servers` | host | `{ uris, username, password }` from the backend's TURN subscription | `host:…update_turn_servers` |
+| `org.matrix.msc4515.get_rtc_transports` | widget | `{}` → `{ rtc_transports: [...] }` | `widget:…get_rtc_transports` |
+| `org.matrix.msc3973.search_user_directory` | widget | `{ search_term, limit? }` → `{ limited, results }` | `widget:…search_user_directory` |
+| `org.matrix.msc4039.get_media_config` | widget | `{}` → `{ "m.upload.size"? }` | `widget:…get_media_config` |
+| `org.matrix.msc4039.upload_file` | widget | `{ file: { mimetype?, base64 } }` → `{ content_uri }`; the backend gets raw bytes (`upload_media`) | `widget:…upload_file` |
+| `org.matrix.msc4039.download_file` | widget | `{ content_uri }` → `{ file: { mimetype?, base64 } }` (`download_media`) | `widget:…download_file` |
+| `com.beeper.read_room_account_data` | widget | `{ type, room_ids? }` → `{ events }` | `widget:…read_room_account_data:<type>` |
+| `org.matrix.msc4533.get_rtc_livekit_token` | widget | `{ server_name, url, room_id, slot_id, member_id }` → `{ jwt }` | `widget:…get_rtc_livekit_token` |
+| `org.matrix.msc4533.delegate_rtc_livekit_delayed_leave` | widget | `{ url, room_id, slot_id, member_id, delay_id }` → `{}` | `widget:…delegate_rtc_livekit_delayed_leave` |
+| `org.matrix.msc2931.navigate` | widget | `{ uri }` (a `matrix.to` permalink) → `WidgetHostPlatform::navigate` | `widget:…navigate` |
+| `set_always_on_screen` | widget | `{ value }` → `{ success }` via `WidgetHostPlatform::set_always_on_screen` | `widget:…set_always_on_screen` |
+| `update_theme` / `update_language` / `update_visibility` | host | pushed by `driver.update_theme / update_language / update_visibility` | `host:…update_theme` / `host:…update_language` / `host:…update_visibility` |
+| `org.matrix.msc4412.get_matrix_context` | widget | `{ user_id, device_id, room_id, display_name, avatar_url, matrix_base_url }`, replaces the legacy URL template parameters | `widget:…get_matrix_context` |
+| `org.matrix.msc4412.get_client_context` | widget | `{ client_id?, client_theme?, client_language? }` about the embedding client | `widget:…get_client_context` |
 
-Capability strings are parsed with both the stable `m.` and the unstable `org.matrix.msc2762.`
-prefix and emitted with the unstable one (what deployed hosts understand). MSC4412 spells the
-capability actions inconsistently; this code uses the MSC2974 names `request_capabilities` /
-`notify_capabilities`.
+Capabilities follow the naming proposal in
+[`docs/spec-appendix/capability-naming-proposal.md`](docs/spec-appendix/capability-naming-proposal.md):
+one capability per action, written `source:namespace.action[.modifier][:data]`.
+
+* `source` is who sends the action: `widget` for a request the widget may make, `host` for a
+  subscription (the host sends the action whenever there is something to send).
+* `…` in the table is the namespace. Strings are emitted with the unstable placeholder
+  `org.matrix.mscXXXX` (`widget:org.matrix.mscXXXX.navigate`) and parsed with it or with the stable
+  `m` (`widget:m.navigate`).
+* `send_event`, `read_events` and `forward_event` always carry `timeline` or `state`.
+* No capability names a room: a widget acts in the room it is embedded in.
+* The matrix-widget-api capability names (`org.matrix.msc2762.send.event:<type>`, ...) and the
+  action names the proposal renamed (`theme_change`, host `send_event`, ...) are **not** understood
+  by the driver. Legacy widgets run behind the
+  [compat wrapper](packages/widget-compat-wrapper), which translates both.
+
+MSC4412 spells the capability actions inconsistently; this code uses the MSC2974 names
+`request_capabilities` / `notify_capabilities`.
 
 ## Using it
 
@@ -133,13 +147,15 @@ api.onEvent((ev) => render(ev));
 api.onCapabilitiesChanged((requested, approved) => console.log(approved));
 
 await api.requestCapabilities([
-  "org.matrix.msc2762.send.event:m.room.message",
-  "org.matrix.msc2762.receive.event:m.room.message",
+  "widget:org.matrix.mscXXXX.send_event.timeline:m.room.message",
+  "widget:org.matrix.mscXXXX.read_events.timeline:m.room.message",   // readEvents()
+  "host:org.matrix.mscXXXX.forward_event.timeline:m.room.message",   // onEvent()
+  "widget:org.matrix.mscXXXX.get_matrix_context",
 ]);
 await api.contentLoaded();                          // host removes its spinner
 const { event_id } = await api.sendEvent("m.room.message", { msgtype: "m.text", body: "hi" });
 const history = await api.readEvents("m.room.message", 20);
-const { user_id, room_id } = await api.getMatrixContext();   // needs org.matrix.msc4412.matrix_context
+const { user_id, room_id } = await api.getMatrixContext();   // the get_matrix_context action
 ```
 
 `new WidgetApi(sendToHost)` + `api.handleMessageFromHost(event.data)` is available when you want
@@ -176,7 +192,7 @@ impl WidgetHostPlatform for Platform {
     fn on_openid_requested(&self) { /* prompt user, then driver.resolve_openid(allowed).await */ }
     fn navigate(&self, uri: String) -> Result<(), PlatformError> { /* open the matrix.to link */ Ok(()) }
     fn set_always_on_screen(&self, value: bool) -> bool { value }
-    // reported to widgets through `client_context`
+    // reported to widgets through `get_client_context`
     fn client_id(&self) -> Option<String> { Some("io.example.client".into()) }
     fn client_theme(&self) -> Option<String> { None }
     fn client_language(&self) -> Option<String> { None }
@@ -234,7 +250,7 @@ cargo run -p uniffi-bindgen -- generate --library target/release/libwidget_host_
 
 The foreign side implements `MatrixBackend` (async operations, the synchronous identity getters
 `room_id`, `own_user_id`, `own_device_id`, `display_name`, `avatar_url`, `base_url` that feed
-`matrix_context`, and the synchronous `subscribe_room` / `subscribe_to_device` /
+`get_matrix_context`, and the synchronous `subscribe_room` / `subscribe_to_device` /
 `subscribe_turn_servers`) and `WidgetHostPlatform`, then uses `WidgetHostDriver`
 exactly like the Rust API above. Event payloads cross the FFI as JSON strings (`JsonValue`),
 capabilities as their strings.
@@ -259,12 +275,15 @@ receive → read → state update). It is the best place to see the whole protoc
   and neither the driver nor the compat wrapper handles the action.
 * **`m.sticker`** (widget → host, `m.sticker`): **not supported**. The action is unknown to the
   driver and `m.sticker` parses as `Capability::Other`.
+* **Legacy capability and action names**: every matrix-widget-api capability string parses as
+  `Capability::Other` and grants nothing; the compat wrapper translates them.
 * **Modal widgets** (`open_modal`, `close_modal`, `set_button_enabled`, `button_clicked`,
   `widget_config`): client UI only, not in MSC4412.
-* **Receiving sticky events** (`org.matrix.msc4407.receive.sticky_event`): the capability parses,
+* **Receiving sticky events** (`host:…forward_event.sticky`): the capability parses,
   but nothing delivers them yet. Sending sticky events works.
-* **Multi-room access**: `room_id` / `room_ids` are accepted only when they name the widget's own
-  room; `room_ids: "*"` and other rooms get an error.
+* **Multi-room access**: one widget, one room. `room_id` / `room_ids` are accepted only when they
+  name the widget's own room (`room_ids: "*"` means the own room); other rooms get an error, and
+  no capability changes that.
 * **A production `MatrixBackend`** for matrix-rust-sdk or matrix-js-sdk. Only `InMemoryBackend`
   exists. An implementation is a thin adapter around `Room::send_raw`,
   `Room::get_state_events`, a room event handler for `subscribe_room`, ...

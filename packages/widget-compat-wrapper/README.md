@@ -4,12 +4,16 @@ A hosted widget that makes a **legacy widget** (built on [matrix-widget-api], `a
 look like an **MSC4412 widget** to its host. The host embeds the wrapper; the wrapper embeds the legacy
 widget in an inner iframe and translates between the two protocols.
 
-It contains **no action logic**. It translates envelopes and two action names, forwards every body
-untouched (including error responses in both directions) except file payloads (converted between
-`Blob` and base64, see below), and implements only two things itself:
-the legacy **URL templating** (`$matrix_user_id` & co., fed by the `matrix_context` /
-`client_context` actions) and the startup handshake, where the two protocols are structurally
+It contains **no action logic**. It translates envelopes, action names and capability names,
+forwards every other body untouched (including error responses in both directions) except file
+payloads (converted between `Blob` and base64, see below), and implements only two things itself:
+the legacy **URL templating** (`$matrix_user_id` & co., fed by the `get_matrix_context` /
+`get_client_context` actions) and the startup handshake, where the two protocols are structurally
 different.
+
+The wrapper is the **only** place the legacy names are understood. The host knows the action and
+capability names of [`capability-naming-proposal.md`](../../docs/spec-appendix/capability-naming-proposal.md)
+and nothing else.
 
 ![Using legacy widgets with the new driver](../../docs/diagrams/02-legacy-widgets.svg)
 
@@ -23,7 +27,7 @@ transition code: a check on the widget state event.
    `https://example.org/myHostedCompatWidget?legacy_widget_url=<urlencoded content.url>&legacy_widget_id=<state_key>`
    as a new-style widget with `usesWidgetAPI: true`. The URL is passed **untemplated**; the host
    knows nothing about template variables. The wrapper resolves them (it asks the host for
-   `matrix_context` and `client_context`), appends the `widgetId` / `parentUrl` query parameters
+   `get_matrix_context` and `get_client_context`), appends the `widgetId` / `parentUrl` query parameters
    legacy clients used to add, and loads the result in its inner iframe.
 3. **New event** (`m.widget`): embed `content.url` directly.
 
@@ -46,15 +50,16 @@ gone, delete it and the wrapper. The host keeps no template engine at all.
 ### Bootstrap: templating the legacy URL
 
 Before the inner iframe exists the wrapper sends `request_capabilities` for
-`org.matrix.msc4412.matrix_context` and `org.matrix.msc4412.client_context`, waits for the host's
-`notify_capabilities`, requests both contexts and
+`widget:org.matrix.mscXXXX.get_matrix_context` and `widget:org.matrix.mscXXXX.get_client_context`,
+waits for the host's `notify_capabilities`, requests both contexts
+(`org.matrix.msc4412.get_matrix_context`, `org.matrix.msc4412.get_client_context`) and
 renders the URL:
 
 | variable | source |
 |---|---|
-| `$matrix_user_id`, `$matrix_room_id`, `$matrix_display_name`, `$matrix_avatar_url` | `matrix_context` |
-| `$org.matrix.msc3819.matrix_device_id`, `$org.matrix.msc4039.matrix_base_url` | `matrix_context` |
-| `$org.matrix.msc2873.client_id`, `$org.matrix.msc2873.client_theme`, `$org.matrix.msc2873.client_language` | `client_context` |
+| `$matrix_user_id`, `$matrix_room_id`, `$matrix_display_name`, `$matrix_avatar_url` | `get_matrix_context` |
+| `$org.matrix.msc3819.matrix_device_id`, `$org.matrix.msc4039.matrix_base_url` | `get_matrix_context` |
+| `$org.matrix.msc2873.client_id`, `$org.matrix.msc2873.client_theme`, `$org.matrix.msc2873.client_language` | `get_client_context` |
 | `$matrix_widget_id` | `legacy_widget_id` |
 | `$<key>` | `legacy_widget_data` |
 
@@ -78,11 +83,69 @@ grant the context capabilities without prompting.
 | `requestId` | unchanged, so responses correlate without extra state |
 | `response.error.message` | unchanged |
 
-Action names: `org.matrix.msc2974.request_capabilities` ↔ `request_capabilities`. Everything else
-passes through unchanged (the host emits and accepts the unstable MSC spellings such as
-`org.matrix.msc2876.read_events` itself, see `docs/parity.md`), so an
+### Action names (`src/envelope.ts`)
+
+The host does not accept the legacy names of the actions below, so the wrapper renames them. The
+table depends on the direction, because `send_event` and `send_to_device` are legacy names in both.
+
+| direction | legacy widget | host |
+|---|---|---|
+| widget → host | `org.matrix.msc2974.request_capabilities` | `request_capabilities` |
+| widget → host | `org.matrix.msc3973.user_directory_search` | `org.matrix.msc3973.search_user_directory` |
+| widget → host | `org.matrix.msc4533.rtc_livekit_get_token` | `org.matrix.msc4533.get_rtc_livekit_token` |
+| widget → host | `org.matrix.msc4533.rtc_livekit_delegate_delayed_leave` | `org.matrix.msc4533.delegate_rtc_livekit_delayed_leave` |
+| host → widget | `send_event` | `forward_event` |
+| host → widget | `send_to_device` | `forward_to_device` |
+| host → widget | `openid_credentials` | `forward_openid_credentials` |
+| host → widget | `theme_change` | `update_theme` |
+| host → widget | `language_change` | `update_language` |
+| host → widget | `visibility` | `update_visibility` |
+
+Everything else passes through unchanged (the host emits and accepts the unstable MSC spellings
+such as `org.matrix.msc2876.read_events` itself, see `docs/parity.md`), so an
 action the host does not implement is answered by the host's own error response, which is
 forwarded to the widget as is.
+
+### Capabilities (`src/capabilities.ts`)
+
+A legacy widget asks for matrix-widget-api capabilities; the host grants one capability per
+action. Every legacy capability stands for a fixed set of new ones. The wrapper requests that set
+and tells the widget a legacy capability is approved when the host approved **all** of its set.
+
+| legacy capability (its MSC prefix or `m.`) | requested from the host (`widget:` / `host:` + `org.matrix.mscXXXX.`) |
+|---|---|
+| `send.event:<t>` | `widget:…send_event.timeline:<t>` |
+| `send.state_event:<t>` | `widget:…send_event.state:<t>` |
+| `receive.event:<t>` | `widget:…read_events.timeline:<t>`, `widget:…read_relations:<t>`, `host:…forward_event.timeline:<t>` |
+| `receive.state_event:<t>` | `widget:…read_events.state:<t>`, `host:…update_state:<t>`, `host:…forward_event.state:<t>` |
+| `timeline:<room>` | nothing: never requested, never reported as approved |
+| `send.to_device:<t>` / `receive.to_device:<t>` | `widget:…send_to_device:<t>` / `host:…forward_to_device:<t>` |
+| `receive.room_account_data:<t>` | `widget:…read_room_account_data:<t>` |
+| `send.delayed_event` / `update_delayed_event` | `widget:…send_event.delayed` / `widget:…update_delayed_event` |
+| `send.sticky_event` / `receive.sticky_event` | `widget:…send_event.sticky` / `host:…forward_event.sticky` |
+| `turn_servers` | `host:…update_turn_servers` |
+| `rtc_transports` | `widget:…get_rtc_transports` |
+| `user_directory_search` | `widget:…search_user_directory` |
+| `upload_file` | `widget:…upload_file`, `widget:…get_media_config` |
+| `download_file` | `widget:…download_file` |
+| `navigate` | `widget:…navigate` |
+| `rtc_livekit_get_token` / `rtc_livekit_delegate_delayed_leave` | `widget:…get_rtc_livekit_token` / `widget:…delegate_rtc_livekit_delayed_leave` |
+| `m.always_on_screen` | `widget:…set_always_on_screen` |
+| anything else (`m.sticker`, custom strings) | the same string, unchanged |
+
+`<t>` keeps its `#<msgtype>` / `#<state_key>` suffix.
+
+- **Always requested**, whatever the widget asks for: `widget:…get_openid`, `host:…update_theme`,
+  `host:…update_language`, `host:…update_visibility`. The legacy api has no capability for these;
+  a legacy host simply allows them. A host that wants the legacy behaviour grants them without a
+  prompt (`setAutoApproved`).
+- **`timeline:<room>` is never granted.** One widget, one room: nothing reaches another room. A
+  request that names the widget's own room works without it.
+- **`notify_capabilities` is rewritten** for the widget: `requested` is the widget's own latest
+  list, `approved` every legacy capability it has ever requested whose whole set the host
+  approved. The widget only ever sees legacy names, in the spelling it used.
+- A partially approved set (the host grants reading but not `forward_event`, say) is reported as
+  **not** approved. The host still holds the partial grant, so the parts that were approved work.
 
 ![How the envelope changed](../../docs/diagrams/03-wire-format-changes.svg)
 
@@ -145,8 +208,8 @@ Always:
   `CurrentApiVersions`. The widget asks during `start()` and again while handling `capabilities`;
   forwarding it would make the widget believe the host supports nothing (no MSC2871 → `ready`
   before capabilities are approved, no MSC2974 → no renegotiation).
-- Renegotiation (`org.matrix.msc2974.request_capabilities`) is forwarded like any request; the
-  resulting `notify_capabilities` is forwarded back.
+- Renegotiation (`org.matrix.msc2974.request_capabilities`) is forwarded with its capability list
+  translated like the first round's; the resulting `notify_capabilities` is translated back.
 - On an inner reload the capability round runs again (legacy hosts do the same); `content_loaded`
   is sent to the host only once.
 - Messages are routed by `event.source` (parent window vs. inner iframe), never by sniffing the

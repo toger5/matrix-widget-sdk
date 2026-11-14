@@ -2,408 +2,423 @@ use std::fmt;
 
 use serde::{Deserialize, Serialize};
 
-/// Stable prefix of every capability this crate models. Accepted when parsing; emitted by
-/// [`Capability::to_stable_string`].
-const STABLE_PREFIX: &str = "m.";
+/// The unstable namespace of the capability naming scheme. One for all capabilities; a literal
+/// placeholder until the scheme has an MSC number. Emitted by [`Display`](fmt::Display).
+pub const UNSTABLE_NAMESPACE: &str = "org.matrix.mscXXXX";
+/// The stable namespace. Accepted when parsing, emitted by [`Capability::to_stable_string`].
+pub const STABLE_NAMESPACE: &str = "m";
 
-// Unstable prefixes, one per MSC. Each capability knows its own, see [`Capability::unstable_prefix`].
-// [`Display`](fmt::Display) emits the unstable form because that is what deployed hosts understand.
-const MSC2762_PREFIX: &str = "org.matrix.msc2762.";
-const MSC3819_PREFIX: &str = "org.matrix.msc3819.";
-const MSC4157_PREFIX: &str = "org.matrix.msc4157.";
-const MSC4407_PREFIX: &str = "org.matrix.msc4407.";
-const BEEPER_PREFIX: &str = "com.beeper.capabilities.";
-const MSC3846_PREFIX: &str = "town.robin.msc3846.";
-const MSC4515_PREFIX: &str = "org.matrix.msc4515.";
-const MSC3973_PREFIX: &str = "org.matrix.msc3973.";
-const MSC4039_PREFIX: &str = "org.matrix.msc4039.";
-const MSC2931_PREFIX: &str = "org.matrix.msc2931.";
-const MSC4533_PREFIX: &str = "org.matrix.msc4533.";
-/// `matrix_context` / `client_context` are not in an MSC yet; they replace the URL templating
-/// MSC4412 removes, so they live under its prefix until they get their own.
-const MSC4412_PREFIX: &str = "org.matrix.msc4412.";
+// Sources: who sends the action the capability is about.
+const WIDGET: &str = "widget";
+const HOST: &str = "host";
 
-/// Every prefix [`Capability::parse`] strips before looking at the body.
-const ALL_PREFIXES: &[&str] = &[
-    MSC2762_PREFIX,
-    MSC3819_PREFIX,
-    MSC4157_PREFIX,
-    MSC4407_PREFIX,
-    BEEPER_PREFIX,
-    MSC3846_PREFIX,
-    MSC4515_PREFIX,
-    MSC3973_PREFIX,
-    MSC4039_PREFIX,
-    MSC2931_PREFIX,
-    MSC4533_PREFIX,
-    MSC4412_PREFIX,
-    STABLE_PREFIX,
+// Heads (`action[.modifier]`) of the capabilities that carry an event type as data.
+const SEND_EVENT_TIMELINE: &str = "send_event.timeline";
+const SEND_EVENT_STATE: &str = "send_event.state";
+const READ_EVENTS_TIMELINE: &str = "read_events.timeline";
+const READ_EVENTS_STATE: &str = "read_events.state";
+const READ_RELATIONS: &str = "read_relations";
+const READ_ROOM_ACCOUNT_DATA: &str = "read_room_account_data";
+const SEND_TO_DEVICE: &str = "send_to_device";
+const FORWARD_EVENT_TIMELINE: &str = "forward_event.timeline";
+const FORWARD_EVENT_STATE: &str = "forward_event.state";
+const UPDATE_STATE: &str = "update_state";
+const FORWARD_TO_DEVICE: &str = "forward_to_device";
+
+/// The capabilities without data: `(source, head, capability)`.
+static UNIT_CAPABILITIES: &[(&str, &str, Capability)] = &[
+    (WIDGET, "send_event.delayed", Capability::SendDelayedEvent),
+    (WIDGET, "send_event.sticky", Capability::SendStickyEvent),
+    (WIDGET, "update_delayed_event", Capability::UpdateDelayedEvent),
+    (WIDGET, "get_openid", Capability::GetOpenId),
+    (WIDGET, "get_rtc_transports", Capability::GetRtcTransports),
+    (WIDGET, "search_user_directory", Capability::SearchUserDirectory),
+    (WIDGET, "get_media_config", Capability::GetMediaConfig),
+    (WIDGET, "upload_file", Capability::UploadFile),
+    (WIDGET, "download_file", Capability::DownloadFile),
+    (WIDGET, "get_rtc_livekit_token", Capability::GetRtcLivekitToken),
+    (WIDGET, "delegate_rtc_livekit_delayed_leave", Capability::DelegateRtcLivekitDelayedLeave),
+    (WIDGET, "navigate", Capability::Navigate),
+    (WIDGET, "set_always_on_screen", Capability::SetAlwaysOnScreen),
+    (WIDGET, "get_matrix_context", Capability::GetMatrixContext),
+    (WIDGET, "get_client_context", Capability::GetClientContext),
+    (HOST, "forward_event.sticky", Capability::ForwardStickyEvent),
+    (HOST, "update_turn_servers", Capability::UpdateTurnServers),
+    (HOST, "update_theme", Capability::UpdateTheme),
+    (HOST, "update_language", Capability::UpdateLanguage),
+    (HOST, "update_visibility", Capability::UpdateVisibility),
 ];
 
-// Bodies (the part after the prefix).
-const SEND_EVENT: &str = "send.event:";
-const RECEIVE_EVENT: &str = "receive.event:";
-const SEND_STATE: &str = "send.state_event:";
-const RECEIVE_STATE: &str = "receive.state_event:";
-const TIMELINE: &str = "timeline:";
-const SEND_TO_DEVICE: &str = "send.to_device:";
-const RECEIVE_TO_DEVICE: &str = "receive.to_device:";
-const SEND_DELAYED_EVENT: &str = "send.delayed_event";
-const UPDATE_DELAYED_EVENT: &str = "update_delayed_event";
-const SEND_STICKY_EVENT: &str = "send.sticky_event";
-const RECEIVE_STICKY_EVENT: &str = "receive.sticky_event";
-const RECEIVE_ROOM_ACCOUNT_DATA: &str = "receive.room_account_data:";
-const TURN_SERVERS: &str = "turn_servers";
-const RTC_TRANSPORTS: &str = "rtc_transports";
-const USER_DIRECTORY_SEARCH: &str = "user_directory_search";
-const UPLOAD_FILE: &str = "upload_file";
-const DOWNLOAD_FILE: &str = "download_file";
-const NAVIGATE: &str = "navigate";
-const RTC_LIVEKIT_GET_TOKEN: &str = "rtc_livekit_get_token";
-const RTC_LIVEKIT_DELEGATE_DELAYED_LEAVE: &str = "rtc_livekit_delegate_delayed_leave";
-const ALWAYS_ON_SCREEN: &str = "always_on_screen";
-const CLIENT_CONTEXT: &str = "client_context";
-const MATRIX_CONTEXT: &str = "matrix_context";
-
-/// The event type whose `send.event` / `receive.event` capabilities may be narrowed to one
-/// `msgtype` with `#<msgtype>` (matrix-widget-api only splits on `#` for this type).
+/// The event type whose timeline capabilities may be narrowed to one `msgtype` with `#<msgtype>`
+/// (matrix-widget-api only splits on `#` for this type).
 const ROOM_MESSAGE: &str = "m.room.message";
 
 /// A widget capability.
 ///
-/// Capabilities are plain strings on the wire. This type understands every capability
-/// matrix-widget-api knows so hosts can check permissions and widgets can build requests without
-/// string fiddling. Unknown strings are preserved verbatim in [`Capability::Other`] so future MSCs
-/// keep working.
+/// Capabilities are plain strings on the wire, one (or more) per action, following
+/// `docs/spec-appendix/capability-naming-proposal.md`:
 ///
-/// Every capability is `<prefix><body>`. `<prefix>` is the MSC's unstable prefix (what deployed
-/// hosts understand, emitted by `Display`) or the stable `m.` (accepted when parsing, emitted by
-/// [`Capability::to_stable_string`]). The event capabilities (MSC2762) are
+/// ```text
+/// source ":" namespace "." action [ "." modifier ] [ ":" data ]
 ///
-/// * `send.event:<type>` / `receive.event:<type>`, for `m.room.message` optionally
-///   `m.room.message#<msgtype>`,
-/// * `send.state_event:<type>` (any state key) or `send.state_event:<type>#<state_key>`, and the
-///   `receive.state_event` pair,
-/// * `timeline:<room_id>` (reading or writing another room's timeline; see `docs/parity.md`).
+/// widget:org.matrix.mscXXXX.send_event.timeline:m.room.message#m.text
+/// widget:org.matrix.mscXXXX.navigate
+/// host:org.matrix.mscXXXX.update_state:m.room.member#@a:x
+/// ```
+///
+/// * `source` is who sends the action: `widget` (a request the widget may make) or `host` (a
+///   subscription: the host sends the action whenever there is something to send). Either way the
+///   capability is held by the widget.
+/// * `namespace` is [`UNSTABLE_NAMESPACE`] (emitted by `Display`) or [`STABLE_NAMESPACE`]
+///   (accepted when parsing, emitted by [`Capability::to_stable_string`]).
+/// * `send_event`, `read_events` and `forward_event` always carry a `timeline` or `state`
+///   modifier; there is no bare `widget:m.send_event:<type>`.
+/// * The data is an event type. For timeline events `m.room.message#<msgtype>` narrows to one
+///   `msgtype`; for state events `<type>#<state_key>` narrows to one state key.
+///
+/// No capability names a room: a widget acts in the room it is embedded in.
+///
+/// Parsing never fails. Unknown strings, including every legacy matrix-widget-api capability, are
+/// preserved verbatim in [`Capability::Other`] and grant nothing.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Capability {
-    /// Send timeline events of `event_type`; for `m.room.message` optionally one `msgtype` only.
-    SendEvent {
-        event_type: String,
-        msgtype: Option<String>,
-    },
-    /// Receive timeline events of `event_type`; for `m.room.message` optionally one `msgtype` only.
-    ReceiveEvent {
-        event_type: String,
-        msgtype: Option<String>,
-    },
-    SendStateEvent {
-        event_type: String,
-        state_key: Option<String>,
-    },
-    ReceiveStateEvent {
-        event_type: String,
-        state_key: Option<String>,
-    },
-    /// Access to the timeline of another room (MSC2762 `timeline:<room_id>`).
-    Timeline {
-        room_id: String,
-    },
-    /// Send to-device messages of `event_type` (MSC3819).
-    SendToDevice {
-        event_type: String,
-    },
-    /// Receive to-device messages of `event_type` (MSC3819).
-    ReceiveToDevice {
-        event_type: String,
-    },
-    /// May use `delay` on `send_event` (MSC4157).
+    // ---- widget actions ------------------------------------------------------------------------
+    /// `send_event` of timeline events of `event_type`; for `m.room.message` optionally one
+    /// `msgtype` only.
+    SendEvent { event_type: String, msgtype: Option<String> },
+    /// `send_event` of state events of `event_type`, optionally one state key only.
+    SendStateEvent { event_type: String, state_key: Option<String> },
+    /// May use `delay` on `send_event`. Held in addition to the event's own capability.
     SendDelayedEvent,
-    /// May call `update_delayed_event` (MSC4157).
-    UpdateDelayedEvent,
-    /// May use `sticky_duration_ms` on `send_event` (MSC4407).
+    /// May use `sticky_duration_ms` on `send_event`. Held in addition to the event's own capability.
     SendStickyEvent,
-    /// May receive sticky events (MSC4407).
-    ReceiveStickyEvent,
-    /// May read room account data of `event_type` (Beeper extension).
-    ReceiveRoomAccountData {
-        event_type: String,
-    },
-    /// May watch TURN servers (MSC3846).
-    TurnServers,
-    /// May read the homeserver's RTC transports (MSC4515).
-    RtcTransports,
-    /// May search the user directory (MSC3973).
-    UserDirectorySearch,
-    /// May upload media and read the media config (MSC4039).
+    /// May call `update_delayed_event`.
+    UpdateDelayedEvent,
+    /// `read_events` of timeline events of `event_type`; for `m.room.message` optionally one
+    /// `msgtype` only.
+    ReadEvents { event_type: String, msgtype: Option<String> },
+    /// `read_events` of state events of `event_type`, optionally one state key only.
+    ReadStateEvents { event_type: String, state_key: Option<String> },
+    /// `read_relations` returning related events of `event_type`; for `m.room.message` optionally
+    /// one `msgtype` only.
+    ReadRelations { event_type: String, msgtype: Option<String> },
+    /// `read_room_account_data` of `event_type`.
+    ReadRoomAccountData { event_type: String },
+    /// `send_to_device` of messages of `event_type`.
+    SendToDevice { event_type: String },
+    /// May call `get_openid` (the user may still be asked).
+    GetOpenId,
+    /// May call `get_rtc_transports`.
+    GetRtcTransports,
+    /// May call `search_user_directory`.
+    SearchUserDirectory,
+    /// May call `get_media_config`.
+    GetMediaConfig,
+    /// May call `upload_file`.
     UploadFile,
-    /// May download media (MSC4039).
+    /// May call `download_file`.
     DownloadFile,
-    /// May ask the client to navigate to a `matrix.to` URI (MSC2931).
+    /// May call `get_rtc_livekit_token`.
+    GetRtcLivekitToken,
+    /// May call `delegate_rtc_livekit_delayed_leave`.
+    DelegateRtcLivekitDelayedLeave,
+    /// May call `navigate`.
     Navigate,
-    /// May obtain LiveKit tokens through the client (MSC4533).
-    RtcLivekitGetToken,
-    /// May hand delayed leave events to the client's LiveKit service (MSC4533).
-    RtcLivekitDelegateDelayedLeave,
-    /// May ask to stay on screen (`m.always_on_screen`).
-    AlwaysOnScreen,
-    /// May call `client_context`.
-    ClientContext,
-    /// May call `matrix_context`.
-    MatrixContext,
-    /// Any capability this crate does not model.
-    Other {
-        raw: String,
-    },
+    /// May call `set_always_on_screen`.
+    SetAlwaysOnScreen,
+    /// May call `get_matrix_context`.
+    GetMatrixContext,
+    /// May call `get_client_context`.
+    GetClientContext,
+
+    // ---- host actions (subscriptions) ----------------------------------------------------------
+    /// The host sends `forward_event` for new timeline events of `event_type`; for
+    /// `m.room.message` optionally one `msgtype` only.
+    ForwardEvent { event_type: String, msgtype: Option<String> },
+    /// The host sends `forward_event` for state events of `event_type` as they arrive in the
+    /// timeline, optionally one state key only.
+    ForwardStateEvent { event_type: String, state_key: Option<String> },
+    /// The host forwards sticky events. Held in addition to the event's own capability.
+    ForwardStickyEvent,
+    /// The host sends `update_state` with the current state of `event_type`, optionally one state
+    /// key only.
+    UpdateState { event_type: String, state_key: Option<String> },
+    /// The host sends `forward_to_device` for to-device messages of `event_type`.
+    ForwardToDevice { event_type: String },
+    /// The host sends `update_turn_servers`.
+    UpdateTurnServers,
+    /// The host sends `update_theme`.
+    UpdateTheme,
+    /// The host sends `update_language`.
+    UpdateLanguage,
+    /// The host sends `update_visibility`.
+    UpdateVisibility,
+
+    /// Any string that is not a capability of this scheme.
+    Other { raw: String },
 }
 
 impl Capability {
+    /// `widget:…send_event.timeline:<event_type>`.
     pub fn send_event(event_type: impl Into<String>) -> Self {
         Self::SendEvent { event_type: event_type.into(), msgtype: None }
     }
 
-    /// `send.event:m.room.message#<msgtype>`.
+    /// `widget:…send_event.timeline:m.room.message#<msgtype>`.
     pub fn send_message(msgtype: impl Into<String>) -> Self {
         Self::SendEvent { event_type: ROOM_MESSAGE.into(), msgtype: Some(msgtype.into()) }
     }
 
-    pub fn receive_event(event_type: impl Into<String>) -> Self {
-        Self::ReceiveEvent { event_type: event_type.into(), msgtype: None }
-    }
-
-    /// `receive.event:m.room.message#<msgtype>`.
-    pub fn receive_message(msgtype: impl Into<String>) -> Self {
-        Self::ReceiveEvent { event_type: ROOM_MESSAGE.into(), msgtype: Some(msgtype.into()) }
-    }
-
+    /// `widget:…send_event.state:<event_type>[#<state_key>]`.
     pub fn send_state_event(event_type: impl Into<String>, state_key: Option<impl Into<String>>) -> Self {
         Self::SendStateEvent { event_type: event_type.into(), state_key: state_key.map(Into::into) }
     }
 
-    pub fn receive_state_event(event_type: impl Into<String>, state_key: Option<impl Into<String>>) -> Self {
-        Self::ReceiveStateEvent { event_type: event_type.into(), state_key: state_key.map(Into::into) }
+    /// `widget:…read_events.timeline:<event_type>`.
+    pub fn read_events(event_type: impl Into<String>) -> Self {
+        Self::ReadEvents { event_type: event_type.into(), msgtype: None }
     }
 
-    pub fn timeline(room_id: impl Into<String>) -> Self {
-        Self::Timeline { room_id: room_id.into() }
+    /// `widget:…read_events.timeline:m.room.message#<msgtype>`.
+    pub fn read_messages(msgtype: impl Into<String>) -> Self {
+        Self::ReadEvents { event_type: ROOM_MESSAGE.into(), msgtype: Some(msgtype.into()) }
     }
 
+    /// `widget:…read_events.state:<event_type>[#<state_key>]`.
+    pub fn read_state_events(event_type: impl Into<String>, state_key: Option<impl Into<String>>) -> Self {
+        Self::ReadStateEvents { event_type: event_type.into(), state_key: state_key.map(Into::into) }
+    }
+
+    /// `widget:…read_relations:<event_type>`.
+    pub fn read_relations(event_type: impl Into<String>) -> Self {
+        Self::ReadRelations { event_type: event_type.into(), msgtype: None }
+    }
+
+    /// `widget:…read_room_account_data:<event_type>`.
+    pub fn read_room_account_data(event_type: impl Into<String>) -> Self {
+        Self::ReadRoomAccountData { event_type: event_type.into() }
+    }
+
+    /// `widget:…send_to_device:<event_type>`.
     pub fn send_to_device(event_type: impl Into<String>) -> Self {
         Self::SendToDevice { event_type: event_type.into() }
     }
 
-    pub fn receive_to_device(event_type: impl Into<String>) -> Self {
-        Self::ReceiveToDevice { event_type: event_type.into() }
+    /// `host:…forward_event.timeline:<event_type>`.
+    pub fn forward_event(event_type: impl Into<String>) -> Self {
+        Self::ForwardEvent { event_type: event_type.into(), msgtype: None }
     }
 
-    pub fn receive_room_account_data(event_type: impl Into<String>) -> Self {
-        Self::ReceiveRoomAccountData { event_type: event_type.into() }
+    /// `host:…forward_event.timeline:m.room.message#<msgtype>`.
+    pub fn forward_messages(msgtype: impl Into<String>) -> Self {
+        Self::ForwardEvent { event_type: ROOM_MESSAGE.into(), msgtype: Some(msgtype.into()) }
     }
 
-    /// Parse a capability string. Never fails: unknown strings become [`Capability::Other`].
-    ///
-    /// Both the capability's unstable prefix and the stable `m.` are accepted; a body behind the
-    /// *wrong* unstable prefix (say `org.matrix.msc3819.send.event:x`) is `Other`.
+    /// `host:…forward_event.state:<event_type>[#<state_key>]`.
+    pub fn forward_state_event(event_type: impl Into<String>, state_key: Option<impl Into<String>>) -> Self {
+        Self::ForwardStateEvent { event_type: event_type.into(), state_key: state_key.map(Into::into) }
+    }
+
+    /// `host:…update_state:<event_type>[#<state_key>]`.
+    pub fn update_state(event_type: impl Into<String>, state_key: Option<impl Into<String>>) -> Self {
+        Self::UpdateState { event_type: event_type.into(), state_key: state_key.map(Into::into) }
+    }
+
+    /// `host:…forward_to_device:<event_type>`.
+    pub fn forward_to_device(event_type: impl Into<String>) -> Self {
+        Self::ForwardToDevice { event_type: event_type.into() }
+    }
+
+    /// Parse a capability string. Never fails: anything that is not a capability of this scheme
+    /// becomes [`Capability::Other`].
     pub fn parse(raw: &str) -> Self {
-        for prefix in ALL_PREFIXES {
-            let Some(body) = raw.strip_prefix(prefix) else { continue };
-            if let Some(cap) = Self::from_body(body) {
-                if *prefix == STABLE_PREFIX || *prefix == cap.unstable_prefix() {
-                    return cap;
-                }
-            }
-        }
-        Self::Other { raw: raw.to_owned() }
+        Self::parse_known(raw).unwrap_or_else(|| Self::Other { raw: raw.to_owned() })
     }
 
-    fn from_body(body: &str) -> Option<Self> {
-        if let Some(rest) = body.strip_prefix(SEND_EVENT) {
-            let (event_type, msgtype) = split_msgtype(rest);
-            return Some(Self::SendEvent { event_type, msgtype });
+    fn parse_known(raw: &str) -> Option<Self> {
+        let (source, rest) = raw.split_once(':')?;
+        let rest = [UNSTABLE_NAMESPACE, STABLE_NAMESPACE]
+            .iter()
+            .find_map(|namespace| rest.strip_prefix(namespace)?.strip_prefix('.'))?;
+        // The head contains no `:`, the data may (`m.room.member#@a:x`).
+        match rest.split_once(':') {
+            Some((head, data)) if !data.is_empty() => Self::with_data(source, head, data),
+            Some(_) => None,
+            None => UNIT_CAPABILITIES.iter().find(|(s, h, _)| *s == source && *h == rest).map(|(_, _, c)| c.clone()),
         }
-        if let Some(rest) = body.strip_prefix(RECEIVE_EVENT) {
-            let (event_type, msgtype) = split_msgtype(rest);
-            return Some(Self::ReceiveEvent { event_type, msgtype });
-        }
-        if let Some(rest) = body.strip_prefix(SEND_STATE) {
-            let (event_type, state_key) = split_hash(rest);
-            return Some(Self::SendStateEvent { event_type, state_key });
-        }
-        if let Some(rest) = body.strip_prefix(RECEIVE_STATE) {
-            let (event_type, state_key) = split_hash(rest);
-            return Some(Self::ReceiveStateEvent { event_type, state_key });
-        }
-        if let Some(room_id) = body.strip_prefix(TIMELINE) {
-            return Some(Self::Timeline { room_id: room_id.to_owned() });
-        }
-        if let Some(t) = body.strip_prefix(SEND_TO_DEVICE) {
-            return Some(Self::SendToDevice { event_type: t.to_owned() });
-        }
-        if let Some(t) = body.strip_prefix(RECEIVE_TO_DEVICE) {
-            return Some(Self::ReceiveToDevice { event_type: t.to_owned() });
-        }
-        if let Some(t) = body.strip_prefix(RECEIVE_ROOM_ACCOUNT_DATA) {
-            return Some(Self::ReceiveRoomAccountData { event_type: t.to_owned() });
-        }
-        Some(match body {
-            SEND_DELAYED_EVENT => Self::SendDelayedEvent,
-            UPDATE_DELAYED_EVENT => Self::UpdateDelayedEvent,
-            SEND_STICKY_EVENT => Self::SendStickyEvent,
-            RECEIVE_STICKY_EVENT => Self::ReceiveStickyEvent,
-            TURN_SERVERS => Self::TurnServers,
-            RTC_TRANSPORTS => Self::RtcTransports,
-            USER_DIRECTORY_SEARCH => Self::UserDirectorySearch,
-            UPLOAD_FILE => Self::UploadFile,
-            DOWNLOAD_FILE => Self::DownloadFile,
-            NAVIGATE => Self::Navigate,
-            RTC_LIVEKIT_GET_TOKEN => Self::RtcLivekitGetToken,
-            RTC_LIVEKIT_DELEGATE_DELAYED_LEAVE => Self::RtcLivekitDelegateDelayedLeave,
-            ALWAYS_ON_SCREEN => Self::AlwaysOnScreen,
-            CLIENT_CONTEXT => Self::ClientContext,
-            MATRIX_CONTEXT => Self::MatrixContext,
+    }
+
+    fn with_data(source: &str, head: &str, data: &str) -> Option<Self> {
+        let timeline = || split_msgtype(data);
+        let state = || split_hash(data);
+        let event_type = data.to_owned();
+        Some(match (source, head) {
+            (WIDGET, SEND_EVENT_TIMELINE) => {
+                let (event_type, msgtype) = timeline();
+                Self::SendEvent { event_type, msgtype }
+            }
+            (WIDGET, SEND_EVENT_STATE) => {
+                let (event_type, state_key) = state();
+                Self::SendStateEvent { event_type, state_key }
+            }
+            (WIDGET, READ_EVENTS_TIMELINE) => {
+                let (event_type, msgtype) = timeline();
+                Self::ReadEvents { event_type, msgtype }
+            }
+            (WIDGET, READ_EVENTS_STATE) => {
+                let (event_type, state_key) = state();
+                Self::ReadStateEvents { event_type, state_key }
+            }
+            (WIDGET, READ_RELATIONS) => {
+                let (event_type, msgtype) = timeline();
+                Self::ReadRelations { event_type, msgtype }
+            }
+            (WIDGET, READ_ROOM_ACCOUNT_DATA) => Self::ReadRoomAccountData { event_type },
+            (WIDGET, SEND_TO_DEVICE) => Self::SendToDevice { event_type },
+            (HOST, FORWARD_EVENT_TIMELINE) => {
+                let (event_type, msgtype) = timeline();
+                Self::ForwardEvent { event_type, msgtype }
+            }
+            (HOST, FORWARD_EVENT_STATE) => {
+                let (event_type, state_key) = state();
+                Self::ForwardStateEvent { event_type, state_key }
+            }
+            (HOST, UPDATE_STATE) => {
+                let (event_type, state_key) = state();
+                Self::UpdateState { event_type, state_key }
+            }
+            (HOST, FORWARD_TO_DEVICE) => Self::ForwardToDevice { event_type },
             _ => return None,
         })
     }
 
-    fn body(&self) -> Option<String> {
-        Some(match self {
-            Capability::SendEvent { event_type, msgtype } => {
-                format!("{SEND_EVENT}{}", join_hash(event_type, msgtype.as_deref()))
-            }
-            Capability::ReceiveEvent { event_type, msgtype } => {
-                format!("{RECEIVE_EVENT}{}", join_hash(event_type, msgtype.as_deref()))
-            }
-            Capability::SendStateEvent { event_type, state_key } => {
-                format!("{SEND_STATE}{}", join_hash(event_type, state_key.as_deref()))
-            }
-            Capability::ReceiveStateEvent { event_type, state_key } => {
-                format!("{RECEIVE_STATE}{}", join_hash(event_type, state_key.as_deref()))
-            }
-            Capability::Timeline { room_id } => format!("{TIMELINE}{room_id}"),
-            Capability::SendToDevice { event_type } => format!("{SEND_TO_DEVICE}{event_type}"),
-            Capability::ReceiveToDevice { event_type } => format!("{RECEIVE_TO_DEVICE}{event_type}"),
-            Capability::ReceiveRoomAccountData { event_type } => format!("{RECEIVE_ROOM_ACCOUNT_DATA}{event_type}"),
-            Capability::SendDelayedEvent => SEND_DELAYED_EVENT.to_owned(),
-            Capability::UpdateDelayedEvent => UPDATE_DELAYED_EVENT.to_owned(),
-            Capability::SendStickyEvent => SEND_STICKY_EVENT.to_owned(),
-            Capability::ReceiveStickyEvent => RECEIVE_STICKY_EVENT.to_owned(),
-            Capability::TurnServers => TURN_SERVERS.to_owned(),
-            Capability::RtcTransports => RTC_TRANSPORTS.to_owned(),
-            Capability::UserDirectorySearch => USER_DIRECTORY_SEARCH.to_owned(),
-            Capability::UploadFile => UPLOAD_FILE.to_owned(),
-            Capability::DownloadFile => DOWNLOAD_FILE.to_owned(),
-            Capability::Navigate => NAVIGATE.to_owned(),
-            Capability::RtcLivekitGetToken => RTC_LIVEKIT_GET_TOKEN.to_owned(),
-            Capability::RtcLivekitDelegateDelayedLeave => RTC_LIVEKIT_DELEGATE_DELAYED_LEAVE.to_owned(),
-            Capability::AlwaysOnScreen => ALWAYS_ON_SCREEN.to_owned(),
-            Capability::ClientContext => CLIENT_CONTEXT.to_owned(),
-            Capability::MatrixContext => MATRIX_CONTEXT.to_owned(),
-            Capability::Other { .. } => return None,
-        })
-    }
-
-    /// The prefix of this capability's unstable form. Capabilities that only exist in a stable
-    /// spelling (`m.always_on_screen`) return the stable prefix.
-    pub fn unstable_prefix(&self) -> &'static str {
+    /// `(source, head, data)` of a modelled capability; `None` for `Other`.
+    fn parts(&self) -> Option<(&'static str, &'static str, Option<String>)> {
+        let typed = |source, head, event_type: &str, key: &Option<String>| {
+            Some((source, head, Some(join_hash(event_type, key.as_deref()))))
+        };
         match self {
-            Capability::SendEvent { .. }
-            | Capability::ReceiveEvent { .. }
-            | Capability::SendStateEvent { .. }
-            | Capability::ReceiveStateEvent { .. }
-            | Capability::Timeline { .. } => MSC2762_PREFIX,
-            Capability::SendToDevice { .. } | Capability::ReceiveToDevice { .. } => MSC3819_PREFIX,
-            Capability::SendDelayedEvent | Capability::UpdateDelayedEvent => MSC4157_PREFIX,
-            Capability::SendStickyEvent | Capability::ReceiveStickyEvent => MSC4407_PREFIX,
-            Capability::ReceiveRoomAccountData { .. } => BEEPER_PREFIX,
-            Capability::TurnServers => MSC3846_PREFIX,
-            Capability::RtcTransports => MSC4515_PREFIX,
-            Capability::UserDirectorySearch => MSC3973_PREFIX,
-            Capability::UploadFile | Capability::DownloadFile => MSC4039_PREFIX,
-            Capability::Navigate => MSC2931_PREFIX,
-            Capability::RtcLivekitGetToken | Capability::RtcLivekitDelegateDelayedLeave => MSC4533_PREFIX,
-            Capability::ClientContext | Capability::MatrixContext => MSC4412_PREFIX,
-            Capability::AlwaysOnScreen | Capability::Other { .. } => STABLE_PREFIX,
+            Self::SendEvent { event_type, msgtype } => typed(WIDGET, SEND_EVENT_TIMELINE, event_type, msgtype),
+            Self::SendStateEvent { event_type, state_key } => typed(WIDGET, SEND_EVENT_STATE, event_type, state_key),
+            Self::ReadEvents { event_type, msgtype } => typed(WIDGET, READ_EVENTS_TIMELINE, event_type, msgtype),
+            Self::ReadStateEvents { event_type, state_key } => typed(WIDGET, READ_EVENTS_STATE, event_type, state_key),
+            Self::ReadRelations { event_type, msgtype } => typed(WIDGET, READ_RELATIONS, event_type, msgtype),
+            Self::ReadRoomAccountData { event_type } => typed(WIDGET, READ_ROOM_ACCOUNT_DATA, event_type, &None),
+            Self::SendToDevice { event_type } => typed(WIDGET, SEND_TO_DEVICE, event_type, &None),
+            Self::ForwardEvent { event_type, msgtype } => typed(HOST, FORWARD_EVENT_TIMELINE, event_type, msgtype),
+            Self::ForwardStateEvent { event_type, state_key } => {
+                typed(HOST, FORWARD_EVENT_STATE, event_type, state_key)
+            }
+            Self::UpdateState { event_type, state_key } => typed(HOST, UPDATE_STATE, event_type, state_key),
+            Self::ForwardToDevice { event_type } => typed(HOST, FORWARD_TO_DEVICE, event_type, &None),
+            Self::Other { .. } => None,
+            unit => {
+                UNIT_CAPABILITIES.iter().find(|(_, _, c)| c == unit).map(|(source, head, _)| (*source, *head, None))
+            }
         }
     }
 
-    /// The unstable representation, e.g. `org.matrix.msc2762.send.event:m.room.message`
+    fn format(&self, namespace: &str) -> String {
+        match (self, self.parts()) {
+            (_, Some((source, head, Some(data)))) => format!("{source}:{namespace}.{head}:{data}"),
+            (_, Some((source, head, None))) => format!("{source}:{namespace}.{head}"),
+            (Self::Other { raw }, None) => raw.clone(),
+            (unit, None) => unreachable!("{unit:?} is missing from UNIT_CAPABILITIES"),
+        }
+    }
+
+    /// The unstable representation, e.g. `widget:org.matrix.mscXXXX.send_event.timeline:m.room.message`
     /// (or the raw string for `Other`).
     pub fn to_unstable_string(&self) -> String {
-        match self.body() {
-            Some(body) => format!("{}{body}", self.unstable_prefix()),
-            None => self.raw_other(),
-        }
+        self.format(UNSTABLE_NAMESPACE)
     }
 
-    /// The `m.*` representation (or the raw string for `Other`).
+    /// The stable representation, e.g. `widget:m.send_event.timeline:m.room.message` (or the raw
+    /// string for `Other`).
     pub fn to_stable_string(&self) -> String {
-        match self.body() {
-            Some(body) => format!("{STABLE_PREFIX}{body}"),
-            None => self.raw_other(),
-        }
+        self.format(STABLE_NAMESPACE)
     }
 
-    fn raw_other(&self) -> String {
-        match self {
-            Capability::Other { raw } => raw.clone(),
-            _ => unreachable!("raw_other is only called for Other"),
-        }
-    }
-
-    /// Does this capability allow *sending* the given event?
+    /// Does this capability allow *sending* the given event with `send_event`?
     /// `state_key == None` means a timeline (non-state) event; `msgtype` is the content's
     /// `msgtype`, only relevant for `m.room.message`.
     pub fn allows_send(&self, event_type: &str, state_key: Option<&str>, msgtype: Option<&str>) -> bool {
         match (self, state_key) {
-            (Capability::SendEvent { event_type: t, msgtype: m }, None) => {
-                t == event_type && m.as_deref().is_none_or(|m| Some(m) == msgtype)
-            }
-            (Capability::SendStateEvent { event_type: t, state_key: k }, Some(sk)) => {
-                t == event_type && k.as_deref().is_none_or(|k| k == sk)
-            }
+            (Self::SendEvent { event_type: t, msgtype: m }, None) => matches_timeline(t, m, event_type, msgtype),
+            (Self::SendStateEvent { event_type: t, state_key: k }, Some(sk)) => matches_state(t, k, event_type, sk),
             _ => false,
         }
     }
 
-    /// Does this capability allow *receiving* the given event? Arguments as in
+    /// Does this capability allow returning the given event from `read_events`? Arguments as in
     /// [`allows_send`](Self::allows_send).
-    pub fn allows_receive(&self, event_type: &str, state_key: Option<&str>, msgtype: Option<&str>) -> bool {
+    pub fn allows_read(&self, event_type: &str, state_key: Option<&str>, msgtype: Option<&str>) -> bool {
         match (self, state_key) {
-            (Capability::ReceiveEvent { event_type: t, msgtype: m }, None) => {
-                t == event_type && m.as_deref().is_none_or(|m| Some(m) == msgtype)
-            }
-            (Capability::ReceiveStateEvent { event_type: t, state_key: k }, Some(sk)) => {
-                t == event_type && k.as_deref().is_none_or(|k| k == sk)
-            }
+            (Self::ReadEvents { event_type: t, msgtype: m }, None) => matches_timeline(t, m, event_type, msgtype),
+            (Self::ReadStateEvents { event_type: t, state_key: k }, Some(sk)) => matches_state(t, k, event_type, sk),
             _ => false,
         }
     }
 
-    /// Does this capability allow *reading* (via `read_events`) events of this type at all?
-    /// Used to decide whether a read request may be forwarded; individual results still need
-    /// [`Capability::allows_receive`].
+    /// Does this capability allow a `read_events` request for this type at all? Individual results
+    /// still need [`allows_read`](Self::allows_read).
     pub fn allows_read_type(&self, event_type: &str, is_state: bool) -> bool {
         match (self, is_state) {
-            (Capability::ReceiveEvent { event_type: t, .. }, false) => t == event_type,
-            (Capability::ReceiveStateEvent { event_type: t, .. }, true) => t == event_type,
+            (Self::ReadEvents { event_type: t, .. }, false) => t == event_type,
+            (Self::ReadStateEvents { event_type: t, .. }, true) => t == event_type,
             _ => false,
         }
     }
+
+    /// Does this capability allow returning a related event of this type from `read_relations`?
+    /// The state key plays no role.
+    pub fn allows_read_relation(&self, event_type: &str, msgtype: Option<&str>) -> bool {
+        match self {
+            Self::ReadRelations { event_type: t, msgtype: m } => matches_timeline(t, m, event_type, msgtype),
+            _ => false,
+        }
+    }
+
+    /// Does this capability make the host send the given new event as `forward_event`? Arguments
+    /// as in [`allows_send`](Self::allows_send).
+    pub fn allows_forward(&self, event_type: &str, state_key: Option<&str>, msgtype: Option<&str>) -> bool {
+        match (self, state_key) {
+            (Self::ForwardEvent { event_type: t, msgtype: m }, None) => matches_timeline(t, m, event_type, msgtype),
+            (Self::ForwardStateEvent { event_type: t, state_key: k }, Some(sk)) => matches_state(t, k, event_type, sk),
+            _ => false,
+        }
+    }
+
+    /// Does this capability make the host include the given state event in `update_state`?
+    pub fn allows_update_state(&self, event_type: &str, state_key: &str) -> bool {
+        match self {
+            Self::UpdateState { event_type: t, state_key: k } => matches_state(t, k, event_type, state_key),
+            _ => false,
+        }
+    }
+}
+
+fn matches_timeline(cap_type: &str, cap_msgtype: &Option<String>, event_type: &str, msgtype: Option<&str>) -> bool {
+    cap_type == event_type && cap_msgtype.as_deref().is_none_or(|m| Some(m) == msgtype)
+}
+
+fn matches_state(cap_type: &str, cap_key: &Option<String>, event_type: &str, state_key: &str) -> bool {
+    cap_type == event_type && cap_key.as_deref().is_none_or(|k| k == state_key)
 }
 
 /// `m.room.message#<msgtype>` splits into type and msgtype; any other event type is taken whole
 /// (`#` is legal inside an event type).
-fn split_msgtype(rest: &str) -> (String, Option<String>) {
-    match rest.strip_prefix(ROOM_MESSAGE).and_then(|r| r.strip_prefix('#')) {
+fn split_msgtype(data: &str) -> (String, Option<String>) {
+    match data.strip_prefix(ROOM_MESSAGE).and_then(|r| r.strip_prefix('#')) {
         Some(msgtype) => (ROOM_MESSAGE.to_owned(), Some(msgtype.to_owned())),
-        None => (rest.to_owned(), None),
+        None => (data.to_owned(), None),
     }
 }
 
-fn split_hash(rest: &str) -> (String, Option<String>) {
-    match rest.split_once('#') {
+fn split_hash(data: &str) -> (String, Option<String>) {
+    match data.split_once('#') {
         Some((t, k)) => (t.to_owned(), Some(k.to_owned())),
-        None => (rest.to_owned(), None),
+        None => (data.to_owned(), None),
     }
 }
 
@@ -421,7 +436,8 @@ impl fmt::Display for Capability {
 }
 
 // Over the FFI a capability is its string form, exactly as on the wire: foreign code deals in
-// `org.matrix.msc2762.send.event:m.room.message` & co. and never needs the parsed shape.
+// `widget:org.matrix.mscXXXX.send_event.timeline:m.room.message` & co. and never needs the parsed
+// shape.
 #[cfg(feature = "uniffi")]
 uniffi::custom_type!(Capability, String, {
     try_lift: |raw| Ok(Capability::parse(&raw)),
@@ -456,12 +472,15 @@ impl<'de> Deserialize<'de> for Capability {
 /// Convenience for a list of capabilities.
 pub trait CapabilitySet {
     fn allows_send(&self, event_type: &str, state_key: Option<&str>, msgtype: Option<&str>) -> bool;
-    fn allows_receive(&self, event_type: &str, state_key: Option<&str>, msgtype: Option<&str>) -> bool;
+    fn allows_read(&self, event_type: &str, state_key: Option<&str>, msgtype: Option<&str>) -> bool;
     fn allows_read_type(&self, event_type: &str, is_state: bool) -> bool;
+    fn allows_read_relation(&self, event_type: &str, msgtype: Option<&str>) -> bool;
+    fn allows_forward(&self, event_type: &str, state_key: Option<&str>, msgtype: Option<&str>) -> bool;
+    fn allows_update_state(&self, event_type: &str, state_key: &str) -> bool;
     fn allows_send_to_device(&self, event_type: &str) -> bool;
-    fn allows_receive_to_device(&self, event_type: &str) -> bool;
-    fn allows_receive_room_account_data(&self, event_type: &str) -> bool;
-    /// Is this unit capability (`m.always_on_screen`, `org.matrix.msc2931.navigate`, ...) in the set?
+    fn allows_forward_to_device(&self, event_type: &str) -> bool;
+    fn allows_read_room_account_data(&self, event_type: &str) -> bool;
+    /// Is this capability (usually one without data, like [`Capability::Navigate`]) in the set?
     fn has(&self, capability: &Capability) -> bool;
 }
 
@@ -470,26 +489,36 @@ impl<T: AsRef<[Capability]>> CapabilitySet for T {
         self.as_ref().iter().any(|c| c.allows_send(event_type, state_key, msgtype))
     }
 
-    fn allows_receive(&self, event_type: &str, state_key: Option<&str>, msgtype: Option<&str>) -> bool {
-        self.as_ref().iter().any(|c| c.allows_receive(event_type, state_key, msgtype))
+    fn allows_read(&self, event_type: &str, state_key: Option<&str>, msgtype: Option<&str>) -> bool {
+        self.as_ref().iter().any(|c| c.allows_read(event_type, state_key, msgtype))
     }
 
     fn allows_read_type(&self, event_type: &str, is_state: bool) -> bool {
         self.as_ref().iter().any(|c| c.allows_read_type(event_type, is_state))
     }
 
+    fn allows_read_relation(&self, event_type: &str, msgtype: Option<&str>) -> bool {
+        self.as_ref().iter().any(|c| c.allows_read_relation(event_type, msgtype))
+    }
+
+    fn allows_forward(&self, event_type: &str, state_key: Option<&str>, msgtype: Option<&str>) -> bool {
+        self.as_ref().iter().any(|c| c.allows_forward(event_type, state_key, msgtype))
+    }
+
+    fn allows_update_state(&self, event_type: &str, state_key: &str) -> bool {
+        self.as_ref().iter().any(|c| c.allows_update_state(event_type, state_key))
+    }
+
     fn allows_send_to_device(&self, event_type: &str) -> bool {
         self.as_ref().iter().any(|c| matches!(c, Capability::SendToDevice { event_type: t } if t == event_type))
     }
 
-    fn allows_receive_to_device(&self, event_type: &str) -> bool {
-        self.as_ref().iter().any(|c| matches!(c, Capability::ReceiveToDevice { event_type: t } if t == event_type))
+    fn allows_forward_to_device(&self, event_type: &str) -> bool {
+        self.as_ref().iter().any(|c| matches!(c, Capability::ForwardToDevice { event_type: t } if t == event_type))
     }
 
-    fn allows_receive_room_account_data(&self, event_type: &str) -> bool {
-        self.as_ref()
-            .iter()
-            .any(|c| matches!(c, Capability::ReceiveRoomAccountData { event_type: t } if t == event_type))
+    fn allows_read_room_account_data(&self, event_type: &str) -> bool {
+        self.as_ref().iter().any(|c| matches!(c, Capability::ReadRoomAccountData { event_type: t } if t == event_type))
     }
 
     fn has(&self, capability: &Capability) -> bool {
@@ -501,72 +530,173 @@ impl<T: AsRef<[Capability]>> CapabilitySet for T {
 mod tests {
     use super::*;
 
-    #[test]
-    fn parse_and_format() {
-        let cases = [
-            ("org.matrix.msc2762.send.event:m.room.message", Capability::send_event("m.room.message")),
-            ("org.matrix.msc2762.send.event:m.room.message#m.text", Capability::send_message("m.text")),
-            ("org.matrix.msc2762.receive.event:m.room.message#", Capability::receive_message("")),
-            ("m.receive.event:m.reaction", Capability::receive_event("m.reaction")),
+    fn other(raw: &str) -> Capability {
+        Capability::Other { raw: raw.into() }
+    }
+
+    /// Every capability of the scheme, in its stable spelling.
+    fn all() -> Vec<(&'static str, Capability)> {
+        let none = None::<&str>;
+        vec![
+            ("widget:m.send_event.timeline:m.room.message", Capability::send_event("m.room.message")),
+            ("widget:m.send_event.timeline:m.room.message#m.text", Capability::send_message("m.text")),
+            ("widget:m.send_event.state:m.room.topic", Capability::send_state_event("m.room.topic", none)),
+            ("widget:m.send_event.state:org.x.foo#", Capability::send_state_event("org.x.foo", Some(""))),
+            ("widget:m.send_event.delayed", Capability::SendDelayedEvent),
+            ("widget:m.send_event.sticky", Capability::SendStickyEvent),
+            ("widget:m.update_delayed_event", Capability::UpdateDelayedEvent),
+            ("widget:m.read_events.timeline:m.reaction", Capability::read_events("m.reaction")),
+            ("widget:m.read_events.timeline:m.room.message#", Capability::read_messages("")),
             // `#` only splits for m.room.message
-            ("m.receive.event:org.x#y", Capability::receive_event("org.x#y")),
-            ("m.send.state_event:m.room.topic", Capability::send_state_event("m.room.topic", None::<&str>)),
+            ("widget:m.read_events.timeline:org.x#y", Capability::read_events("org.x#y")),
             (
-                "org.matrix.msc2762.receive.state_event:m.room.member#@a:b",
-                Capability::receive_state_event("m.room.member", Some("@a:b")),
+                "widget:m.read_events.state:m.room.member#@a:b",
+                Capability::read_state_events("m.room.member", Some("@a:b")),
             ),
-            ("m.send.state_event:org.x.foo#", Capability::send_state_event("org.x.foo", Some(""))),
-            ("org.matrix.msc2762.timeline:!r:x", Capability::timeline("!r:x")),
-            ("org.matrix.msc3819.send.to_device:m.key", Capability::send_to_device("m.key")),
-            ("m.receive.to_device:m.key", Capability::receive_to_device("m.key")),
-            ("org.matrix.msc4157.send.delayed_event", Capability::SendDelayedEvent),
-            ("org.matrix.msc4157.update_delayed_event", Capability::UpdateDelayedEvent),
-            ("org.matrix.msc4407.send.sticky_event", Capability::SendStickyEvent),
-            ("org.matrix.msc4407.receive.sticky_event", Capability::ReceiveStickyEvent),
-            ("com.beeper.capabilities.receive.room_account_data:m.tag", Capability::receive_room_account_data("m.tag")),
-            ("town.robin.msc3846.turn_servers", Capability::TurnServers),
-            ("org.matrix.msc4515.rtc_transports", Capability::RtcTransports),
-            ("org.matrix.msc3973.user_directory_search", Capability::UserDirectorySearch),
-            ("org.matrix.msc4039.upload_file", Capability::UploadFile),
-            ("org.matrix.msc4039.download_file", Capability::DownloadFile),
-            ("org.matrix.msc2931.navigate", Capability::Navigate),
-            ("org.matrix.msc4533.rtc_livekit_get_token", Capability::RtcLivekitGetToken),
-            ("org.matrix.msc4533.rtc_livekit_delegate_delayed_leave", Capability::RtcLivekitDelegateDelayedLeave),
-            // stickers are intentionally not supported
-            ("m.sticker", Capability::Other { raw: "m.sticker".into() }),
-            ("m.always_on_screen", Capability::AlwaysOnScreen),
-            ("org.matrix.msc4412.matrix_context", Capability::MatrixContext),
-            ("m.matrix_context", Capability::MatrixContext),
-            ("m.client_context", Capability::ClientContext),
-            // wrong unstable prefix for the body
-            ("org.matrix.msc3819.send.event:x", Capability::Other { raw: "org.matrix.msc3819.send.event:x".into() }),
-            ("io.element.requires_client", Capability::Other { raw: "io.element.requires_client".into() }),
-            ("garbage", Capability::Other { raw: "garbage".into() }),
-        ];
-        for (raw, expected) in cases {
-            assert_eq!(Capability::parse(raw), expected, "{raw}");
-            // Every modelled capability roundtrips through its unstable form.
-            if !matches!(expected, Capability::Other { .. }) {
-                let unstable = expected.to_unstable_string();
-                assert_eq!(Capability::parse(&unstable), expected, "{unstable}");
-                let stable = expected.to_stable_string();
-                assert!(stable.starts_with("m."));
-                assert_eq!(Capability::parse(&stable), expected, "{stable}");
+            ("widget:m.read_relations:m.reaction", Capability::read_relations("m.reaction")),
+            (
+                "widget:m.read_relations:m.room.message#m.text",
+                Capability::ReadRelations { event_type: "m.room.message".into(), msgtype: Some("m.text".into()) },
+            ),
+            ("widget:m.read_room_account_data:m.tag", Capability::read_room_account_data("m.tag")),
+            ("widget:m.send_to_device:m.key", Capability::send_to_device("m.key")),
+            ("widget:m.get_openid", Capability::GetOpenId),
+            ("widget:m.get_rtc_transports", Capability::GetRtcTransports),
+            ("widget:m.search_user_directory", Capability::SearchUserDirectory),
+            ("widget:m.get_media_config", Capability::GetMediaConfig),
+            ("widget:m.upload_file", Capability::UploadFile),
+            ("widget:m.download_file", Capability::DownloadFile),
+            ("widget:m.get_rtc_livekit_token", Capability::GetRtcLivekitToken),
+            ("widget:m.delegate_rtc_livekit_delayed_leave", Capability::DelegateRtcLivekitDelayedLeave),
+            ("widget:m.navigate", Capability::Navigate),
+            ("widget:m.set_always_on_screen", Capability::SetAlwaysOnScreen),
+            ("widget:m.get_matrix_context", Capability::GetMatrixContext),
+            ("widget:m.get_client_context", Capability::GetClientContext),
+            ("host:m.forward_event.timeline:m.room.message", Capability::forward_event("m.room.message")),
+            ("host:m.forward_event.timeline:m.room.message#m.text", Capability::forward_messages("m.text")),
+            ("host:m.forward_event.state:m.room.member", Capability::forward_state_event("m.room.member", none)),
+            (
+                "host:m.forward_event.state:m.room.member#@a:b",
+                Capability::forward_state_event("m.room.member", Some("@a:b")),
+            ),
+            ("host:m.forward_event.sticky", Capability::ForwardStickyEvent),
+            ("host:m.update_state:m.room.member#@a:b", Capability::update_state("m.room.member", Some("@a:b"))),
+            ("host:m.update_state:m.room.topic#", Capability::update_state("m.room.topic", Some(""))),
+            ("host:m.forward_to_device:m.key", Capability::forward_to_device("m.key")),
+            ("host:m.update_turn_servers", Capability::UpdateTurnServers),
+            ("host:m.update_theme", Capability::UpdateTheme),
+            ("host:m.update_language", Capability::UpdateLanguage),
+            ("host:m.update_visibility", Capability::UpdateVisibility),
+        ]
+    }
+
+    #[test]
+    fn parses_and_formats_every_capability_in_both_namespaces() {
+        for (stable, expected) in all() {
+            assert_eq!(Capability::parse(stable), expected, "{stable}");
+            assert_eq!(expected.to_stable_string(), stable);
+
+            let unstable = stable.replacen(":m.", ":org.matrix.mscXXXX.", 1);
+            assert_eq!(Capability::parse(&unstable), expected, "{unstable}");
+            assert_eq!(expected.to_unstable_string(), unstable);
+            assert_eq!(expected.to_string(), unstable, "Display emits the unstable namespace");
+        }
+    }
+
+    #[test]
+    fn every_unit_variant_is_in_the_table_once() {
+        for (i, (source, head, capability)) in UNIT_CAPABILITIES.iter().enumerate() {
+            assert!(capability.parts().is_some_and(|p| p == (*source, *head, None)), "{head}");
+            for (_, other_head, other_capability) in &UNIT_CAPABILITIES[i + 1..] {
+                assert_ne!(capability, other_capability);
+                assert_ne!(head, other_head);
             }
         }
+        // 20 of the 39 strings in `all()` are unit capabilities; every one must be in the table.
+        let units = all().into_iter().filter(|(raw, _)| raw.matches(':').count() == 1).count();
+        assert_eq!(units, UNIT_CAPABILITIES.len());
+    }
 
+    #[test]
+    fn strings_outside_the_scheme_are_other() {
+        let cases = [
+            // An action with modifiers has no capability without one.
+            "widget:m.send_event:m.room.message",
+            "widget:m.send_event",
+            "widget:m.read_events:m.room.message",
+            "host:m.forward_event:m.room.message",
+            // Unknown modifier, or a modifier on an action that has none.
+            "widget:m.send_event.type:m.room.message",
+            "widget:m.send_event.room:!r:x",
+            "widget:m.read_events.room:!r:x",
+            "host:m.update_state.state:m.room.topic",
+            "widget:m.navigate.now",
+            // Wrong source for the action.
+            "host:m.send_event.timeline:m.room.message",
+            "widget:m.forward_event.timeline:m.room.message",
+            "widget:m.update_theme",
+            "host:m.navigate",
+            "runtime:m.update_theme",
+            // Data missing, empty or unexpected.
+            "widget:m.send_event.timeline",
+            "widget:m.send_event.timeline:",
+            "widget:m.send_to_device",
+            "widget:m.navigate:somewhere",
+            "widget:m.send_event.delayed:m.room.message",
+            // Wrong namespace or shape.
+            "widget:org.matrix.msc4412.navigate",
+            "widget:navigate",
+            "widget.m.navigate",
+            "m.widget.navigate",
+            "m.widget.send_event:m.room.message",
+            "widget:mnavigate",
+            // Legacy matrix-widget-api capabilities grant nothing here.
+            "org.matrix.msc2762.send.event:m.room.message",
+            "m.send.event:m.room.message",
+            "org.matrix.msc2762.receive.state_event:m.room.member#@a:b",
+            "org.matrix.msc2762.timeline:!r:x",
+            "org.matrix.msc2762.timeline:*",
+            "org.matrix.msc3819.send.to_device:m.key",
+            "org.matrix.msc4157.send.delayed_event",
+            "town.robin.msc3846.turn_servers",
+            "com.beeper.capabilities.receive.room_account_data:m.tag",
+            "org.matrix.msc2931.navigate",
+            "m.always_on_screen",
+            "org.matrix.msc4412.matrix_context",
+            "m.sticker",
+            "io.element.requires_client",
+            "garbage",
+            "",
+        ];
+        for raw in cases {
+            let parsed = Capability::parse(raw);
+            assert_eq!(parsed, other(raw), "{raw}");
+            // Unknown strings survive unchanged in every spelling.
+            assert_eq!(parsed.to_string(), raw);
+            assert_eq!(parsed.to_stable_string(), raw);
+        }
+    }
+
+    #[test]
+    fn data_may_contain_separators() {
+        // `:` in a state key, `#` inside the key, and a namespace-like event type.
         assert_eq!(
-            Capability::receive_state_event("m.room.member", Some("@a:b")).to_string(),
-            "org.matrix.msc2762.receive.state_event:m.room.member#@a:b"
+            Capability::parse("host:org.matrix.mscXXXX.update_state:m.room.member#@a:b.c:8448"),
+            Capability::update_state("m.room.member", Some("@a:b.c:8448"))
         );
         assert_eq!(
-            Capability::send_message("m.text").to_string(),
-            "org.matrix.msc2762.send.event:m.room.message#m.text"
+            Capability::parse("widget:m.send_event.state:org.x#a#b"),
+            Capability::send_state_event("org.x", Some("a#b"))
         );
-        assert_eq!(Capability::send_event("x").to_stable_string(), "m.send.event:x");
-        assert_eq!(Capability::MatrixContext.to_string(), "org.matrix.msc4412.matrix_context");
-        assert_eq!(Capability::AlwaysOnScreen.to_string(), "m.always_on_screen");
-        assert_eq!(Capability::parse("custom.cap").to_stable_string(), "custom.cap");
+        assert_eq!(
+            Capability::parse("widget:m.send_event.timeline:widget:m.navigate"),
+            Capability::send_event("widget:m.navigate")
+        );
+        // The stable namespace is `m`, so an `m.`-prefixed unstable-looking rest is still stable.
+        assert_eq!(
+            Capability::parse("widget:m.send_to_device:org.matrix.mscXXXX.navigate"),
+            Capability::send_to_device("org.matrix.mscXXXX.navigate")
+        );
     }
 
     #[test]
@@ -574,10 +704,15 @@ mod tests {
         let caps = vec![
             Capability::send_event("m.room.message"),
             Capability::send_state_event("m.room.topic", None::<&str>),
-            Capability::receive_state_event("m.room.member", Some("@me:x")),
-            Capability::receive_message("m.text"),
+            Capability::read_state_events("m.room.member", Some("@me:x")),
+            Capability::read_messages("m.text"),
+            Capability::read_relations("m.reaction"),
+            Capability::forward_messages("m.image"),
+            Capability::forward_state_event("m.room.topic", Some("")),
+            Capability::update_state("m.room.name", None::<&str>),
             Capability::send_to_device("m.key"),
-            Capability::receive_room_account_data("m.tag"),
+            Capability::forward_to_device("m.other"),
+            Capability::read_room_account_data("m.tag"),
             Capability::Navigate,
         ];
         assert!(caps.allows_send("m.room.message", None, None));
@@ -587,33 +722,64 @@ mod tests {
         assert!(caps.allows_send("m.room.topic", Some(""), None));
         assert!(caps.allows_send("m.room.topic", Some("anything"), None));
         assert!(!caps.allows_send("m.room.topic", None, None));
-        assert!(caps.allows_receive("m.room.member", Some("@me:x"), None));
-        assert!(!caps.allows_receive("m.room.member", Some("@you:x"), None));
-        assert!(caps.allows_receive("m.room.message", None, Some("m.text")));
-        assert!(!caps.allows_receive("m.room.message", None, Some("m.image")));
-        assert!(!caps.allows_receive("m.room.message", None, None));
+
+        assert!(caps.allows_read("m.room.member", Some("@me:x"), None));
+        assert!(!caps.allows_read("m.room.member", Some("@you:x"), None));
+        assert!(caps.allows_read("m.room.message", None, Some("m.text")));
+        assert!(!caps.allows_read("m.room.message", None, Some("m.image")));
+        assert!(!caps.allows_read("m.room.message", None, None));
         assert!(caps.allows_read_type("m.room.member", true));
         assert!(!caps.allows_read_type("m.room.member", false));
         assert!(caps.allows_read_type("m.room.message", false));
+
+        assert!(caps.allows_read_relation("m.reaction", None));
+        assert!(!caps.allows_read_relation("m.room.message", Some("m.text")));
+
         assert!(caps.allows_send_to_device("m.key"));
-        assert!(!caps.allows_receive_to_device("m.key"));
-        assert!(caps.allows_receive_room_account_data("m.tag"));
+        assert!(!caps.allows_forward_to_device("m.key"));
+        assert!(caps.allows_forward_to_device("m.other"));
+        assert!(caps.allows_read_room_account_data("m.tag"));
         assert!(caps.has(&Capability::Navigate));
-        assert!(!caps.has(&Capability::AlwaysOnScreen));
+        assert!(!caps.has(&Capability::SetAlwaysOnScreen));
+    }
+
+    #[test]
+    fn each_action_has_its_own_capability() {
+        // Sending, reading, forwarding and state updates never imply each other.
+        let read = vec![Capability::read_events("m.x"), Capability::read_state_events("m.s", None::<&str>)];
+        assert!(read.allows_read("m.x", None, None));
+        assert!(!read.allows_forward("m.x", None, None));
+        assert!(!read.allows_read_relation("m.x", None));
+        assert!(!read.allows_send("m.x", None, None));
+        assert!(!read.allows_update_state("m.s", ""));
+        assert!(!read.allows_forward("m.s", Some(""), None));
+
+        let forward = vec![Capability::forward_event("m.x"), Capability::forward_state_event("m.s", None::<&str>)];
+        assert!(forward.allows_forward("m.x", None, None));
+        assert!(forward.allows_forward("m.s", Some("k"), None));
+        assert!(!forward.allows_read("m.x", None, None));
+        assert!(!forward.allows_read_type("m.x", false));
+        assert!(!forward.allows_update_state("m.s", "k"));
+
+        let update = vec![Capability::update_state("m.s", Some("k"))];
+        assert!(update.allows_update_state("m.s", "k"));
+        assert!(!update.allows_update_state("m.s", "other"));
+        assert!(!update.allows_forward("m.s", Some("k"), None));
+        assert!(!update.allows_read("m.s", Some("k"), None));
+
+        let relations = vec![Capability::read_relations("m.x")];
+        assert!(relations.allows_read_relation("m.x", None));
+        assert!(!relations.allows_read("m.x", None, None));
     }
 
     #[test]
     fn serde_as_string() {
-        let v: Vec<Capability> = serde_json::from_str(r#"["m.send.event:a", "zzz"]"#).unwrap();
-        assert_eq!(v[0], Capability::send_event("a"));
-        assert_eq!(serde_json::to_string(&v).unwrap(), r#"["org.matrix.msc2762.send.event:a","zzz"]"#);
-    }
-
-    #[test]
-    fn context_capabilities() {
-        assert_eq!(Capability::ClientContext.to_unstable_string(), "org.matrix.msc4412.client_context");
-        assert_eq!(Capability::MatrixContext.to_stable_string(), "m.matrix_context");
-        assert_eq!(Capability::send_event("x").unstable_prefix(), "org.matrix.msc2762.");
-        assert!(!Capability::ClientContext.allows_send("m.room.message", None, None));
+        let v: Vec<Capability> =
+            serde_json::from_str(r#"["widget:m.send_event.timeline:a", "m.send.event:a", "zzz"]"#).unwrap();
+        assert_eq!(v, [Capability::send_event("a"), other("m.send.event:a"), other("zzz")]);
+        assert_eq!(
+            serde_json::to_string(&v).unwrap(),
+            r#"["widget:org.matrix.mscXXXX.send_event.timeline:a","m.send.event:a","zzz"]"#
+        );
     }
 }

@@ -39,7 +39,7 @@ let out = WidgetRequest::ContentLoaded.into_wire(uuid).to_json();
 let ack = msg.ack();                                  // `{}` reply to any request
 
 // capabilities
-let approved = vec![Capability::parse("org.matrix.msc2762.send.event:m.room.message")];
+let approved = vec![Capability::parse("widget:org.matrix.mscXXXX.send_event.timeline:m.room.message")];
 assert!(approved.allows_send("m.room.message", None, Some("m.text")));
 ```
 

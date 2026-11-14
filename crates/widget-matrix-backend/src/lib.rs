@@ -28,7 +28,7 @@ pub use error::BackendError;
 pub use in_memory::{DelayedEvent, DelegatedDelayedLeave, InMemoryBackend, SentToDeviceMessage, StoredMedia};
 pub use widget_actions::{
     JsonValue, MatrixEvent, MediaConfigResponse as MediaConfig, OpenIdToken, RelationDirection, RoomAccountData,
-    StateKeySelector, ToDeviceEvent, TurnServer, UserDirectorySearchResponse as UserDirectorySearchResult,
+    SearchUserDirectoryResponse as UserDirectorySearchResult, StateKeySelector, ToDeviceEvent, TurnServer,
     UserDirectoryUser,
 };
 

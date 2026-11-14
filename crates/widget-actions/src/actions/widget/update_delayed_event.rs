@@ -2,7 +2,7 @@
 //! delayed event scheduled with `send_event` + `delay`.
 //!
 //! Body: [`UpdateDelayedEventRequest`], acknowledged with `{}`. Requires the
-//! `org.matrix.msc4157.update_delayed_event` capability.
+//! `widget:…update_delayed_event` capability.
 
 use serde::{Deserialize, Serialize};
 

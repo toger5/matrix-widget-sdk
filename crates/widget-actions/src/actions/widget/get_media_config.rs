@@ -2,7 +2,7 @@
 //! configuration (`GET /_matrix/client/v1/media/config`).
 //!
 //! Empty request body, answered with [`MediaConfigResponse`]. Requires
-//! `org.matrix.msc4039.upload_file` (the config is what an uploader needs).
+//! `widget:…get_media_config`.
 
 use serde::{Deserialize, Serialize};
 

@@ -5,19 +5,19 @@ use serde::{Deserialize, Serialize};
 
 use super::{expect, parse_tagged, split_tagged};
 use crate::{
-    ActionError, JsonValue, LanguageChangeRequest, MatrixEvent, NotifyCapabilitiesRequest, OpenIdCredentialsRequest,
-    Source, ToDeviceEvent, TurnServer, UpdateStateRequest, VisibilityRequest, WireMessage,
+    ActionError, ForwardOpenIdCredentialsRequest, JsonValue, MatrixEvent, NotifyCapabilitiesRequest, Source,
+    ToDeviceEvent, TurnServer, UpdateLanguageRequest, UpdateStateRequest, UpdateVisibilityRequest, WireMessage,
 };
 
-pub(crate) mod language_change;
+pub(crate) mod forward_event;
+pub(crate) mod forward_openid_credentials;
+pub(crate) mod forward_to_device;
 pub(crate) mod notify_capabilities;
-pub(crate) mod openid_credentials;
-pub(crate) mod send_event;
-pub(crate) mod send_to_device;
-pub(crate) mod theme_change;
+pub(crate) mod update_language;
 pub(crate) mod update_state;
+pub(crate) mod update_theme;
 pub(crate) mod update_turn_servers;
-pub(crate) mod visibility;
+pub(crate) mod update_visibility;
 
 /// A request sent by the host (`source: host`, has `request`).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -27,42 +27,42 @@ pub enum HostRequest {
     /// Result of a capability negotiation.
     #[serde(rename = "notify_capabilities")]
     NotifyCapabilities { request: NotifyCapabilitiesRequest },
-    /// A room event the widget has a `receive.*` capability for.
-    #[serde(rename = "send_event")]
-    SendEvent {
+    /// A new room event the widget holds a `host:…forward_event.*` capability for.
+    #[serde(rename = "forward_event")]
+    ForwardEvent {
         #[serde(rename = "request")]
         event: MatrixEvent,
     },
-    /// Current room state the widget has `receive.state_event` capabilities for.
+    /// Current room state the widget holds `host:…update_state` capabilities for.
     #[serde(rename = "update_state")]
     UpdateState { request: UpdateStateRequest },
-    /// A to-device message the widget has a `receive.to_device` capability for.
-    #[serde(rename = "send_to_device")]
-    SendToDevice {
+    /// A to-device message the widget holds a `host:…forward_to_device` capability for.
+    #[serde(rename = "forward_to_device")]
+    ForwardToDevice {
         #[serde(rename = "request")]
         message: ToDeviceEvent,
     },
-    /// The late outcome of a `get_openid` (MSC1960).
-    #[serde(rename = "openid_credentials")]
-    OpenIdCredentials { request: OpenIdCredentialsRequest },
-    /// TURN credentials for a widget that is watching them (MSC3846).
+    /// The late outcome of a `get_openid` (MSC1960); covered by `widget:…get_openid`.
+    #[serde(rename = "forward_openid_credentials")]
+    ForwardOpenIdCredentials { request: ForwardOpenIdCredentialsRequest },
+    /// TURN credentials for a widget that is watching them (MSC3846). Needs `host:…update_turn_servers`.
     #[serde(rename = "update_turn_servers")]
     UpdateTurnServers {
         #[serde(rename = "request")]
         server: TurnServer,
     },
-    /// The client's theme changed (MSC2873); the body shape is up to the client.
-    #[serde(rename = "theme_change")]
-    ThemeChange {
+    /// The client's theme changed (MSC2873); the body shape is up to the client. Needs `host:…update_theme`.
+    #[serde(rename = "update_theme")]
+    UpdateTheme {
         #[serde(rename = "request")]
         theme: JsonValue,
     },
-    /// The client's UI language changed.
-    #[serde(rename = "language_change")]
-    LanguageChange { request: LanguageChangeRequest },
-    /// The client started or stopped showing the widget.
-    #[serde(rename = "visibility")]
-    Visibility { request: VisibilityRequest },
+    /// The client's UI language changed. Needs `host:…update_language`.
+    #[serde(rename = "update_language")]
+    UpdateLanguage { request: UpdateLanguageRequest },
+    /// The client started or stopped showing the widget. Needs `host:…update_visibility`.
+    #[serde(rename = "update_visibility")]
+    UpdateVisibility { request: UpdateVisibilityRequest },
     /// An action this crate does not know; see [`WidgetRequest::Unknown`](crate::WidgetRequest::Unknown).
     #[serde(other)]
     Unknown,
@@ -77,22 +77,22 @@ pub enum HostRequest {
 pub enum HostResponse {
     #[serde(rename = "notify_capabilities")]
     NotifyCapabilities,
-    #[serde(rename = "send_event")]
-    SendEvent,
+    #[serde(rename = "forward_event")]
+    ForwardEvent,
     #[serde(rename = "update_state")]
     UpdateState,
-    #[serde(rename = "send_to_device")]
-    SendToDevice,
-    #[serde(rename = "openid_credentials")]
-    OpenIdCredentials,
+    #[serde(rename = "forward_to_device")]
+    ForwardToDevice,
+    #[serde(rename = "forward_openid_credentials")]
+    ForwardOpenIdCredentials,
     #[serde(rename = "update_turn_servers")]
     UpdateTurnServers,
-    #[serde(rename = "theme_change")]
-    ThemeChange,
-    #[serde(rename = "language_change")]
-    LanguageChange,
-    #[serde(rename = "visibility")]
-    Visibility,
+    #[serde(rename = "update_theme")]
+    UpdateTheme,
+    #[serde(rename = "update_language")]
+    UpdateLanguage,
+    #[serde(rename = "update_visibility")]
+    UpdateVisibility,
     /// A response to an action this crate does not know; the raw body is in the [`WireMessage`].
     #[serde(other)]
     Unknown,
@@ -150,5 +150,30 @@ mod tests {
 
         let bad = WireMessage::request(Source::Host, "update_state", "b", json!({"state": 5}));
         assert!(matches!(HostRequest::from_wire(&bad), Err(ActionError::InvalidBody { .. })));
+    }
+
+    /// The actions renamed by the capability naming proposal have no aliases: the old names are
+    /// unknown actions. Only the compat wrapper translates them.
+    #[test]
+    fn renamed_actions_are_only_known_by_their_new_name() {
+        let renamed = [
+            ("send_event", "forward_event"),
+            ("send_to_device", "forward_to_device"),
+            ("openid_credentials", "forward_openid_credentials"),
+            ("theme_change", "update_theme"),
+            ("language_change", "update_language"),
+            ("visibility", "update_visibility"),
+        ];
+        for (old, new) in renamed {
+            let request = |action| HostRequest::from_wire(&WireMessage::request(Source::Host, action, "r", json!({})));
+            assert_eq!(request(old), Ok(HostRequest::Unknown), "{old}");
+            // Known: either parsed, or rejected for its body, but never `Unknown`.
+            assert_ne!(request(new), Ok(HostRequest::Unknown), "{new}");
+            let response = |action: &str| {
+                HostResponse::from_wire(&WireMessage::request(Source::Host, action, "r", json!({})).ack())
+            };
+            assert_eq!(response(old), Ok(HostResponse::Unknown), "{old}");
+            assert_ne!(response(new), Ok(HostResponse::Unknown), "{new}");
+        }
     }
 }

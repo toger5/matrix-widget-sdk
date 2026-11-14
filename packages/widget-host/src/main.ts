@@ -117,8 +117,19 @@ function showMedia() {
   );
 }
 
-/** Capabilities the compat wrapper needs to template a legacy widget's URL. */
-const CONTEXT_CAPABILITIES = ["org.matrix.msc4412.matrix_context", "org.matrix.msc4412.client_context"];
+/**
+ * Capabilities granted to a legacy widget (behind the compat wrapper) without a prompt, because a
+ * legacy client did not ask for them either: the facts it put into the widget URL, the theme,
+ * language and visibility updates, and asking for an OpenID token (which still asks per request).
+ */
+const LEGACY_AUTO_APPROVED = [
+  "widget:org.matrix.mscXXXX.get_matrix_context",
+  "widget:org.matrix.mscXXXX.get_client_context",
+  "widget:org.matrix.mscXXXX.get_openid",
+  "host:org.matrix.mscXXXX.update_theme",
+  "host:org.matrix.mscXXXX.update_language",
+  "host:org.matrix.mscXXXX.update_visibility",
+];
 
 let driver: WidgetHostDriver | undefined;
 let backend: InMemoryBackend | undefined;
@@ -232,9 +243,9 @@ async function loadWidget() {
   mediaUrls.clear();
   await seedMedia(backend);
   driver = new WidgetHostDriver(backend.asBackend(), platform);
-  // A legacy client handed these facts over as URL template parameters; the compat wrapper
-  // asks for them instead, so grant them without a prompt. The driver applies the rule.
-  if (widget.legacy) driver.setAutoApproved(CONTEXT_CAPABILITIES);
+  // What a legacy client gave a widget without asking; the compat wrapper requests these as
+  // capabilities, so grant them without a prompt. The driver applies the rule.
+  if (widget.legacy) driver.setAutoApproved(LEGACY_AUTO_APPROVED);
   driver.setOpenidAutoApproved(checked("autoApproveOpenId"));
   widgetOrigin = new URL(widget.url).origin;
   iframe = Object.assign(document.createElement("iframe"), { src: widget.url, hidden: widget.usesWidgetApi });
@@ -277,9 +288,9 @@ $("injectToDeviceBtn").onclick = () => {
 };
 $("clear").onclick = () => (backend?.clear(), refresh());
 let visible = true;
-$("themeChange").onclick = () => driver?.notifyThemeChange({ name: "dark", is_dark: true });
-$("languageChange").onclick = () => driver?.notifyLanguageChange("de");
-$("visibility").onclick = () => ((visible = !visible), driver?.notifyVisibility(visible));
+$("themeChange").onclick = () => driver?.updateTheme({ name: "dark", is_dark: true });
+$("languageChange").onclick = () => driver?.updateLanguage("de");
+$("visibility").onclick = () => ((visible = !visible), driver?.updateVisibility(visible));
 let turnCounter = 0;
 $("pushTurn").onclick = () => {
   turnCounter += 1;

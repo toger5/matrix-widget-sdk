@@ -27,15 +27,17 @@ are previewed, other files get a save link), **upload_file: last download** and 
 chosen file** (pick any file from disk). An upload puts the new URI into the input, so the file
 can be downloaded straight back. The new widget sends the bytes as base64; the legacy widget
 sends a `Blob`, which the compat wrapper converts. Incoming `send_event` and
-`update_state` are acknowledged and logged. The state panel shows `urlParams`, the query
+`update_state` are acknowledged and logged. The legacy widget requests matrix-widget-api
+capabilities (`legacy/capabilities.ts`); the compat wrapper translates them. The state panel shows `urlParams`, the query
 parameters the page was loaded with: when embedded through the compat wrapper that is the
 wrapper's templating result (`userId`, `baseUrl`, `parentUrl`, ...). The same object is written
 to the console once on load, so headless runs can read it.
 
 New (`/new/`): `request_capabilities`, `content_loaded`, send `m.room.message`, send state
-`m.room.topic`, read `m.room.message`, read state `m.room.topic`, `matrix_context`,
-`client_context` (the default capability list includes `org.matrix.msc4412.matrix_context` and
-`org.matrix.msc4412.client_context`). Incoming `send_event`,
+`m.room.topic`, read `m.room.message`, read state `m.room.topic`, `get_matrix_context`,
+`get_client_context`. The default capability list (`new/capabilities.ts`) uses the names of
+`docs/spec-appendix/capability-naming-proposal.md`, one capability per action, e.g.
+`widget:org.matrix.mscXXXX.send_event.timeline:m.room.message`. Incoming `forward_event`,
 `update_state` and `notify_capabilities` are logged and the state panel shows the SDK's state.
 
 ## URL parameters

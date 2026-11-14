@@ -10,6 +10,8 @@ import {
   EXTRA_CAPABILITIES,
   RELATION_CAPABILITIES,
   TO_DEVICE_CAPABILITIES,
+} from "./capabilities";
+import {
   TO_DEVICE_MESSAGES,
   button,
   capabilityList,
@@ -30,20 +32,20 @@ await init();
 const api = WidgetApi.connectToParent();
 const refresh = () => showState(api.state);
 
-api.onEvent((event: unknown) => (log("send_event", event), refresh()));
+api.onEvent((event: unknown) => (log("forward_event", event), refresh()));
 api.onStateUpdate((state: unknown) => (log("update_state", state), refresh()));
-api.onToDeviceMessage((message: unknown) => log("send_to_device", message));
+api.onToDeviceMessage((message: unknown) => log("forward_to_device", message));
 api.onTurnServer((server: unknown) => log("update_turn_servers", server));
-api.onThemeChange((theme: unknown) => log("theme_change", theme));
-api.onLanguageChange((lang: string) => log("language_change", lang));
-api.onVisibilityChange((visible: boolean) => log("visibility", visible));
+api.onThemeChange((theme: unknown) => log("update_theme", theme));
+api.onLanguageChange((lang: string) => log("update_language", lang));
+api.onVisibilityChange((visible: boolean) => log("update_visibility", visible));
 api.onCapabilitiesChanged((requested: string[], approved: string[]) => (log("notify_capabilities", { requested, approved }), refresh()));
 
 const content = () => ({ msgtype: "m.text", body: valueOf("body") });
 mount("MSC4412 test widget (widget-base-sdk)", [
   input(
     "caps",
-    `${DEFAULT_CAPABILITIES},${DELAYED_CAPABILITIES},${RELATION_CAPABILITIES},${TO_DEVICE_CAPABILITIES},${EXTRA_CAPABILITIES},org.matrix.msc4412.matrix_context,org.matrix.msc4412.client_context`,
+    `${DEFAULT_CAPABILITIES},${DELAYED_CAPABILITIES},${RELATION_CAPABILITIES},${TO_DEVICE_CAPABILITIES},${EXTRA_CAPABILITIES}`,
     "capabilities",
   ),
   button("request_capabilities", () => api.requestCapabilities(capabilityList()).finally(refresh)),
@@ -67,7 +69,7 @@ mount("MSC4412 test widget (widget-base-sdk)", [
   button("watch_turn_servers", () => api.watchTurnServers()),
   button("unwatch_turn_servers", () => api.unwatchTurnServers()),
   button("get_rtc_transports", () => api.getRtcTransports()),
-  button("user_directory_search 'ali'", () => api.searchUserDirectory("ali", 10)),
+  button("search_user_directory 'ali'", () => api.searchUserDirectory("ali", 10)),
   button("get_media_config", () => api.getMediaConfig()),
   ...fileControls({
     async download(contentUri) {
@@ -80,11 +82,11 @@ mount("MSC4412 test widget (widget-base-sdk)", [
     },
   }),
   button("read_room_account_data m.tag", () => api.readRoomAccountData("m.tag")),
-  button("rtc_livekit_get_token", () =>
-    api.rtcLivekitGetToken({ server_name: "example.org", url: "https://livekit.example.org", room_id: "!room:example.org", slot_id: "slot", member_id: "member" }),
+  button("get_rtc_livekit_token", () =>
+    api.getRtcLivekitToken({ server_name: "example.org", url: "https://livekit.example.org", room_id: "!room:example.org", slot_id: "slot", member_id: "member" }),
   ),
-  button("matrix_context", () => api.getMatrixContext()),
-  button("client_context", () => api.getClientContext()),
+  button("get_matrix_context", () => api.getMatrixContext()),
+  button("get_client_context", () => api.getClientContext()),
 ]);
 refresh();
 if (new URLSearchParams(location.search).get("autostart") !== "0") {

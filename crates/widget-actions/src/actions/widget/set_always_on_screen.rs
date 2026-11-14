@@ -2,7 +2,7 @@
 //! visible while the user moves around, e.g. a running call.
 //!
 //! Body: [`SetAlwaysOnScreenRequest`], answered with [`SetAlwaysOnScreenResponse`]. Requires
-//! `m.always_on_screen`.
+//! `widget:…set_always_on_screen`.
 
 use serde::{Deserialize, Serialize};
 

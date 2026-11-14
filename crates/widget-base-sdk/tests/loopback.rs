@@ -116,8 +116,12 @@ fn full_widget_lifecycle() {
         // 1. The widget asks for capabilities before showing itself.
         let caps = vec![
             Capability::send_event("m.room.message"),
-            Capability::receive_event("m.room.message"),
-            Capability::receive_state_event("m.room.topic", None::<&str>),
+            // New messages and topic changes are forwarded, the topic is kept up to date, and
+            // the widget may read the topic itself: one capability per action.
+            Capability::forward_event("m.room.message"),
+            Capability::forward_state_event("m.room.topic", None::<&str>),
+            Capability::update_state("m.room.topic", None::<&str>),
+            Capability::read_state_events("m.room.topic", None::<&str>),
             Capability::send_state_event("m.room.topic", Some("")),
         ];
         let cap_fut = l.client.request_capabilities(caps.clone());
@@ -128,7 +132,7 @@ fn full_widget_lifecycle() {
 
         // 2. The user approves all but the topic write. The driver subscribes to the backend;
         //    the room has no topic yet, so no `update_state` is pushed.
-        let approved: Vec<Capability> = caps.iter().take(3).cloned().collect();
+        let approved: Vec<Capability> = caps.iter().take(caps.len() - 1).cloned().collect();
         l.driver.approve_capabilities(approved.clone());
         l.pump().await;
         assert_eq!(l.client.state().approved, approved);
@@ -161,7 +165,7 @@ fn full_widget_lifecycle() {
         assert!(matches!(denied.await, Err(widget_base_sdk::WidgetClientError::Host(_))));
 
         // 6. Sync delivers events (injected into the backend); only permitted ones reach the
-        //    widget. A state event arrives as `send_event` and as a state update.
+        //    widget. A state event arrives as `forward_event` and as a state update.
         let topic = MatrixEvent {
             event_type: "m.room.topic".into(),
             sender: "@admin:example".into(),

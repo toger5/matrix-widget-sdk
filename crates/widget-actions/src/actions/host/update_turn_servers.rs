@@ -1,5 +1,5 @@
 //! `update_turn_servers` (MSC3846), host -> widget: a (new) set of TURN credentials for a widget
-//! that is watching them.
+//! that is watching them. Needs `host:…update_turn_servers`.
 //!
 //! Body: a [`TurnServer`](crate::TurnServer), acknowledged with `{}`.
 

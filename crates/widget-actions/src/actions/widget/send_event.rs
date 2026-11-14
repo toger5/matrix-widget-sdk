@@ -1,15 +1,16 @@
 //! `send_event` (MSC2762), widget -> host: send an event to the room.
 //!
-//! Body: [`SendEventRequest`], answered with [`SendEventResponse`]. Requires a `send.*`
-//! capability. The host -> widget action of the same name lives in `actions::host::send_event`.
+//! Body: [`SendEventRequest`], answered with [`SendEventResponse`]. Requires a
+//! `widget:…send_event.timeline:<type>` or `widget:…send_event.state:<type>` capability. The host's
+//! delivery of an event is a different action, `forward_event` (`actions::host::forward_event`).
 //!
 //! Extensions carried in the same body:
 //!
-//! * `room_id` (MSC2762): another room's timeline; needs `org.matrix.msc2762.timeline:<room>`.
-//! * `delay` (MSC4157): schedule the send; needs `org.matrix.msc4157.send.delayed_event`. The
+//! * `room_id` (MSC2762): may only name the widget's own room.
+//! * `delay` (MSC4157): schedule the send; needs `widget:…send_event.delayed`. The
 //!   response then carries a `delay_id` instead of an `event_id`.
 //! * `sticky_duration_ms` (MSC4407 / MSC4354): a sticky event; needs
-//!   `org.matrix.msc4407.send.sticky_event`. Not allowed together with `state_key`.
+//!   `widget:…send_event.sticky`. Not allowed together with `state_key`.
 
 use serde::{Deserialize, Serialize};
 

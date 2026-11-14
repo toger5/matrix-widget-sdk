@@ -1,9 +1,9 @@
 //! `org.matrix.msc3869.read_relations` (MSC3869), widget -> host: read the events relating to
 //! one event (`GET /rooms/{roomId}/relations/{eventId}[/{relType}[/{eventType}]]`).
 //!
-//! Body: [`ReadRelationsRequest`], answered with [`ReadRelationsResponse`]. No capability of its
-//! own: the host filters the result by the widget's `receive.*` capabilities (and `room_id`
-//! needs the `timeline:<room>` capability, as for `send_event`).
+//! Body: [`ReadRelationsRequest`], answered with [`ReadRelationsResponse`]. The host filters the
+//! result by the widget's `widget:…read_relations:<type>` capabilities. `room_id` may only name
+//! the widget's own room.
 
 use serde::{Deserialize, Serialize};
 

@@ -6,16 +6,16 @@
 //! response, and `handle_request` sends it.
 
 use widget_actions::{
-    Base64File, Capability, CapabilitySet, ClientContextResponse, DownloadFileRequest, DownloadFileResponse,
-    GetOpenIdResponse, MatrixContextResponse, ReadEventsRequest, ReadEventsResponse, ReadRelationsRequest,
-    ReadRelationsResponse, ReadRoomAccountDataRequest, ReadRoomAccountDataResponse, RtcLivekitGetTokenResponse,
+    Base64File, Capability, CapabilitySet, DownloadFileRequest, DownloadFileResponse, GetClientContextResponse,
+    GetMatrixContextResponse, GetOpenIdResponse, GetRtcLivekitTokenResponse, ReadEventsRequest, ReadEventsResponse,
+    ReadRelationsRequest, ReadRelationsResponse, ReadRoomAccountDataRequest, ReadRoomAccountDataResponse,
     RtcTransportsResponse, SendEventRequest, SendEventResponse, SendToDeviceRequest, SetAlwaysOnScreenResponse,
     UpdateDelayedEventAction, UpdateDelayedEventRequest, UploadFileRequest, UploadFileResponse, WidgetError,
     WidgetRequest, WidgetResponse, WireMessage,
 };
 use widget_matrix_backend::{BackendError, MediaFile, ToDeviceMessage};
 
-use super::access::{self, ReadScope};
+use super::access;
 use super::WidgetHostDriver;
 use crate::PlatformError;
 
@@ -84,7 +84,7 @@ impl WidgetHostDriver {
                 W::UnwatchTurnServers
             }
             R::GetRtcTransports => W::GetRtcTransports { response: self.rtc_transports().await? },
-            R::UserDirectorySearch { request } => W::UserDirectorySearch {
+            R::SearchUserDirectory { request } => W::SearchUserDirectory {
                 response: backend
                     .search_user_directory(request.search_term, request.limit)
                     .await
@@ -95,8 +95,8 @@ impl WidgetHostDriver {
             },
             R::UploadFile { request } => W::UploadFile { response: self.upload_file(request).await? },
             R::DownloadFile { request } => W::DownloadFile { response: self.download_file(request).await? },
-            R::RtcLivekitGetToken { request } => W::RtcLivekitGetToken {
-                response: RtcLivekitGetTokenResponse {
+            R::GetRtcLivekitToken { request } => W::GetRtcLivekitToken {
+                response: GetRtcLivekitTokenResponse {
                     jwt: backend
                         .rtc_livekit_get_token(
                             request.server_name,
@@ -109,7 +109,7 @@ impl WidgetHostDriver {
                         .map_err(backend_error("Failed to get a LiveKit token"))?,
                 },
             },
-            R::RtcLivekitDelegateDelayedLeave { request } => {
+            R::DelegateRtcLivekitDelayedLeave { request } => {
                 backend
                     .rtc_livekit_delegate_delayed_leave(
                         request.url,
@@ -120,7 +120,7 @@ impl WidgetHostDriver {
                     )
                     .await
                     .map_err(backend_error("Failed to delegate the delayed leave"))?;
-                W::RtcLivekitDelegateDelayedLeave
+                W::DelegateRtcLivekitDelayedLeave
             }
             R::Navigate { request } => {
                 if !request.uri.starts_with("https://matrix.to/#") {
@@ -132,8 +132,8 @@ impl WidgetHostDriver {
             R::SetAlwaysOnScreen { request } => W::SetAlwaysOnScreen {
                 response: SetAlwaysOnScreenResponse { success: self.platform.set_always_on_screen(request.value) },
             },
-            R::MatrixContext => W::MatrixContext {
-                response: MatrixContextResponse {
+            R::GetMatrixContext => W::GetMatrixContext {
+                response: GetMatrixContextResponse {
                     user_id: backend.own_user_id(),
                     device_id: backend.own_device_id(),
                     room_id: backend.room_id(),
@@ -142,8 +142,8 @@ impl WidgetHostDriver {
                     matrix_base_url: backend.base_url(),
                 },
             },
-            R::ClientContext => W::ClientContext {
-                response: ClientContextResponse {
+            R::GetClientContext => W::GetClientContext {
+                response: GetClientContextResponse {
                     client_id: self.platform.client_id(),
                     client_theme: self.platform.client_theme(),
                     client_language: self.platform.client_language(),
@@ -248,18 +248,16 @@ impl WidgetHostDriver {
     }
 
     /// `read_events`: check the rooms and the event type, read from the backend, and drop what the
-    /// widget may not receive (e.g. other state keys or msgtypes).
+    /// widget may not read (e.g. other state keys or msgtypes).
     async fn read_events(&self, request: ReadEventsRequest) -> Result<ReadEventsResponse, WidgetError> {
         let approved = self.approved();
         let room_id = self.backend.room_id();
-        if access::read_scope(&approved, &room_id, request.room_ids.as_ref())? == ReadScope::Nothing {
-            return Ok(ReadEventsResponse::default());
-        }
+        access::check_rooms(&room_id, request.room_ids.as_ref())?;
         if !approved.allows_read_type(&request.event_type, request.is_state()) {
             let needed = if request.is_state() {
-                Capability::receive_state_event(&request.event_type, None::<&str>)
+                Capability::read_state_events(&request.event_type, None::<&str>)
             } else {
-                Capability::receive_event(&request.event_type)
+                Capability::read_events(&request.event_type)
             };
             return Err(access::missing(&needed));
         }
@@ -271,18 +269,18 @@ impl WidgetHostDriver {
             }
         }
         .map_err(backend_error("Failed to read events"))?;
-        let mut events: Vec<_> = events.into_iter().filter(|e| access::may_receive(&approved, e)).collect();
+        let mut events: Vec<_> = events.into_iter().filter(|e| access::may_read(&approved, e)).collect();
         events.truncate(limit as usize);
         Ok(ReadEventsResponse { events })
     }
 
-    /// `read_relations`: needs no capability of its own. The page is reduced to the events the
-    /// widget may receive, as in matrix-widget-api.
+    /// `read_relations`: the page is reduced to the related events the widget holds a
+    /// `read_relations:<type>` capability for. Without any, the page is empty.
     async fn read_relations(&self, request: ReadRelationsRequest) -> Result<ReadRelationsResponse, WidgetError> {
         let approved = self.approved();
         let room_id = self.backend.room_id();
         if let Some(requested) = &request.room_id {
-            access::check_room(&approved, &room_id, requested)?;
+            access::check_room(&room_id, requested)?;
         }
         let ReadRelationsRequest { event_id, rel_type, event_type, limit, from, to, direction, .. } = request;
         let page = self
@@ -291,7 +289,7 @@ impl WidgetHostDriver {
             .await
             .map_err(backend_error("Failed to read relations"))?;
         Ok(ReadRelationsResponse {
-            chunk: page.chunk.into_iter().filter(|e| access::may_receive(&approved, e)).collect(),
+            chunk: page.chunk.into_iter().filter(|e| access::may_read_relation(&approved, e)).collect(),
             next_batch: page.next_batch,
             prev_batch: page.prev_batch,
         })
@@ -304,11 +302,9 @@ impl WidgetHostDriver {
     ) -> Result<ReadRoomAccountDataResponse, WidgetError> {
         let approved = self.approved();
         let room_id = self.backend.room_id();
-        if access::read_scope(&approved, &room_id, request.room_ids.as_ref())? == ReadScope::Nothing {
-            return Ok(ReadRoomAccountDataResponse::default());
-        }
-        if !approved.allows_receive_room_account_data(&request.event_type) {
-            return Err(access::missing(&Capability::receive_room_account_data(&request.event_type)));
+        access::check_rooms(&room_id, request.room_ids.as_ref())?;
+        if !approved.allows_read_room_account_data(&request.event_type) {
+            return Err(access::missing(&Capability::read_room_account_data(&request.event_type)));
         }
         let events = self
             .backend

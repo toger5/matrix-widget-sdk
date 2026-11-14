@@ -134,13 +134,13 @@
   <g>
     <rect x="30" y="882" width="1140" height="34" fill="#ffffff"/>
     <text x="42" y="904" class="m">URL templates ($matrix_user_id …)</text>
-    <text x="440" y="904" class="b">Dropped. Replaced by org.matrix.msc4412.matrix_context / client_context: asked for, behind a capability.</text>
+    <text x="440" y="904" class="b">Dropped. Replaced by org.matrix.msc4412.get_matrix_context / get_client_context: asked for, behind a capability.</text>
   </g>
   <g>
     <rect x="30" y="916" width="1140" height="34" fill="#f9fafb"/>
     <text x="42" y="938" class="m">msc2974.request_capabilities → request_capabilities</text>
-    <text x="440" y="938" class="b">The one renamed action. The legacy name is accepted as alias.</text>
+    <text x="440" y="938" class="b">Renamed by MSC4412, legacy name accepted. More renames (host send_event → forward_event, …): wrapper only, no alias.</text>
   </g>
   <line x1="30" y1="950" x2="1170" y2="950" stroke="#e5e7eb"/>
-  <text x="30" y="978" class="s">Unchanged: requestId, action names (the unstable MSC spelling such as org.matrix.msc2876.read_events is emitted, the prefix-less one accepted), bodies, error shape.</text>
+  <text x="30" y="978" class="s">Unchanged: requestId, most action names (the unstable MSC spelling such as org.matrix.msc2876.read_events is emitted, the prefix-less one accepted), bodies, error shape.</text>
 </svg>

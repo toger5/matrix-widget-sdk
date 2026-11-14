@@ -58,29 +58,33 @@ function setup() {
 describe("WidgetHostDriver through the JS bindings", () => {
   it("negotiates capabilities, sends, reads and receives events", async () => {
     const { backend, driver, ask, drain } = setup();
+    const W = "widget:org.matrix.mscXXXX.";
+    const H = "host:org.matrix.mscXXXX.";
     const caps = [
-      "org.matrix.msc2762.send.event:m.room.message",
-      "org.matrix.msc2762.receive.event:m.room.message",
-      "org.matrix.msc2762.receive.state_event:m.room.topic",
-      "org.matrix.msc4157.send.delayed_event",
-      "org.matrix.msc4157.update_delayed_event",
-      "org.matrix.msc3819.send.to_device:org.example.ping",
-      "org.matrix.msc3819.receive.to_device:org.example.ping",
-      "town.robin.msc3846.turn_servers",
-      "org.matrix.msc2931.navigate",
-      "org.matrix.msc4412.matrix_context",
+      `${W}send_event.timeline:m.room.message`,
+      `${W}read_events.timeline:m.room.message`,
+      `${H}forward_event.timeline:m.room.message`,
+      `${H}update_state:m.room.topic`,
+      `${W}send_event.delayed`,
+      `${W}update_delayed_event`,
+      `${W}send_to_device:org.example.ping`,
+      `${H}forward_to_device:org.example.ping`,
+      `${H}update_turn_servers`,
+      `${W}navigate`,
+      `${W}get_matrix_context`,
     ];
     expect(await ask("request_capabilities", { capabilities: caps })).toEqual({});
     await new Promise((r) => setTimeout(r, 0));
     const notify = drain().find((m) => m.action === "notify_capabilities");
+    // The strings cross the FFI unchanged, in both directions.
     expect((notify?.request as { approved: string[] }).approved).toEqual(caps);
     expect(driver.snapshot().approved).toEqual(caps);
 
     const sentEvent = await ask("send_event", { type: "m.room.message", content: { msgtype: "m.text", body: "hi" } });
     expect(sentEvent.room_id).toBe("!room:example.org");
     expect(typeof sentEvent.event_id).toBe("string");
-    // Echoed through the subscription as host -> widget send_event.
-    expect(drain().some((m) => m.source === "host" && m.action === "send_event")).toBe(true);
+    // Echoed through the subscription as host -> widget forward_event.
+    expect(drain().some((m) => m.source === "host" && m.action === "forward_event")).toBe(true);
     expect(backend.timeline()).toHaveLength(1);
 
     const read = await ask("org.matrix.msc2876.read_events", { type: "m.room.message", limit: 10 });
@@ -98,7 +102,7 @@ describe("WidgetHostDriver through the JS bindings", () => {
     expect(backend.toDeviceSent()).toHaveLength(1);
     drain();
     backend.injectToDevice({ eventType: "org.example.ping", sender: "@bob:example.org", content: { n: 2 }, encrypted: true });
-    const incoming = drain().find((m) => m.action === "send_to_device");
+    const incoming = drain().find((m) => m.action === "forward_to_device");
     expect(incoming?.request).toEqual({ type: "org.example.ping", sender: "@bob:example.org", content: { n: 2 }, encrypted: true });
 
     expect(await ask("watch_turn_servers")).toEqual({});
@@ -106,12 +110,15 @@ describe("WidgetHostDriver through the JS bindings", () => {
     expect(drain().find((m) => m.action === "update_turn_servers")?.request).toEqual({ uris: ["turn:x"], username: "u", password: "p" });
 
     expect(await ask("org.matrix.msc2931.navigate", { uri: "https://matrix.to/#/#x:example.org" })).toEqual({});
-    const context = await ask("org.matrix.msc4412.matrix_context");
+    const context = await ask("org.matrix.msc4412.get_matrix_context");
     expect(context.user_id).toBe("@alice:example.org");
 
-    // Missing capability -> error response with a message.
-    const denied = await ask("org.matrix.msc3973.user_directory_search", { search_term: "a" });
-    expect((denied.error as { message: string }).message).toContain("user_directory_search");
+    // Missing capability -> error response naming the capability.
+    const denied = await ask("org.matrix.msc3973.search_user_directory", { search_term: "a" });
+    expect((denied.error as { message: string }).message).toBe(`Missing capability for ${W}search_user_directory`);
+    // The actions' old names are unknown to the host; only the compat wrapper translates them.
+    const old = await ask("org.matrix.msc3973.user_directory_search", { search_term: "a" });
+    expect((old.error as { message: string }).message).toContain("Unknown action");
 
     // Backend failures carry the Matrix error details.
     backend.failSends("boom");
@@ -119,16 +126,42 @@ describe("WidgetHostDriver through the JS bindings", () => {
     expect((failed.error as { message: string }).message).toContain("boom");
   });
 
+  it("accepts the stable namespace, emits the unstable one and grants nothing for legacy names", async () => {
+    const { driver, ask, drain } = setup();
+    const legacy = "org.matrix.msc2762.send.event:m.room.message";
+    expect(await ask("request_capabilities", { capabilities: ["widget:m.navigate", "host:m.update_state:m.room.member#@a:x", legacy] })).toEqual({});
+    await new Promise((r) => setTimeout(r, 0));
+    const notify = drain().find((m) => m.action === "notify_capabilities");
+    const approved = ["widget:org.matrix.mscXXXX.navigate", "host:org.matrix.mscXXXX.update_state:m.room.member#@a:x", legacy];
+    expect((notify?.request as { approved: string[] }).approved).toEqual(approved);
+    expect(driver.snapshot().approved).toEqual(approved);
+
+    expect(await ask("org.matrix.msc2931.navigate", { uri: "https://matrix.to/#/#x:example.org" })).toEqual({});
+    // The legacy string is kept as an unknown capability and allows nothing.
+    const denied = await ask("send_event", { type: "m.room.message", content: { body: "hi" } });
+    expect((denied.error as { message: string }).message).toBe("Missing capability for widget:org.matrix.mscXXXX.send_event.timeline:m.room.message");
+  });
+
   it("runs the two-phase OpenID flow and the client pushes", async () => {
     const { platform, driver, ask, drain } = setup();
+    // Asking for a token and every push are capabilities of their own.
+    expect(((await ask("get_openid")).error as { message: string }).message).toContain("get_openid");
+    driver.updateTheme({ name: "dark" });
+    expect(drain().filter((m) => m.source === "host")).toEqual([]);
+    const W = "widget:org.matrix.mscXXXX.";
+    const H = "host:org.matrix.mscXXXX.";
+    await ask("request_capabilities", { capabilities: [`${W}get_openid`, `${H}update_theme`, `${H}update_language`, `${H}update_visibility`] });
+    await new Promise((r) => setTimeout(r, 0));
+    drain();
+
     const pending = await ask("get_openid");
     expect(pending).toEqual({ state: "request" });
     expect(platform.openidAsked).toBe(1);
     drain();
     await driver.resolveOpenid(true);
-    const creds = drain().find((m) => m.action === "openid_credentials")?.request as Record<string, unknown>;
+    const creds = drain().find((m) => m.action === "forward_openid_credentials")?.request as Record<string, unknown>;
     expect(creds.state).toBe("allowed");
-    expect(creds.original_request_id).toBe("req-1");
+    expect(creds.original_request_id).toBe("req-3");
     expect(creds.matrix_server_name).toBe("matrix.example.org");
 
     driver.setOpenidAutoApproved(true);
@@ -136,9 +169,9 @@ describe("WidgetHostDriver through the JS bindings", () => {
     expect(platform.openidAsked).toBe(1);
     drain();
 
-    driver.notifyThemeChange({ name: "dark" });
-    driver.notifyLanguageChange("de");
-    driver.notifyVisibility(false);
-    expect(drain().map((m) => m.action)).toEqual(["theme_change", "language_change", "visibility"]);
+    driver.updateTheme({ name: "dark" });
+    driver.updateLanguage("de");
+    driver.updateVisibility(false);
+    expect(drain().map((m) => m.action)).toEqual(["update_theme", "update_language", "update_visibility"]);
   });
 });

@@ -1,12 +1,12 @@
 /**
  * The protocol bridge: a legacy widget on one side, an MSC4412 host on the other.
  *
- * Most messages are only re-enveloped (envelope.ts) and forwarded. The bridge does three things
+ * Most messages are only re-enveloped (envelope.ts) and forwarded. The bridge does four things
  * itself:
  *
  * 1. **Bootstrap.** A legacy widget URL contains template variables (`$matrix_user_id`, ...).
- *    Before loading the widget, the bridge asks the host for the `matrix_context` and
- *    `client_context` capabilities, fetches both contexts and fills in the URL (template.ts).
+ *    Before loading the widget, the bridge asks the host for the `get_matrix_context` and
+ *    `get_client_context` capabilities, fetches both contexts and fills in the URL (template.ts).
  *    If the host refuses, the variables stay empty and the widget still loads.
  * 2. **Startup handshake.** The two protocols start differently:
  *    - Legacy capabilities are requested by the host (`capabilities` to the widget). MSC4412
@@ -16,13 +16,17 @@
  *      or on the widget's `content_loaded` (`waitForIframeLoad: false`). The bridge does the same.
  *    - The legacy widget asks `supported_api_versions`, which MSC4412 does not have. The bridge
  *      answers it.
- * 3. **Files.** Legacy widgets send files as `Blob`; MSC4412 hosts expect base64 (files.ts).
+ * 3. **Capabilities.** The widget asks for legacy capabilities; the host only knows the new ones.
+ *    The bridge requests what each legacy capability stands for, plus what the legacy api allowed
+ *    without asking, and translates the host's answer back (capabilities.ts).
+ * 4. **Files.** Legacy widgets send files as `Blob`; MSC4412 hosts expect base64 (files.ts).
  *
  * The class does no I/O. It is driven by `start`, `onIframeLoad`, `onWidgetMessage` and
  * `onHostMessage`, and sends through the callbacks in {@link BridgeOptions}.
  */
 import { CurrentApiVersions } from "matrix-widget-api";
 
+import { capabilitiesToRequest, collapseApproved, widgetCapability } from "./capabilities";
 import {
   API_VERSION,
   errorBody,
@@ -33,6 +37,7 @@ import {
   legacyResponse,
   newRequestToLegacy,
   newResponse,
+  toNewAction,
   type LegacyMessage,
   type NewMessage,
 } from "./envelope";
@@ -40,10 +45,18 @@ import { DOWNLOAD_FILE_ACTION, downloadResponseToLegacy, UPLOAD_FILE_ACTION, upl
 import { renderLegacyUrl, type ClientContext, type MatrixContext } from "./template";
 
 /** The context actions, in the unstable spelling the host emits (`docs/parity.md`). */
-export const MATRIX_CONTEXT_ACTION = "org.matrix.msc4412.matrix_context";
-export const CLIENT_CONTEXT_ACTION = "org.matrix.msc4412.client_context";
-/** The capabilities for the context actions. Each is spelled exactly like its action. */
-export const CONTEXT_CAPABILITIES = [MATRIX_CONTEXT_ACTION, CLIENT_CONTEXT_ACTION];
+export const MATRIX_CONTEXT_ACTION = "org.matrix.msc4412.get_matrix_context";
+export const CLIENT_CONTEXT_ACTION = "org.matrix.msc4412.get_client_context";
+/** The capabilities for the context actions. */
+export const CONTEXT_CAPABILITIES = [widgetCapability("get_matrix_context"), widgetCapability("get_client_context")];
+
+const REQUEST_CAPABILITIES_ACTION = "request_capabilities";
+const NOTIFY_CAPABILITIES_ACTION = "notify_capabilities";
+
+const capabilitiesOf = (body: unknown): string[] => {
+  const list = (body as { capabilities?: unknown } | undefined)?.capabilities;
+  return Array.isArray(list) ? list.filter((c): c is string => typeof c === "string") : [];
+};
 
 export interface BridgeOptions {
   /** The `widgetId` the legacy widget expects on every message (the legacy state event's `state_key`). */
@@ -85,12 +98,16 @@ export class CompatBridge {
   private contentLoadedSentToHost = false;
   /** The widget sent `content_loaded` since its iframe last loaded. A second one is an error. */
   private contentLoadedFromWidget = false;
+  /** The legacy capabilities of the widget's latest request, as the widget spelled them. */
+  private legacyRequested: string[] = [];
+  /** Every legacy capability the widget ever requested: the candidates for "approved". */
+  private readonly legacyKnown = new Set<string>();
 
   constructor(private readonly o: BridgeOptions) {}
 
   /** Start the bootstrap by requesting the context capabilities. The host answers with `notify_capabilities`. */
   start(): void {
-    this.requestHost("request_capabilities", { capabilities: CONTEXT_CAPABILITIES });
+    this.requestHost(REQUEST_CAPABILITIES_ACTION, { capabilities: CONTEXT_CAPABILITIES });
   }
 
   /** The inner iframe fired `load`. This also happens when the widget reloads itself. */
@@ -161,6 +178,10 @@ export class CompatBridge {
         );
         return;
       default:
+        if (toNewAction(m.action, "widget") === REQUEST_CAPABILITIES_ACTION) {
+          // Renegotiation (MSC2974): the widget names its legacy capabilities itself.
+          return this.forwardToHost(m, { capabilities: this.translateRequested(capabilitiesOf(m.data)) });
+        }
         this.forwardToHost(m);
     }
   }
@@ -209,14 +230,15 @@ export class CompatBridge {
     }
     if (this.phase === "bootstrap") {
       // There is no widget yet. The only host request expected is the reply to `start()`.
-      if (m.action !== "notify_capabilities") {
+      if (m.action !== NOTIFY_CAPABILITIES_ACTION) {
         return this.o.sendToHost(newResponse(m, errorBody("The wrapped widget is not loaded yet")));
       }
       this.o.sendToHost(newResponse(m, {}));
       return this.bootstrap();
     }
     this.fromHost.set(m.requestId, m);
-    this.o.sendToWidget(newRequestToLegacy(m, this.o.widgetId));
+    const request = m.action === NOTIFY_CAPABILITIES_ACTION ? this.translateNotified(m.request) : m.request;
+    this.o.sendToWidget(newRequestToLegacy({ ...m, request }, this.o.widgetId));
   }
 
   /** The widget answered: either one of the bridge's own requests, or a forwarded host request. */
@@ -240,9 +262,31 @@ export class CompatBridge {
   /** Play the legacy host: ask the widget for its capabilities, then request them from the real host. */
   private negotiateCapabilities(): void {
     this.requestWidget("capabilities", {}, (response) => {
-      const capabilities = (response as { capabilities?: string[] } | undefined)?.capabilities ?? [];
-      this.requestHost("request_capabilities", { capabilities });
+      const capabilities = this.translateRequested(capabilitiesOf(response));
+      this.requestHost(REQUEST_CAPABILITIES_ACTION, { capabilities });
     });
+  }
+
+  // ---- capabilities --------------------------------------------------------------------------
+
+  /** Remember the widget's legacy capabilities and return what to request from the host for them. */
+  private translateRequested(legacy: string[]): string[] {
+    this.legacyRequested = legacy;
+    for (const capability of legacy) this.legacyKnown.add(capability);
+    return capabilitiesToRequest(legacy);
+  }
+
+  /**
+   * The body of the host's `notify_capabilities`, in the widget's terms: `requested` is what the
+   * widget asked for last, `approved` every legacy capability it holds now (as in the legacy api,
+   * where `approved` is cumulative).
+   */
+  private translateNotified(request: unknown): { requested: string[]; approved: string[] } {
+    const approved = (request as { approved?: unknown } | undefined)?.approved;
+    return {
+      requested: this.legacyRequested,
+      approved: collapseApproved([...this.legacyKnown], Array.isArray(approved) ? approved : []),
+    };
   }
 
   // ---- the bridge's own requests -------------------------------------------------------------

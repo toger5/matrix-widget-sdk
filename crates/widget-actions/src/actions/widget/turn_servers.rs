@@ -3,7 +3,7 @@
 //!
 //! Both have an empty body and are acknowledged with `{}`. While watching, the host pushes
 //! credentials as host -> widget `update_turn_servers` (`actions::host::update_turn_servers`).
-//! Requires `town.robin.msc3846.turn_servers`.
+//! Requires `host:…update_turn_servers`.
 
 #[cfg(test)]
 mod tests {

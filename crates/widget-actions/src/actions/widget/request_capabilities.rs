@@ -26,12 +26,15 @@ mod tests {
         };
         let wire = caps.clone().into_wire("y");
         assert_eq!(wire.action, "request_capabilities");
-        assert_eq!(wire.to_value()["request"]["capabilities"][0], "org.matrix.msc2762.send.event:m.room.message");
+        assert_eq!(
+            wire.to_value()["request"]["capabilities"][0],
+            "widget:org.matrix.mscXXXX.send_event.timeline:m.room.message"
+        );
         assert_eq!(WidgetRequest::from_wire(&wire).unwrap(), caps);
-        // The MSC2974 spelling the legacy api uses is accepted too.
+        // The MSC2974 spelling of the legacy api is not accepted: the compat wrapper renames it.
         let mut legacy = wire.clone();
         legacy.action = "org.matrix.msc2974.request_capabilities".into();
-        assert_eq!(WidgetRequest::from_wire(&legacy).unwrap(), caps);
+        assert_eq!(WidgetRequest::from_wire(&legacy).unwrap(), WidgetRequest::Unknown);
         assert_eq!(WidgetResponse::from_wire(&wire.ack()).unwrap(), WidgetResponse::RequestCapabilities);
     }
 }

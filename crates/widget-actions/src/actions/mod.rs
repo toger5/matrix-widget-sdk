@@ -11,9 +11,8 @@
 //! [`Capability`](crate::Capability), [`StateKeySelector`](crate::StateKeySelector)) lives at the
 //! crate root next to the wire types.
 //!
-//! `source` + `action` identify a message type, which is why `send_event` exists once per
-//! source: the widget's request to send an event and the host's delivery of one are different
-//! types that share a wire name.
+//! `source` + `action` identify a message type. No action name is used by both sources: the
+//! widget's request to send an event is `send_event`, the host's delivery of one is `forward_event`.
 //!
 //! To add an action:
 //!
@@ -135,11 +134,14 @@ mod tests {
             Action::from_wire(&req.ack()).unwrap(),
             Action::WidgetResponse { response: WidgetResponse::ContentLoaded }
         );
-        let host = HostRequest::SendEvent { event: test_event() }.into_wire("b");
+        let host = HostRequest::ForwardEvent { event: test_event() }.into_wire("b");
         let parsed = Action::from_wire(&host).unwrap();
         assert_eq!(parsed.kind(), MessageKind::HostRequest);
-        assert_eq!(parsed, Action::HostRequest { request: HostRequest::SendEvent { event: test_event() } });
-        assert_eq!(Action::from_wire(&host.ack()).unwrap(), Action::HostResponse { response: HostResponse::SendEvent });
-        assert_eq!(HostResponse::SendEvent.into_wire_reply(&host), host.ack());
+        assert_eq!(parsed, Action::HostRequest { request: HostRequest::ForwardEvent { event: test_event() } });
+        assert_eq!(
+            Action::from_wire(&host.ack()).unwrap(),
+            Action::HostResponse { response: HostResponse::ForwardEvent }
+        );
+        assert_eq!(HostResponse::ForwardEvent.into_wire_reply(&host), host.ack());
     }
 }

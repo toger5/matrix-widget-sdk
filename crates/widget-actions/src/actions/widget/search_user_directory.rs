@@ -1,15 +1,15 @@
-//! `org.matrix.msc3973.user_directory_search` (MSC3973), widget -> host: search the user
+//! `org.matrix.msc3973.search_user_directory` (MSC3973), widget -> host: search the user
 //! directory (`POST /_matrix/client/v3/user_directory/search`).
 //!
-//! Body: [`UserDirectorySearchRequest`], answered with [`UserDirectorySearchResponse`]. Requires
-//! `org.matrix.msc3973.user_directory_search`.
+//! Body: [`SearchUserDirectoryRequest`], answered with [`SearchUserDirectoryResponse`]. Requires
+//! `widget:…search_user_directory`.
 
 use serde::{Deserialize, Serialize};
 
-/// Body of `user_directory_search`.
+/// Body of `search_user_directory`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
-pub struct UserDirectorySearchRequest {
+pub struct SearchUserDirectoryRequest {
     pub search_term: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub limit: Option<u32>,
@@ -26,10 +26,10 @@ pub struct UserDirectoryUser {
     pub avatar_url: Option<String>,
 }
 
-/// Response to `user_directory_search`.
+/// Response to `search_user_directory`.
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
-pub struct UserDirectorySearchResponse {
+pub struct SearchUserDirectoryResponse {
     /// Whether more results exist than `limit` allowed.
     pub limited: bool,
     pub results: Vec<UserDirectoryUser>,
@@ -44,11 +44,11 @@ mod tests {
 
     #[test]
     fn roundtrip() {
-        let req = WidgetRequest::UserDirectorySearch {
-            request: UserDirectorySearchRequest { search_term: "ali".into(), limit: Some(5) },
+        let req = WidgetRequest::SearchUserDirectory {
+            request: SearchUserDirectoryRequest { search_term: "ali".into(), limit: Some(5) },
         };
         let wire = req.clone().into_wire("s");
-        assert_eq!(wire.action, "org.matrix.msc3973.user_directory_search");
+        assert_eq!(wire.action, "org.matrix.msc3973.search_user_directory");
         assert_eq!(wire.to_value()["request"], json!({"search_term": "ali", "limit": 5}));
         assert_eq!(WidgetRequest::from_wire(&wire).unwrap(), req);
 
@@ -56,8 +56,8 @@ mod tests {
             wire.response_to(json!({"limited": false, "results": [{"user_id": "@alice:x", "display_name": "Alice"}]}));
         assert_eq!(
             WidgetResponse::from_wire(&res).unwrap(),
-            WidgetResponse::UserDirectorySearch {
-                response: UserDirectorySearchResponse {
+            WidgetResponse::SearchUserDirectory {
+                response: SearchUserDirectoryResponse {
                     limited: false,
                     results: vec![UserDirectoryUser {
                         user_id: "@alice:x".into(),

@@ -1,9 +1,9 @@
 //! The push half of the driver: what it subscribes to at the backend, and how it forwards what the
 //! backend delivers to the widget.
 //!
-//! The subscriptions follow the approved capabilities: `receive.*` gives a room subscription,
-//! `receive.to_device:*` a to-device subscription. TURN servers are subscribed only while the
-//! widget watches them.
+//! The subscriptions follow the approved `host:…` capabilities: `forward_event.*` and
+//! `update_state` give a room subscription, `forward_to_device` a to-device subscription. TURN
+//! servers are subscribed only while the widget watches them.
 
 use std::sync::{Arc, Mutex, Weak};
 
@@ -78,7 +78,7 @@ impl ToDeviceSink for DriverSink {
 impl TurnServerSink for DriverSink {
     fn on_turn_server(&self, server: TurnServer) {
         if let Some(driver) = self.0.upgrade() {
-            driver.send_request(HostRequest::UpdateTurnServers { server });
+            driver.push(HostRequest::UpdateTurnServers { server });
         }
     }
 }
@@ -125,53 +125,55 @@ impl WidgetHostDriver {
         }
     }
 
-    /// Forward new timeline events as `send_event`, each one the widget may receive.
+    /// Forward new timeline events as `forward_event`, each one the widget holds a
+    /// `forward_event.*` capability for.
     fn forward_timeline_events(&self, events: Vec<MatrixEvent>) {
         let approved = self.approved();
         for event in events {
-            if access::may_receive(&approved, &event) {
-                self.send_request(HostRequest::SendEvent { event });
+            if access::may_forward(&approved, &event) {
+                self.send_request(HostRequest::ForwardEvent { event });
             }
         }
     }
 
     /// Forward the current state set of `event_type` as `update_state`, reduced to the events the
-    /// widget may receive. Nothing is sent when that leaves no event.
+    /// widget holds an `update_state` capability for. Nothing is sent when that leaves no event.
     fn forward_state_events(&self, event_type: String, events: Vec<MatrixEvent>) {
         let approved = self.approved();
         let state: Vec<MatrixEvent> = events
             .into_iter()
-            .filter(|e| e.is_state() && e.event_type == event_type && access::may_receive(&approved, e))
+            .filter(|e| e.event_type == event_type && access::may_update_state(&approved, e))
             .collect();
         if !state.is_empty() {
             self.send_request(HostRequest::UpdateState { request: UpdateStateRequest { state } });
         }
     }
 
-    /// Forward a to-device message as `send_to_device` if the widget may receive its type.
+    /// Forward a to-device message as `forward_to_device` if the widget holds the capability for
+    /// its type.
     fn forward_to_device_message(&self, message: ToDeviceEvent) {
-        if self.approved().allows_receive_to_device(&message.event_type) {
-            self.send_request(HostRequest::SendToDevice { message });
+        if self.approved().allows_forward_to_device(&message.event_type) {
+            self.send_request(HostRequest::ForwardToDevice { message });
         }
     }
 }
 
 /// The room subscription for a set of approved capabilities.
 ///
-/// * `receive.event:T` subscribes to `T` on the timeline.
-/// * `receive.state_event:T[#key]` subscribes to the state set of `T` **and** to `T` on the
-///   timeline, because widgets expect state changes as `send_event` too.
+/// * `forward_event.timeline:T` and `forward_event.state:T[#key]` subscribe to `T` on the timeline.
+/// * `update_state:T[#key]` subscribes to the state set of `T`.
 ///
-/// State keys are not part of the subscription; the driver filters by state key when forwarding.
+/// A widget that wants state changes both as `update_state` and as `forward_event` holds both
+/// capabilities. State keys and msgtypes are not part of the subscription; the driver filters by
+/// them when forwarding.
 fn subjects_for(approved: &[Capability]) -> RoomSubjects {
     let mut subjects = RoomSubjects::default();
     for capability in approved {
         match capability {
-            Capability::ReceiveEvent { event_type, .. } => push_unique(&mut subjects.timeline_event_types, event_type),
-            Capability::ReceiveStateEvent { event_type, .. } => {
-                push_unique(&mut subjects.timeline_event_types, event_type);
-                push_unique(&mut subjects.state_event_types, event_type);
+            Capability::ForwardEvent { event_type, .. } | Capability::ForwardStateEvent { event_type, .. } => {
+                push_unique(&mut subjects.timeline_event_types, event_type)
             }
+            Capability::UpdateState { event_type, .. } => push_unique(&mut subjects.state_event_types, event_type),
             _ => {}
         }
     }
@@ -182,7 +184,7 @@ fn subjects_for(approved: &[Capability]) -> RoomSubjects {
 fn to_device_types_for(approved: &[Capability]) -> Vec<String> {
     let mut types = Vec::new();
     for capability in approved {
-        if let Capability::ReceiveToDevice { event_type } = capability {
+        if let Capability::ForwardToDevice { event_type } = capability {
             push_unique(&mut types, event_type);
         }
     }
@@ -204,21 +206,31 @@ mod tests {
     }
 
     #[test]
-    fn subjects_follow_receive_capabilities() {
+    fn subjects_follow_the_host_capabilities() {
         let approved = vec![
             Capability::send_event("m.room.message"),
-            Capability::receive_event("m.room.message"),
-            Capability::receive_message("m.text"),
-            Capability::receive_state_event("m.room.topic", None::<&str>),
-            Capability::receive_state_event("m.room.topic", Some("")),
-            Capability::receive_to_device("a"),
-            Capability::receive_to_device("a"),
+            Capability::forward_event("m.room.message"),
+            Capability::forward_messages("m.text"),
+            Capability::forward_state_event("m.room.topic", None::<&str>),
+            Capability::update_state("m.room.name", None::<&str>),
+            Capability::update_state("m.room.name", Some("")),
+            Capability::forward_to_device("a"),
+            Capability::forward_to_device("a"),
         ];
         let subjects = subjects_for(&approved);
         assert_eq!(subjects.timeline_event_types, strings(&["m.room.message", "m.room.topic"]));
-        assert_eq!(subjects.state_event_types, strings(&["m.room.topic"]));
+        // `forward_event.state` alone gives no state updates, and `update_state` no timeline events.
+        assert_eq!(subjects.state_event_types, strings(&["m.room.name"]));
         assert_eq!(to_device_types_for(&approved), strings(&["a"]));
 
-        assert!(subjects_for(&[Capability::send_event("x")]).is_empty());
+        // The widget's own actions (send, read) subscribe to nothing.
+        let widget_only = [
+            Capability::send_event("x"),
+            Capability::read_events("x"),
+            Capability::read_state_events("x", None::<&str>),
+            Capability::send_to_device("x"),
+        ];
+        assert!(subjects_for(&widget_only).is_empty());
+        assert!(to_device_types_for(&widget_only).is_empty());
     }
 }

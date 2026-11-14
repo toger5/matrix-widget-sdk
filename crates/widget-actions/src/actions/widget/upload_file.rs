@@ -2,7 +2,7 @@
 //! repository (`POST /_matrix/media/v3/upload`).
 //!
 //! Body: [`UploadFileRequest`], answered with [`UploadFileResponse`]. Requires
-//! `org.matrix.msc4039.upload_file`.
+//! `widget:…upload_file`.
 
 use serde::{Deserialize, Serialize};
 

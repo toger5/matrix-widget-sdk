@@ -33,7 +33,7 @@ mod tests {
         let wire = req.clone().into_wire("n");
         assert_eq!(wire.action, "notify_capabilities");
         assert_eq!(wire.source, Source::Host);
-        assert_eq!(wire.to_value()["request"]["approved"], json!(["org.matrix.msc2762.send.event:a"]));
+        assert_eq!(wire.to_value()["request"]["approved"], json!(["widget:org.matrix.mscXXXX.send_event.timeline:a"]));
         assert_eq!(HostRequest::from_wire(&wire).unwrap(), req);
         assert_eq!(HostResponse::from_wire(&wire.ack()).unwrap(), HostResponse::NotifyCapabilities);
     }

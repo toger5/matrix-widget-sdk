@@ -10,7 +10,7 @@
 //!
 //! The driver takes care of the handshake (`content_loaded`, capability negotiation), checks
 //! capabilities, performs Matrix operations through a [`MatrixBackend`] and answers the widget.
-//! Events arriving from sync come through the backend too: whenever the widget's `receive.*`
+//! Events arriving from sync come through the backend too: whenever the widget's `host:…`
 //! capabilities change, the driver subscribes to the backend
 //! ([`MatrixBackend::subscribe_room`]) for exactly those event types, pushes the current state as
 //! `update_state` and forwards new events as `send_event`.

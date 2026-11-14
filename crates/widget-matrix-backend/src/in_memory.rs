@@ -190,7 +190,7 @@ impl InMemoryBackend {
         )
     }
 
-    /// Like [`new`](Self::new) but with everything `matrix_context` reports spelled out.
+    /// Like [`new`](Self::new) but with everything `get_matrix_context` reports spelled out.
     #[cfg_attr(feature = "uniffi", uniffi::constructor)]
     pub fn with_context(
         room_id: String,

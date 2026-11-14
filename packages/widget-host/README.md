@@ -16,23 +16,27 @@ page.
     hidden until `content_loaded` when `usesWidgetAPI` is `true`.
   - `im.vector.modular.widgets` (legacy) → `content.url` is handed **untemplated** to the compat
     wrapper: `<wrapper url>?legacy_widget_url=...&legacy_widget_id=...&legacy_wait_for_iframe_load=...[&legacy_widget_data=...]`.
-    The wrapper resolves `$matrix_user_id` & co. itself through the `matrix_context` /
-    `client_context` actions; this host has no template engine.
+    The wrapper resolves `$matrix_user_id` & co. itself through the `get_matrix_context` /
+    `get_client_context` actions; this host has no template engine.
   The decision and the final URL are shown under the **Load widget** button. This is the logic a
   real client needs during the transition, in `src/widgets.ts`.
 - **Drives the protocol**: every message from the widget iframe goes into the driver, every
   message from the driver goes to the iframe. Both directions are shown in the **Messages** log.
 - **Capability prompt**: when the widget requests capabilities you get a checklist and an
   **Approve selected** button, or tick **auto-approve capabilities** to grant everything.
-  For legacy widgets the host calls the driver's `setAutoApproved` with the `matrix_context` and
-  `client_context` capabilities, which the compat wrapper needs to template the URL (a legacy client handed
-  the same facts over as URL parameters). The driver grants those without consulting the host;
+  For legacy widgets the host calls the driver's `setAutoApproved` with what a legacy client
+  gave a widget without asking: the `get_matrix_context` and `get_client_context` capabilities the
+  compat wrapper needs to template the URL (a legacy client handed the same facts over as URL
+  parameters), plus `get_openid` and the `update_theme` / `update_language` / `update_visibility`
+  subscriptions the wrapper always requests. The driver grants those without consulting the host;
   the legacy widget's own capabilities are still prompted for, so a wrapped widget prompts once,
-  like a new widget. The **Driver snapshot** lists the auto-approved set.
+  like a new widget. The prompt lists the **new** capability names: the wrapper has already
+  translated the legacy ones. The **Driver snapshot** lists the auto-approved set.
 - **Memory store menu**: shows the room's timeline and state as the backend holds them.
   - **Inject event**: stores the JSON event in the room as if it came from sync. The driver's
-    subscription delivers it to the widget (`send_event`, and for state events also
-    `update_state`) if a matching `receive.*` capability was approved. Events the widget sends
+    subscription delivers it to the widget (`forward_event`, and for state events also
+    `update_state`) if the matching `host:…forward_event.*` / `host:…update_state` capability was
+    approved. Events the widget sends
     are echoed back the same way.
   - **Clear store**: drops all stored events.
   - **fail sends**: every `send_event` (and `upload_file`) from the widget fails with an error
@@ -50,7 +54,7 @@ page.
 
 | field | default | meaning |
 |---|---|---|
-| room id / user id | `!room:example.org` / `@alice:example.org` | Identity of the in-memory room and of the sending user, reported by `matrix_context` and used as `room_id` / `sender` of events the widget sends. `client_context` reports `widget-test-host` / `light` / `en`. |
+| room id / user id | `!room:example.org` / `@alice:example.org` | Identity of the in-memory room and of the sending user, reported by `get_matrix_context` and used as `room_id` / `sender` of events the widget sends. `get_client_context` reports `widget-test-host` / `light` / `en`. |
 | compat wrapper url | `http://localhost:5174/` | Base URL of `../widget-compat-wrapper`, used for legacy events only. |
 | widget state event | example new widget | Any `m.widget` or `im.vector.modular.widgets` state event (`type`, `state_key`, `content`). Two example buttons fill it in. |
 

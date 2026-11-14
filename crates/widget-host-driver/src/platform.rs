@@ -34,7 +34,7 @@ pub trait WidgetHostPlatform: Send + Sync {
     /// [`WidgetHostDriver::set_openid_auto_approved`]: crate::WidgetHostDriver::set_openid_auto_approved
     fn on_openid_requested(&self);
 
-    /// Open `uri` (`org.matrix.msc2931.navigate`). The driver has checked that it is a
+    /// Open `uri` (the `navigate` action). The driver has checked that it is a
     /// `https://matrix.to/#/` permalink. An error is passed on to the widget.
     fn navigate(&self, uri: String) -> Result<(), PlatformError>;
 
@@ -42,12 +42,12 @@ pub trait WidgetHostPlatform: Send + Sync {
     /// honours the request.
     fn set_always_on_screen(&self, value: bool) -> bool;
 
-    /// The client's identifier for `client_context`, e.g. `io.element.web`.
+    /// The client's identifier for `get_client_context`, e.g. `io.element.web`.
     fn client_id(&self) -> Option<String>;
 
-    /// The client's current theme name for `client_context`, e.g. `dark`.
+    /// The client's current theme name for `get_client_context`, e.g. `dark`.
     fn client_theme(&self) -> Option<String>;
 
-    /// The client's current UI language for `client_context`, e.g. `en`.
+    /// The client's current UI language for `get_client_context`, e.g. `en`.
     fn client_language(&self) -> Option<String>;
 }

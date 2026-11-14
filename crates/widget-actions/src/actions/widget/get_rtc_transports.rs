@@ -2,7 +2,7 @@
 //! MatrixRTC transports (`GET /_matrix/client/v1/rtc/transports`).
 //!
 //! Empty request body, answered with [`RtcTransportsResponse`]. Requires
-//! `org.matrix.msc4515.rtc_transports`.
+//! `widget:…get_rtc_transports`.
 
 use serde::{Deserialize, Serialize};
 

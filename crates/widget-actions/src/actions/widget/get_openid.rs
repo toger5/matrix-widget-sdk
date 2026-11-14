@@ -4,8 +4,8 @@
 //! Empty request body. The host answers at once with [`GetOpenIdResponse`]: `state: allowed`
 //! plus the token when it needs no user consent, `state: blocked` when refused, or
 //! `state: request` when the user is being asked; in that case the outcome follows as the host
-//! -> widget action `openid_credentials` (`actions::host::openid_credentials`) carrying this
-//! request's id as `original_request_id`. No capability: the consent prompt is the permission.
+//! -> widget action `forward_openid_credentials` (`actions::host::forward_openid_credentials`) carrying this
+//! request's id as `original_request_id`. Requires `widget:…get_openid`; the host may still ask the user.
 
 use serde::{Deserialize, Serialize};
 
@@ -21,7 +21,7 @@ pub enum OpenIdState {
     /// Refused (by the user or the client).
     #[serde(rename = "blocked")]
     Blocked,
-    /// The user is being asked; the decision arrives as `openid_credentials`.
+    /// The user is being asked; the decision arrives as `forward_openid_credentials`.
     #[serde(rename = "request")]
     PendingUserConfirmation,
 }

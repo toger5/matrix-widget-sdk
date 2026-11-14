@@ -97,10 +97,10 @@ deliver the **current set** of every requested state type right away (`sink.onSt
 events)`, an empty array when there is none) and then after every change, forward new timeline
 events with `sink.onTimelineEvents([event])`, and return `{ cancel() { /* remove listeners */ } }`.
 `subscribeRoom` is synchronous; the sink may be called from inside it. The driver calls it
-whenever the widget's approved `receive.*` capabilities grow and cancels the previous subscription.
+whenever the widget's approved `host:…` capabilities grow and cancels the previous subscription.
 
 Notes on the generated types: records are camelCase (`eventType`, `stateKey`), `u64` fields such
 as `originServerTs` are `bigint`, event `content` is a plain JS value, capabilities are strings
-(`org.matrix.msc2762.receive.event:m.room.message`), and `StateKeySelector` is a tagged class
+(`host:org.matrix.mscXXXX.forward_event.timeline:m.room.message`), and `StateKeySelector` is a tagged class
 (`new StateKeySelector.Any()` / `new StateKeySelector.Key({ key })`). `matrixEventFromJson` /
 `matrixEventToJson` convert between the record and client-server API JSON.
