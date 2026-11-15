@@ -15,7 +15,7 @@ import { decodeRecoveryKey } from "matrix-js-sdk/lib/crypto-api";
 
 import { JsSdkBackend } from "./backend/jsSdkBackend";
 import { WIDGET_EVENT_TYPES, type StateEvent } from "../widgetStateEvent";
-import type { LiveSession, LoginOptions, PendingLogin, RoomSummary, SessionProvider } from "../player/session";
+import { StoredLoginInvalidError, type LiveSession, type LoginOptions, type PendingLogin, type RoomSummary, type SessionProvider } from "../player/session";
 
 /**
  * The matrix-js-sdk implementation of `../player/session`. With `./backend` it is the only code that
@@ -50,6 +50,15 @@ function loadStored(): Stored | undefined {
 }
 
 const saveStored = (stored: Stored) => localStorage.setItem(STORAGE_KEY, JSON.stringify(stored));
+
+/**
+ * Delete the SDK's stores. There is one crypto store per origin and it belongs to one device, so
+ * it has to go before another device logs in: the SDK refuses to open the store of another device.
+ */
+const clearSdkStores = (baseUrl: string) =>
+  createClient({ baseUrl })
+    .clearStores()
+    .catch((e: unknown) => console.warn("clearing the stores failed", e));
 
 const redirectUri = () => `${location.origin}/oidc-callback.html`;
 
@@ -152,6 +161,8 @@ class JsSdkPendingLogin implements PendingLogin {
   }
 
   private async finish(stored: Stored): Promise<JsSdkSession> {
+    // A login is always a new device; whatever an earlier one left behind cannot be used by it.
+    await clearSdkStores(stored.homeserverUrl);
     saveStored(stored);
     return JsSdkSession.start(stored);
   }
@@ -198,12 +209,18 @@ class JsSdkSession implements LiveSession {
     try {
       await client.whoami();
     } catch (e) {
-      if (e instanceof MatrixError && (e.errcode === "M_UNKNOWN_TOKEN" || e.httpStatus === 401)) throw new Error("The stored login is no longer valid.");
+      if (e instanceof MatrixError && (e.errcode === "M_UNKNOWN_TOKEN" || e.httpStatus === 401)) throw new StoredLoginInvalidError();
       console.warn("the homeserver could not be reached, starting anyway", e);
     }
 
-    await client.initRustCrypto();
-    await client.startClient({ lazyLoadMembers: true });
+    try {
+      await client.initRustCrypto();
+      await client.startClient({ lazyLoadMembers: true });
+    } catch (e) {
+      // Nothing may keep running (or keep the crypto store open) when the start is tried again.
+      client.stopClient();
+      throw e;
+    }
     session = new JsSdkSession(client);
     return session;
   }
@@ -293,8 +310,15 @@ class JsSdkSession implements LiveSession {
 export const jsSdkSessions: SessionProvider = {
   startLogin: (server) => JsSdkPendingLogin.start(server),
   restore: () => JsSdkSession.restore(),
-  /** The crypto store of a login that cannot be restored stays behind; it is replaced by the next login of that device. */
   async clearStored() {
+    const stored = loadStored();
+    if (!stored) return;
+    const { homeserverUrl: baseUrl, userId, deviceId, accessToken, refreshToken, oauthClientId } = stored;
+    // Fails when the homeserver has already ended the login, which is as good.
+    await createClient({ baseUrl, userId, deviceId, accessToken, refreshToken, oauthClientId })
+      .logout(true)
+      .catch((e: unknown) => console.warn("logout request failed", e));
     localStorage.removeItem(STORAGE_KEY);
+    await clearSdkStores(baseUrl);
   },
 };

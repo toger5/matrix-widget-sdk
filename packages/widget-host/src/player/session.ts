@@ -60,12 +60,24 @@ export interface LiveSession {
   logout(): Promise<void>;
 }
 
+/** `SessionProvider.restore()` rejects with this when the homeserver no longer knows the stored login. */
+export class StoredLoginInvalidError extends Error {
+  constructor() {
+    super("The stored login is no longer valid.");
+    this.name = "StoredLoginInvalidError";
+  }
+}
+
 export interface SessionProvider {
   /** Look the homeserver up and report how it lets users log in. */
   startLogin(server: string): Promise<PendingLogin>;
-  /** Restore the stored login, if there is one. */
+  /**
+   * Restore the stored login, if there is one. Rejects with `StoredLoginInvalidError` when the
+   * homeserver has ended that login; after any other rejection the login may still be alive and
+   * stays stored, so `restore()` can be tried again.
+   */
   restore(): Promise<LiveSession | undefined>;
-  /** Forget a stored login that can no longer be restored. */
+  /** End the stored login without restoring it: log out on the homeserver if it still answers, and delete everything stored for it. */
   clearStored(): Promise<void>;
 }
 

@@ -40,6 +40,11 @@ Enter a homeserver, log in, pick a room, open one of its widgets. Widgets come f
 state. If the account has cross-signing and this device is not verified, the room list asks for
 the recovery key. Log out revokes the session and deletes the stored login and the crypto store.
 
+The login screen only appears when no login is stored or the homeserver has ended the stored
+one. If a stored login cannot be started for another reason (the crypto store cannot be opened,
+say), the host says so and offers **Try again** and **Log out** instead: logging in again would
+create a second device and leave the first one behind.
+
 This mode has been checked up to the login options of matrix.org; everything after the login
 (sync, sending, encryption, verification) is covered by tests against a faked client only.
 
