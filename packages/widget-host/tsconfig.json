@@ -11,7 +11,10 @@
     "strict": true,
     "noEmit": true,
     "skipLibCheck": true,
-    "types": []
+    "types": [
+      "vite/client"
+    ],
+    "jsx": "react-jsx"
   },
   "include": [
     "src",

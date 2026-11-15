@@ -1,15 +1,56 @@
-# Widget test host
+# Widget host
 
-A minimal MSC4412 widget host in the browser: `widget-host-driver` through the UniFFI/wasm
-bindings in `../widget-host-bindings`, running on the crate's `InMemoryBackend` (an in-memory
-Matrix room) which the page creates and hands to the driver like any other `MatrixBackend`. It
-exists for manual testing, for end-to-end tests of widgets and of the compat wrapper, and as the
-smallest possible example of embedding the driver. It is not a Matrix client: nothing leaves the
-page.
+An MSC4412 widget host in the browser, on `widget-host-driver` through the UniFFI/wasm bindings
+in `../widget-host-bindings`. One React app (`src/player/`) with two modes that share every view
+(room list, room view, widget view):
+
+| mode | backend | for |
+|---|---|---|
+| logged in | `JsSdkBackend` (`src/js_sdk/backend/`): a real room of a matrix-js-sdk client | opening and debugging the widgets of your rooms |
+| in-memory store | the crate's `InMemoryBackend`, an in-memory Matrix room; nothing leaves the page | widget development without a homeserver, end-to-end tests of widgets and of the compat wrapper |
+
+The start page is the login screen. **Use the in-memory store (no login)** on it switches to the
+in-memory mode, and so do the URL parameters below. The app has no Element Web or Compound
+components yet. Where this is heading (devtools, layouts, timeline) is in
+[`docs/host-app/feature-set-and-tech-stack.md`](../../docs/host-app/feature-set-and-tech-stack.md)
+and [`handover.md`](../../handover.md).
+
+## Structure
+
+- `src/player/session.ts` is what the UI needs from a Matrix client, as interfaces (login, session
+  restore, room list, the widget state events of a room, a backend per room, device
+  verification). The UI imports no SDK. Its `sessions` export picks the SDK and loads it lazily.
+- `src/js_sdk/session.ts` implements it on matrix-js-sdk: OAuth 2.0 (dynamic client
+  registration, PKCE, in a popup that returns through `oidc-callback.html`) or a password,
+  `/sync` v2, end-to-end encryption, verification with a recovery key. `src/js_sdk/backend/` is the
+  `MatrixBackend` for one room. `src/js_sdk/` is the only folder that imports matrix-js-sdk; a
+  matrix-rust-sdk implementation of the same interfaces lives on the `rust-sdk-player` branch.
+- `src/player/memorySession.ts` implements the same `LiveSession` on an `InMemoryBackend`, with
+  one room and an editable list of widgets. `MemoryPlayer.tsx` puts the shared `Player` on it and
+  adds `MemoryStorePanel.tsx`, the store's controls, as a side panel.
+- `src/player/Player.tsx`, `RoomView.tsx`, `WidgetView.tsx` are the shared views. `WidgetView` is
+  one widget: iframe, its own `WidgetHostDriver`, the capability and OpenID prompts, a message
+  log and a driver panel (snapshot, `update_theme` / `update_language` / `update_visibility`).
+- `src/widgetStateEvent.ts` decides how a widget state event is embedded (below).
+
+## Logged in
+
+Enter a homeserver, log in, pick a room, open one of its widgets. Widgets come from `m.widget`,
+`org.matrix.msc4411.widget` and `im.vector.modular.widgets` state; the list follows the room
+state. If the account has cross-signing and this device is not verified, the room list asks for
+the recovery key. Log out revokes the session and deletes the stored login and the crypto store.
+
+This mode has been checked up to the login options of matrix.org; everything after the login
+(sync, sending, encryption, verification) is covered by tests against a faked client only.
+
+## In-memory store
+
+The in-memory mode is not a Matrix client. It creates one `InMemoryBackend` for its room and
+hands it to each widget's driver like any other `MatrixBackend`.
 
 ![Test host, test widgets and the in-memory store](../../docs/diagrams/07-test-setup.svg)
 
-## What it does
+### What it does
 
 - **Loads a widget from a widget state event** you paste in. The event decides how it is embedded:
   - `m.widget` / `org.matrix.msc4411.widget` → `content.url` is loaded directly; the iframe is
@@ -19,8 +60,9 @@ page.
     wrapper: `<wrapper url>?legacy_widget_url=...&legacy_widget_id=...&legacy_wait_for_iframe_load=...[&legacy_widget_data=...]`.
     The wrapper resolves `$matrix_user_id` & co. itself through the `get_matrix_context` /
     `get_client_context` actions; this host has no template engine.
-  The decision and the final URL are shown under the **Load widget** button. This is the logic a
-  real client needs during the transition, in `src/widgets.ts`.
+  **Add widget to the room** puts the pasted event into the room's widget list (two examples are
+  there from the start); open it from the list above the widget. This is the logic a real client
+  needs during the transition, in `src/widgetStateEvent.ts`, and the logged-in mode uses the same.
 - **Drives the protocol**: every message from the widget iframe goes into the driver, every
   message from the driver goes to the iframe. Both directions are shown in the **Messages** log.
 - **Capability prompt**: when the widget requests capabilities you get a checklist and an
@@ -33,41 +75,47 @@ page.
   the legacy widget's own capabilities are still prompted for, so a wrapped widget prompts once,
   like a new widget. The prompt lists the **new** capability names: the wrapper has already
   translated the legacy ones. The **Driver snapshot** lists the auto-approved set.
-- **Memory store menu**: shows the room's timeline and state as the backend holds them.
+  **auto-approve OpenID tokens** hands tokens out without the Allow / Block prompt.
+- **Memory store panel** (right column): shows the room's timeline, state, delayed events and
+  sent to-device messages as the backend holds them.
   - **Inject event**: stores the JSON event in the room as if it came from sync. The driver's
     subscription delivers it to the widget (`forward_event`, and for state events also
     `update_state`) if the matching `host:…forward_event.*` / `host:…update_state` capability was
     approved. Events the widget sends
     are echoed back the same way.
+  - **Inject to-device message**, **Push TURN credentials**, **Set m.tag room account data**,
+    **Set RTC transports**, **Fire oldest** delayed event: what a homeserver would deliver or do.
   - **Clear store**: drops all stored events.
   - **fail sends**: every `send_event` (and `upload_file`) from the widget fails with an error
     response.
-  - **Media repository**: every new store starts with three demo files from `public/demo/`
+  - **Media repository**: the store starts with three demo files from `public/demo/`
     (`mxc://example.org/demo-landscape`, `…/demo-tiles`, `…/demo-notes`). Files the widget
     uploads appear here too. Images are previewed, every file has a download link and a
     **copy uri** button for the widget's `mxc uri` input. A typical round trip: download the demo
     image in the widget, upload it again, or upload a file chosen from disk, and watch it show
     up here.
   Approving capabilities also pushes the current permitted state (`update_state`) at once.
-- **Driver snapshot**: `ready`, approved and pending capabilities.
-- **Revoke all capabilities**: the widget gets `update_capabilities` with an empty list.
+- **Driver** panel of the widget: the snapshot (`ready`, approved and pending capabilities) and
+  buttons that push `update_theme`, `update_language` and `update_visibility`.
+- **Revoke all**: the widget gets `update_capabilities` with an empty list.
 
-## Configuration
+### Configuration
 
-| field | default | meaning |
-|---|---|---|
-| room id / user id | `!room:example.org` / `@alice:example.org` | Identity of the in-memory room and of the sending user, reported by `get_matrix_context` and used as `room_id` / `sender` of events the widget sends. `get_client_context` reports `widget-test-host` / `light` / `en`. |
-| compat wrapper url | `http://localhost:5174/` | Base URL of `../widget-compat-wrapper`, used for legacy events only. |
-| widget state event | example new widget | Any `m.widget` or `im.vector.modular.widgets` state event (`type`, `state_key`, `content`). Two example buttons fill it in. |
+The room is `!room:example.org`, the user `@alice:example.org`; `get_matrix_context` reports them
+and they are the `room_id` / `sender` of events the widget sends. `get_client_context` reports
+`widget-host`, the browser's colour scheme and language. All widgets of the room share the one
+store, so one widget sees what another sent.
 
 URL parameters for scripted runs (e2e tests):
 
 | parameter | meaning |
 |---|---|
-| `event=<json>` | Prefills the state event textarea. |
-| `autoload=1` | Clicks **Load widget** on start. |
-| `autoApprove=1` | Approves every capability request without a prompt. |
-| `wrapper=<url>` | Overrides the compat wrapper URL. |
+| `event=<json>` | Adds this widget state event (`type`, `state_key`, `content`) to the room. Starts in the in-memory mode. |
+| `autoload=1` | Opens the widget from `event` (or the new test widget) on start. Starts in the in-memory mode. |
+| `autoApprove=1` | Approves every capability request without a prompt (in-memory mode). |
+| `mode=memory` | Starts in the in-memory mode without opening a widget. |
+| `room=<id>` / `user=<id>` | Ids of the in-memory room and its user. |
+| `wrapper=<url>` | Base URL of `../widget-compat-wrapper`, used for legacy events only (default `http://localhost:5174/`; both modes). |
 | `log=<level>` | Level of the driver's own log: `error`, `warn` (default), `info`, `debug`, `trace`. The records appear in the browser console and in the **Messages** log (grey `sdk` lines; warnings and errors in red). |
 | `logFilter=<spec>` | `RUST_LOG`-style overrides per module, e.g. `widget_host_driver::driver::requests=trace`. |
 
@@ -91,7 +139,8 @@ For the examples to work also start `../test-widgets` (port 5175) and, for legac
 
 Open the host with `event`, `autoload=1` and `autoApprove=1`, then read the page: the
 **Messages** log contains every envelope in both directions as JSON, the **Driver snapshot** shows
-the negotiated state, and the store panels show what the widget sent. Everything is plain DOM,
+the negotiated state, and the store panel shows what the widget sent (in the in-memory mode the
+log and the driver panel start open). No Matrix SDK code is loaded on this path. Everything is plain DOM,
 so Playwright, Cypress or a headless `--dump-dom` run can assert on it. Why the driver refused
 or dropped something is in the same log as a red `warn …` line (see `log=` above). Widget-side assertions are
 available in the test widgets' own log.

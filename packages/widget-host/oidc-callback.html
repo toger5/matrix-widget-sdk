@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Completing sign in…</title>
+  </head>
+  <body>
+    <p id="status">Completing sign in…</p>
+    <script>
+      // The OAuth redirect target. It runs in the login popup and hands the callback URL (which
+      // carries the authorization code) to the player page that opened it.
+      if (window.opener && !window.opener.closed) {
+        window.opener.postMessage({ type: "oidc-callback", callbackUrl: location.href }, location.origin);
+        window.close();
+      } else {
+        document.getElementById("status").textContent = "This page completes a login started from the widget host. You can close it.";
+      }
+    </script>
+  </body>
+</html>

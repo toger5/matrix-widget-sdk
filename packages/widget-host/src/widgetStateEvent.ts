@@ -16,6 +16,11 @@ export interface ResolvedWidget {
 
 const NEW_TYPES = ["m.widget", "org.matrix.msc4411.widget"];
 const LEGACY_TYPES = ["im.vector.modular.widgets"];
+/** Every state event type that describes a widget. */
+export const WIDGET_EVENT_TYPES = [...NEW_TYPES, ...LEGACY_TYPES];
+
+/** Identifies a widget within a room: two event types may use the same state key. */
+export const widgetKey = (event: Pick<StateEvent, "type" | "state_key">) => `${event.type}/${event.state_key}`;
 
 /**
  * The only transition-specific code a client needs. The host never templates URLs: a legacy
@@ -40,3 +45,17 @@ export function resolveWidget(event: StateEvent, wrapperUrl: string): ResolvedWi
   if (content.data && Object.keys(content.data).length > 0) query.set("legacy_widget_data", JSON.stringify(content.data));
   return { url: `${wrapperUrl}?${query}`, name, legacy: true, usesWidgetApi: true };
 }
+
+/**
+ * Capabilities granted to a legacy widget (behind the compat wrapper) without a prompt, because a
+ * legacy client did not ask for them either: the facts it put into the widget URL, the theme,
+ * language and visibility updates, and asking for an OpenID token (which still asks per request).
+ */
+export const LEGACY_AUTO_APPROVED = [
+  "widget:org.matrix.mscXXXX.get_matrix_context",
+  "widget:org.matrix.mscXXXX.get_client_context",
+  "widget:org.matrix.mscXXXX.get_openid",
+  "host:org.matrix.mscXXXX.update_theme",
+  "host:org.matrix.mscXXXX.update_language",
+  "host:org.matrix.mscXXXX.update_visibility",
+];

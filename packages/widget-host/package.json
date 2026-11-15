@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Minimal MSC4412 widget host webapp: widget-host-driver (uniffi/wasm bindings) on an in-memory room, for manual and e2e testing",
+  "description": "Widget host webapp on widget-host-driver (uniffi/wasm bindings): logs in with matrix-js-sdk and opens the widgets of your rooms, or runs on an in-memory room for widget development and e2e testing",
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
@@ -11,9 +11,15 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@matrix-widget-tools/widget-host-bindings": "*"
+    "@matrix-widget-tools/widget-host-bindings": "*",
+    "matrix-js-sdk": "45.1.0",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1"
   },
   "devDependencies": {
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.3.0",
     "typescript": "^5.9.0",
     "vite": "^8.0.0",
     "vitest": "^5.0.0"

@@ -33,7 +33,7 @@
   <line x1="220" y1="263" x2="248" y2="263" stroke="#374151" stroke-width="1.5" marker-end="url(#arr)"/>
   <text x="250" y="420" class="s">the only transition code</text>
   <text x="250" y="436" class="s">in the client:</text>
-  <text x="250" y="452" class="m">widget-host/src/widgets.ts</text>
+  <text x="250" y="452" class="m">widget-host/src/widgetStateEvent.ts</text>
 
   <!-- new branch -->
   <polyline points="320,213 320,145 448,145" fill="none" stroke="#374151" stroke-width="1.5" marker-end="url(#arr)"/>
