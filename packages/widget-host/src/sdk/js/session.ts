@@ -14,11 +14,11 @@ import {
 import { decodeRecoveryKey, VerificationPhase, VerificationRequestEvent, VerifierEvent, type ShowSasCallbacks, type VerificationRequest } from "matrix-js-sdk/lib/crypto-api";
 
 import { JsSdkBackend } from "./backend/jsSdkBackend";
-import { WIDGET_EVENT_TYPES, type StateEvent } from "../widgetStateEvent";
-import { StoredLoginInvalidError, type EmojiVerification, type LiveSession, type LoginOptions, type PendingLogin, type RoomSummary, type SessionProvider } from "../player/session";
+import { WIDGET_EVENT_TYPES, type StateEvent } from "../../widgetStateEvent";
+import { StoredLoginInvalidError, type EmojiVerification, type LiveSession, type LoginOptions, type PendingLogin, type RoomSummary, type SessionProvider } from "../../session";
 
 /**
- * The matrix-js-sdk implementation of `../player/session`. With `./backend` it is the only code that
+ * The matrix-js-sdk implementation of `../../session`. With `./backend` it is the only code that
  * knows which SDK the app runs on.
  *
  * Sync is classic `/sync` v2 with the SDK's in-memory store, so every start does an initial sync;

@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { resolveWidget, widgetKey, type ResolvedWidget, type StateEvent } from "../widgetStateEvent";
-import { capabilityStoreKey } from "./capabilityStore";
-import type { LiveSession, RoomBackend, RoomSummary } from "./session";
+import { capabilityStoreKey } from "../lib/capabilityStore";
+import type { LiveSession, RoomBackend, RoomSummary } from "../session";
 import { WidgetView, type WidgetOptions } from "./WidgetView";
 
 /** Where legacy widgets are loaded through; the compat wrapper this host serves itself by default. */

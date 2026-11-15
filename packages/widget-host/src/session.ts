@@ -1,6 +1,6 @@
 /**
- * Everything the player needs from a Matrix client, as interfaces. The UI (`App`, `Login`,
- * `Player`, `RoomView`, `WidgetView`) only uses this module, so supporting another Matrix SDK
+ * Everything the widget host needs from a Matrix client, as interfaces. The UI (`App`, `Login`,
+ * `LoggedInView`, `RoomView`, `WidgetView`) only uses this module, so supporting another Matrix SDK
  * means writing another `SessionProvider` and adding it to the choice at the bottom. Nothing
  * here, and nothing in the UI, may import an SDK.
  *
@@ -9,7 +9,7 @@
  */
 import type { MatrixBackend } from "@matrix-widget-tools/widget-host-bindings";
 
-import type { StateEvent } from "../widgetStateEvent";
+import type { StateEvent } from "./widgetStateEvent";
 
 export interface RoomSummary {
   id: string;
@@ -111,12 +111,12 @@ function lazyProvider(load: () => Promise<SessionProvider>): SessionProvider {
 }
 
 /**
- * The Matrix SDK this build of the player runs on: matrix-rust-sdk, or matrix-js-sdk when built
+ * The Matrix SDK this build of the widget host runs on: matrix-rust-sdk, or matrix-js-sdk when built
  * with `VITE_MATRIX_SDK=js` (`npm run dev:js`, `npm run build:js`). Vite replaces the variable
  * at build time, so the other SDK is not part of the build at all.
  */
 export const sessions: SessionProvider = lazyProvider(
   import.meta.env.VITE_MATRIX_SDK === "js"
-    ? () => import("../js_sdk/session").then((m) => m.jsSdkSessions)
-    : () => import("../rust_sdk/session").then((m) => m.rustSdkSessions),
+    ? () => import("./sdk/js/session").then((m) => m.jsSdkSessions)
+    : () => import("./sdk/rust/session").then((m) => m.rustSdkSessions),
 );

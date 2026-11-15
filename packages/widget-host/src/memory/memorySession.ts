@@ -1,7 +1,7 @@
 import { InMemoryBackend } from "@matrix-widget-tools/widget-host-bindings";
 
 import { widgetKey, type StateEvent } from "../widgetStateEvent";
-import type { LiveSession, RoomBackend, RoomSummary } from "./session";
+import type { LiveSession, RoomBackend, RoomSummary } from "../session";
 
 export const EXAMPLE_NEW: StateEvent = {
   type: "m.widget",
@@ -49,7 +49,7 @@ export interface MemorySessionOptions {
 
 /**
  * The in-memory stand-in for a logged-in client: one room on the crate's `InMemoryBackend`, with
- * a list of widgets kept here. It implements `LiveSession`, so the player's views work on it
+ * a list of widgets kept here. It implements `LiveSession`, so the host's views work on it
  * unchanged; `store` is what the memory-store panel inspects and seeds. Nothing leaves the page.
  */
 export class MemorySession implements LiveSession {

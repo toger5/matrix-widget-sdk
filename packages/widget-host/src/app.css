@@ -75,7 +75,7 @@ pre {
   gap: 2px;
 }
 
-.player {
+.logged-in-view {
   height: 100%;
   display: grid;
   grid-template-columns: 260px 1fr;
@@ -300,7 +300,7 @@ hr {
 }
 
 /* The in-memory mode: the store's controls in a third column. */
-.player.with-side {
+.logged-in-view.with-side {
   grid-template-columns: 200px 1fr 340px;
 }
 .side {

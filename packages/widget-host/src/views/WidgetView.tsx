@@ -2,9 +2,9 @@ import { useEffect, useRef, useState } from "react";
 import { WidgetHostDriver, type DriverSnapshot, type MatrixBackend, type WidgetHostPlatform } from "@matrix-widget-tools/widget-host-bindings";
 
 import { LEGACY_AUTO_APPROVED, type ResolvedWidget } from "../widgetStateEvent";
-import { loadCapabilities, saveCapabilities } from "./capabilityStore";
-import { envelope, pretty, stringify } from "./format";
-import { onDriverLog } from "./hostLogging";
+import { loadCapabilities, saveCapabilities } from "../lib/capabilityStore";
+import { envelope, pretty, stringify } from "../lib/format";
+import { onDriverLog } from "../lib/hostLogging";
 
 /** MSC4412 recommends showing an error when `notify_ready` has not arrived after 15 seconds. */
 const NOTIFY_READY_TIMEOUT_MS = 15_000;

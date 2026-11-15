@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 
-import { Login } from "./Login";
-import { MemoryPlayer, startsInMemory } from "./MemoryPlayer";
-import { Player } from "./Player";
+import { Login } from "./views/Login";
+import { MemoryView, startsInMemory } from "./memory/MemoryView";
+import { LoggedInView } from "./views/LoggedInView";
 import { sessions, StoredLoginInvalidError, type LiveSession } from "./session";
 
 type State =
@@ -79,9 +79,9 @@ export function App() {
     case "login":
       return <Login error={state.error} onLoggedIn={(session) => setState({ step: "live", session })} onUseMemory={() => setState({ step: "memory" })} />;
     case "live":
-      return <Player session={state.session} onLeft={() => setState({ step: "restoring" })} />;
+      return <LoggedInView session={state.session} onLeft={() => setState({ step: "restoring" })} />;
     case "memory":
       // Leaving the in-memory store looks for a stored login again, like a fresh start would.
-      return <MemoryPlayer onLeft={() => setState({ step: "restoring" })} />;
+      return <MemoryView onLeft={() => setState({ step: "restoring" })} />;
   }
 }

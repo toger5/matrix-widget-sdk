@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 
-import { sessions, type LiveSession, type PendingLogin } from "./session";
+import { sessions, type LiveSession, type PendingLogin } from "../session";
 
 interface Props {
   error?: string;

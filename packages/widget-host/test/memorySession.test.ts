@@ -2,7 +2,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { matrixEventFromJson } from "../../widget-host-bindings/src/generated/widget_actions";
-import { EXAMPLE_LEGACY, EXAMPLE_NEW, MemorySession } from "../src/player/memorySession";
+import { EXAMPLE_LEGACY, EXAMPLE_NEW, MemorySession } from "../src/memory/memorySession";
 import { describeBackendContract } from "./backendContract";
 import "./harness";
 

@@ -3,8 +3,8 @@ import { createRoot } from "react-dom/client";
 import { uniffiInitAsync } from "@matrix-widget-tools/widget-host-bindings";
 
 import { App } from "./App";
-import { setupDriverLogging } from "./hostLogging";
-import "./player.css";
+import { setupDriverLogging } from "./lib/hostLogging";
+import "./app.css";
 
 const root = createRoot(document.getElementById("root")!);
 try {

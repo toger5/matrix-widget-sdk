@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type FormEvent, type ReactNode } from "react";
 
-import { clearCapabilities } from "./capabilityStore";
+import { clearCapabilities } from "../lib/capabilityStore";
 import { RoomView } from "./RoomView";
-import type { EmojiVerification, LiveSession, RoomSummary, VerificationEmoji } from "./session";
+import type { EmojiVerification, LiveSession, RoomSummary, VerificationEmoji } from "../session";
 import type { WidgetOptions } from "./WidgetView";
 
 interface Props {
@@ -21,7 +21,7 @@ interface Props {
 }
 
 /** The main view of both modes: account, searchable room list, and the open room. */
-export function Player({ session, onLeft, leaveLabel = "Log out", sidePanel, initialRoomId, initialWidgetKey, widgetOptions }: Props) {
+export function LoggedInView({ session, onLeft, leaveLabel = "Log out", sidePanel, initialRoomId, initialWidgetKey, widgetOptions }: Props) {
   const rooms = useRooms(session);
   const [search, setSearch] = useState("");
   const [roomId, setRoomId] = useState<string | undefined>(initialRoomId);
@@ -42,7 +42,7 @@ export function Player({ session, onLeft, leaveLabel = "Log out", sidePanel, ini
   };
 
   return (
-    <div className={sidePanel ? "player with-side" : "player"}>
+    <div className={sidePanel ? "logged-in-view with-side" : "logged-in-view"}>
       <aside>
         <div className="account">
           <span className="muted">{session.userId}</span>

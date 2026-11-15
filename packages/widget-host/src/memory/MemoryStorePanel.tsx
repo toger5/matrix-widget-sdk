@@ -2,9 +2,9 @@ import { useEffect, useRef, useState } from "react";
 import { matrixEventFromJson, type StoredMedia } from "@matrix-widget-tools/widget-host-bindings";
 
 import type { StateEvent } from "../widgetStateEvent";
-import { stringify } from "./format";
+import { stringify } from "../lib/format";
 import { EXAMPLE_LEGACY, EXAMPLE_NEW, type MemorySession } from "./memorySession";
-import type { WidgetOptions } from "./WidgetView";
+import type { WidgetOptions } from "../views/WidgetView";
 
 const EXAMPLE_EVENT = {
   type: "m.room.message",

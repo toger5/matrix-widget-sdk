@@ -1,12 +1,12 @@
 # Widget host
 
 An MSC4412 widget host in the browser, on `widget-host-driver` through the UniFFI/wasm bindings
-in `../widget-host-bindings`. One React app (`src/player/`) with two modes that share every view
+in `../widget-host-bindings`. One React app (`src/`) with two modes that share every view
 (room list, room view, widget view):
 
 | mode | backend | for |
 |---|---|---|
-| logged in | `RustSdkBackend` (`src/rust_sdk/backend/`): a real room of a matrix-rust-sdk client. A `js` build uses `JsSdkBackend` (`src/js_sdk/backend/`) on matrix-js-sdk instead, see "Choosing the Matrix SDK" | opening and debugging the widgets of your rooms |
+| logged in | `RustSdkBackend` (`src/sdk/rust/backend/`): a real room of a matrix-rust-sdk client. A `js` build uses `JsSdkBackend` (`src/sdk/js/backend/`) on matrix-js-sdk instead, see "Choosing the Matrix SDK" | opening and debugging the widgets of your rooms |
 | in-memory store | the crate's `InMemoryBackend`, an in-memory Matrix room; nothing leaves the page | widget development without a homeserver, end-to-end tests of widgets and of the compat wrapper |
 
 The start page is the login screen. **Use the in-memory store (no login)** on it switches to the
@@ -17,21 +17,21 @@ and [`handover.md`](../../handover.md).
 
 ## Structure
 
-- `src/player/session.ts` is what the UI needs from a Matrix client, as interfaces (login, session
+- `src/session.ts` is what the UI needs from a Matrix client, as interfaces (login, session
   restore, room list, the widget state events of a room, a backend per room, device
   verification). The UI imports no SDK. Its `sessions` export picks the SDK and loads it lazily.
-- `src/js_sdk/session.ts` implements it on matrix-js-sdk: OAuth 2.0 (dynamic client
+- `src/sdk/js/session.ts` implements it on matrix-js-sdk: OAuth 2.0 (dynamic client
   registration, PKCE, in a popup that returns through `oidc-callback.html`) or a password,
-  `/sync` v2, end-to-end encryption, verification with a recovery key. `src/js_sdk/backend/` is the
-  `MatrixBackend` for one room. `src/js_sdk/` is the only folder that imports matrix-js-sdk.
-- `src/rust_sdk/session.ts` and `src/rust_sdk/backend/` are the same on matrix-rust-sdk
+  `/sync` v2, end-to-end encryption, verification with a recovery key. `src/sdk/js/backend/` is the
+  `MatrixBackend` for one room. `src/sdk/js/` is the only folder that imports matrix-js-sdk.
+- `src/sdk/rust/session.ts` and `src/sdk/rust/backend/` are the same on matrix-rust-sdk
   (`../matrix-sdk-uniffi-js`, with native sliding sync). A build has one SDK or the other, see
   "Choosing the Matrix SDK" below. This implementation has not run against a homeserver yet;
   `../../rust-sdk-port.md` says what it relies on and how it differs.
-- `src/player/memorySession.ts` implements the same `LiveSession` on an `InMemoryBackend`, with
-  one room and an editable list of widgets. `MemoryPlayer.tsx` puts the shared `Player` on it and
+- `src/memory/memorySession.ts` implements the same `LiveSession` on an `InMemoryBackend`, with
+  one room and an editable list of widgets. `MemoryView.tsx` puts the shared `LoggedInView` on it and
   adds `MemoryStorePanel.tsx`, the store's controls, as a side panel.
-- `src/player/Player.tsx`, `RoomView.tsx`, `WidgetView.tsx` are the shared views. `WidgetView` is
+- `src/views/` holds the views: `Login.tsx`, and `LoggedInView.tsx`, `RoomView.tsx`, `WidgetView.tsx`, which both modes share. `WidgetView` is
   one widget: iframe, its own `WidgetHostDriver`, the capability and OpenID prompts, a message
   log and a driver panel (snapshot, `update_theme` / `update_language` / `update_visibility`).
 - `src/widgetStateEvent.ts` decides how a widget state event is embedded (below).
@@ -158,7 +158,7 @@ host's origin, unlike a wrapper deployed for a real client.
 
 ### Choosing the Matrix SDK
 
-The player runs on matrix-rust-sdk unless it is built with `VITE_MATRIX_SDK=js`
+The widget host runs on matrix-rust-sdk unless it is built with `VITE_MATRIX_SDK=js`
 (`.env.js`, used by Vite's `js` mode):
 
 ```sh
@@ -166,7 +166,7 @@ npm run dev:js           # dev server on matrix-js-sdk
 npm run build:js         # dist/ on matrix-js-sdk
 ```
 
-`src/player/session.ts` reads the variable. Vite replaces it at build time, so a build contains
+`src/session.ts` reads the variable. Vite replaces it at build time, so a build contains
 one SDK only: the `js` build has no matrix-rust-sdk wasm (15 MB gzip) in it, and the default
 build no matrix-js-sdk. Logins are stored separately per SDK.
 

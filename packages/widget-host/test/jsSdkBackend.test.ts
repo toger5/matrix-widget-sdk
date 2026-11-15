@@ -1,12 +1,12 @@
 /**
- * The player's `MatrixBackend` on matrix-js-sdk (`src/js_sdk/backend`), a foreign trait implemented in
+ * The widget host's `MatrixBackend` on matrix-js-sdk (`src/sdk/js/backend`), a foreign trait implemented in
  * TypeScript, behind the real `WidgetHostDriver` wasm. The js-sdk client is faked: the test checks
  * which SDK calls each widget action turns into, and what the SDK's events turn into for the widget.
  */
 import { ClientEvent, MatrixError, MatrixEventEvent, RoomStateEvent, type MatrixClient } from "matrix-js-sdk";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { JsSdkBackend } from "../src/js_sdk/backend/jsSdkBackend";
+import { JsSdkBackend } from "../src/sdk/js/backend/jsSdkBackend";
 import { describeBackendContract } from "./backendContract";
 import { X, behindDriver, tick } from "./harness";
 

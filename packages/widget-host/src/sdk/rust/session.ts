@@ -22,11 +22,11 @@ import {
 } from "matrix-sdk-uniffi-js";
 
 import { RustSdkBackend } from "./backend/rustSdkBackend";
-import { WIDGET_EVENT_TYPES, type StateEvent } from "../widgetStateEvent";
-import { StoredLoginInvalidError, type EmojiVerification, type LiveSession, type LoginOptions, type PendingLogin, type RoomSummary, type SessionProvider, type VerificationEmoji } from "../player/session";
+import { WIDGET_EVENT_TYPES, type StateEvent } from "../../widgetStateEvent";
+import { StoredLoginInvalidError, type EmojiVerification, type LiveSession, type LoginOptions, type PendingLogin, type RoomSummary, type SessionProvider, type VerificationEmoji } from "../../session";
 
 /**
- * The matrix-rust-sdk implementation of `../player/session` (`matrix-sdk-uniffi-js`). With
+ * The matrix-rust-sdk implementation of `../../session` (`matrix-sdk-uniffi-js`). With
  * `./backend` it is the only code that knows which SDK the app runs on.
  */
 

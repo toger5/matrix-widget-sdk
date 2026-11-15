@@ -3,8 +3,8 @@ import { useEffect, useState } from "react";
 import { widgetKey, type StateEvent } from "../widgetStateEvent";
 import { EXAMPLE_NEW, MemorySession, seedDemoMedia } from "./memorySession";
 import { MemoryStorePanel } from "./MemoryStorePanel";
-import { Player } from "./Player";
-import type { WidgetOptions } from "./WidgetView";
+import { LoggedInView } from "../views/LoggedInView";
+import type { WidgetOptions } from "../views/WidgetView";
 
 /**
  * URL parameters of the in-memory mode, so tests can start deterministically:
@@ -44,10 +44,10 @@ function start(): Start {
 }
 
 /**
- * The widget host on the in-memory store instead of a login: the same `Player` as the logged-in
+ * The widget host on the in-memory store instead of a login: the same `LoggedInView` as the logged-in
  * mode, on a `MemorySession`, with the store's controls in a side panel.
  */
-export function MemoryPlayer({ onLeft }: { onLeft: () => void }) {
+export function MemoryView({ onLeft }: { onLeft: () => void }) {
   const [{ session, initialWidgetKey, problem }] = useState(start);
   const [options, setOptions] = useState<WidgetOptions>(() => ({ autoApprove: params().get("autoApprove") === "1", autoApproveOpenId: false, rememberCapabilities: false, devtoolsOpen: true }));
 
@@ -56,7 +56,7 @@ export function MemoryPlayer({ onLeft }: { onLeft: () => void }) {
   }, [session]);
 
   return (
-    <Player
+    <LoggedInView
       session={session}
       onLeft={onLeft}
       leaveLabel="Leave"

@@ -1,5 +1,5 @@
 /**
- * The player's `MatrixBackend` on matrix-rust-sdk (`src/rust_sdk/backend`), a foreign trait
+ * The widget host's `MatrixBackend` on matrix-rust-sdk (`src/sdk/rust/backend`), a foreign trait
  * implemented in TypeScript, behind the real `WidgetHostDriver` wasm. The SDK client is faked: the
  * test checks which SDK calls each widget action turns into, and what the SDK's sync turns into
  * for the widget. The SDK's wasm module is loaded too, because its enums and event type
@@ -24,7 +24,7 @@ import {
 import initSdkWasm from "../../matrix-sdk-uniffi-js/src/generated/wasm-bindgen/index.js";
 import * as sdkFfi from "../../matrix-sdk-uniffi-js/src/generated/matrix_sdk_ffi";
 import * as rumaEvents from "../../matrix-sdk-uniffi-js/src/generated/ruma_events";
-import { RustSdkBackend } from "../src/rust_sdk/backend/rustSdkBackend";
+import { RustSdkBackend } from "../src/sdk/rust/backend/rustSdkBackend";
 import { describeBackendContract } from "./backendContract";
 import { X, behindDriver, tick } from "./harness";
 

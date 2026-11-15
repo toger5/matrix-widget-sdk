@@ -93,7 +93,7 @@ Only when the action needs something new from Matrix.
 
 - The `MatrixBackend` trait and its sinks in `lib.rs`.
 - `InMemoryBackend` in `in_memory.rs` (it backs every Rust test and the browser host's in-memory mode).
-- The matrix-js-sdk backend of the browser host, `packages/widget-host/src/js_sdk/backend/jsSdkBackend.ts`,
+- The matrix-js-sdk backend of the browser host, `packages/widget-host/src/sdk/js/backend/jsSdkBackend.ts`,
   implements the trait in TypeScript: a new or changed method needs its js-sdk mapping there and a
   case in `packages/widget-host/test/jsSdkBackend.test.ts`.
 - The table in `docs/parity.md` §3 that compares the trait with matrix-rust-rtc.
@@ -152,9 +152,9 @@ Ask for every change:
 
 | what | where |
 |---|---|
-| Driver calls, platform implementation, per-widget buttons | `packages/widget-host/src/player/WidgetView.tsx` |
+| Driver calls, platform implementation, per-widget buttons | `packages/widget-host/src/views/WidgetView.tsx` |
 | Auto-approved capabilities of legacy widgets | `packages/widget-host/src/widgetStateEvent.ts` |
-| Controls of the in-memory store | `packages/widget-host/src/player/MemoryStorePanel.tsx` |
+| Controls of the in-memory store | `packages/widget-host/src/memory/MemoryStorePanel.tsx` |
 | End to end through the JS bindings | `packages/widget-host/test/driver.test.ts` |
 | What every backend must do behind the driver | `packages/widget-host/test/backendContract.ts` |
 | New widget: capability lists | `packages/test-widgets/new/capabilities.ts` |
