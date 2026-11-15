@@ -1,0 +1,30 @@
+# uniffi-bindgen-react-native (ubrn) configuration, `web` flavour, for matrix-sdk-ffi.
+#
+# `ubrn checkout` clones the SDK at `rust.ref` into `rust_modules/matrix-rust-sdk`.
+# `ubrn build web` builds matrix-sdk-ffi natively to read the UniFFI metadata, generates
+# TypeScript for every namespace into `src/generated`, writes a wasm-bindgen shim crate to
+# `bindings/wasm` inside the SDK checkout, builds it for wasm32-unknown-unknown and runs
+# `wasm-bindgen`. Do not run it directly: `scripts/build.sh` patches the checkout first.
+#
+# The pin is `main` of 2026-11-13. The SDK is on uniffi 0.32.1, which released ubrn does not
+# support yet (jhugman/uniffi-bindgen-react-native#449), so `package.json` takes ubrn from the
+# unmerged 0.32 branch `uniffi-0.32/ci-typecheck` of neekolas/uniffi-bindgen-react-native.
+# The last SDK commit that builds with released ubrn (uniffi 0.31) is b994f47f.
+rust:
+  repo: https://github.com/matrix-org/matrix-rust-sdk
+  ref: ce0552083826b15f41e05cf03abbca0d6b9e68d2
+  manifestPath: bindings/matrix-sdk-ffi/Cargo.toml
+
+bindings:
+  ts: src/generated
+
+web:
+  workspace: true
+  manifestPath: rust_modules/matrix-rust-sdk/bindings/wasm/Cargo.toml
+  # The ffi's default features are off (they include sqlite and a native TLS stack), so the
+  # optional API the player uses is listed: sticky events (MSC4354).
+  features: ["js", "indexeddb", "unstable-msc4354"]
+  defaultFeatures: false
+  target: web
+  tsBindings: src/generated
+  entrypoint: src/generated/index.web.ts

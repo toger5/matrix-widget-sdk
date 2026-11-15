@@ -1,0 +1,32 @@
+{
+  "name": "matrix-sdk-uniffi-js",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "matrix-rust-sdk (matrix-sdk-ffi) for the browser: TypeScript bindings and one wasm module, generated from the SDK's UniFFI scaffolding with uniffi-bindgen-react-native",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "types": "./src/index.ts",
+  "files": [
+    "src",
+    "README.md"
+  ],
+  "scripts": {
+    "bindings": "bash scripts/build.sh",
+    "ubrn:checkout": "ubrn checkout --config ubrn.config.yaml",
+    "ubrn:web": "ubrn build web --config ubrn.config.yaml --release",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "uniffi-bindgen-react-native": "github:neekolas/uniffi-bindgen-react-native#b625018398dd4b1a8fccff873b2f31d812a60bd2"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/element-hq/matrix-widget-tools-sdk",
+    "directory": "packages/matrix-sdk-uniffi-js"
+  }
+}

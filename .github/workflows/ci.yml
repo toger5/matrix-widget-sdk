@@ -43,5 +43,22 @@ jobs:
       - run: npm ci
       - run: npm run wasm
       - run: npm run bindings
+      # matrix-rust-sdk for the browser (packages/matrix-sdk-uniffi-js). Building it compiles the
+      # whole SDK twice, so the generated output is cached and only rebuilt when the pin, the
+      # SDK additions or the build script change.
+      - id: sdk-bindings
+        uses: actions/cache@v4
+        with:
+          path: packages/matrix-sdk-uniffi-js/src/generated
+          key: matrix-sdk-uniffi-js-${{ hashFiles('packages/matrix-sdk-uniffi-js/ubrn.config.yaml', 'packages/matrix-sdk-uniffi-js/scripts/**', 'packages/matrix-sdk-uniffi-js/sdk-additions/**', 'packages/matrix-sdk-uniffi-js/package.json') }}
+      - if: steps.sdk-bindings.outputs.cache-hit != 'true'
+        run: npm run bindings -w packages/matrix-sdk-uniffi-js
+      - if: steps.sdk-bindings.outputs.cache-hit != 'true'
+        run: npm pack -w packages/matrix-sdk-uniffi-js --pack-destination "$RUNNER_TEMP"
+      - if: steps.sdk-bindings.outputs.cache-hit != 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: matrix-sdk-uniffi-js
+          path: ${{ runner.temp }}/matrix-sdk-uniffi-js-*.tgz
       - run: npm run build --workspaces --if-present
       - run: npm test
