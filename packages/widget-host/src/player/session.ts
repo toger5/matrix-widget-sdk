@@ -111,12 +111,12 @@ function lazyProvider(load: () => Promise<SessionProvider>): SessionProvider {
 }
 
 /**
- * The Matrix SDK this build of the player runs on: matrix-js-sdk, or matrix-rust-sdk when built
- * with `VITE_MATRIX_SDK=rust` (`npm run dev:rust`, `npm run build:rust`). Vite replaces the
- * variable at build time, so the other SDK is not part of the build at all.
+ * The Matrix SDK this build of the player runs on: matrix-rust-sdk, or matrix-js-sdk when built
+ * with `VITE_MATRIX_SDK=js` (`npm run dev:js`, `npm run build:js`). Vite replaces the variable
+ * at build time, so the other SDK is not part of the build at all.
  */
 export const sessions: SessionProvider = lazyProvider(
-  import.meta.env.VITE_MATRIX_SDK === "rust"
-    ? () => import("../rust_sdk/session").then((m) => m.rustSdkSessions)
-    : () => import("../js_sdk/session").then((m) => m.jsSdkSessions),
+  import.meta.env.VITE_MATRIX_SDK === "js"
+    ? () => import("../js_sdk/session").then((m) => m.jsSdkSessions)
+    : () => import("../rust_sdk/session").then((m) => m.rustSdkSessions),
 );

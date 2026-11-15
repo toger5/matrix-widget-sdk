@@ -3,12 +3,12 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Widget host webapp on widget-host-driver (uniffi/wasm bindings): logs in with matrix-js-sdk and opens the widgets of your rooms, or runs on an in-memory room for widget development and e2e testing",
+  "description": "Widget host webapp on widget-host-driver (uniffi/wasm bindings): logs in with matrix-rust-sdk (or matrix-js-sdk) and opens the widgets of your rooms, or runs on an in-memory room for widget development and e2e testing",
   "scripts": {
     "dev": "vite",
-    "dev:rust": "vite --mode rust",
+    "dev:js": "vite --mode js",
     "build": "tsc --noEmit && vite build",
-    "build:rust": "tsc --noEmit && vite build --mode rust",
+    "build:js": "tsc --noEmit && vite build --mode js",
     "preview": "vite preview",
     "test": "vitest run"
   },

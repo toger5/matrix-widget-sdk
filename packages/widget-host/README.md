@@ -6,7 +6,7 @@ in `../widget-host-bindings`. One React app (`src/player/`) with two modes that 
 
 | mode | backend | for |
 |---|---|---|
-| logged in | `JsSdkBackend` (`src/js_sdk/backend/`): a real room of a matrix-js-sdk client | opening and debugging the widgets of your rooms |
+| logged in | `RustSdkBackend` (`src/rust_sdk/backend/`): a real room of a matrix-rust-sdk client. A `js` build uses `JsSdkBackend` (`src/js_sdk/backend/`) on matrix-js-sdk instead, see "Choosing the Matrix SDK" | opening and debugging the widgets of your rooms |
 | in-memory store | the crate's `InMemoryBackend`, an in-memory Matrix room; nothing leaves the page | widget development without a homeserver, end-to-end tests of widgets and of the compat wrapper |
 
 The start page is the login screen. **Use the in-memory store (no login)** on it switches to the
@@ -158,20 +158,20 @@ host's origin, unlike a wrapper deployed for a real client.
 
 ### Choosing the Matrix SDK
 
-The player runs on matrix-js-sdk unless it is built with `VITE_MATRIX_SDK=rust`
-(`.env.rust`, used by Vite's `rust` mode):
+The player runs on matrix-rust-sdk unless it is built with `VITE_MATRIX_SDK=js`
+(`.env.js`, used by Vite's `js` mode):
 
 ```sh
-npm run dev:rust         # dev server on matrix-rust-sdk
-npm run build:rust       # dist/ on matrix-rust-sdk
+npm run dev:js           # dev server on matrix-js-sdk
+npm run build:js         # dist/ on matrix-js-sdk
 ```
 
 `src/player/session.ts` reads the variable. Vite replaces it at build time, so a build contains
-one SDK only: the default build has no matrix-rust-sdk wasm (15 MB gzip) in it, and the `rust`
+one SDK only: the `js` build has no matrix-rust-sdk wasm (15 MB gzip) in it, and the default
 build no matrix-js-sdk. Logins are stored separately per SDK.
 
-Both implementations are type-checked and tested in every build, so `../matrix-sdk-uniffi-js`
-has to be built once even for the default one:
+Both implementations are type-checked and tested in every build, and the default build runs on
+it, so `../matrix-sdk-uniffi-js` has to be built once:
 `npm run bindings -w packages/matrix-sdk-uniffi-js` (slow, see its README).
 
 ## Using it in end-to-end tests
