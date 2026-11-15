@@ -19,7 +19,7 @@ npm run bindings -w packages/matrix-sdk-uniffi-js
 Needs:
 
 - the Rust target `wasm32-unknown-unknown`
-- optionally binaryen's `wasm-opt`, which shrinks the binary
+- binaryen's `wasm-opt` (`brew install binaryen`); the script stops without it
 
 The `wasm-bindgen` CLI has to match the SDK's `Cargo.lock` exactly, so the script installs that
 version into `rust_modules/tools` instead of relying on the one on `PATH`.
@@ -62,6 +62,42 @@ are.
 | `crates/matrix-sdk-ui/src/room_list_service/full_state.rs` | `RoomListService::set_room_subscriptions_with_full_state`: a room subscription with `required_state: [["*", "*"]]` instead of the SDK's fixed list |
 | `bindings/matrix-sdk-ffi/src/room_list_full_state.rs` | `RoomListService::subscribe_to_room_with_full_state`: the above for one room, returning once the state has arrived (or after a timeout) |
 
+## Wasm size
+
+Measured at the pin below. "Without" is what `ubrn build web --release` produces on its own:
+cargo's default release profile and no post-processing.
+
+| | Without optimisations | With |
+|---|---|---|
+| wasm file | 72.2 MB | 18.9 MB |
+| gzip (`-9`) | 14.7 MB | 6.7 MB |
+| brotli (`-q 11`) | 7.6 MB | 4.5 MB |
+| code section | 49.2 MB | 15.2 MB |
+| name section (function names) | 18.5 MB | removed |
+| data section | 4.1 MB | 3.3 MB |
+| functions | 75,810 | 40,333 |
+
+The wasm is built in the SDK's workspace, which has no `[profile.release]`, so the profile in
+this repository's `Cargo.toml` does not apply to it. `scripts/build.sh` sets the profile through
+`CARGO_PROFILE_RELEASE_*` environment variables instead, which needs no edit of the checkout:
+
+| Optimisation | Setting | What it does |
+|---|---|---|
+| optimise for size | `opt-level = "z"` | the default, `3`, trades size for speed: more inlining, loop unrolling, and generic code compiled again in every crate that uses it |
+| link-time optimisation | `lto = "fat"` | optimises all crates as one unit, which merges those duplicated generics and removes code nothing reaches |
+| one codegen unit | `codegen-units = 1` | the default of 16 splits each crate into parts that are optimised separately |
+| strip | `strip = true` | drops the name section. Build scripts and proc macros are left unstripped (`build-override`), as stripped proc-macro dylibs can fail to load on recent macOS |
+| `wasm-opt -Oz` | binaryen, after `wasm-bindgen` | a wasm-level size pass over the finished module |
+
+The profile and the strip take the file from 72.2 MB to 20 MB; `wasm-opt` takes it to 18.9 MB.
+The price is build time (the wasm pass takes about 5 minutes) and Rust panics that show function
+indices instead of names in their stack trace. For a local build with names, remove
+`CARGO_PROFILE_RELEASE_STRIP` from the script.
+
+What remains is mostly code that cannot be removed without changing what is built: UniFFI
+exports the whole ffi API (1,650 functions), and every export keeps its code alive whether an
+app calls it or not. Going further means turning off ffi features or exporting a smaller API.
+
 ## The pin
 
 | | |
@@ -70,7 +106,7 @@ are.
 | ubrn | `neekolas/uniffi-bindgen-react-native` at `b625018`, the tip of the unmerged `uniffi-0.32/ci-typecheck` branch. Released ubrn is on uniffi 0.31 ([ubrn#449](https://github.com/jhugman/uniffi-bindgen-react-native/issues/449)) |
 | ffi features | `js`, `indexeddb`, `unstable-msc4354` (sticky events); the ffi's default features are off |
 | wasm-bindgen | 0.2.128, from the SDK's lock file |
-| Output | 72 MB wasm without `wasm-opt` (14.8 MB gzip), 2.8 MB of TypeScript for `matrix_sdk_ffi` |
+| Output | 18.9 MB wasm (see [Wasm size](#wasm-size)), 2.8 MB of TypeScript for `matrix_sdk_ffi` |
 
 The generated TypeScript passes `tsc --noEmit` (`npm run typecheck`). Moving the pin means
 checking the first table above against the new commit and that `sdk-additions/` still compiles. The last SDK commit that builds with
