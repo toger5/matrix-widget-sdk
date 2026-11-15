@@ -11,11 +11,11 @@ import {
   type MatrixEvent,
   type ValidatedAuthMetadata,
 } from "matrix-js-sdk";
-import { decodeRecoveryKey } from "matrix-js-sdk/lib/crypto-api";
+import { decodeRecoveryKey, VerificationPhase, VerificationRequestEvent, VerifierEvent, type ShowSasCallbacks, type VerificationRequest } from "matrix-js-sdk/lib/crypto-api";
 
 import { JsSdkBackend } from "./backend/jsSdkBackend";
 import { WIDGET_EVENT_TYPES, type StateEvent } from "../widgetStateEvent";
-import { StoredLoginInvalidError, type LiveSession, type LoginOptions, type PendingLogin, type RoomSummary, type SessionProvider } from "../player/session";
+import { StoredLoginInvalidError, type EmojiVerification, type LiveSession, type LoginOptions, type PendingLogin, type RoomSummary, type SessionProvider } from "../player/session";
 
 /**
  * The matrix-js-sdk implementation of `../player/session`. With `./backend` it is the only code that
@@ -164,8 +164,51 @@ class JsSdkPendingLogin implements PendingLogin {
     // A login is always a new device; whatever an earlier one left behind cannot be used by it.
     await clearSdkStores(stored.homeserverUrl);
     saveStored(stored);
-    return JsSdkSession.start(stored);
+    return (await activate(JsSdkSession.start(stored)))!;
   }
+}
+
+/**
+ * The one client of this page, or its start in progress. There must never be two: they would
+ * share the crypto store, and each would upload its own one-time keys under the same ids (the
+ * homeserver then answers "One time key … already exists" and encryption is broken for good).
+ * `restore()` is called twice in a row by React's strict mode, for one.
+ */
+let active: Promise<JsSdkSession | undefined> | undefined;
+
+/** Make `start` the page's client, unless it fails or finds no login. */
+function activate(start: Promise<JsSdkSession | undefined>): Promise<JsSdkSession | undefined> {
+  const tracked: Promise<JsSdkSession | undefined> = start.then(
+    (session) => {
+      if (!session && active === tracked) active = undefined;
+      return session;
+    },
+    (e: unknown) => {
+      if (active === tracked) active = undefined;
+      throw e;
+    },
+  );
+  active = tracked;
+  return tracked;
+}
+
+/** How long the signature of the verifying device may take to arrive after an emoji verification. */
+const VERIFIED_TIMEOUT_MS = 20_000;
+
+/** Resolves once the other device has accepted `request` (or started verifying right away). */
+function accepted(request: VerificationRequest): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const check = () => {
+      const phase = request.phase;
+      if (phase !== VerificationPhase.Ready && phase !== VerificationPhase.Started && phase !== VerificationPhase.Cancelled && phase !== VerificationPhase.Done) return;
+      request.off(VerificationRequestEvent.Change, check);
+      if (phase === VerificationPhase.Cancelled) reject(new Error("The verification was cancelled or timed out."));
+      else if (phase === VerificationPhase.Done) reject(new Error("The verification ended before the emoji were shown."));
+      else resolve();
+    };
+    request.on(VerificationRequestEvent.Change, check);
+    check();
+  });
 }
 
 /** A logged-in, syncing client. */
@@ -298,8 +341,67 @@ class JsSdkSession implements LiveSession {
     if (await this.needsVerification()) throw new Error("The recovery key was accepted, but this device is still not verified.");
   }
 
+  /**
+   * Emoji (SAS) verification, started from here: every other device of the account gets the
+   * request, the one that accepts it compares emoji with this one and then signs this device.
+   * The secrets (cross-signing keys, backup key) follow from that device on their own.
+   */
+  async startEmojiVerification(): Promise<EmojiVerification> {
+    const crypto = this.client.getCrypto();
+    if (!crypto) throw new Error("End-to-end encryption is not set up in this client.");
+    const request = await crypto.requestOwnUserVerification();
+    let sas: ShowSasCallbacks | undefined;
+    let done: Promise<void> | undefined;
+
+    const emoji = (async () => {
+      await accepted(request);
+      // `Started`: the other device chose emoji already and the verifier exists.
+      const verifier = request.verifier ?? (await request.startVerification("m.sas.v1"));
+      const shown = new Promise<ShowSasCallbacks>((resolve) => {
+        const callbacks = verifier.getShowSasCallbacks();
+        if (callbacks) resolve(callbacks);
+        else verifier.once(VerifierEvent.ShowSas, resolve);
+      });
+      // Runs until both sides have confirmed; rejects when either side cancels.
+      done = verifier.verify();
+      done.catch(() => undefined);
+      sas = await Promise.race([
+        shown,
+        done.then(() => {
+          throw new Error("The verification ended before the emoji were shown.");
+        }),
+      ]);
+      if (!sas.sas.emoji) throw new Error("The other device offers no emoji to compare.");
+      return sas.sas.emoji.map(([symbol, name]) => ({ symbol, name }));
+    })();
+    emoji.catch(() => undefined);
+
+    return {
+      emoji,
+      confirm: async () => {
+        await emoji;
+        await sas!.confirm();
+        await done;
+        // This device is verified once the other device's signature of it has come down the sync.
+        const deadline = Date.now() + VERIFIED_TIMEOUT_MS;
+        while (await this.needsVerification()) {
+          if (Date.now() > deadline) throw new Error("The emoji were confirmed, but this device is still not verified.");
+          await new Promise((resolve) => setTimeout(resolve, 500));
+        }
+        await crypto.checkKeyBackupAndEnable().catch((e: unknown) => console.warn("checking the key backup failed", e));
+      },
+      cancel: (mismatch) => {
+        if (mismatch && sas) sas.mismatch();
+        else if (request.phase !== VerificationPhase.Done && request.phase !== VerificationPhase.Cancelled) {
+          request.cancel().catch((e: unknown) => console.warn("cancelling the verification failed", e));
+        }
+      },
+    };
+  }
+
   /** Log out (for an OAuth login this revokes the tokens) and delete the SDK's stores. */
   async logout(): Promise<void> {
+    active = undefined;
     await this.client.logout(true).catch((e: unknown) => console.warn("logout request failed", e));
     this.client.stopClient();
     localStorage.removeItem(STORAGE_KEY);
@@ -309,7 +411,7 @@ class JsSdkSession implements LiveSession {
 
 export const jsSdkSessions: SessionProvider = {
   startLogin: (server) => JsSdkPendingLogin.start(server),
-  restore: () => JsSdkSession.restore(),
+  restore: async () => active ?? activate(JsSdkSession.restore()),
   async clearStored() {
     const stored = loadStored();
     if (!stored) return;

@@ -39,6 +39,22 @@ export interface RoomBackend extends MatrixBackend {
   dispose(): void;
 }
 
+/** One of the emoji both devices show during an emoji verification. */
+export interface VerificationEmoji {
+  symbol: string;
+  name: string;
+}
+
+/** A running emoji (SAS) verification of this device by another device of the same account. */
+export interface EmojiVerification {
+  /** The emoji to compare, once the other device has accepted the request. Rejects when the verification ends before that. */
+  readonly emoji: Promise<VerificationEmoji[]>;
+  /** The user says the emoji match. Resolves when the other device has confirmed too and this device is verified. */
+  confirm(): Promise<void>;
+  /** End the verification: the emoji differ (`mismatch`), or the user gave up. */
+  cancel(mismatch?: boolean): void;
+}
+
 /** A logged-in, syncing client (or the in-memory stand-in for one). */
 export interface LiveSession {
   readonly userId: string;
@@ -56,6 +72,8 @@ export interface LiveSession {
   needsVerification(): Promise<boolean>;
   /** Verify this device with the account's recovery key. */
   verifyWithRecoveryKey(recoveryKey: string): Promise<void>;
+  /** Ask the account's other devices to verify this one by comparing emoji. */
+  startEmojiVerification(): Promise<EmojiVerification>;
   /** Log out and delete everything stored for this login. */
   logout(): Promise<void>;
 }

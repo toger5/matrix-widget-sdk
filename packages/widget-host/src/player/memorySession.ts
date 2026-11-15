@@ -109,6 +109,10 @@ export class MemorySession implements LiveSession {
 
   async verifyWithRecoveryKey(): Promise<void> {}
 
+  async startEmojiVerification(): Promise<never> {
+    throw new Error("The in-memory store has no devices to verify.");
+  }
+
   /** Leaving the in-memory mode: there is nothing to log out of, the store goes with the session. */
   async logout(): Promise<void> {
     this.store.clear();

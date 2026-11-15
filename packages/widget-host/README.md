@@ -37,8 +37,9 @@ and [`handover.md`](../../handover.md).
 
 Enter a homeserver, log in, pick a room, open one of its widgets. Widgets come from `m.widget`,
 `org.matrix.msc4411.widget` and `im.vector.modular.widgets` state; the list follows the room
-state. If the account has cross-signing and this device is not verified, the room list asks for
-the recovery key. Log out revokes the session and deletes the stored login and the crypto store.
+state. If the account has cross-signing and this device is not verified, the room list offers
+to verify it: by comparing emoji with another device of the account (the host sends the request,
+accept it there), or with the recovery key. Log out revokes the session and deletes the stored login and the crypto store.
 
 The login screen only appears when no login is stored or the homeserver has ended the stored
 one. If a stored login cannot be started for another reason (the crypto store cannot be opened,
