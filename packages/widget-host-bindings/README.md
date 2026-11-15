@@ -41,6 +41,13 @@ npm run bindings          # from the repository root (= npm run ubrn:web in this
    `wasm32-unknown-unknown` and runs `wasm-bindgen`, producing `src/generated/wasm-bindgen/`
    (`index.js`, `index_bg.wasm`, type declarations).
 
+The npm scripts set `CARGO_TARGET_DIR` to `rust_modules/target`, so this build (the ubrn CLI
+included) never shares a cargo target directory with another checkout of this repository. With
+a shared one (`build.target-dir` in `~/.cargo/config.toml`, and a second git worktree) cargo
+takes the crates of the two checkouts for the same ones: the ubrn CLI then writes the other
+checkout's path into `rust_modules/wasm/Cargo.toml` and the wasm link fails with duplicate
+`wasm-bindgen` symbols.
+
 `src/generated/` and `rust_modules/` are build outputs and gitignored. `src/index.ts` is the
 package entry: it loads the wasm by URL (bundler friendly) and re-exports the three namespaces.
 

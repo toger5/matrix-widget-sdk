@@ -1,8 +1,8 @@
 /**
  * Everything the player needs from a Matrix client, as interfaces. The UI (`App`, `Login`,
- * `Player`, `RoomView`, `WidgetView`) only uses this module, so swapping the Matrix SDK means
- * writing another `SessionProvider` and changing the one line at the bottom. Nothing here, and
- * nothing in the UI, may import an SDK.
+ * `Player`, `RoomView`, `WidgetView`) only uses this module, so supporting another Matrix SDK
+ * means writing another `SessionProvider` and adding it to the choice at the bottom. Nothing
+ * here, and nothing in the UI, may import an SDK.
  *
  * The in-memory mode (`./memorySession`) implements `LiveSession` too, which is why it gets the
  * same views as a logged-in client.
@@ -110,5 +110,13 @@ function lazyProvider(load: () => Promise<SessionProvider>): SessionProvider {
   };
 }
 
-/** The Matrix SDK this build of the player runs on. */
-export const sessions: SessionProvider = lazyProvider(() => import("../js_sdk/session").then((m) => m.jsSdkSessions));
+/**
+ * The Matrix SDK this build of the player runs on: matrix-js-sdk, or matrix-rust-sdk when built
+ * with `VITE_MATRIX_SDK=rust` (`npm run dev:rust`, `npm run build:rust`). Vite replaces the
+ * variable at build time, so the other SDK is not part of the build at all.
+ */
+export const sessions: SessionProvider = lazyProvider(
+  import.meta.env.VITE_MATRIX_SDK === "rust"
+    ? () => import("../rust_sdk/session").then((m) => m.rustSdkSessions)
+    : () => import("../js_sdk/session").then((m) => m.jsSdkSessions),
+);

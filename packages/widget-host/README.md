@@ -23,8 +23,11 @@ and [`handover.md`](../../handover.md).
 - `src/js_sdk/session.ts` implements it on matrix-js-sdk: OAuth 2.0 (dynamic client
   registration, PKCE, in a popup that returns through `oidc-callback.html`) or a password,
   `/sync` v2, end-to-end encryption, verification with a recovery key. `src/js_sdk/backend/` is the
-  `MatrixBackend` for one room. `src/js_sdk/` is the only folder that imports matrix-js-sdk; a
-  matrix-rust-sdk implementation of the same interfaces lives on the `rust-sdk-player` branch.
+  `MatrixBackend` for one room. `src/js_sdk/` is the only folder that imports matrix-js-sdk.
+- `src/rust_sdk/session.ts` and `src/rust_sdk/backend/` are the same on matrix-rust-sdk
+  (`../matrix-sdk-uniffi-js`, with native sliding sync). A build has one SDK or the other, see
+  "Choosing the Matrix SDK" below. This implementation has not run against a homeserver yet;
+  `../../rust-sdk-port.md` says what it relies on and how it differs.
 - `src/player/memorySession.ts` implements the same `LiveSession` on an `InMemoryBackend`, with
   one room and an editable list of widgets. `MemoryPlayer.tsx` puts the shared `Player` on it and
   adds `MemoryStorePanel.tsx`, the store's controls, as a side panel.
@@ -152,6 +155,24 @@ in the dev server and in `dist/` alike, and loads legacy widgets through it. Tha
 host's origin, unlike a wrapper deployed for a real client.
 
 `npm run build` writes a static site to `dist/` that can be served by any web server.
+
+### Choosing the Matrix SDK
+
+The player runs on matrix-js-sdk unless it is built with `VITE_MATRIX_SDK=rust`
+(`.env.rust`, used by Vite's `rust` mode):
+
+```sh
+npm run dev:rust         # dev server on matrix-rust-sdk
+npm run build:rust       # dist/ on matrix-rust-sdk
+```
+
+`src/player/session.ts` reads the variable. Vite replaces it at build time, so a build contains
+one SDK only: the default build has no matrix-rust-sdk wasm (15 MB gzip) in it, and the `rust`
+build no matrix-js-sdk. Logins are stored separately per SDK.
+
+Both implementations are type-checked and tested in every build, so `../matrix-sdk-uniffi-js`
+has to be built once even for the default one:
+`npm run bindings -w packages/matrix-sdk-uniffi-js` (slow, see its README).
 
 ## Using it in end-to-end tests
 

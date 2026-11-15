@@ -6,13 +6,16 @@
   "description": "Widget host webapp on widget-host-driver (uniffi/wasm bindings): logs in with matrix-js-sdk and opens the widgets of your rooms, or runs on an in-memory room for widget development and e2e testing",
   "scripts": {
     "dev": "vite",
+    "dev:rust": "vite --mode rust",
     "build": "tsc --noEmit && vite build",
+    "build:rust": "tsc --noEmit && vite build --mode rust",
     "preview": "vite preview",
     "test": "vitest run"
   },
   "dependencies": {
     "@matrix-widget-tools/widget-host-bindings": "*",
     "matrix-js-sdk": "45.1.0",
+    "matrix-sdk-uniffi-js": "*",
     "react": "^19.3.1",
     "react-dom": "^19.3.1"
   },

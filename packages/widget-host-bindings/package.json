@@ -9,8 +9,8 @@
   },
   "types": "./src/index.ts",
   "scripts": {
-    "ubrn:web": "ubrn build web --config ubrn.config.yaml --release",
-    "ubrn:web:debug": "ubrn build web --config ubrn.config.yaml",
+    "ubrn:web": "CARGO_TARGET_DIR=\"$PWD/rust_modules/target\" ubrn build web --config ubrn.config.yaml --release",
+    "ubrn:web:debug": "CARGO_TARGET_DIR=\"$PWD/rust_modules/target\" ubrn build web --config ubrn.config.yaml",
     "build": "tsc --noEmit",
     "prepare": "npm run ubrn:web"
   },
