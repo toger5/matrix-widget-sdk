@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<title>Login page (with the skip login option) · Widget host mockup</title>
+<meta name="viewport" content="width=1280">
+<link rel="stylesheet" href="../../mock.css">
+<script>
+  // The gallery picks the theme through the URL hash (#theme=light). A leaf with a fixed theme ignores it.
+  (function () { var fixed = ""; function apply() { document.documentElement.dataset.theme = fixed || (location.hash.match(/theme=(light|dark)/) || [])[1] || "dark"; } apply(); addEventListener("hashchange", apply); })();
+</script>
+</head>
+<body style="width:1280px;height:800px">
+<div class="app login-page"><div class="login-card"><svg class="logo" width="40" height="40" viewBox="0 0 24 24" aria-hidden="true"><rect x="2.5" y="2.5" width="19" height="19" rx="5" fill="none" stroke="currentColor" stroke-width="2"/><rect x="7" y="10" width="10" height="7" rx="2" fill="currentColor"/><circle cx="8" cy="6.6" r="1.1" fill="currentColor"/><circle cx="11.5" cy="6.6" r="1.1" fill="currentColor"/></svg><h1>Widget Host</h1><p class="muted">Sign in to open the widgets of your rooms.</p>
+    <label class="field "><span class="field-l">Homeserver</span><span class="input  ">example.org</span></label><button class="btn primary  block"><span>Continue</span><svg class="ico end" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button>
+    <p class="hint center">You sign in on your homeserver's own page. No password is entered here.</p>
+    <div class="or"><span>or</span></div>
+    <button class="skip"><svg class="ico " width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.5 3h3l4.5 15H6zM3 21h18M8.4 10h7.2M7 14.5h10"/></svg><span><b>Skip login and use the DevBackend</b><small>In-memory rooms, no account needed. Enables the dev tools.</small></span><svg class="ico end" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button></div></div>
+</body>
+</html>

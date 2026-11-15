@@ -1,0 +1,16 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<title>No rooms yet · Widget host mockup</title>
+<meta name="viewport" content="width=348">
+<link rel="stylesheet" href="../../mock.css">
+<script>
+  // The gallery picks the theme through the URL hash (#theme=light). A leaf with a fixed theme ignores it.
+  (function () { var fixed = ""; function apply() { document.documentElement.dataset.theme = fixed || (location.hash.match(/theme=(light|dark)/) || [])[1] || "dark"; } apply(); addEventListener("hashchange", apply); })();
+</script>
+</head>
+<body style="width:348px;height:520px">
+<div class="stage fence" style=""><div class="sidecol"><section class="sidebox devb"><header class="side-head"><div class="room-pick none"><span class="av sq ghost" style="--s:28px"><svg class="ico " width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9h16M4 15h16M10 3L8 21M16 3l-2 18"/></svg></span><div class="side-title"><b>No mocked room</b><small>DevBackend</small></div><svg class="ico end" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></div></header><div class="side-body"><div class="empty"><svg class="ico " width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.5 3h3l4.5 15H6zM3 21h18M8.4 10h7.2M7 14.5h10"/></svg><b>No mocked rooms yet</b><p>Create an empty room, or copy a real one from its room overview (Dev tools › Copy to DevBackend).</p><button class="btn primary  "><svg class="ico " width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><span>Create a room</span></button></div></div></section><button class="media-btn"><svg class="ico " width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="M21 15l-5-5L5 21"/></svg><span>Media Backend Tool</span><em>3 files</em><svg class="ico end" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></button><button class="leave-link" title="Back to your Matrix account. The mocked rooms are kept.">Leave DevBackend<svg class="ico " width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg></button></div></div>
+</body>
+</html>

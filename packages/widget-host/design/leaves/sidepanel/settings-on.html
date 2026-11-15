@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<title>Dev tools enabled · Widget host mockup</title>
+<meta name="viewport" content="width=348">
+<link rel="stylesheet" href="../../mock.css">
+<script>
+  // The gallery picks the theme through the URL hash (#theme=light). A leaf with a fixed theme ignores it.
+  (function () { var fixed = ""; function apply() { document.documentElement.dataset.theme = fixed || (location.hash.match(/theme=(light|dark)/) || [])[1] || "dark"; } apply(); addEventListener("hashchange", apply); })();
+</script>
+</head>
+<body style="width:348px;height:420px">
+<div class="stage " style=""><div class="sidecol"><section class="sidebox "><header class="side-head"><div class="side-title"><b>Settings</b></div><span class="sp"></span><button class="ibtn " title="Close panel" aria-label="Close panel"><svg class="ico " width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button></header><div class="side-body"><h4 class="side-h">Appearance</h4>
+    <div class="set-row"><div><b>Theme</b><small>Follows the system unless you choose one.</small></div></div>
+    <div class="seg" role="radiogroup" aria-label="Theme"><span class="on" role="radio" aria-checked="true">System</span><span role="radio" aria-checked="false">Light</span><span role="radio" aria-checked="false">Dark</span></div>
+    <h4 class="side-h">Developer</h4>
+    <div class="set-row"><div><b>Enable dev tools</b><small>Tools to inspect and mock what a widget sees.</small></div><button class="toggle on" role="switch" aria-checked="true" aria-label="Enable dev tools"><i></i></button></div>
+    <ul class="set-list on"><li><svg class="ico " width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.5 3h3l4.5 15H6zM3 21h18M8.4 10h7.2M7 14.5h10"/></svg><span><b>DevBackend</b> button in the left bar</span></li><li><svg class="ico " width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="5" cy="12" r="1.2" fill="currentColor"/><circle cx="12" cy="12" r="1.2" fill="currentColor"/><circle cx="19" cy="12" r="1.2" fill="currentColor"/></svg><span><b>Widget dev tools</b> via the ⋯ button of a widget tab</span></li><li><svg class="ico " width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg><span><b>Copy to DevBackend</b> in the room overview</span></li></ul></div></section></div></div>
+</body>
+</html>

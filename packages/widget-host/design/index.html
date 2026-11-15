@@ -1,0 +1,371 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<title>Widget host mockups</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root { --bg: #050506; --panel: #101012; --line: #2a2a2f; --text: #ededf0; --muted: #a3a3ad; --accent: #6fdc8c; }
+  :root[data-theme="light"] { --bg: #f6f6f3; --panel: #ffffff; --line: #d9d9d4; --text: #17171a; --muted: #55555c; --accent: #18794e; }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; scroll-padding-top: 72px; }
+  body { margin: 0; font: 14px/1.5 Inter, system-ui, -apple-system, sans-serif; background: var(--bg); color: var(--text); }
+  header.top { position: sticky; top: 0; z-index: 10; display: flex; align-items: center; gap: 16px; height: 56px; padding: 0 24px; background: var(--panel); border-bottom: 1px solid var(--line); }
+  header.top h1 { font-size: 16px; margin: 0; }
+  header.top span { color: var(--muted); font-size: 13px; }
+  .grow { flex: 1; }
+  .switch { display: inline-flex; padding: 2px; border: 1px solid var(--line); border-radius: 9px; }
+  .switch button { font: inherit; font-size: 13px; color: var(--muted); background: none; border: 0; padding: 4px 12px; border-radius: 7px; cursor: pointer; }
+  .switch button[aria-pressed="true"] { background: var(--line); color: var(--text); font-weight: 600; }
+  .layout { display: grid; grid-template-columns: 250px minmax(0, 1fr); }
+  nav { position: sticky; top: 56px; align-self: start; height: calc(100vh - 56px); overflow: auto; padding: 16px 12px 40px; border-right: 1px solid var(--line); display: grid; align-content: start; gap: 1px; }
+  nav a { color: var(--muted); text-decoration: none; padding: 3px 8px; border-radius: 6px; font-size: 13px; }
+  nav a:hover { background: var(--line); color: var(--text); }
+  nav a.n1 { color: var(--text); font-weight: 600; margin-top: 12px; display: flex; justify-content: space-between; }
+  nav a.n1 i { font-style: normal; font-weight: 400; color: var(--muted); }
+  nav a.n2 { padding-left: 18px; } nav a.n3 { padding-left: 30px; } nav a.n4 { padding-left: 42px; }
+  main { padding: 8px 32px 120px; min-width: 0; }
+  h2 { font-size: 26px; margin: 48px 0 0; }
+  .intro { color: var(--muted); margin: 4px 0 0; }
+  h3 { font-size: 14px; font-weight: 600; color: var(--accent); margin: 40px 0 0; padding-top: 12px; border-top: 1px solid var(--line); }
+  .leaves { display: flex; flex-wrap: wrap; gap: 32px 28px; align-items: flex-start; margin-top: 20px; }
+  figure { margin: 0; max-width: 100%; }
+  figcaption { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; margin-bottom: 8px; max-width: 100%; }
+  figcaption b { font-weight: 600; }
+  figcaption .meta { color: var(--muted); font-size: 12px; }
+  figcaption a { color: var(--muted); font-size: 12px; }
+  figcaption p { flex-basis: 100%; margin: 0; color: var(--muted); font-size: 13px; }
+  .frame { position: relative; overflow: hidden; border-radius: 10px; outline: 1px solid var(--line); background: #0a0a0b; }
+  iframe { display: block; border: 0; transform-origin: 0 0; }
+  @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } nav { display: none; } main { padding: 8px 16px 80px; } }
+</style>
+</head>
+<body>
+<header class="top"><h1>Widget host mockups</h1><span>79 views from “Required visualisations” in appDesign.md, each at its real size</span><span class="grow"></span>
+  <div class="switch" role="group" aria-label="Theme of the mockups"><button data-theme="dark" aria-pressed="true">Dark</button><button data-theme="light" aria-pressed="false">Light</button></div>
+</header>
+<div class="layout">
+<nav aria-label="Views"><a class="n1" href="#complete-views">Complete views <i>3</i></a><a class="n1" href="#app">App <i>10</i></a><a class="n1" href="#leftbar">LeftBar <i>6</i></a><a class="n1" href="#sidepanel">SidePanel <i>17</i></a><a class="n2" href="#sidepanel-accountview">AccountView</a><a class="n2" href="#sidepanel-settings">Settings</a><a class="n2" href="#sidepanel-devbackendview">DevBackendView</a><a class="n3" href="#sidepanel-devbackendview-room-page">Room page</a><a class="n3" href="#sidepanel-devbackendview-media-box">Media box</a><a class="n1" href="#pictureinpicturepanel">PictureInPicturePanel <i>8</i></a><a class="n1" href="#roomsarea">RoomsArea <i>35</i></a><a class="n2" href="#roomsarea-layout">Layout</a><a class="n2" href="#roomsarea-room-panel-empty">Room panel (empty)</a><a class="n2" href="#roomsarea-roomview-1">RoomView (1)</a><a class="n3" href="#roomsarea-roomview-1-tab-bar">Tab bar</a><a class="n3" href="#roomsarea-roomview-1-tab-1-new-tab">Tab (1): new tab</a><a class="n3" href="#roomsarea-roomview-1-tab-2-widgettab">Tab (2): WidgetTab</a><a class="n4" href="#roomsarea-roomview-1-tab-2-widgettab-dev-tools">Dev tools</a><a class="n3" href="#roomsarea-roomview-1-tab-3-roomoverviewtab">Tab (3): RoomOverviewTab</a><a class="n2" href="#roomsarea-roomview-2">RoomView (2)</a></nav>
+<main><section id="complete-views"><h2>Complete views</h2><p class="intro">Whole screens with several features at once, to judge how the leaves below work together.</p><div class="leaves"><figure class="leaf" id="complete-workspace">
+  <figcaption><b>Workspace: two rooms, dev tools, AccountView, PiP</b><span class="meta">1440 × 900</span><a href="leaves/complete/workspace.html" target="_blank" rel="noopener">open ↗</a><p>SidePanel open (RoomsArea shifted), dev tools docked on top with two panels, the whiteboard is always on screen and its tab is not the active one, so it is in the floating panel.</p></figcaption>
+  <div class="frame" data-w="1440" data-h="900"><iframe loading="lazy" title="Workspace: two rooms, dev tools, AccountView, PiP" data-leaf="leaves/complete/workspace.html"  src="leaves/complete/workspace.html#theme=dark" width="1440" height="900"></iframe></div>
+</figure>
+<figure class="leaf" id="complete-devbackend">
+  <figcaption><b>DevBackend: mocked room, media tool, dev tools on the right</b><span class="meta">1440 × 900</span><a href="leaves/complete/devbackend.html" target="_blank" rel="noopener">open ↗</a><p>Construction-fence background and DevBackend badge. The DevBackendView with the media box open; dev tools docked right.</p></figcaption>
+  <div class="frame" data-w="1440" data-h="900"><iframe loading="lazy" title="DevBackend: mocked room, media tool, dev tools on the right" data-leaf="leaves/complete/devbackend.html"  src="leaves/complete/devbackend.html#theme=dark" width="1440" height="900"></iframe></div>
+</figure>
+<figure class="leaf" id="complete-light">
+  <figcaption><b>Light theme: the overall screen in the other theme</b><span class="meta">1440 × 900 · always light</span><a href="leaves/complete/light.html" target="_blank" rel="noopener">open ↗</a><p>Always rendered in the light theme, whatever the gallery's theme switch says.</p></figcaption>
+  <div class="frame" data-w="1440" data-h="900"><iframe loading="lazy" title="Light theme: the overall screen in the other theme" data-leaf="leaves/complete/light.html" data-fixed src="leaves/complete/light.html#theme=light" width="1440" height="900"></iframe></div>
+</figure></div></section><section id="app"><h2>App</h2><p class="intro">The app-level states.</p><div class="leaves"><figure class="leaf" id="app-login">
+  <figcaption><b>Login page (with the skip login option)</b><span class="meta">1280 × 800</span><a href="leaves/app/login.html" target="_blank" rel="noopener">open ↗</a></figcaption>
+  <div class="frame" data-w="1280" data-h="800"><iframe loading="lazy" title="Login page (with the skip login option)" data-leaf="leaves/app/login.html"  src="leaves/app/login.html#theme=dark" width="1280" height="800"></iframe></div>
+</figure>
+<figure class="leaf" id="app-default">
+  <figcaption><b>Default screen: LeftBar + one room panel</b><span class="meta">1280 × 800</span><a href="leaves/app/default.html" target="_blank" rel="noopener">open ↗</a></figcaption>
+  <div class="frame" data-w="1280" data-h="800"><iframe loading="lazy" title="Default screen: LeftBar + one room panel" data-leaf="leaves/app/default.html"  src="leaves/app/default.html#theme=dark" width="1280" height="800"></iframe></div>
+</figure>
+<figure class="leaf" id="app-devbackend">
+  <figcaption><b>DevBackend active: construction fence + badge</b><span class="meta">1280 × 800</span><a href="leaves/app/devbackend.html" target="_blank" rel="noopener">open ↗</a><p>The badge sits in the LeftBar, so the mode is not signalled by the background alone.</p></figcaption>
+  <div class="frame" data-w="1280" data-h="800"><iframe loading="lazy" title="DevBackend active: construction fence + badge" data-leaf="leaves/app/devbackend.html"  src="leaves/app/devbackend.html#theme=dark" width="1280" height="800"></iframe></div>
+</figure>
+<figure class="leaf" id="app-devbackend-collapsed">
+  <figcaption><b>DevBackend active, LeftBar collapsed: floating badge (extra)</b><span class="meta">1280 × 800</span><a href="leaves/app/devbackend-collapsed.html" target="_blank" rel="noopener">open ↗</a><p>Without the LeftBar its badge is gone, so a floating badge takes over. It stays in the fullscreen view, where no fence is visible at all.</p></figcaption>
+  <div class="frame" data-w="1280" data-h="800"><iframe loading="lazy" title="DevBackend active, LeftBar collapsed: floating badge (extra)" data-leaf="leaves/app/devbackend-collapsed.html"  src="leaves/app/devbackend-collapsed.html#theme=dark" width="1280" height="800"></iframe></div>
+</figure>
+<figure class="leaf" id="app-devbackend-empty">
+  <figcaption><b>DevBackend just activated: empty RoomsArea (extra)</b><span class="meta">1280 × 800</span><a href="leaves/app/devbackend-empty.html" target="_blank" rel="noopener">open ↗</a><p>Activating the DevBackend removes all panels.</p></figcaption>
+  <div class="frame" data-w="1280" data-h="800"><iframe loading="lazy" title="DevBackend just activated: empty RoomsArea (extra)" data-leaf="leaves/app/devbackend-empty.html"  src="leaves/app/devbackend-empty.html#theme=dark" width="1280" height="800"></iframe></div>
+</figure>
+<figure class="leaf" id="app-confirm">
+  <figcaption><b>Confirmation before an action that loses state (extra)</b><span class="meta">1280 × 800</span><a href="leaves/app/confirm.html" target="_blank" rel="noopener">open ↗</a></figcaption>
+  <div class="frame" data-w="1280" data-h="800"><iframe loading="lazy" title="Confirmation before an action that loses state (extra)" data-leaf="leaves/app/confirm.html"  src="leaves/app/confirm.html#theme=dark" width="1280" height="800"></iframe></div>
+</figure>
+<figure class="leaf" id="app-info-modal">
+  <figcaption><b>App info modal</b><span class="meta">1280 × 800</span><a href="leaves/app/info-modal.html" target="_blank" rel="noopener">open ↗</a></figcaption>
+  <div class="frame" data-w="1280" data-h="800"><iframe loading="lazy" title="App info modal" data-leaf="leaves/app/info-modal.html"  src="leaves/app/info-modal.html#theme=dark" width="1280" height="800"></iframe></div>
+</figure>
+<figure class="leaf" id="app-fullscreen">
+  <figcaption><b>Fullscreen: LeftBar collapsed, one widget</b><span class="meta">1280 × 800</span><a href="leaves/app/fullscreen.html" target="_blank" rel="noopener">open ↗</a><p>No rounded containers. The room header stays. The tab of the only widget is not shown, and the + button is hidden by default.</p></figcaption>
+  <div class="frame" data-w="1280" data-h="800"><iframe loading="lazy" title="Fullscreen: LeftBar collapsed, one widget" data-leaf="leaves/app/fullscreen.html"  src="leaves/app/fullscreen.html#theme=dark" width="1280" height="800"></iframe></div>
+</figure>
+<figure class="leaf" id="app-fullscreen-hover">
+  <figcaption><b>Fullscreen, header hovered or focused: the tab and the + button appear</b><span class="meta">1280 × 800</span><a href="leaves/app/fullscreen-hover.html" target="_blank" rel="noopener">open ↗</a></figcaption>
+  <div class="frame" data-w="1280" data-h="800"><iframe loading="lazy" title="Fullscreen, header hovered or focused: the tab and the + button appear" data-leaf="leaves/app/fullscreen-hover.html"  src="leaves/app/fullscreen-hover.html#theme=dark" width="1280" height="800"></iframe></div>
+</figure>
+<figure class="leaf" id="app-narrow">
+  <figcaption><b>Narrow window: SidePanel overlays, one room panel</b><span class="meta">820 × 800</span><a href="leaves/app/narrow.html" target="_blank" rel="noopener">open ↗</a></figcaption>
+  <div class="frame" data-w="820" data-h="800"><iframe loading="lazy" title="Narrow window: SidePanel overlays, one room panel" data-leaf="leaves/app/narrow.html"  src="leaves/app/narrow.html#theme=dark" width="820" height="800"></iframe></div>
+</figure></div></section><section id="leftbar"><h2>LeftBar</h2><p class="intro">The slim bar on the left. It sits directly on the app background.</p><div class="leaves"><figure class="leaf" id="leftbar-expanded">
+  <figcaption><b>Expanded, dev tools disabled</b><span class="meta">68 × 620</span><a href="leaves/leftbar/expanded.html" target="_blank" rel="noopener">open ↗</a></figcaption>
+  <div class="frame" data-w="68" data-h="620"><iframe loading="lazy" title="Expanded, dev tools disabled" data-leaf="leaves/leftbar/expanded.html"  src="leaves/leftbar/expanded.html#theme=dark" width="68" height="620"></iframe></div>
+</figure>
+<figure class="leaf" id="leftbar-devtools">
+  <figcaption><b>Dev tools enabled, DevBackend inactive</b><span class="meta">68 × 620</span><a href="leaves/leftbar/devtools.html" target="_blank" rel="noopener">open ↗</a></figcaption>
+  <div class="frame" data-w="68" data-h="620"><iframe loading="lazy" title="Dev tools enabled, DevBackend inactive" data-leaf="leaves/leftbar/devtools.html"  src="leaves/leftbar/devtools.html#theme=dark" width="68" height="620"></iframe></div>
+</figure>
+<figure class="leaf" id="leftbar-devbackend">
+  <figcaption><b>Dev tools enabled, DevBackend active</b><span class="meta">68 × 620</span><a href="leaves/leftbar/devbackend.html" target="_blank" rel="noopener">open ↗</a><p>The account icon is the DevBackend icon.</p></figcaption>
+  <div class="frame" data-w="68" data-h="620"><iframe loading="lazy" title="Dev tools enabled, DevBackend active" data-leaf="leaves/leftbar/devbackend.html"  src="leaves/leftbar/devbackend.html#theme=dark" width="68" height="620"></iframe></div>
+</figure>
+<figure class="leaf" id="leftbar-devbackend-hover">
+  <figcaption><b>DevBackend active, button hovered: pressing it again leaves</b><span class="meta">230 × 620</span><a href="leaves/leftbar/devbackend-hover.html" target="_blank" rel="noopener">open ↗</a></figcaption>
+  <div class="frame" data-w="230" data-h="620"><iframe loading="lazy" title="DevBackend active, button hovered: pressing it again leaves" data-leaf="leaves/leftbar/devbackend-hover.html"  src="leaves/leftbar/devbackend-hover.html#theme=dark" width="230" height="620"></iframe></div>
+</figure>
+<figure class="leaf" id="leftbar-collapsed-toast">
+  <figcaption><b>Collapsed with toast</b><span class="meta">900 × 480</span><a href="leaves/leftbar/collapsed-toast.html" target="_blank" rel="noopener">open ↗</a></figcaption>
+  <div class="frame" data-w="900" data-h="480"><iframe loading="lazy" title="Collapsed with toast" data-leaf="leaves/leftbar/collapsed-toast.html"  src="leaves/leftbar/collapsed-toast.html#theme=dark" width="900" height="480"></iframe></div>
+</figure>
+<figure class="leaf" id="leftbar-collapsed-expand">
+  <figcaption><b>Collapsed, expand icon revealed (after Esc)</b><span class="meta">900 × 480</span><a href="leaves/leftbar/collapsed-expand.html" target="_blank" rel="noopener">open ↗</a><p>The icon appears where the collapse button was. It also appears when the mouse reaches the left screen edge.</p></figcaption>
+  <div class="frame" data-w="900" data-h="480"><iframe loading="lazy" title="Collapsed, expand icon revealed (after Esc)" data-leaf="leaves/leftbar/collapsed-expand.html"  src="leaves/leftbar/collapsed-expand.html#theme=dark" width="900" height="480"></iframe></div>
+</figure></div></section><section id="sidepanel"><h2>SidePanel</h2><p class="intro">One panel next to the LeftBar, hosting the AccountView, the Settings or the DevBackendView.</p><div class="leaves"><figure class="leaf" id="sidepanel-closed">
+  <figcaption><b>Closed</b><span class="meta">900 × 480</span><a href="leaves/sidepanel/closed.html" target="_blank" rel="noopener">open ↗</a></figcaption>
+  <div class="frame" data-w="900" data-h="480"><iframe loading="lazy" title="Closed" data-leaf="leaves/sidepanel/closed.html"  src="leaves/sidepanel/closed.html#theme=dark" width="900" height="480"></iframe></div>
+</figure></div><h3 id="sidepanel-accountview">AccountView</h3><div class="leaves"><figure class="leaf" id="sidepanel-account-one">
+  <figcaption><b>One account</b><span class="meta">348 × 620</span><a href="leaves/sidepanel/account-one.html" target="_blank" rel="noopener">open ↗</a></figcaption>
+  <div class="frame" data-w="348" data-h="620"><iframe loading="lazy" title="One account" data-leaf="leaves/sidepanel/account-one.html"  src="leaves/sidepanel/account-one.html#theme=dark" width="348" height="620"></iframe></div>
+</figure>
+<figure class="leaf" id="sidepanel-account-several">
+  <figcaption><b>Several accounts (switch list at the bottom, ending with “Add account”)</b><span class="meta">348 × 620</span><a href="leaves/sidepanel/account-several.html" target="_blank" rel="noopener">open ↗</a></figcaption>
+  <div class="frame" data-w="348" data-h="620"><iframe loading="lazy" title="Several accounts (switch list at the bottom, ending with “Add account”)" data-leaf="leaves/sidepanel/account-several.html"  src="leaves/sidepanel/account-several.html#theme=dark" width="348" height="620"></iframe></div>
+</figure>
+<figure class="leaf" id="sidepanel-account-dev">
+  <figcaption><b>DevBackend mode (full account list)</b><span class="meta">348 × 620</span><a href="leaves/sidepanel/account-dev.html" target="_blank" rel="noopener">open ↗</a></figcaption>
+  <div class="frame" data-w="348" data-h="620"><iframe loading="lazy" title="DevBackend mode (full account list)" data-leaf="leaves/sidepanel/account-dev.html"  src="leaves/sidepanel/account-dev.html#theme=dark" width="348" height="620"></iframe></div>
+</figure></div><h3 id="sidepanel-settings">Settings</h3><div class="leaves"><figure class="leaf" id="sidepanel-settings-off">
+  <figcaption><b>Dev tools disabled</b><span class="meta">348 × 420</span><a href="leaves/sidepanel/settings-off.html" target="_blank" rel="noopener">open ↗</a></figcaption>
+  <div class="frame" data-w="348" data-h="420"><iframe loading="lazy" title="Dev tools disabled" data-leaf="leaves/sidepanel/settings-off.html"  src="leaves/sidepanel/settings-off.html#theme=dark" width="348" height="420"></iframe></div>
+</figure>
+<figure class="leaf" id="sidepanel-settings-on">
+  <figcaption><b>Dev tools enabled</b><span class="meta">348 × 420</span><a href="leaves/sidepanel/settings-on.html" target="_blank" rel="noopener">open ↗</a></figcaption>
+  <div class="frame" data-w="348" data-h="420"><iframe loading="lazy" title="Dev tools enabled" data-leaf="leaves/sidepanel/settings-on.html"  src="leaves/sidepanel/settings-on.html#theme=dark" width="348" height="420"></iframe></div>
+</figure></div><h3 id="sidepanel-devbackendview">DevBackendView</h3><div class="leaves"><figure class="leaf" id="devbackend-none">
+  <figcaption><b>No rooms yet</b><span class="meta">348 × 520</span><a href="leaves/devbackend/none.html" target="_blank" rel="noopener">open ↗</a></figcaption>
+  <div class="frame" data-w="348" data-h="520"><iframe loading="lazy" title="No rooms yet" data-leaf="leaves/devbackend/none.html"  src="leaves/devbackend/none.html#theme=dark" width="348" height="520"></iframe></div>
+</figure>
+<figure class="leaf" id="devbackend-dropdown">
+  <figcaption><b>Room dropdown open (rooms + add room)</b><span class="meta">348 × 520</span><a href="leaves/devbackend/dropdown.html" target="_blank" rel="noopener">open ↗</a></figcaption>
+  <div class="frame" data-w="348" data-h="520"><iframe loading="lazy" title="Room dropdown open (rooms + add room)" data-leaf="leaves/devbackend/dropdown.html"  src="leaves/devbackend/dropdown.html#theme=dark" width="348" height="520"></iframe></div>
+</figure></div><h3 id="sidepanel-devbackendview-room-page">DevBackendView › Room page</h3><div class="leaves"><figure class="leaf" id="devbackend-state">
+  <figcaption><b>State: shortcuts, send (delayed) state, state explorer</b><span class="meta">348 × 1090</span><a href="leaves/devbackend/state.html" target="_blank" rel="noopener">open ↗</a></figcaption>
+  <div class="frame" data-w="348" data-h="1090"><iframe loading="lazy" title="State: shortcuts, send (delayed) state, state explorer" data-leaf="leaves/devbackend/state.html"  src="leaves/devbackend/state.html#theme=dark" width="348" height="1090"></iframe></div>
+</figure>
+<figure class="leaf" id="devbackend-state-edit">
+  <figcaption><b>State: edit state</b><span class="meta">348 × 1140</span><a href="leaves/devbackend/state-edit.html" target="_blank" rel="noopener">open ↗</a></figcaption>
+  <div class="frame" data-w="348" data-h="1140"><iframe loading="lazy" title="State: edit state" data-leaf="leaves/devbackend/state-edit.html"  src="leaves/devbackend/state-edit.html#theme=dark" width="348" height="1140"></iframe></div>
+</figure>
+<figure class="leaf" id="devbackend-timeline">
+  <figcaption><b>Timeline: send event with a predefined form, event list</b><span class="meta">348 × 840</span><a href="leaves/devbackend/timeline.html" target="_blank" rel="noopener">open ↗</a></figcaption>
+  <div class="frame" data-w="348" data-h="840"><iframe loading="lazy" title="Timeline: send event with a predefined form, event list" data-leaf="leaves/devbackend/timeline.html"  src="leaves/devbackend/timeline.html#theme=dark" width="348" height="840"></iframe></div>
+</figure>
+<figure class="leaf" id="devbackend-timeline-raw">
+  <figcaption><b>Timeline: send event as raw JSON</b><span class="meta">348 × 880</span><a href="leaves/devbackend/timeline-raw.html" target="_blank" rel="noopener">open ↗</a></figcaption>
+  <div class="frame" data-w="348" data-h="880"><iframe loading="lazy" title="Timeline: send event as raw JSON" data-leaf="leaves/devbackend/timeline-raw.html"  src="leaves/devbackend/timeline-raw.html#theme=dark" width="348" height="880"></iframe></div>
+</figure>
+<figure class="leaf" id="devbackend-timeline-delayed">
+  <figcaption><b>Timeline: send delayed event</b><span class="meta">348 × 1050</span><a href="leaves/devbackend/timeline-delayed.html" target="_blank" rel="noopener">open ↗</a></figcaption>
+  <div class="frame" data-w="348" data-h="1050"><iframe loading="lazy" title="Timeline: send delayed event" data-leaf="leaves/devbackend/timeline-delayed.html"  src="leaves/devbackend/timeline-delayed.html#theme=dark" width="348" height="1050"></iframe></div>
+</figure>
+<figure class="leaf" id="devbackend-behavior">
+  <figcaption><b>WidgetHostBehavior</b><span class="meta">348 × 590</span><a href="leaves/devbackend/behavior.html" target="_blank" rel="noopener">open ↗</a></figcaption>
+  <div class="frame" data-w="348" data-h="590"><iframe loading="lazy" title="WidgetHostBehavior" data-leaf="leaves/devbackend/behavior.html"  src="leaves/devbackend/behavior.html#theme=dark" width="348" height="590"></iframe></div>
+</figure>
+<figure class="leaf" id="devbackend-todevice">
+  <figcaption><b>To-device messages</b><span class="meta">348 × 780</span><a href="leaves/devbackend/todevice.html" target="_blank" rel="noopener">open ↗</a></figcaption>
+  <div class="frame" data-w="348" data-h="780"><iframe loading="lazy" title="To-device messages" data-leaf="leaves/devbackend/todevice.html"  src="leaves/devbackend/todevice.html#theme=dark" width="348" height="780"></iframe></div>
+</figure></div><h3 id="sidepanel-devbackendview-media-box">DevBackendView › Media box</h3><div class="leaves"><figure class="leaf" id="devbackend-media-collapsed">
+  <figcaption><b>Collapsed (only the “Media Backend Tool” button)</b><span class="meta">348 × 420</span><a href="leaves/devbackend/media-collapsed.html" target="_blank" rel="noopener">open ↗</a></figcaption>
+  <div class="frame" data-w="348" data-h="420"><iframe loading="lazy" title="Collapsed (only the “Media Backend Tool” button)" data-leaf="leaves/devbackend/media-collapsed.html"  src="leaves/devbackend/media-collapsed.html#theme=dark" width="348" height="420"></iframe></div>
+</figure>
+<figure class="leaf" id="devbackend-media-open">
+  <figcaption><b>Open below the room box (resize handle, minimise button, media list)</b><span class="meta">348 × 850</span><a href="leaves/devbackend/media-open.html" target="_blank" rel="noopener">open ↗</a></figcaption>
+  <div class="frame" data-w="348" data-h="850"><iframe loading="lazy" title="Open below the room box (resize handle, minimise button, media list)" data-leaf="leaves/devbackend/media-open.html"  src="leaves/devbackend/media-open.html#theme=dark" width="348" height="850"></iframe></div>
+</figure></div></section><section id="pictureinpicturepanel"><h2>PictureInPicturePanel</h2><p class="intro">The floating container for the always-on-screen widgets whose tab is not shown at the moment.</p><div class="leaves"><figure class="leaf" id="pip-idle-1">
+  <figcaption><b>Idle: borderless box, 1 widget</b><span class="meta">560 × 360</span><a href="leaves/pip/idle-1.html" target="_blank" rel="noopener">open ↗</a></figcaption>
+  <div class="frame" data-w="560" data-h="360"><iframe loading="lazy" title="Idle: borderless box, 1 widget" data-leaf="leaves/pip/idle-1.html"  src="leaves/pip/idle-1.html#theme=dark" width="560" height="360"></iframe></div>
+</figure>
+<figure class="leaf" id="pip-idle-4">
+  <figcaption><b>Idle: borderless boxes, 4 widgets, stacked horizontal</b><span class="meta">1040 × 360</span><a href="leaves/pip/idle-4.html" target="_blank" rel="noopener">open ↗</a></figcaption>
+  <div class="frame" data-w="1040" data-h="360"><iframe loading="lazy" title="Idle: borderless boxes, 4 widgets, stacked horizontal" data-leaf="leaves/pip/idle-4.html"  src="leaves/pip/idle-4.html#theme=dark" width="1040" height="360"></iframe></div>
+</figure>
+<figure class="leaf" id="pip-vertical">
+  <figcaption><b>Stacked vertical</b><span class="meta">480 × 560</span><a href="leaves/pip/vertical.html" target="_blank" rel="noopener">open ↗</a></figcaption>
+  <div class="frame" data-w="480" data-h="560"><iframe loading="lazy" title="Stacked vertical" data-leaf="leaves/pip/vertical.html"  src="leaves/pip/vertical.html#theme=dark" width="480" height="560"></iframe></div>
+</figure>
+<figure class="leaf" id="pip-hover">
+  <figcaption><b>Hover: surrounding box with room name, widget name and buttons</b><span class="meta">860 × 360</span><a href="leaves/pip/hover.html" target="_blank" rel="noopener">open ↗</a></figcaption>
+  <div class="frame" data-w="860" data-h="360"><iframe loading="lazy" title="Hover: surrounding box with room name, widget name and buttons" data-leaf="leaves/pip/hover.html"  src="leaves/pip/hover.html#theme=dark" width="860" height="360"></iframe></div>
+</figure>
+<figure class="leaf" id="pip-hover-vertical">
+  <figcaption><b>Hover, stacked vertical</b><span class="meta">480 × 500</span><a href="leaves/pip/hover-vertical.html" target="_blank" rel="noopener">open ↗</a></figcaption>
+  <div class="frame" data-w="480" data-h="500"><iframe loading="lazy" title="Hover, stacked vertical" data-leaf="leaves/pip/hover-vertical.html"  src="leaves/pip/hover-vertical.html#theme=dark" width="480" height="500"></iframe></div>
+</figure>
+<figure class="leaf" id="pip-enlarged-devtools">
+  <figcaption><b>Enlarged, with the WidgetDevToolBar of one widget open</b><span class="meta">1160 × 660</span><a href="leaves/pip/enlarged-devtools.html" target="_blank" rel="noopener">open ↗</a><p>Hovered, so the extra “close dev tools” button of the first widget is visible. Behind it the whiteboard tab is active: the call is always on screen and was moved away from.</p></figcaption>
+  <div class="frame" data-w="1160" data-h="660"><iframe loading="lazy" title="Enlarged, with the WidgetDevToolBar of one widget open" data-leaf="leaves/pip/enlarged-devtools.html"  src="leaves/pip/enlarged-devtools.html#theme=dark" width="1160" height="660"></iframe></div>
+</figure>
+<figure class="leaf" id="pip-overflow">
+  <figcaption><b>More widgets than fit: “+2” at the end</b><span class="meta">1100 × 360</span><a href="leaves/pip/overflow.html" target="_blank" rel="noopener">open ↗</a><p>There is no limit on always-on-screen widgets. The panel shows four boxes; the rest is one press away.</p></figcaption>
+  <div class="frame" data-w="1100" data-h="360"><iframe loading="lazy" title="More widgets than fit: “+2” at the end" data-leaf="leaves/pip/overflow.html"  src="leaves/pip/overflow.html#theme=dark" width="1100" height="360"></iframe></div>
+</figure>
+<figure class="leaf" id="pip-overflow-menu">
+  <figcaption><b>Overflow menu open</b><span class="meta">1100 × 420</span><a href="leaves/pip/overflow-menu.html" target="_blank" rel="noopener">open ↗</a></figcaption>
+  <div class="frame" data-w="1100" data-h="420"><iframe loading="lazy" title="Overflow menu open" data-leaf="leaves/pip/overflow-menu.html"  src="leaves/pip/overflow-menu.html#theme=dark" width="1100" height="420"></iframe></div>
+</figure></div></section><section id="roomsarea"><h2>RoomsArea</h2><p class="intro">Room panels next to each other. Each one is a tabbed RoomView.</p><h3 id="roomsarea-layout">Layout</h3><div class="leaves"><figure class="leaf" id="roomsarea-one">
+  <figcaption><b>One room panel</b><span class="meta">1280 × 800</span><a href="leaves/roomsarea/one.html" target="_blank" rel="noopener">open ↗</a></figcaption>
+  <div class="frame" data-w="1280" data-h="800"><iframe loading="lazy" title="One room panel" data-leaf="leaves/roomsarea/one.html"  src="leaves/roomsarea/one.html#theme=dark" width="1280" height="800"></iframe></div>
+</figure>
+<figure class="leaf" id="roomsarea-several">
+  <figcaption><b>Several room panels next to each other</b><span class="meta">1280 × 800</span><a href="leaves/roomsarea/several.html" target="_blank" rel="noopener">open ↗</a></figcaption>
+  <div class="frame" data-w="1280" data-h="800"><iframe loading="lazy" title="Several room panels next to each other" data-leaf="leaves/roomsarea/several.html"  src="leaves/roomsarea/several.html#theme=dark" width="1280" height="800"></iframe></div>
+</figure>
+<figure class="leaf" id="roomsarea-shifted">
+  <figcaption><b>Shifted by an open SidePanel</b><span class="meta">1280 × 800</span><a href="leaves/roomsarea/shifted.html" target="_blank" rel="noopener">open ↗</a></figcaption>
+  <div class="frame" data-w="1280" data-h="800"><iframe loading="lazy" title="Shifted by an open SidePanel" data-leaf="leaves/roomsarea/shifted.html"  src="leaves/roomsarea/shifted.html#theme=dark" width="1280" height="800"></iframe></div>
+</figure></div><h3 id="roomsarea-room-panel-empty">Room panel (empty)</h3><div class="leaves"><figure class="leaf" id="panel-recents">
+  <figcaption><b>List of recent widgets</b><span class="meta">760 × 520</span><a href="leaves/panel/recents.html" target="_blank" rel="noopener">open ↗</a></figcaption>
+  <div class="frame" data-w="760" data-h="520"><iframe loading="lazy" title="List of recent widgets" data-leaf="leaves/panel/recents.html"  src="leaves/panel/recents.html#theme=dark" width="760" height="520"></iframe></div>
+</figure>
+<figure class="leaf" id="panel-no-recents">
+  <figcaption><b>No recents yet</b><span class="meta">760 × 520</span><a href="leaves/panel/no-recents.html" target="_blank" rel="noopener">open ↗</a></figcaption>
+  <div class="frame" data-w="760" data-h="520"><iframe loading="lazy" title="No recents yet" data-leaf="leaves/panel/no-recents.html"  src="leaves/panel/no-recents.html#theme=dark" width="760" height="520"></iframe></div>
+</figure>
+<figure class="leaf" id="panel-loading">
+  <figcaption><b>Loading (extra: every list has a loading state)</b><span class="meta">760 × 520</span><a href="leaves/panel/loading.html" target="_blank" rel="noopener">open ↗</a></figcaption>
+  <div class="frame" data-w="760" data-h="520"><iframe loading="lazy" title="Loading (extra: every list has a loading state)" data-leaf="leaves/panel/loading.html"  src="leaves/panel/loading.html#theme=dark" width="760" height="520"></iframe></div>
+</figure>
+<figure class="leaf" id="panel-error">
+  <figcaption><b>Error (extra: every list has an error state)</b><span class="meta">760 × 520</span><a href="leaves/panel/error.html" target="_blank" rel="noopener">open ↗</a></figcaption>
+  <div class="frame" data-w="760" data-h="520"><iframe loading="lazy" title="Error (extra: every list has an error state)" data-leaf="leaves/panel/error.html"  src="leaves/panel/error.html#theme=dark" width="760" height="520"></iframe></div>
+</figure>
+<figure class="leaf" id="panel-all-rooms">
+  <figcaption><b>All rooms, with search bar</b><span class="meta">760 × 520</span><a href="leaves/panel/all-rooms.html" target="_blank" rel="noopener">open ↗</a></figcaption>
+  <div class="frame" data-w="760" data-h="520"><iframe loading="lazy" title="All rooms, with search bar" data-leaf="leaves/panel/all-rooms.html"  src="leaves/panel/all-rooms.html#theme=dark" width="760" height="520"></iframe></div>
+</figure></div><h3 id="roomsarea-roomview-1">RoomView (1)</h3><div class="leaves"><figure class="leaf" id="roomview-header">
+  <figcaption><b>Room header (name, number of widgets and users)</b><span class="meta">640 × 72</span><a href="leaves/roomview/header.html" target="_blank" rel="noopener">open ↗</a><p>The header is a button: it opens the RoomOverviewTab.</p></figcaption>
+  <div class="frame" data-w="640" data-h="72"><iframe loading="lazy" title="Room header (name, number of widgets and users)" data-leaf="leaves/roomview/header.html"  src="leaves/roomview/header.html#theme=dark" width="640" height="72"></iframe></div>
+</figure>
+<figure class="leaf" id="roomview-tiles">
+  <figcaption><b>No widget open: widget tiles</b><span class="meta">860 × 520</span><a href="leaves/roomview/tiles.html" target="_blank" rel="noopener">open ↗</a></figcaption>
+  <div class="frame" data-w="860" data-h="520"><iframe loading="lazy" title="No widget open: widget tiles" data-leaf="leaves/roomview/tiles.html"  src="leaves/roomview/tiles.html#theme=dark" width="860" height="520"></iframe></div>
+</figure></div><h3 id="roomsarea-roomview-1-tab-bar">RoomView (1) › Tab bar</h3><div class="leaves"><figure class="leaf" id="tabs-widget-active">
+  <figcaption><b>WidgetTab active, WidgetTab and NativeTab inactive</b><span class="meta">860 × 72</span><a href="leaves/tabs/widget-active.html" target="_blank" rel="noopener">open ↗</a></figcaption>
+  <div class="frame" data-w="860" data-h="72"><iframe loading="lazy" title="WidgetTab active, WidgetTab and NativeTab inactive" data-leaf="leaves/tabs/widget-active.html"  src="leaves/tabs/widget-active.html#theme=dark" width="860" height="72"></iframe></div>
+</figure>
+<figure class="leaf" id="tabs-native-active">
+  <figcaption><b>NativeTab active (dev tools enabled: ⋯ on widget tabs)</b><span class="meta">860 × 72</span><a href="leaves/tabs/native-active.html" target="_blank" rel="noopener">open ↗</a></figcaption>
+  <div class="frame" data-w="860" data-h="72"><iframe loading="lazy" title="NativeTab active (dev tools enabled: ⋯ on widget tabs)" data-leaf="leaves/tabs/native-active.html"  src="leaves/tabs/native-active.html#theme=dark" width="860" height="72"></iframe></div>
+</figure>
+<figure class="leaf" id="tabs-pinned">
+  <figcaption><b>Tabs marked as always on screen (pin icon)</b><span class="meta">960 × 72</span><a href="leaves/tabs/pinned.html" target="_blank" rel="noopener">open ↗</a><p>Element Call is pinned and active: it is shown in its tab. The whiteboard is pinned and not active: it is shown in the PictureInPicturePanel until its tab is pressed.</p></figcaption>
+  <div class="frame" data-w="960" data-h="72"><iframe loading="lazy" title="Tabs marked as always on screen (pin icon)" data-leaf="leaves/tabs/pinned.html"  src="leaves/tabs/pinned.html#theme=dark" width="960" height="72"></iframe></div>
+</figure>
+<figure class="leaf" id="tabs-overflow">
+  <figcaption><b>More tabs than fit (scroll + menu of all tabs)</b><span class="meta">860 × 360</span><a href="leaves/tabs/overflow.html" target="_blank" rel="noopener">open ↗</a><p>Element Call is always on screen and not the active tab, so it is in the floating panel.</p></figcaption>
+  <div class="frame" data-w="860" data-h="360"><iframe loading="lazy" title="More tabs than fit (scroll + menu of all tabs)" data-leaf="leaves/tabs/overflow.html"  src="leaves/tabs/overflow.html#theme=dark" width="860" height="360"></iframe></div>
+</figure></div><h3 id="roomsarea-roomview-1-tab-1-new-tab">RoomView (1) › Tab (1): new tab</h3><div class="leaves"><figure class="leaf" id="roomview-new-tab">
+  <figcaption><b>Widget list, opened widgets grayed out with “jump to tab”</b><span class="meta">860 × 520</span><a href="leaves/roomview/new-tab.html" target="_blank" rel="noopener">open ↗</a></figcaption>
+  <div class="frame" data-w="860" data-h="520"><iframe loading="lazy" title="Widget list, opened widgets grayed out with “jump to tab”" data-leaf="leaves/roomview/new-tab.html"  src="leaves/roomview/new-tab.html#theme=dark" width="860" height="520"></iframe></div>
+</figure></div><h3 id="roomsarea-roomview-1-tab-2-widgettab">RoomView (1) › Tab (2): WidgetTab</h3><div class="leaves"><figure class="leaf" id="widgetview-loading">
+  <figcaption><b>Loading</b><span class="meta">700 × 440</span><a href="leaves/widgetview/loading.html" target="_blank" rel="noopener">open ↗</a></figcaption>
+  <div class="frame" data-w="700" data-h="440"><iframe loading="lazy" title="Loading" data-leaf="leaves/widgetview/loading.html"  src="leaves/widgetview/loading.html#theme=dark" width="700" height="440"></iframe></div>
+</figure>
+<figure class="leaf" id="widgetview-failed">
+  <figcaption><b>Failed to load</b><span class="meta">700 × 440</span><a href="leaves/widgetview/failed.html" target="_blank" rel="noopener">open ↗</a></figcaption>
+  <div class="frame" data-w="700" data-h="440"><iframe loading="lazy" title="Failed to load" data-leaf="leaves/widgetview/failed.html"  src="leaves/widgetview/failed.html#theme=dark" width="700" height="440"></iframe></div>
+</figure>
+<figure class="leaf" id="widgetview-prompt">
+  <figcaption><b>Capability prompt (extra: exists in the app today, not in the list)</b><span class="meta">700 × 560</span><a href="leaves/widgetview/prompt.html" target="_blank" rel="noopener">open ↗</a></figcaption>
+  <div class="frame" data-w="700" data-h="560"><iframe loading="lazy" title="Capability prompt (extra: exists in the app today, not in the list)" data-leaf="leaves/widgetview/prompt.html"  src="leaves/widgetview/prompt.html#theme=dark" width="700" height="560"></iframe></div>
+</figure>
+<figure class="leaf" id="widgetview-plain">
+  <figcaption><b>Dev tools: no (full widget)</b><span class="meta">900 × 560</span><a href="leaves/widgetview/plain.html" target="_blank" rel="noopener">open ↗</a></figcaption>
+  <div class="frame" data-w="900" data-h="560"><iframe loading="lazy" title="Dev tools: no (full widget)" data-leaf="leaves/widgetview/plain.html"  src="leaves/widgetview/plain.html#theme=dark" width="900" height="560"></iframe></div>
+</figure></div><h3 id="roomsarea-roomview-1-tab-2-widgettab-dev-tools">RoomView (1) › Tab (2): WidgetTab › Dev tools</h3><div class="leaves"><figure class="leaf" id="devtools-bar-top">
+  <figcaption><b>Bar only, docked top</b><span class="meta">900 × 560</span><a href="leaves/devtools/bar-top.html" target="_blank" rel="noopener">open ↗</a></figcaption>
+  <div class="frame" data-w="900" data-h="560"><iframe loading="lazy" title="Bar only, docked top" data-leaf="leaves/devtools/bar-top.html"  src="leaves/devtools/bar-top.html#theme=dark" width="900" height="560"></iframe></div>
+</figure>
+<figure class="leaf" id="devtools-bar-left">
+  <figcaption><b>Bar only, docked left</b><span class="meta">900 × 560</span><a href="leaves/devtools/bar-left.html" target="_blank" rel="noopener">open ↗</a></figcaption>
+  <div class="frame" data-w="900" data-h="560"><iframe loading="lazy" title="Bar only, docked left" data-leaf="leaves/devtools/bar-left.html"  src="leaves/devtools/bar-left.html#theme=dark" width="900" height="560"></iframe></div>
+</figure>
+<figure class="leaf" id="devtools-bar-right">
+  <figcaption><b>Bar only, docked right</b><span class="meta">900 × 560</span><a href="leaves/devtools/bar-right.html" target="_blank" rel="noopener">open ↗</a></figcaption>
+  <div class="frame" data-w="900" data-h="560"><iframe loading="lazy" title="Bar only, docked right" data-leaf="leaves/devtools/bar-right.html"  src="leaves/devtools/bar-right.html#theme=dark" width="900" height="560"></iframe></div>
+</figure>
+<figure class="leaf" id="devtools-one-panel">
+  <figcaption><b>One panel open (full width)</b><span class="meta">1000 × 640</span><a href="leaves/devtools/one-panel.html" target="_blank" rel="noopener">open ↗</a></figcaption>
+  <div class="frame" data-w="1000" data-h="640"><iframe loading="lazy" title="One panel open (full width)" data-leaf="leaves/devtools/one-panel.html"  src="leaves/devtools/one-panel.html#theme=dark" width="1000" height="640"></iframe></div>
+</figure>
+<figure class="leaf" id="devtools-two-panels">
+  <figcaption><b>Two panels next to each other</b><span class="meta">1000 × 640</span><a href="leaves/devtools/two-panels.html" target="_blank" rel="noopener">open ↗</a></figcaption>
+  <div class="frame" data-w="1000" data-h="640"><iframe loading="lazy" title="Two panels next to each other" data-leaf="leaves/devtools/two-panels.html"  src="leaves/devtools/two-panels.html#theme=dark" width="1000" height="640"></iframe></div>
+</figure>
+<figure class="leaf" id="devtools-three-panels">
+  <figcaption><b>Three panels next to each other</b><span class="meta">1280 × 680</span><a href="leaves/devtools/three-panels.html" target="_blank" rel="noopener">open ↗</a></figcaption>
+  <div class="frame" data-w="1280" data-h="680"><iframe loading="lazy" title="Three panels next to each other" data-leaf="leaves/devtools/three-panels.html"  src="leaves/devtools/three-panels.html#theme=dark" width="1280" height="680"></iframe></div>
+</figure>
+<figure class="leaf" id="devtools-fourth-panel">
+  <figcaption><b>Fourth panel opened: the oldest one closes</b><span class="meta">1280 × 680</span><a href="leaves/devtools/fourth-panel.html" target="_blank" rel="noopener">open ↗</a><p>Messages, Stats and Driver were open. Pressing Console closed Messages, the oldest. Three panels are the maximum.</p></figcaption>
+  <div class="frame" data-w="1280" data-h="680"><iframe loading="lazy" title="Fourth panel opened: the oldest one closes" data-leaf="leaves/devtools/fourth-panel.html"  src="leaves/devtools/fourth-panel.html#theme=dark" width="1280" height="680"></iframe></div>
+</figure>
+<figure class="leaf" id="devtools-side-panels">
+  <figcaption><b>Docked right with two panels (they stack)</b><span class="meta">1000 × 640</span><a href="leaves/devtools/side-panels.html" target="_blank" rel="noopener">open ↗</a><p>Not a leaf of the list: shows what “next to each other” becomes when the bar is docked to a side.</p></figcaption>
+  <div class="frame" data-w="1000" data-h="640"><iframe loading="lazy" title="Docked right with two panels (they stack)" data-leaf="leaves/devtools/side-panels.html"  src="leaves/devtools/side-panels.html#theme=dark" width="1000" height="640"></iframe></div>
+</figure>
+<figure class="leaf" id="devtools-messages">
+  <figcaption><b>WidgetDevToolMessagesPanel: list, one message expanded</b><span class="meta">1000 × 720</span><a href="leaves/devtools/messages.html" target="_blank" rel="noopener">open ↗</a></figcaption>
+  <div class="frame" data-w="1000" data-h="720"><iframe loading="lazy" title="WidgetDevToolMessagesPanel: list, one message expanded" data-leaf="leaves/devtools/messages.html"  src="leaves/devtools/messages.html#theme=dark" width="1000" height="720"></iframe></div>
+</figure>
+<figure class="leaf" id="devtools-stats">
+  <figcaption><b>WidgetDevToolStatsPanel</b><span class="meta">1000 × 640</span><a href="leaves/devtools/stats.html" target="_blank" rel="noopener">open ↗</a></figcaption>
+  <div class="frame" data-w="1000" data-h="640"><iframe loading="lazy" title="WidgetDevToolStatsPanel" data-leaf="leaves/devtools/stats.html"  src="leaves/devtools/stats.html#theme=dark" width="1000" height="640"></iframe></div>
+</figure>
+<figure class="leaf" id="devtools-driver">
+  <figcaption><b>WidgetDevToolDriverPanel</b><span class="meta">1000 × 720</span><a href="leaves/devtools/driver.html" target="_blank" rel="noopener">open ↗</a></figcaption>
+  <div class="frame" data-w="1000" data-h="720"><iframe loading="lazy" title="WidgetDevToolDriverPanel" data-leaf="leaves/devtools/driver.html"  src="leaves/devtools/driver.html#theme=dark" width="1000" height="720"></iframe></div>
+</figure>
+<figure class="leaf" id="devtools-console">
+  <figcaption><b>WidgetDevToolConsolePanel</b><span class="meta">1000 × 640</span><a href="leaves/devtools/console.html" target="_blank" rel="noopener">open ↗</a></figcaption>
+  <div class="frame" data-w="1000" data-h="640"><iframe loading="lazy" title="WidgetDevToolConsolePanel" data-leaf="leaves/devtools/console.html"  src="leaves/devtools/console.html#theme=dark" width="1000" height="640"></iframe></div>
+</figure></div><h3 id="roomsarea-roomview-1-tab-3-roomoverviewtab">RoomView (1) › Tab (3): RoomOverviewTab</h3><div class="leaves"><figure class="leaf" id="overview-plain">
+  <figcaption><b>Dev tools disabled</b><span class="meta">900 × 700</span><a href="leaves/overview/plain.html" target="_blank" rel="noopener">open ↗</a></figcaption>
+  <div class="frame" data-w="900" data-h="700"><iframe loading="lazy" title="Dev tools disabled" data-leaf="leaves/overview/plain.html"  src="leaves/overview/plain.html#theme=dark" width="900" height="700"></iframe></div>
+</figure>
+<figure class="leaf" id="overview-devtools">
+  <figcaption><b>Dev tools enabled (copy to DevBackend)</b><span class="meta">900 × 800</span><a href="leaves/overview/devtools.html" target="_blank" rel="noopener">open ↗</a></figcaption>
+  <div class="frame" data-w="900" data-h="800"><iframe loading="lazy" title="Dev tools enabled (copy to DevBackend)" data-leaf="leaves/overview/devtools.html"  src="leaves/overview/devtools.html#theme=dark" width="900" height="800"></iframe></div>
+</figure></div><h3 id="roomsarea-roomview-2">RoomView (2)</h3><div class="leaves"><figure class="leaf" id="roomview2-different">
+  <figcaption><b>A different room next to RoomView (1)</b><span class="meta">1280 × 800</span><a href="leaves/roomview2/different.html" target="_blank" rel="noopener">open ↗</a></figcaption>
+  <div class="frame" data-w="1280" data-h="800"><iframe loading="lazy" title="A different room next to RoomView (1)" data-leaf="leaves/roomview2/different.html"  src="leaves/roomview2/different.html#theme=dark" width="1280" height="800"></iframe></div>
+</figure>
+<figure class="leaf" id="roomview2-same">
+  <figcaption><b>The same room as RoomView (1) (Ctrl+Shift+N, in a browser tab: Alt+Shift+N)</b><span class="meta">1280 × 800</span><a href="leaves/roomview2/same.html" target="_blank" rel="noopener">open ↗</a><p>Both panels show “Design crit”. A widget runs once. The call and the whiteboard are open on the left, so on the right they offer “jump to tab” and “move widget here” (closes the tab on the left and opens the widget on the right; it keeps running). The poll is open in the right panel itself: only “jump to tab”.</p></figcaption>
+  <div class="frame" data-w="1280" data-h="800"><iframe loading="lazy" title="The same room as RoomView (1) (Ctrl+Shift+N, in a browser tab: Alt+Shift+N)" data-leaf="leaves/roomview2/same.html"  src="leaves/roomview2/same.html#theme=dark" width="1280" height="800"></iframe></div>
+</figure></div></section></main>
+</div>
+<script>
+  // Show every leaf at its real size, scaled down only when the column is narrower than the leaf.
+  // A narrow leaf's caption may not make its figure wider than the leaf, so the caption wraps.
+  function fit() {
+    var avail = document.querySelector("main").clientWidth - 64;
+    document.querySelectorAll(".frame").forEach(function (frame) {
+      var w = +frame.dataset.w, h = +frame.dataset.h, s = Math.min(1, avail / w);
+      frame.style.width = w * s + "px"; frame.style.height = h * s + "px";
+      frame.firstElementChild.style.transform = "scale(" + s + ")";
+      frame.parentElement.style.width = Math.max(w * s, 220) + "px";
+    });
+  }
+  addEventListener("resize", fit); fit();
+  document.querySelectorAll(".switch button").forEach(function (button) {
+    button.addEventListener("click", function () {
+      var theme = button.dataset.theme;
+      document.documentElement.dataset.theme = theme;
+      document.querySelectorAll(".switch button").forEach(function (b) { b.setAttribute("aria-pressed", String(b === button)); });
+      document.querySelectorAll("iframe:not([data-fixed])").forEach(function (f) { f.src = f.dataset.leaf + "#theme=" + theme; });
+    });
+  });
+</script>
+</body>
+</html>

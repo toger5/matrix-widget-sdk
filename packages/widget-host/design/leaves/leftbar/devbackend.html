@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<title>Dev tools enabled, DevBackend active · Widget host mockup</title>
+<meta name="viewport" content="width=68">
+<link rel="stylesheet" href="../../mock.css">
+<script>
+  // The gallery picks the theme through the URL hash (#theme=light). A leaf with a fixed theme ignores it.
+  (function () { var fixed = ""; function apply() { document.documentElement.dataset.theme = fixed || (location.hash.match(/theme=(light|dark)/) || [])[1] || "dark"; } apply(); addEventListener("hashchange", apply); })();
+</script>
+</head>
+<body style="width:68px;height:620px">
+<div class="stage fence" style=""><nav class="leftbar" aria-label="App">
+    <button class="lb-logo" title="About this app" aria-label="About this app"><svg class="logo" width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><rect x="2.5" y="2.5" width="19" height="19" rx="5" fill="none" stroke="currentColor" stroke-width="2"/><rect x="7" y="10" width="10" height="7" rx="2" fill="currentColor"/><circle cx="8" cy="6.6" r="1.1" fill="currentColor"/><circle cx="11.5" cy="6.6" r="1.1" fill="currentColor"/></svg></button>
+    <button class="lb-btn  " title="New room panel (Alt+N) · with the same room: Alt+Shift+N" aria-label="New room panel (Alt+N) · with the same room: Alt+Shift+N"><svg class="ico " width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button>
+    <button class="lb-btn  placeholder" title="Room list (coming soon: use a new panel)" aria-label="Room list (coming soon: use a new panel)" aria-disabled="true"><svg class="ico " width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01"/></svg></button>
+    <span class="lb-wrap"><button class="lb-btn on dev-on" title="Leave DevBackend" aria-label="Leave DevBackend" aria-pressed="true"><svg class="ico " width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.5 3h3l4.5 15H6zM3 21h18M8.4 10h7.2M7 14.5h10"/></svg></button></span>
+    <span class="lb-badge" title="Widgets only see the DevBackend">DevBackend</span>
+    <span class="sp"></span>
+    <button class="lb-btn  " title="Settings" aria-label="Settings"><svg class="ico " width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg></button>
+    <button class="lb-avatar " title="Account" aria-label="Account: DevBackend"><span class="av dev-av" style="--s:26px" aria-hidden="true"><svg class="ico " width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.5 3h3l4.5 15H6zM3 21h18M8.4 10h7.2M7 14.5h10"/></svg></span></button>
+    <button class="lb-btn  " title="Collapse the bar" aria-label="Collapse the bar"><svg class="ico " width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="M9 3v18"/></svg></button>
+  </nav></div>
+</body>
+</html>

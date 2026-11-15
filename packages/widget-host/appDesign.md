@@ -18,7 +18,7 @@ What to take from the `reference_image`:
 - The header bar is removed.
 - The "Overview" label becomes the room name.
 - The tiles are replaced by the widget. The widget gets no padding and spans the full area of its box.
-- A matching tab style for the room box still needs to be found.
+- The tab style of the room box: the tabs sit in the header row of the box, next to the room name. Every tab has a slightly different background than the header. Only the active tab has a border. There is no accent color.
 
 While the [DevBackend](#devbackend) is active, the app background (on which all panels are shown) becomes a "construction fence": 45° stripes alternating between a slightly lighter and a slightly darker shade. This indicates that the widgets only get the values of the DevBackend.
 
@@ -41,9 +41,9 @@ See the leftmost bar in the `reference_image`. It contains:
 - An app icon in the top left corner. It opens a modal explaining what this app is.
 - A + button, equivalent to Ctrl+N (new room panel).
 - A room list button. Placeholder: it does nothing for now, the room list is reachable through a new, empty room panel.
-- A DevBackend button (only if dev tools are enabled). It activates the [DevBackend](#devbackend).
+- A DevBackend button (only if dev tools are enabled). It activates the [DevBackend](#devbackend). While the DevBackend is active, pressing it again leaves the DevBackend (tooltip on hover: "Leave DevBackend"). All the view state will be cached however. pressing it again "reverts the leave entirely (same rooms/widgets open) widgets reload however"
 - A settings button. It opens [Settings](#settings).
-- The user avatar. It opens the [AccountView](#accountview).
+- The user avatar. It opens the [AccountView](#accountview). While the DevBackend is active, it is the DevBackend icon.
 - A collapse button.
 
 Collapsing the bar shows a toast: "Press Esc to show the expand button". Pressing Escape only reveals the expand icon; pressing that icon shows the bar again.
@@ -57,12 +57,12 @@ One panel next to the LeftBar, positioned and styled like the "Core product" pan
 - The current account at the top: avatar and the default account information.
 - Buttons:
   - Manage account & devices (opens the MAS account page)
-  - Add account (opens the OIDC login page)
   - Copy Matrix URI
   - Log out
 - At the bottom, a list to switch to the other logged-in accounts: "switch to: `<Avatar>` `<AccName>`", with "switch to" very small above the name and an arrow icon on the right.
+  - The last entry of the list is "Add account" (opens the OIDC login page).
 
-In DevBackend mode it shows the full list of accounts with buttons: "switch to `<AccName>`".
+In DevBackend mode the account icon is the DevBackend icon, and the view shows the full list of accounts with buttons: "switch to `<AccName>`". "Add account" is again the last entry of the list.
 
 ### Settings
 
@@ -94,7 +94,10 @@ A room view is a tabbed container, shown inside a room panel. Each tab contains 
 
 - If no widget is open, the room shows the available widgets as nice, large, centered tiles.
 - Once a widget is selected, it is rendered as the first tab.
-- A + button in the tab bar opens a new tab with the same widget list. Widgets that are already open are grayed out, with a "jump to tab" button overlaying the tile.
+- A + button in the tab bar opens a new tab with the same widget list. Widgets that are already open are grayed out, with buttons overlaying the tile:
+  - "jump to tab"
+  - "move widget here", if the widget is open in another room view: it closes the tab there and opens the widget in this room view.
+- A widget runs only once per account, also when two room views show the same room.
 - The room header contains the room name and the number of widgets and users. Pressing it opens the [RoomOverviewTab](#roomoverviewtab) (or switches to it if it is already open).
 
 ## Tabs
@@ -106,7 +109,7 @@ There are two kinds of tabs with slightly different designs:
 
 Every tab has a close button (equivalent to Ctrl+W). With dev tools enabled, a WidgetTab also has an overflow button (three dots) that opens the [WidgetDevToolBar](#widgetdevtoolbar).
 
-A widget that is set to always on screen gets a marker on its tab: a pin icon and a darker border.
+A widget that is set to always on screen gets a marker on its tab: a pin icon (see [PictureInPicturePanel](#pictureinpicturepanel)).
 
 ## RoomOverviewTab
 
@@ -127,7 +130,7 @@ A toolbar for a single widget, with information like the driver state (approved 
 - It is docked at the top of the widget by default and can be moved to the left or right (as in the browser devtools).
 - The bar itself only has buttons to open and close specific panels:
   - The first panel opens at full width, the second opens next to it, the third next to those.
-  - Some panels need the full width; they open on top of the others.
+  - At most three panels are open: opening a fourth closes the oldest one.
   - Panels are resized by dragging between them.
 
 ### WidgetDevToolMessagesPanel
@@ -161,14 +164,22 @@ A copy of the widget's browser console, to make it easy to debug with only the w
 
 ## PictureInPicturePanel
 
-Widgets that are set to always on screen are rendered in a floating container, the PictureInPicturePanel.
+Widgets that are set to always on screen are rendered in a floating container, the PictureInPicturePanel, while their tab is not shown:
 
-- The container is a list of up to 4 widgets next to each other. A button switches between horizontal and vertical stacking.
+- Setting a widget to always on screen first only adds the pin icon to its tab. The widget stays where it is.
+- Moving away from the widget (for example by opening another tab) opens it in the PictureInPicturePanel.
+- Opening the widget again (pressing its tab, the one with the pin icon) closes it in the PictureInPicturePanel.
+
+The container:
+
+- The container is a list of widgets next to each other. A button switches between horizontal and vertical stacking.
+- There is no limit on the number of always-on-screen widgets. The container shows 4 boxes; the other widgets are listed in an overflow menu of the container.
 - The container can be resized, up to almost the size of the screen, so there is enough space for the devtools.
 - It has no border. It is just an array of rounded boxes, like the `Usage & Quota`, `Cost & Billing` and `Organization` boxes at the top of the `reference_image` (bigger and a bit more square, but similar).
 - When the mouse hovers over the panel, an opaque box appears around all the small boxes. It shows:
   - the room name and the widget name next to each box
   - buttons per widget: jump to widget, close, and close the WidgetDevToolBar (if open)
+  - Close stops (kills) the widget. An always-on-screen widget otherwise always stays running. (killing prompts the user with a modal to confirm closing even though the widget still wants to be on screen)
 - This larger surrounding box is also the drag area of the floating panel.
 - Moving a widget to PiP does not change its WidgetDevToolBar state and layout.
 - Widgets need to be started in a shadow DOM so that they can be remounted from the room view to the PictureInPicturePanel.
@@ -182,7 +193,12 @@ The DevBackend is a custom in-memory backend. It is implemented as a separate ac
 - The app renders the construction-fence background (see [Design](#design)).
 - The SidePanel opens with the DevBackendView.
 - The RoomsArea keeps the same design, but only shows the rooms that were created in the DevBackendView or copied over from a RoomOverviewTab.
-
+- There are three ways to leave it:
+  - switching to an account in the AccountView
+  - the "Leave DevBackend" text button at the bottom of the DevBackendView
+- Pressing the devBackend button in the left bar DOES not leave (this might be in conflict with toher parts here. update them. This is a last minitue decision and this statement here wins)
+  - it closes the devBackend side bar
+  - the leave button below the devpanel is enough
 ## DevBackendView
 
 One of the [SidePanel](#sidepanel) views. It has one page per mocked room. The rooms are not rendered as tabs but as a dropdown next to the room name and ID (where "Core product" is in the `reference_image`). The last entry of the dropdown is a + button to add a room.
@@ -216,6 +232,12 @@ Media is a special case, as it is not per room. It gets its own box:
 - The header of this box has a minimise/hide button to collapse it again (full space for the per-room box).
 - Content: upload media, a list of all media (including media uploaded by widgets), and buttons to copy the MXC URI of each item.
 
+**Leave**
+
+At the very bottom of the view, below the media box: "Leave DevBackend" followed by a leave icon. It is just a text button, styled like a link (the icon may be colored). No header and no box: it should not draw attention.
+
+Remove the leave options in case there is no logged in account to fallback to.
+
 ## Login page
 
 A simple fullscreen login. It allows skipping the login, which immediately ends up in the DevBackend (and enables dev tools).
@@ -223,6 +245,9 @@ A simple fullscreen login. It allows skipping the login, which immediately ends 
 # Custom behavior
 
 - Collapsing the LeftBar while only one widget is open renders the widget fullscreen: no rounded containers anymore.
+  - The room header stays: it is important information.
+  - The + button of the tab bar is not shown by default.
+  - The tab is not shown, as only one widget is open.
 
 # Required visualisations
 
@@ -233,18 +258,18 @@ The mockups needed to review the full design. Each leaf is one state to draw. Do
   - Default screen: LeftBar + one room panel
   - DevBackend active: construction-fence background + DevBackend badge
   - App info modal
-  - Fullscreen: LeftBar collapsed, one widget, no rounded containers
+  - Fullscreen: LeftBar collapsed, one widget, no rounded containers: room header without tab and + button / header hovered
   - Narrow window: SidePanel overlays, one room panel
 - LeftBar
   - Expanded, dev tools disabled
-  - Expanded, dev tools enabled (DevBackend button), DevBackend inactive / active
+  - Expanded, dev tools enabled (DevBackend button), DevBackend inactive / active / active and hovered ("Leave DevBackend" tooltip)
   - Collapsed with toast
   - Collapsed, expand icon revealed (after Esc)
 - SidePanel
   - Closed
   - AccountView
     - One account
-    - Several accounts (switch list at the bottom)
+    - Several accounts (switch list at the bottom, ending with "Add account")
     - DevBackend mode (full account list)
   - Settings
     - Dev tools disabled / enabled
@@ -259,8 +284,10 @@ The mockups needed to review the full design. Each leaf is one state to draw. Do
     - Media box
       - Collapsed (only the "Media Backend Tool" button)
       - Open below the room box (resize handle, minimise button, media list)
+    - "Leave DevBackend" text button at the bottom (part of every DevBackendView state)
 - PictureInPicturePanel
   - Idle: borderless boxes, 1 widget / 4 widgets
+  - More widgets than fit: overflow menu closed / open
   - Stacked horizontal / vertical
   - Hover: surrounding box with room name, widget name and buttons
   - Enlarged, with the WidgetDevToolBar of one widget open
@@ -278,7 +305,7 @@ The mockups needed to review the full design. Each leaf is one state to draw. Do
     - No widget open: widget tiles
     - Tab bar
       - WidgetTab / NativeTab, active / inactive
-      - Tab marked as always on screen (pin icon, darker border)
+      - Tab marked as always on screen (pin icon)
       - More tabs than fit
     - Tab (1): new tab
       - Widget list, opened widgets grayed out with "jump to tab"
@@ -290,7 +317,7 @@ The mockups needed to review the full design. Each leaf is one state to draw. Do
           - Bar only, docked top / left / right
           - One panel open (full width)
           - Two and three panels next to each other
-          - Full-width panel on top of the others
+          - Fourth panel opened: the oldest one closes
           - WidgetDevToolMessagesPanel: list, one message expanded
           - WidgetDevToolStatsPanel
           - WidgetDevToolDriverPanel
@@ -299,7 +326,7 @@ The mockups needed to review the full design. Each leaf is one state to draw. Do
       - Dev tools disabled / enabled (copy to DevBackend)
   - RoomView (2)
     - A different room next to RoomView (1)
-    - The same room as RoomView (1) (Ctrl+Shift+N)
+    - The same room as RoomView (1) (Ctrl+Shift+N): opened widgets offer "jump to tab" and "move widget here"
 
 # Details
 
