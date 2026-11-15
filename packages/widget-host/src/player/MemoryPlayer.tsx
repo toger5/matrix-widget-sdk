@@ -49,7 +49,7 @@ function start(): Start {
  */
 export function MemoryPlayer({ onLeft }: { onLeft: () => void }) {
   const [{ session, initialWidgetKey, problem }] = useState(start);
-  const [options, setOptions] = useState<WidgetOptions>(() => ({ autoApprove: params().get("autoApprove") === "1", autoApproveOpenId: false, devtoolsOpen: true }));
+  const [options, setOptions] = useState<WidgetOptions>(() => ({ autoApprove: params().get("autoApprove") === "1", autoApproveOpenId: false, rememberCapabilities: false, devtoolsOpen: true }));
 
   useEffect(() => {
     seedDemoMedia(session.store).catch((e: unknown) => console.warn("seeding the demo media failed", e));

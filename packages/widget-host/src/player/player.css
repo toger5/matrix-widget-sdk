@@ -178,6 +178,37 @@ main {
   padding: 6px 12px;
   background: var(--panel);
 }
+/* The approved capabilities, shown while the pointer (or the focus) is on their number. */
+.caps-count {
+  position: relative;
+  cursor: help;
+  text-decoration: underline dotted;
+}
+.caps-list {
+  display: none;
+  position: absolute;
+  top: 100%;
+  right: 0;
+  z-index: 10;
+  gap: 4px;
+  padding: 8px 10px;
+  max-height: 60vh;
+  overflow: auto;
+  white-space: nowrap;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  box-shadow: 0 4px 12px rgb(0 0 0 / 20%);
+}
+.caps-count:hover .caps-list,
+.caps-count:focus .caps-list,
+.caps-count:focus-within .caps-list {
+  display: grid;
+}
+.caps-list span {
+  color: var(--muted);
+}
 .prompt {
   padding: 8px 12px;
   display: grid;

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { WidgetHostDriver, type DriverSnapshot, type MatrixBackend, type WidgetHostPlatform } from "@matrix-widget-tools/widget-host-bindings";
 
 import { LEGACY_AUTO_APPROVED, type ResolvedWidget } from "../widgetStateEvent";
+import { loadCapabilities, saveCapabilities } from "./capabilityStore";
 import { envelope, pretty, stringify } from "./format";
 import { onDriverLog } from "./hostLogging";
 
@@ -22,6 +23,8 @@ interface LogLine {
 export interface WidgetOptions {
   /** Approve every capability request without a prompt. */
   autoApprove?: boolean;
+  /** `false`: do not remember approved capabilities, so every start of a widget asks again. */
+  rememberCapabilities?: boolean;
   /** Hand out OpenID tokens without a prompt. */
   autoApproveOpenId?: boolean;
   /** Start with the message log and the driver panel open. */
@@ -32,6 +35,11 @@ interface Props {
   widget: ResolvedWidget;
   /** A backend bound to the room the widget lives in. */
   backend: MatrixBackend;
+  /**
+   * Where the capabilities approved for this widget are remembered (`capabilityStoreKey`). What is
+   * stored there is granted without a prompt; without a key the widget is asked about every time.
+   */
+  capabilityKey?: string;
   /** Called when the widget asks to open a URI; throw to refuse. */
   onNavigate: (uri: string) => void;
   options?: WidgetOptions;
@@ -42,7 +50,7 @@ interface Props {
  * log and a driver panel. The iframe and the driver live and die together: give the component a
  * new `key` whenever the widget URL or the backend changes.
  */
-export function WidgetView({ widget, backend, onNavigate, options }: Props) {
+export function WidgetView({ widget, backend, capabilityKey, onNavigate, options }: Props) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const driverRef = useRef<WidgetHostDriver | undefined>(undefined);
   const nextLogId = useRef(0);
@@ -80,6 +88,27 @@ export function WidgetView({ widget, backend, onNavigate, options }: Props) {
   const refresh = () => setSnapshot(driverRef.current?.snapshot());
 
   const { url, legacy, usesWidgetApi } = widget;
+  /**
+   * Remember `capabilities` for this widget (replacing what was remembered) and have the driver
+   * grant them, and what a legacy widget gets anyway, without a prompt from now on.
+   */
+  const remember = (driver: WidgetHostDriver, capabilities: string[]) => {
+    if (capabilityKey) saveCapabilities(capabilityKey, capabilities);
+    // What a legacy client gave a widget without asking; the compat wrapper requests these as
+    // capabilities, so grant them without a prompt. The driver applies the rule.
+    driver.setAutoApproved([...(legacy ? LEGACY_AUTO_APPROVED : []), ...(capabilityKey ? capabilities : [])]);
+  };
+  /** Answer the open capability request and remember what the widget holds after it. */
+  const grant = (driver: WidgetHostDriver, capabilities: string[]) => {
+    driver.approveCapabilities(capabilities);
+    // Added to what is remembered: a widget that asks for less this time keeps its earlier grants.
+    const remembered = capabilityKey ? loadCapabilities(capabilityKey) : [];
+    remember(driver, [...new Set([...remembered, ...driver.snapshot().approved])]);
+  };
+  const grantRef = useRef(grant);
+  grantRef.current = grant;
+  const rememberRef = useRef(remember);
+  rememberRef.current = remember;
   useEffect(() => {
     const origin = new URL(url).origin;
     const log: typeof logRef.current = (kind, data) => logRef.current(kind, data);
@@ -95,7 +124,7 @@ export function WidgetView({ widget, backend, onNavigate, options }: Props) {
       onCapabilitiesRequested(caps) {
         queueMicrotask(() => {
           if (optionsRef.current?.autoApprove) {
-            driver.approveCapabilities(caps);
+            grantRef.current(driver, caps);
           } else {
             setRequested(caps);
             setSelected(new Set(caps));
@@ -119,9 +148,7 @@ export function WidgetView({ widget, backend, onNavigate, options }: Props) {
     };
 
     const driver = new WidgetHostDriver(backend, platform);
-    // What a legacy client gave a widget without asking; the compat wrapper requests these as
-    // capabilities, so grant them without a prompt. The driver applies the rule.
-    if (legacy) driver.setAutoApproved(LEGACY_AUTO_APPROVED);
+    rememberRef.current(driver, capabilityKey ? loadCapabilities(capabilityKey) : []);
     driver.setOpenidAutoApproved(optionsRef.current?.autoApproveOpenId === true);
     driverRef.current = driver;
     refresh();
@@ -155,7 +182,7 @@ export function WidgetView({ widget, backend, onNavigate, options }: Props) {
       driver.revokeCapabilities(driver.snapshot().approved);
       driverRef.current = undefined;
     };
-  }, [url, legacy, usesWidgetApi, backend]);
+  }, [url, legacy, usesWidgetApi, backend, capabilityKey]);
 
   const autoApproveOpenId = options?.autoApproveOpenId === true;
   useEffect(() => {
@@ -163,7 +190,7 @@ export function WidgetView({ widget, backend, onNavigate, options }: Props) {
   }, [autoApproveOpenId]);
 
   const approve = (caps: string[]) => {
-    driverRef.current?.approveCapabilities(caps);
+    if (driverRef.current) grant(driverRef.current, caps);
     setRequested(undefined);
     refresh();
   };
@@ -185,7 +212,8 @@ export function WidgetView({ widget, backend, onNavigate, options }: Props) {
     if (!driver) return;
     // The host may take capabilities away at any time; the widget gets the reduced list.
     driver.revokeCapabilities(driver.snapshot().approved);
-    log("info", "all capabilities revoked; the widget gets update_capabilities with an empty list");
+    remember(driver, []);
+    log("info", "all capabilities revoked and forgotten; the widget gets update_capabilities with an empty list");
     refresh();
   };
   const pushTheme = () => {
@@ -204,7 +232,16 @@ export function WidgetView({ widget, backend, onNavigate, options }: Props) {
         <strong>{widget.name}</strong>
         <span className="muted">{widget.legacy ? "legacy, via compat wrapper" : new URL(widget.url).origin}</span>
         <span className="spacer" />
-        <span className="muted">{approved.length} capabilities</span>
+        <span className="caps-count muted" tabIndex={0}>
+          {approved.length} capabilities
+          <span className="caps-list">
+            {approved.length === 0 && "This widget holds no capabilities."}
+            {[...approved].sort().map((cap) => (
+              <code key={cap}>{cap}</code>
+            ))}
+            {capabilityKey && approved.length > 0 && <span>Remembered for this widget in this room until revoked.</span>}
+          </span>
+        </span>
         <button onClick={revokeAll} disabled={approved.length === 0}>
           Revoke all
         </button>

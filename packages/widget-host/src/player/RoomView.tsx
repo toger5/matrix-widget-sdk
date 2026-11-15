@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { resolveWidget, widgetKey, type ResolvedWidget, type StateEvent } from "../widgetStateEvent";
+import { capabilityStoreKey } from "./capabilityStore";
 import type { LiveSession, RoomBackend, RoomSummary } from "./session";
 import { WidgetView, type WidgetOptions } from "./WidgetView";
 
@@ -98,6 +99,7 @@ export function RoomView({ session, room, initialWidgetKey, widgetOptions }: Pro
           key={`${backend.generation}|${current.key}|${current.widget.url}`}
           widget={current.widget}
           backend={backend.backend}
+          capabilityKey={widgetOptions?.rememberCapabilities === false ? undefined : capabilityStoreKey(session.userId, room.id, current.key)}
           onNavigate={onNavigate}
           options={widgetOptions}
         />

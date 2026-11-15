@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, useSyncExternalStore, type FormEvent, type ReactNode } from "react";
 
+import { clearCapabilities } from "./capabilityStore";
 import { RoomView } from "./RoomView";
 import type { LiveSession, RoomSummary } from "./session";
 import type { WidgetOptions } from "./WidgetView";
@@ -33,7 +34,11 @@ export function Player({ session, onLeft, leaveLabel = "Log out", sidePanel, ini
 
   const leave = () => {
     setError(undefined);
-    session.logout().then(onLeft, (e: unknown) => setError(`${leaveLabel} failed: ${e instanceof Error ? e.message : String(e)}`));
+    const { userId } = session;
+    session
+      .logout()
+      .then(() => clearCapabilities(userId))
+      .then(onLeft, (e: unknown) => setError(`${leaveLabel} failed: ${e instanceof Error ? e.message : String(e)}`));
   };
 
   return (

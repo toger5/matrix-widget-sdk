@@ -102,7 +102,14 @@ hands it to each widget's driver like any other `MatrixBackend`.
   Approving capabilities also pushes the current permitted state (`update_state`) at once.
 - **Driver** panel of the widget: the snapshot (`ready`, approved and pending capabilities) and
   buttons that push `update_theme`, `update_language` and `update_visibility`.
-- **Revoke all**: the widget gets `update_capabilities` with an empty list.
+- **Remembered capabilities** (logged-in mode): what you approve is stored in `localStorage` per
+  account, room and widget, and granted without a prompt the next time the widget is opened; only
+  capabilities it has not been given before are prompted for. Logging out forgets them. The
+  in-memory mode stores nothing, so every start asks again.
+- **N capabilities** in the widget header: hover (or focus) it to see every capability the widget
+  holds.
+- **Revoke all**: the widget gets `update_capabilities` with an empty list, and what was
+  remembered for it is forgotten.
 
 ### Configuration
 
