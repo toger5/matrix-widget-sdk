@@ -6,8 +6,10 @@
 # where it is applied. Run from anywhere: `npm run bindings -w packages/matrix-sdk-uniffi-js`.
 #
 # Needs: the wasm32-unknown-unknown target (the matching `wasm-bindgen` CLI is installed locally),
-# and optionally binaryen's `wasm-opt`.
+# and binaryen's `wasm-opt`.
 set -euo pipefail
+
+command -v wasm-opt > /dev/null || { echo "wasm-opt not found: install binaryen (brew install binaryen)" >&2; exit 1; }
 
 cd "$(dirname "$0")/.."
 SDK=rust_modules/matrix-rust-sdk
@@ -71,6 +73,18 @@ fi
 export UBRN_WASM_BINDGEN="$TOOLS/bin/wasm-bindgen"
 
 echo "==> Second pass: build with bindings/wasm in the workspace"
+# The wasm is built in the SDK's workspace, which has no [profile.release], so the profile of this
+# repository's Cargo.toml does not apply and cargo's defaults (opt-level 3, no LTO, 16 codegen
+# units) would be used. Those roughly triple the code size: generic code is duplicated per crate
+# and nothing is merged at link time. The profile is set here, through the environment, so that
+# no further edit of the checkout is needed. `strip` drops the name section (function names,
+# ~18 MB); build scripts and proc macros are left unstripped, as stripped proc-macro dylibs can
+# fail to load on recent macOS (see the SDK's small-release-stripped profile).
+export CARGO_PROFILE_RELEASE_OPT_LEVEL=z
+export CARGO_PROFILE_RELEASE_LTO=fat
+export CARGO_PROFILE_RELEASE_CODEGEN_UNITS=1
+export CARGO_PROFILE_RELEASE_STRIP=true
+export CARGO_PROFILE_RELEASE_BUILD_OVERRIDE_STRIP=none
 sed -i.bak '/"xtask",/a\
     "bindings/wasm",
 ' "$SDK/Cargo.toml"
@@ -83,13 +97,15 @@ echo "==> Pointing the generated code at this package's ubrn runtime"
 sed -i.bak -E "s#(['\"])@ubjs/core['\"]#\1uniffi-bindgen-react-native\1#" src/generated/*.ts
 rm src/generated/*.bak
 
-if command -v wasm-opt > /dev/null; then
-    echo "==> Optimising the wasm binary (takes a few minutes)"
-    wasm-opt -Oz "$WASM_FILE" -o "$WASM_FILE.tmp"
-    mv "$WASM_FILE.tmp" "$WASM_FILE"
-else
-    echo "==> wasm-opt not found (install binaryen); skipping optimisation"
-fi
+echo "==> Optimising the wasm binary (takes a few minutes)"
+# The features are listed because `strip` removes the target_features section wasm-opt would
+# otherwise read them from; they are the ones rustc enables for wasm32-unknown-unknown.
+ls -lh "$WASM_FILE"
+wasm-opt -Oz \
+    --enable-bulk-memory --enable-nontrapping-float-to-int --enable-sign-ext \
+    --enable-mutable-globals --enable-reference-types --enable-multivalue \
+    "$WASM_FILE" -o "$WASM_FILE.tmp"
+mv "$WASM_FILE.tmp" "$WASM_FILE"
 
 ls -lh "$WASM_FILE"
 echo "==> Done"
