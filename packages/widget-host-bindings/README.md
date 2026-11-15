@@ -69,6 +69,7 @@ const driver = new WidgetHostDriver(backend.asBackend(), platform);
 window.addEventListener("message", (ev) => {
   if (ev.source === iframe.contentWindow) driver.handleMessageFromWidget(JSON.stringify(ev.data));
 });
+// InMemoryBackend specific public api to mock a sync response
 backend.inject(matrixEventFromJson(JSON.stringify(eventFromSync)));   // reaches the widget if permitted
 ```
 
