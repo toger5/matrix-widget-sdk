@@ -4,7 +4,7 @@
  * means writing another `SessionProvider` and adding it to the choice at the bottom. Nothing
  * here, and nothing in the UI, may import an SDK.
  *
- * The in-memory mode (`./memorySession`) implements `LiveSession` too, which is why it gets the
+ * The in-memory mode (`./matrix_session/memory/session`) implements `LiveSession` too, which is why it gets the
  * same views as a logged-in client.
  */
 import type { MatrixBackend } from "@matrix-widget-tools/widget-host-bindings";
@@ -14,6 +14,13 @@ import type { StateEvent } from "./widgetStateEvent";
 export interface RoomSummary {
   id: string;
   name: string;
+  /** The room's avatar, an `mxc://` URI. `LiveSession.avatar` turns it into a URL an `<img>` can show. */
+  avatarUrl?: string;
+  /**
+   * The room's state events of the widget event types, as they are: what they mean (which of them
+   * describe a widget) is up to the UI. `undefined` as long as the session does not know.
+   */
+  widgetEvents?: StateEvent[];
 }
 
 /** Which ways of logging in the chosen homeserver offers. */
@@ -62,6 +69,8 @@ export interface LiveSession {
   rooms(): RoomSummary[];
   /** Call `listener` whenever `rooms()` may have changed. Returns the unsubscribe function. */
   onRoomsChanged(listener: () => void): () => void;
+  /** The avatar at `mxcUrl` (`RoomSummary.avatarUrl`) as a URL for an `<img>`, or `undefined` if it cannot be loaded. */
+  avatar(mxcUrl: string): Promise<string | undefined>;
   /** The widget state events of a room that currently describe a widget (removed ones have no `url`). */
   widgets(roomId: string): Promise<StateEvent[]>;
   /** Call `listener` whenever `widgets(roomId)` may have changed. Returns the unsubscribe function. */

@@ -1,7 +1,7 @@
 import { InMemoryBackend } from "@matrix-widget-tools/widget-host-bindings";
 
-import { widgetKey, type StateEvent } from "../widgetStateEvent";
-import type { LiveSession, RoomBackend, RoomSummary } from "../session";
+import { widgetKey, type StateEvent } from "../../widgetStateEvent";
+import type { LiveSession, RoomBackend, RoomSummary } from "../../session";
 
 export const EXAMPLE_NEW: StateEvent = {
   type: "m.widget",
@@ -58,6 +58,7 @@ export class MemorySession implements LiveSession {
   readonly store: InMemoryBackend;
   private readonly events: StateEvent[];
   private readonly listeners = new Set<() => void>();
+  private readonly roomListeners = new Set<() => void>();
 
   constructor(options: MemorySessionOptions = {}) {
     this.roomId = options.roomId ?? "!room:example.org";
@@ -67,11 +68,17 @@ export class MemorySession implements LiveSession {
   }
 
   rooms(): RoomSummary[] {
-    return [{ id: this.roomId, name: "In-memory room" }];
+    return [{ id: this.roomId, name: "In-memory room", widgetEvents: [...this.events] }];
   }
 
-  onRoomsChanged(): () => void {
-    return () => {};
+  onRoomsChanged(listener: () => void): () => void {
+    this.roomListeners.add(listener);
+    return () => this.roomListeners.delete(listener);
+  }
+
+  /** The in-memory room has no avatar. */
+  async avatar(): Promise<undefined> {
+    return undefined;
   }
 
   async widgets(roomId: string): Promise<StateEvent[]> {
@@ -120,5 +127,7 @@ export class MemorySession implements LiveSession {
 
   private notify(): void {
     this.listeners.forEach((listener) => listener());
+    // The room list has the widget events too.
+    this.roomListeners.forEach((listener) => listener());
   }
 }

@@ -46,7 +46,9 @@ mod $3;/" "$1"
 }
 declare_module "$SDK/bindings/matrix-sdk-ffi/src/room/mod.rs" "mod power_levels;" raw_events
 declare_module "$SDK/bindings/matrix-sdk-ffi/src/lib.rs" "mod room_list;" room_list_full_state
+declare_module "$SDK/bindings/matrix-sdk-ffi/src/lib.rs" "mod room_list;" room_list_extra_state
 declare_module "$SDK/crates/matrix-sdk-ui/src/room_list_service/mod.rs" "mod room_list;" full_state
+declare_module "$SDK/crates/matrix-sdk-ui/src/room_list_service/mod.rs" "mod room_list;" extra_state
 
 echo "==> Patching: drop the forced experimental-search feature"
 # matrix-sdk-ffi enables matrix-sdk/experimental-search unconditionally, which pulls in tantivy

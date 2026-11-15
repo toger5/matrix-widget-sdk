@@ -9,12 +9,14 @@ import {
   createClient,
   type MatrixClient,
   type MatrixEvent,
+  type Room,
   type ValidatedAuthMetadata,
 } from "matrix-js-sdk";
 import { decodeRecoveryKey, VerificationPhase, VerificationRequestEvent, VerifierEvent, type ShowSasCallbacks, type VerificationRequest } from "matrix-js-sdk/lib/crypto-api";
 
 import { JsSdkBackend } from "./backend/jsSdkBackend";
-import { WIDGET_EVENT_TYPES, type StateEvent } from "../../widgetStateEvent";
+import { AVATAR_SIZE, AvatarCache } from "../../lib/avatarCache";
+import { describesWidget, WIDGET_EVENT_TYPES, type StateEvent } from "../../widgetStateEvent";
 import { StoredLoginInvalidError, type EmojiVerification, type LiveSession, type LoginOptions, type PendingLogin, type RoomSummary, type SessionProvider } from "../../session";
 
 /**
@@ -211,10 +213,25 @@ function accepted(request: VerificationRequest): Promise<void> {
   });
 }
 
+/** The state events of the widget event types in the SDK's local copy of the room state. */
+function widgetStateEvents(room: Room): StateEvent[] {
+  return WIDGET_EVENT_TYPES.flatMap((type) => room.currentState.getStateEvents(type))
+    .filter((event) => event.getStateKey() !== undefined)
+    .map((event) => ({ type: event.getType(), state_key: event.getStateKey()!, content: event.getContent() }));
+}
+
 /** A logged-in, syncing client. */
 class JsSdkSession implements LiveSession {
   /** Set while verifying: the SDK asks for it through `getSecretStorageKey`. */
   private recoveryKey: Uint8Array<ArrayBuffer> | undefined;
+  private readonly avatars = new AvatarCache(async (mxcUrl) => {
+    const url = this.client.mxcUrlToHttp(mxcUrl, AVATAR_SIZE, AVATAR_SIZE, "crop", false, true, true);
+    if (!url) throw new Error("not an mxc:// URI");
+    // Authenticated media: the access token goes in a header, so an `<img src>` cannot load it.
+    const response = await fetch(url, { headers: { Authorization: `Bearer ${this.client.getAccessToken() ?? ""}` } });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    return response.blob();
+  });
 
   private constructor(private readonly client: MatrixClient) {}
 
@@ -277,16 +294,32 @@ class JsSdkSession implements LiveSession {
     return this.client
       .getRooms()
       .filter((room) => room.getMyMembership() === KnownMembership.Join)
-      .map((room) => ({ id: room.roomId, name: room.name || room.roomId }))
+      .map((room) => ({
+        id: room.roomId,
+        name: room.name || room.roomId,
+        avatarUrl: room.getMxcAvatarUrl() ?? undefined,
+        // With `/sync` v2 the state of every room is local.
+        widgetEvents: widgetStateEvents(room),
+      }))
       .sort((a, b) => a.name.localeCompare(b.name));
+  }
+
+  avatar(mxcUrl: string): Promise<string | undefined> {
+    return this.avatars.get(mxcUrl);
   }
 
   /** Call `listener` whenever `rooms()` may have changed. Returns the unsubscribe function. */
   onRoomsChanged(listener: () => void): () => void {
     const events = [ClientEvent.Room, ClientEvent.DeleteRoom, RoomEvent.Name, RoomEvent.MyMembership] as const;
     for (const event of events) this.client.on(event, listener);
+    // What a room of the list has besides its name: the avatar and the widget events.
+    const onState = (event: MatrixEvent) => {
+      if (event.getType() === "m.room.avatar" || WIDGET_EVENT_TYPES.includes(event.getType())) listener();
+    };
+    this.client.on(RoomStateEvent.Events, onState);
     return () => {
       for (const event of events) this.client.off(event, listener);
+      this.client.off(RoomStateEvent.Events, onState);
     };
   }
 
@@ -294,9 +327,7 @@ class JsSdkSession implements LiveSession {
   async widgets(roomId: string): Promise<StateEvent[]> {
     const room = this.client.getRoom(roomId);
     if (!room) throw new Error(`unknown room ${roomId}`);
-    return WIDGET_EVENT_TYPES.flatMap((type) => room.currentState.getStateEvents(type))
-      .filter((event) => typeof event.getContent().url === "string" && event.getStateKey() !== undefined)
-      .map((event) => ({ type: event.getType(), state_key: event.getStateKey()!, content: event.getContent() }));
+    return widgetStateEvents(room).filter(describesWidget);
   }
 
   onWidgetsChanged(roomId: string, listener: () => void): () => void {
@@ -402,6 +433,7 @@ class JsSdkSession implements LiveSession {
   /** Log out (for an OAuth login this revokes the tokens) and delete the SDK's stores. */
   async logout(): Promise<void> {
     active = undefined;
+    this.avatars.clear();
     await this.client.logout(true).catch((e: unknown) => console.warn("logout request failed", e));
     this.client.stopClient();
     localStorage.removeItem(STORAGE_KEY);

@@ -3,7 +3,7 @@ import { matrixEventFromJson, type StoredMedia } from "@matrix-widget-tools/widg
 
 import type { StateEvent } from "../widgetStateEvent";
 import { stringify } from "../lib/format";
-import { EXAMPLE_LEGACY, EXAMPLE_NEW, type MemorySession } from "./memorySession";
+import { EXAMPLE_LEGACY, EXAMPLE_NEW, type MemorySession } from "../matrix_session/memory/session";
 import type { WidgetOptions } from "../views/WidgetView";
 
 const EXAMPLE_EVENT = {

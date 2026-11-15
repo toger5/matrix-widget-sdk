@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 
 import { widgetKey, type StateEvent } from "../widgetStateEvent";
-import { EXAMPLE_NEW, MemorySession, seedDemoMedia } from "./memorySession";
+import { EXAMPLE_NEW, MemorySession, seedDemoMedia } from "../matrix_session/memory/session";
 import { MemoryStorePanel } from "./MemoryStorePanel";
 import { LoggedInView } from "../views/LoggedInView";
 import type { WidgetOptions } from "../views/WidgetView";

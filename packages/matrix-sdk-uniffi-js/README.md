@@ -61,6 +61,8 @@ are.
 | `bindings/matrix-sdk-ffi/src/room/raw_events.rs` | `Room::events_raw`, `paginate_events_raw_backwards`, `subscribe_to_events_raw`: the room's event cache as JSON, any event type, decrypted. `Room::relations_raw`: one page of `/relations`, decrypted. `Room::account_data_raw`: room account data from the store |
 | `crates/matrix-sdk-ui/src/room_list_service/full_state.rs` | `RoomListService::set_room_subscriptions_with_full_state`: a room subscription with `required_state: [["*", "*"]]` instead of the SDK's fixed list |
 | `bindings/matrix-sdk-ffi/src/room_list_full_state.rs` | `RoomListService::subscribe_to_room_with_full_state`: the above for one room, returning once the state has arrived (or after a timeout) |
+| `crates/matrix-sdk-ui/src/room_list_service/extra_state.rs` | `RoomListService::sync_extra_state_for_all_rooms`: a second sliding sync list (`extra_state`, growing, no timeline) on the room list's connection, whose `required_state` the caller chooses. The `required_state` of the `all_rooms` list is fixed |
+| `bindings/matrix-sdk-ffi/src/room_list_extra_state.rs` | `RoomListService::sync_extra_state_for_all_rooms`: the above for a list of state event types, any state key |
 
 ## Wasm size
 

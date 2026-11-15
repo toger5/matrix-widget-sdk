@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type FormEvent, type ReactNode } from "react";
 
 import { clearCapabilities } from "../lib/capabilityStore";
+import { RoomAvatar } from "./RoomAvatar";
 import { RoomView } from "./RoomView";
 import type { EmojiVerification, LiveSession, RoomSummary, VerificationEmoji } from "../session";
 import type { WidgetOptions } from "./WidgetView";
+import { describesWidget } from "../widgetStateEvent";
 
 interface Props {
   session: LiveSession;
@@ -55,7 +57,9 @@ export function LoggedInView({ session, onLeft, leaveLabel = "Log out", sidePane
           {shown.map((r) => (
             <li key={r.id}>
               <button className={r.id === roomId ? "selected" : ""} onClick={() => setRoomId(r.id)}>
-                {r.name}
+                <RoomAvatar session={session} room={r} />
+                <span className="room-name">{r.name}</span>
+                <WidgetCount room={r} />
               </button>
             </li>
           ))}
@@ -77,6 +81,17 @@ export function LoggedInView({ session, onLeft, leaveLabel = "Log out", sidePane
       </main>
       {sidePanel && <section className="side">{sidePanel}</section>}
     </div>
+  );
+}
+
+/** How many widgets the room has, from its widget state events. Nothing for a room without widgets. */
+function WidgetCount({ room }: { room: RoomSummary }) {
+  const count = room.widgetEvents?.filter(describesWidget).length;
+  if (!count) return null;
+  return (
+    <span className="widget-count" title={count === 1 ? "1 widget" : `${count} widgets`}>
+      {count}
+    </span>
   );
 }
 

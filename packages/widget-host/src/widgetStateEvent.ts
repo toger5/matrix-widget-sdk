@@ -19,6 +19,9 @@ const LEGACY_TYPES = ["im.vector.modular.widgets"];
 /** Every state event type that describes a widget. */
 export const WIDGET_EVENT_TYPES = [...NEW_TYPES, ...LEGACY_TYPES];
 
+/** Whether a widget state event describes a widget: removing a widget leaves an event without a `url` behind. */
+export const describesWidget = (event: StateEvent) => typeof event.content.url === "string";
+
 /** Identifies a widget within a room: two event types may use the same state key. */
 export const widgetKey = (event: Pick<StateEvent, "type" | "state_key">) => `${event.type}/${event.state_key}`;
 

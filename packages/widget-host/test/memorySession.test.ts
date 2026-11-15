@@ -2,7 +2,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { matrixEventFromJson } from "../../widget-host-bindings/src/generated/widget_actions";
-import { EXAMPLE_LEGACY, EXAMPLE_NEW, MemorySession } from "../src/memory/memorySession";
+import { EXAMPLE_LEGACY, EXAMPLE_NEW, MemorySession } from "../src/matrix_session/memory/session";
 import { describeBackendContract } from "./backendContract";
 import "./harness";
 
@@ -28,7 +28,7 @@ describeBackendContract("InMemoryBackend (MemorySession)", async () => {
 describe("MemorySession", () => {
   it("has one room with the two test widgets", async () => {
     const session = new MemorySession();
-    expect(session.rooms()).toEqual([{ id: "!room:example.org", name: "In-memory room" }]);
+    expect(session.rooms()).toEqual([{ id: "!room:example.org", name: "In-memory room", widgetEvents: [EXAMPLE_NEW, EXAMPLE_LEGACY] }]);
     expect(session.userId).toBe("@alice:example.org");
     expect(await session.widgets(session.roomId)).toEqual([EXAMPLE_NEW, EXAMPLE_LEGACY]);
     expect(await session.widgets("!other:example.org")).toEqual([]);

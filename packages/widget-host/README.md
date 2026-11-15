@@ -19,7 +19,8 @@ and [`handover.md`](../../handover.md).
 
 - `src/session.ts` is what the UI needs from a Matrix client, as interfaces (login, session
   restore, room list, the widget state events of a room, a backend per room, device
-  verification). The UI imports no SDK. Its `sessions` export picks the SDK and loads it lazily.
+  verification). A room of the room list comes with its avatar and its widget state events. The UI
+  imports no SDK. Its `sessions` export picks the SDK and loads it lazily.
 - `src/matrix_session/js/session.ts` implements it on matrix-js-sdk: OAuth 2.0 (dynamic client
   registration, PKCE, in a popup that returns through `oidc-callback.html`) or a password,
   `/sync` v2, end-to-end encryption, verification with a recovery key. `src/matrix_session/js/backend/` is the
@@ -28,12 +29,14 @@ and [`handover.md`](../../handover.md).
   (`../matrix-sdk-uniffi-js`, with native sliding sync). A build has one SDK or the other, see
   "Choosing the Matrix SDK" below. This implementation has not run against a homeserver yet;
   `../../rust-sdk-port.md` says what it relies on and how it differs.
-- `src/memory/memorySession.ts` implements the same `LiveSession` on an `InMemoryBackend`, with
-  one room and an editable list of widgets. `MemoryView.tsx` puts the shared `LoggedInView` on it and
+- `src/matrix_session/memory/session.ts` implements the same `LiveSession` on an `InMemoryBackend`, with
+  one room and an editable list of widgets. `src/memory/MemoryView.tsx` puts the shared `LoggedInView` on it and
   adds `MemoryStorePanel.tsx`, the store's controls, as a side panel.
 - `src/views/` holds the views: `Login.tsx`, and `LoggedInView.tsx`, `RoomView.tsx`, `WidgetView.tsx`, which both modes share. `WidgetView` is
   one widget: iframe, its own `WidgetHostDriver`, the capability and OpenID prompts, a message
   log and a driver panel (snapshot, `update_theme` / `update_language` / `update_visibility`).
+- `src/lib/` holds what is neither a view nor a session: the store of approved capabilities, the
+  avatar cache, log formatting and the driver's log.
 - `src/widgetStateEvent.ts` decides how a widget state event is embedded (below).
 
 ## Logged in

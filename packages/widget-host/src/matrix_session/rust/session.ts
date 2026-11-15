@@ -3,6 +3,7 @@ import {
   ClientBuilder,
   ClientError,
   IndexedDbStoreBuilder,
+  MediaSource,
   Membership,
   OAuthPrompt,
   RoomListEntriesDynamicFilterKind,
@@ -22,7 +23,8 @@ import {
 } from "matrix-sdk-uniffi-js";
 
 import { RustSdkBackend } from "./backend/rustSdkBackend";
-import { WIDGET_EVENT_TYPES, type StateEvent } from "../../widgetStateEvent";
+import { AVATAR_SIZE, AvatarCache } from "../../lib/avatarCache";
+import { describesWidget, WIDGET_EVENT_TYPES, type StateEvent } from "../../widgetStateEvent";
 import { StoredLoginInvalidError, type EmojiVerification, type LiveSession, type LoginOptions, type PendingLogin, type RoomSummary, type SessionProvider, type VerificationEmoji } from "../../session";
 
 /**
@@ -37,6 +39,8 @@ const ROOM_LIST_PAGE_SIZE = 500;
 const VERIFIED_TIMEOUT_MS = 20_000;
 /** How long to wait for the full state of a room that was just opened. */
 const FULL_STATE_TIMEOUT_MS = 5000;
+/** The least time between two reads of the widget events of all rooms, each of which asks the store once per room and widget event type. */
+const WIDGET_EVENTS_INTERVAL_MS = 1000;
 
 interface Stored {
   session: SdkSession;
@@ -224,6 +228,16 @@ async function restoredClient(stored: Stored): Promise<ClientLike> {
   return client;
 }
 
+/** The state events of the widget event types in the SDK's store for `room`. */
+async function widgetStateEvents(room: RoomLike): Promise<StateEvent[]> {
+  const perType = await Promise.all(
+    WIDGET_EVENT_TYPES.map(async (type) =>
+      (await room.stateEvents(stateEventTypeFromString(type))).map((ev) => ({ type, state_key: ev.stateKey, content: JSON.parse(ev.contentJson) as Record<string, unknown> })),
+    ),
+  );
+  return perType.flat();
+}
+
 /** A logged-in, syncing client. */
 class RustSdkSession implements LiveSession {
   private readonly listeners = new Set<() => void>();
@@ -232,6 +246,11 @@ class RustSdkSession implements LiveSession {
   private readonly roomListService: RoomListServiceLike;
   /** The room the sliding sync currently delivers the full state of. */
   private opened: { roomId: string; ready: Promise<void> } | undefined;
+  /** The widget events per room, as of the last read. `rooms()` cannot ask the store: it is synchronous. */
+  private readonly widgetEvents = new Map<string, StateEvent[]>();
+  private readingWidgets: "idle" | "running" | "again" = "idle";
+  private stopped = false;
+  private readonly avatars = new AvatarCache((mxcUrl) => this.client.getMediaThumbnail(MediaSource.fromUrl(mxcUrl), BigInt(AVATAR_SIZE), BigInt(AVATAR_SIZE)));
 
   private constructor(
     private readonly client: ClientLike,
@@ -261,8 +280,13 @@ class RustSdkSession implements LiveSession {
   static async start(client: ClientLike, storeId: string): Promise<RustSdkSession> {
     const sync = await client.syncService().withOfflineMode().finish();
     const session = new RustSdkSession(client, sync, storeId);
-    const notify = () => session.listeners.forEach((listener) => listener());
+    const notify = () => {
+      session.notify();
+      session.readWidgetEvents();
+    };
 
+    // The room list only syncs the state the SDK needs itself; this adds the widgets of every room.
+    await session.roomListService.syncExtraStateForAllRooms(WIDGET_EVENT_TYPES);
     const roomList = await session.roomListService.allRooms();
     const entries = roomList.entriesWithDynamicAdapters(ROOM_LIST_PAGE_SIZE, { onUpdate: notify });
     const controller = entries.controller();
@@ -283,8 +307,44 @@ class RustSdkSession implements LiveSession {
     return this.client
       .rooms()
       .filter((room) => room.membership() === Membership.Joined)
-      .map((room) => ({ id: room.id(), name: room.displayName() ?? room.id() }))
+      .map((room) => ({ id: room.id(), name: room.displayName() ?? room.id(), avatarUrl: room.avatarUrl(), widgetEvents: this.widgetEvents.get(room.id()) }))
       .sort((a, b) => a.name.localeCompare(b.name));
+  }
+
+  avatar(mxcUrl: string): Promise<string | undefined> {
+    return this.avatars.get(mxcUrl);
+  }
+
+  private notify(): void {
+    this.listeners.forEach((listener) => listener());
+  }
+
+  /**
+   * Bring `widgetEvents` up to date, in the background, and tell the room list's listeners if
+   * the events of a room have changed. Called on every update of the room list; a call during a
+   * read leads to one more read after it.
+   */
+  private readWidgetEvents(): void {
+    if (this.readingWidgets !== "idle") {
+      this.readingWidgets = "again";
+      return;
+    }
+    this.readingWidgets = "running";
+    void (async () => {
+      let changed = false;
+      for (const room of this.client.rooms()) {
+        if (this.stopped) return;
+        if (room.membership() !== Membership.Joined) continue;
+        const events = await widgetStateEvents(room).catch(() => []);
+        if (JSON.stringify(this.widgetEvents.get(room.id())) !== JSON.stringify(events)) changed = true;
+        this.widgetEvents.set(room.id(), events);
+      }
+      if (changed) this.notify();
+      await new Promise((resolve) => setTimeout(resolve, WIDGET_EVENTS_INTERVAL_MS));
+      const again = this.readingWidgets === "again";
+      this.readingWidgets = "idle";
+      if (again) this.readWidgetEvents();
+    })();
   }
 
   /** Call `listener` whenever `rooms()` may have changed. Returns the unsubscribe function. */
@@ -310,13 +370,7 @@ class RustSdkSession implements LiveSession {
 
   /** The widget state events of a room that currently describe a widget (removed ones have no `url`). */
   async widgets(roomId: string): Promise<StateEvent[]> {
-    const room = await this.open(roomId);
-    const perType = await Promise.all(
-      WIDGET_EVENT_TYPES.map(async (type) =>
-        (await room.stateEvents(stateEventTypeFromString(type))).map((ev) => ({ type, state_key: ev.stateKey, content: JSON.parse(ev.contentJson) as Record<string, unknown> })),
-      ),
-    );
-    return perType.flat().filter((ev) => typeof ev.content.url === "string");
+    return (await widgetStateEvents(await this.open(roomId))).filter(describesWidget);
   }
 
   onWidgetsChanged(roomId: string, listener: () => void): () => void {
@@ -325,7 +379,13 @@ class RustSdkSession implements LiveSession {
     const handles = WIDGET_EVENT_TYPES.map((type) => {
       // The SDK reports the current state right away; only what follows is a change.
       let initial = true;
-      return room.subscribeToStateEvents(stateEventTypeFromString(type), { onUpdate: () => (initial ? (initial = false) : listener()) });
+      return room.subscribeToStateEvents(stateEventTypeFromString(type), {
+        onUpdate: () => {
+          if (initial) return void (initial = false);
+          listener();
+          this.readWidgetEvents();
+        },
+      });
     });
     return () => handles.forEach((handle) => handle.cancel());
   }
@@ -412,6 +472,8 @@ class RustSdkSession implements LiveSession {
 
   async logout(): Promise<void> {
     active = undefined;
+    this.stopped = true;
+    this.avatars.clear();
     await this.sync.stop().catch(() => undefined);
     await this.client.logout().catch((e: unknown) => console.warn("logout request failed", e));
     localStorage.removeItem(STORAGE_KEY);
