@@ -85,12 +85,31 @@ function randomPassphrase(): string {
   return btoa(String.fromCharCode(...bytes));
 }
 
-function deleteStore(storeId: string): Promise<void> {
-  return new Promise((resolve) => {
-    // Failing to delete must not block logging out.
-    const request = indexedDB.deleteDatabase(storeName(storeId));
-    request.onsuccess = request.onerror = request.onblocked = () => resolve();
-  });
+/**
+ * The SDK uses the store name as a prefix: the state store has that very name, the others
+ * (crypto, event cache, media) and the stores' metadata are `<name>::<suffix>`.
+ */
+const STORE_SUFFIXES = ["", "::matrix-sdk-state", "::matrix-sdk-crypto", "::matrix-sdk-crypto-meta", "::event_cache", "::media"];
+
+/** Delete every IndexedDB database of a login: the state, the crypto store with the device's keys, and the caches. */
+async function deleteStore(storeId: string): Promise<void> {
+  const prefix = storeName(storeId);
+  const names = new Set(STORE_SUFFIXES.map((suffix) => prefix + suffix));
+  // Whatever else the SDK has created under the prefix. Not every browser can list databases.
+  const existing = await indexedDB.databases?.().catch(() => []);
+  for (const { name } of existing ?? []) if (name?.startsWith(`${prefix}::`)) names.add(name);
+  await Promise.all(
+    Array.from(
+      names,
+      (name) =>
+        new Promise<void>((resolve) => {
+          // Failing to delete must not block logging out. A database the client still has open
+          // is deleted once the client lets go of it, at the latest when the page is closed.
+          const request = indexedDB.deleteDatabase(name);
+          request.onsuccess = request.onerror = request.onblocked = () => resolve();
+        }),
+    ),
+  );
 }
 
 let initialised: Promise<void> | undefined;
