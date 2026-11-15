@@ -45,6 +45,7 @@ gone, delete it and the wrapper. The host keeps no template engine at all.
 | `legacy_wait_for_iframe_load` | no | `content.waitForIframeLoad` (default `true`) | Decides when the legacy capability round starts, see below. |
 | `legacy_widget_data` | no | `content.data` as JSON | Extra `$key` template variables, as in legacy clients. |
 | `client_origin` | no | | Target origin for `postMessage` to the host. Default `*`. Set it in production. |
+| `log_level` | no | | What the wrapper writes to the console (prefix `[widget-compat-wrapper]`): `off`, `error`, `warn` (default), `info`, `debug`. `warn` reports dropped responses and refused requests, `debug` adds one line per message. |
 
 ## What the wrapper does
 

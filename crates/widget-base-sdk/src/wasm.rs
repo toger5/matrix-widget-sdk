@@ -17,6 +17,11 @@
 //!
 //! The constructor [`WidgetApi::new`] is kept as a test anchor: it takes a `sendToHost` callback
 //! instead of a window, so the protocol can be driven from a JavaScript test without an iframe.
+//!
+//! Warnings, errors and Rust panics are written to the console once the module is loaded;
+//! `initLogging("debug")` shows more (see the `logging` module).
+
+mod logging;
 
 use std::cell::RefCell;
 use std::future::Future;
@@ -67,12 +72,26 @@ struct JsDelegate {
 
 fn to_js<T: Serialize>(value: &T) -> JsValue {
     let ser = serde_wasm_bindgen::Serializer::json_compatible();
-    value.serialize(&ser).unwrap_or(JsValue::UNDEFINED)
+    value.serialize(&ser).unwrap_or_else(|e| {
+        log::error!("could not convert a value for JavaScript, passing `undefined`: {e}");
+        JsValue::UNDEFINED
+    })
 }
 
-fn call(cb: &Option<Function>, arg: JsValue) {
+/// Call a callback of the widget. What it throws is logged: there is no caller to rethrow to.
+fn call(name: &str, cb: &Option<Function>, arg: JsValue) {
     if let Some(cb) = cb {
-        let _ = cb.call1(&JsValue::NULL, &arg);
+        if let Err(e) = cb.call1(&JsValue::NULL, &arg) {
+            log::warn!("the {name} callback threw: {}", describe(&e));
+        }
+    }
+}
+
+/// A thrown JavaScript value as text: the message of an `Error`, else its string form.
+fn describe(value: &JsValue) -> String {
+    match value.dyn_ref::<js_sys::Error>() {
+        Some(error) => String::from(error.to_string()),
+        None => value.as_string().unwrap_or_else(|| format!("{value:?}")),
     }
 }
 
@@ -81,15 +100,19 @@ impl WidgetDelegate for JsDelegate {
     ///
     /// On the `postMessage` transport the JSON is parsed first so the host receives a structured
     /// object in `event.data`, as MSC4412 requires. Delivery errors (detached parent, closed
-    /// window) are swallowed: there is nobody left to report them to.
+    /// window) are logged: there is nobody left to report them to.
     fn send_to_host(&self, json: String) {
         match &self.transport {
             Transport::PostMessage { target, origin } => {
                 let message = js_sys::JSON::parse(&json).unwrap_or_else(|_| JsValue::from_str(&json));
-                let _ = target.post_message(&message, origin);
+                if let Err(e) = target.post_message(&message, origin) {
+                    log::warn!("could not post a message to the host: {}", describe(&e));
+                }
             }
             Transport::Callback(callback) => {
-                let _ = callback.call1(&JsValue::NULL, &JsValue::from_str(&json));
+                if let Err(e) = callback.call1(&JsValue::NULL, &JsValue::from_str(&json)) {
+                    log::warn!("the sendToHost callback threw: {}", describe(&e));
+                }
             }
         }
     }
@@ -104,42 +127,48 @@ impl WidgetDelegate for JsDelegate {
             }
         });
         let set_timeout = js_sys::Reflect::get(&js_sys::global(), &JsValue::from_str("setTimeout"));
-        if let Ok(Ok(set_timeout)) = set_timeout.map(|f| f.dyn_into::<Function>()) {
-            let _ = set_timeout.call2(&JsValue::NULL, &expire, &JsValue::from_f64(ACTION_TIMEOUT_MS as f64));
+        let started = match set_timeout.map(|f| f.dyn_into::<Function>()) {
+            Ok(Ok(set_timeout)) => {
+                set_timeout.call2(&JsValue::NULL, &expire, &JsValue::from_f64(ACTION_TIMEOUT_MS as f64)).is_ok()
+            }
+            _ => false,
+        };
+        if !started {
+            log::warn!("no `setTimeout` here: requests the host does not answer never time out");
         }
     }
 
     fn on_matrix_event(&self, event: MatrixEvent) {
-        call(&self.callbacks.borrow().on_event, to_js(&event));
+        call("onEvent", &self.callbacks.borrow().on_event, to_js(&event));
     }
 
     fn on_state_update(&self, state: Vec<MatrixEvent>) {
-        call(&self.callbacks.borrow().on_state_update, to_js(&state));
+        call("onStateUpdate", &self.callbacks.borrow().on_state_update, to_js(&state));
     }
 
     fn on_to_device_message(&self, message: ToDeviceEvent) {
-        call(&self.callbacks.borrow().on_to_device_message, to_js(&message));
+        call("onToDeviceMessage", &self.callbacks.borrow().on_to_device_message, to_js(&message));
     }
 
     fn on_turn_server(&self, server: TurnServer) {
-        call(&self.callbacks.borrow().on_turn_server, to_js(&server));
+        call("onTurnServer", &self.callbacks.borrow().on_turn_server, to_js(&server));
     }
 
     fn on_theme_change(&self, theme: Value) {
-        call(&self.callbacks.borrow().on_theme_change, to_js(&theme));
+        call("onThemeChange", &self.callbacks.borrow().on_theme_change, to_js(&theme));
     }
 
     fn on_language_change(&self, lang: String) {
-        call(&self.callbacks.borrow().on_language_change, JsValue::from_str(&lang));
+        call("onLanguageChange", &self.callbacks.borrow().on_language_change, JsValue::from_str(&lang));
     }
 
     fn on_visibility_change(&self, visible: bool) {
-        call(&self.callbacks.borrow().on_visibility_change, JsValue::from_bool(visible));
+        call("onVisibilityChange", &self.callbacks.borrow().on_visibility_change, JsValue::from_bool(visible));
     }
 
     fn on_capabilities_changed(&self, allowed: Vec<Capability>) {
         let cb = self.callbacks.borrow().on_capabilities_changed.clone();
-        call(&cb, to_js(&allowed));
+        call("onCapabilitiesChanged", &cb, to_js(&allowed));
     }
 }
 
@@ -217,6 +246,7 @@ impl WidgetApi {
             if !js_sys::Object::is(&source, &parent) {
                 return;
             }
+            // What is wrong with the message has been logged by the client.
             let _ = handle(&client, event.data());
         });
         window.add_event_listener_with_callback("message", listener.as_ref().unchecked_ref())?;

@@ -30,12 +30,21 @@
 //! `widget-matrix-backend` and `widget-actions`; it is what the Kotlin/Swift/Python bindings and
 //! the web bindings (`packages/widget-host-bindings`, via uniffi-bindgen-react-native) are
 //! generated from.
+//!
+//! # Logging
+//!
+//! The driver logs through the [`log`] facade and installs no logger: a Rust application uses the
+//! one it likes. The bindings have [`logging::setup_logging`] (`uniffi` feature) instead. Levels:
+//! `warn` for anything dropped or refused, `info` for the widget's lifecycle, `debug` for one line
+//! per message, `trace` for the message bodies (credentials redacted).
 
 // See widget-actions: request handlers return the full `WidgetError`.
 #![allow(clippy::result_large_err)]
 
 mod driver;
 mod error;
+#[cfg(feature = "uniffi")]
+pub mod logging;
 mod platform;
 mod widget_event;
 

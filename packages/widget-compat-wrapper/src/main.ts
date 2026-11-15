@@ -4,6 +4,7 @@ try {
   if (window.parent === window) throw new Error("the compat wrapper must be embedded by a widget host");
   startWrapper(parseConfig(new URLSearchParams(location.search)), document.body);
 } catch (e) {
+  console.error("[widget-compat-wrapper] could not start:", e);
   const error = document.createElement("div");
   error.id = "error";
   error.textContent = `Widget compat wrapper: ${(e as Error).message}`;

@@ -193,4 +193,35 @@ describe("WidgetHostDriver through the JS bindings", () => {
     driver.updateVisibility(false);
     expect(drain().map((m) => m.action)).toEqual([`${X}update_theme`, `${X}update_language`, `${X}update_visibility`]);
   });
+
+  it("delivers log records to a host sink, filtered by level", async () => {
+    const records: hostDriver.LogRecord[] = [];
+    const { LogLevel } = hostDriver;
+    hostDriver.setLogSink({ log: (r) => void records.push(r) });
+    hostDriver.setupLogging(hostDriver.LogConfig.create({ level: LogLevel.Debug, writeToSystem: false }));
+    const { ask } = setup();
+
+    // A request without the capability is refused, which is a warning; every message is a debug line.
+    expect((await ask(`${X}get_openid`)).error).toBeDefined();
+    const warning = records.find((r) => r.level === LogLevel.Warn);
+    expect(warning?.message).toContain("get_openid");
+    expect(warning?.target).toBe("widget_host_driver::driver::requests");
+    expect(records.some((r) => r.level === LogLevel.Debug && r.message.startsWith("from widget:"))).toBe(true);
+    // Bodies are trace only.
+    expect(records.some((r) => r.level === LogLevel.Trace)).toBe(false);
+
+    records.length = 0;
+    hostDriver.setupLogging(hostDriver.LogConfig.create({ level: LogLevel.Error, writeToSystem: false }));
+    await ask(`${X}get_openid`);
+    expect(records).toEqual([]);
+
+    expect(() => hostDriver.setupLogging(hostDriver.LogConfig.create({ level: LogLevel.Info, filter: "a=b=c" }))).toThrow();
+    // An invalid filter changes nothing; without the sink nothing arrives any more.
+    hostDriver.clearLogSink();
+    hostDriver.setupLogging(hostDriver.LogConfig.create({ level: LogLevel.Debug, writeToSystem: false }));
+    await ask(`${X}get_openid`);
+    expect(records).toEqual([]);
+    // Back to the default, so the other tests stay quiet.
+    hostDriver.setupLogging(hostDriver.LogConfig.create({ level: LogLevel.Warn, writeToSystem: false }));
+  });
 });

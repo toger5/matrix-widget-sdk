@@ -39,6 +39,22 @@ const history = await api.readEvents("m.room.message", 20);
 To own the transport (e.g. in tests), use `new WidgetApi((json) => …)` and feed incoming
 messages to `api.handleMessageFromHost(data)`.
 
+### Logging
+
+Warnings (a rejected message, a request that timed out, a callback of yours that threw), errors
+and Rust panics are written to the browser console as soon as `init()` has run. For more:
+
+```js
+import init, { initLogging } from "./pkg/widget_base_sdk.js";
+await init();
+initLogging("debug");                                   // off | error | warn | info | debug | trace
+initLogging("warn", "widget_base_sdk::client=trace");   // RUST_LOG-style filter per module
+```
+
+`debug` prints one line per message, `trace` adds the bodies (credentials redacted). The levels
+are described in the [repository README](../../README.md#logging). From Rust, the client only
+emits `log` records; install any logger you like.
+
 ## How to use it (Rust)
 
 Implement `WidgetDelegate::send_to_host` (and the `on_*` callbacks you need), create

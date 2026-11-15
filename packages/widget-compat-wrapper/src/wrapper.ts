@@ -1,5 +1,6 @@
 /** Browser glue: read the configuration from the URL, create the inner iframe, route messages. */
 import { CompatBridge } from "./bridge";
+import { type LogLevel, log, parseLogLevel, setLogLevel } from "./log";
 
 /** The wrapper's query parameters, parsed. The README describes each parameter. */
 export interface WrapperConfig {
@@ -12,6 +13,8 @@ export interface WrapperConfig {
   widgetData?: Record<string, unknown>;
   /** Target origin for messages to the host. */
   clientOrigin: string;
+  /** What the wrapper writes to the console. Default: `warn`. */
+  logLevel: LogLevel;
 }
 
 /** Read the configuration from the wrapper's query parameters. Throws when a required one is missing. */
@@ -28,6 +31,7 @@ export function parseConfig(params: URLSearchParams): WrapperConfig {
     waitForIframeLoad: params.get("legacy_wait_for_iframe_load") !== "false",
     widgetData: data ? (JSON.parse(data) as Record<string, unknown>) : undefined,
     clientOrigin: params.get("client_origin") ?? "*",
+    logLevel: parseLogLevel(params.get("log_level")),
   };
 }
 
@@ -36,6 +40,8 @@ export function parseConfig(params: URLSearchParams): WrapperConfig {
  * and start the bootstrap. The iframe is added once the bridge knows the templated URL.
  */
 export function startWrapper(config: WrapperConfig, container: HTMLElement, parent: Window = window.parent): CompatBridge {
+  setLogLevel(config.logLevel);
+  log.info(`wrapping legacy widget ${config.widgetId}`);
   const iframe = document.createElement("iframe");
   iframe.allow = "camera; microphone; display-capture; autoplay; clipboard-write";
   iframe.title = config.widgetName;
@@ -52,6 +58,7 @@ export function startWrapper(config: WrapperConfig, container: HTMLElement, pare
     sendToWidget: (m) => iframe.contentWindow?.postMessage(m, widgetOrigin),
     loadWidget: (url) => {
       widgetOrigin = new URL(url).origin;
+      log.info(`loading the legacy widget from ${widgetOrigin}`);
       iframe.src = url;
       container.append(iframe);
     },

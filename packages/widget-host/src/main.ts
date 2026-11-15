@@ -1,7 +1,11 @@
 import {
   InMemoryBackend,
+  LogConfig,
+  LogLevel,
   WidgetHostDriver,
   matrixEventFromJson,
+  setLogSink,
+  setupLogging,
   uniffiInitAsync,
   type WidgetHostPlatform,
 } from "@matrix-widget-tools/widget-host-bindings";
@@ -139,10 +143,11 @@ let widgetOrigin = "*";
 let readyTimer: number | undefined;
 const NOTIFY_READY_TIMEOUT_MS = 15_000;
 
-const LABELS = { in: "← widget", out: "→ widget", err: "error", info: "info" };
+const LABELS = { in: "← widget", out: "→ widget", err: "error", info: "info", sdk: "sdk" };
 
 /** One log line: time and direction, then for envelopes the action, `(request|response <id>)` and the body. */
 function log(kind: keyof typeof LABELS, data: unknown) {
+  console.info("[WidgetHost] ", data);
   const line = el("pre", kind, `${new Date().toISOString().slice(11, 23)} ${LABELS[kind]} `);
   const msg = envelope(data);
   if (msg) {
@@ -157,6 +162,27 @@ function log(kind: keyof typeof LABELS, data: unknown) {
     line.append(pretty(data));
   }
   $("log").prepend(line);
+}
+
+/** An error of the host: into the log panel, and with its stack into the console. */
+function fail(e: unknown) {
+  console.error(e);
+  log("err", String(e));
+}
+
+const LOG_LEVELS = { error: LogLevel.Error, warn: LogLevel.Warn, info: LogLevel.Info, debug: LogLevel.Debug, trace: LogLevel.Trace };
+
+/**
+ * Send the driver's log records to the console and into the log panel. `level` is the `?log=`
+ * parameter (default `warn`), `filter` the `?logFilter=` parameter (`RUST_LOG` syntax).
+ */
+function setupDriverLogging(level: string | null, filter: string | null) {
+  const known = level !== null && level in LOG_LEVELS;
+  setLogSink({
+    log: (record) => log(record.level <= LogLevel.Warn ? "err" : "sdk", `${LogLevel[record.level].toLowerCase()} ${record.target}: ${record.message}`),
+  });
+  setupLogging(LogConfig.create({ level: known ? LOG_LEVELS[level as keyof typeof LOG_LEVELS] : LogLevel.Warn, filter: filter ?? "" }));
+  if (level !== null && !known) log("err", `unknown ?log=${level}, using warn; expected one of ${Object.keys(LOG_LEVELS).join(", ")}`);
 }
 
 function refresh() {
@@ -196,7 +222,7 @@ function askOpenId() {
     const b = Object.assign(document.createElement("button"), { textContent: label });
     b.onclick = () => {
       box.replaceChildren();
-      driver?.resolveOpenid(allowed).catch((e: unknown) => log("err", String(e))).finally(refresh);
+      driver?.resolveOpenid(allowed).catch(fail).finally(refresh);
     };
     box.append(b);
   }
@@ -273,14 +299,21 @@ window.addEventListener("message", (ev) => {
   log("in", ev.data);
   driver
     .handleMessageFromWidget(typeof ev.data === "string" ? ev.data : JSON.stringify(ev.data))
+    // Why a message was rejected is in the driver's log (shown here as "sdk" lines).
     .catch((e: unknown) => log("err", String(e)))
     .finally(refresh);
 });
 
 await uniffiInitAsync();
+const params = new URLSearchParams(location.search);
+try {
+  setupDriverLogging(params.get("log"), params.get("logFilter"));
+} catch (e) {
+  fail(e);
+}
 $("exampleNew").onclick = () => ($<HTMLTextAreaElement>("event").value = JSON.stringify(EXAMPLE_NEW, null, 2));
 $("exampleLegacy").onclick = () => ($<HTMLTextAreaElement>("event").value = JSON.stringify(EXAMPLE_LEGACY, null, 2));
-$("load").onclick = () => loadWidget().catch((e: unknown) => log("err", String(e)));
+$("load").onclick = () => loadWidget().catch(fail);
 $("injectBtn").onclick = () => {
   try {
     const event = backend?.inject(matrixEventFromJson(value("inject")));
@@ -342,7 +375,7 @@ $("autoApproveOpenId").onchange = () => driver?.setOpenidAutoApproved(checked("a
 
 // Prefill from the URL so e2e tests can start deterministically:
 //   ?event=<json state event>&autoApprove=1&autoload=1&wrapper=<url>
-const params = new URLSearchParams(location.search);
+// and `?log=<error|warn|info|debug|trace>&logFilter=<RUST_LOG spec>` for the driver's log (above).
 $<HTMLTextAreaElement>("event").value = params.get("event") ?? JSON.stringify(EXAMPLE_NEW, null, 2);
 $<HTMLTextAreaElement>("inject").value = JSON.stringify(EXAMPLE_EVENT, null, 2);
 $<HTMLTextAreaElement>("injectToDevice").value = JSON.stringify(EXAMPLE_TO_DEVICE, null, 2);

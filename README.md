@@ -38,6 +38,7 @@ More diagrams (legacy widgets, wire format, the actions crate, capabilities, tes
 | [`widget-base-sdk`](crates/widget-base-sdk) | widget side, wasm + JS | `WidgetClient`: tracks the session (capabilities, `notify_ready`), turns actions into async functions, answers host requests. On `wasm32` also exports the `WidgetApi` JS class wired to `window.parent.postMessage`. |
 | [`widget-host-driver`](crates/widget-host-driver) | host side, optional UniFFI | `WidgetHostDriver`: one instance per rendered widget. Feed it widget messages, it performs the handshake, checks capabilities, calls the backend, subscribes to the room for the approved `receive.*` capabilities and answers. One callback (`send_to_widget`) carries JSON to the iframe. Also defines the `m.widget` state event content (MSC4411). Its `cdylib` carries the UniFFI scaffolding of all three host crates. |
 | [`widget-matrix-backend`](crates/widget-matrix-backend) | host side, optional UniFFI | `MatrixBackend`: the trait a host implements once per Matrix SDK, shaped after matrix-rust-rtc's (send room / state / sticky / delayed / to-device, read events / state / relations / account data, OpenID, TURN, RTC transports, user directory, media config, LiveKit; subscribe to the room, to-device messages and TURN credentials). Ships `InMemoryBackend` for tests and the browser test host. See [`docs/parity.md`](docs/parity.md). |
+| [`widget-logging`](crates/widget-logging) | bindings only | The logger the bindings install: `RUST_LOG`-style filter, platform log output, optional host sink. See [Logging](#logging). |
 | [`uniffi-bindgen`](crates/uniffi-bindgen) | tooling | Binary that generates Kotlin / Swift / Python bindings for the crates above. |
 
 Web packages (npm workspaces under `packages/`, see each README):
@@ -273,6 +274,62 @@ The foreign side implements `MatrixBackend` (async operations, the synchronous i
 `subscribe_turn_servers`) and `WidgetHostPlatform`, then uses `WidgetHostDriver`
 exactly like the Rust API above. Event payloads cross the FFI as JSON strings (`JsonValue`),
 capabilities as their strings.
+
+## Logging
+
+All crates log through the Rust [`log`](https://docs.rs/log) facade. What is installed behind it
+depends on how the code is used:
+
+| you use | entry point | default without a call | records go to |
+|---|---|---|---|
+| widget, JavaScript (`widget-base-sdk` wasm) | `initLogging(level, filter?)` | `warn` | browser console |
+| host, JavaScript (`widget-host-bindings`) | `setupLogging(LogConfig.create({ level }))` | `warn` | browser console, and a `LogSink` |
+| host, Kotlin / Swift / Python | `setupLogging(LogConfig(level = ...))` | silent | logcat (tag `matrix-widget`) on Android, the unified log on iOS, stderr elsewhere, and a `LogSink` |
+| any crate from Rust | your own logger (`env_logger`, `tracing-log`, ...) | silent | wherever that logger writes |
+| compat wrapper page | `log_level=<level>` query parameter | `warn` | browser console, prefix `[widget-compat-wrapper]` |
+
+On the web, warnings, errors and Rust panics therefore show up in the console with no setup. A
+native host is silent until it calls `setupLogging`, because a library should not claim the
+process-wide logger unasked; if the app installed a Rust logger first, that one is kept.
+
+Levels mean the same everywhere:
+
+| level | what |
+|---|---|
+| `error` | a bug in this SDK |
+| `warn` | something was dropped or refused: a rejected message, a missing capability, a failed backend call, a request that timed out, a callback that threw |
+| `info` | the lifecycle: ready, capabilities requested / approved / revoked, OpenID decisions |
+| `debug` | one line per message in either direction: action, kind and request id, never the body |
+| `trace` | the message bodies as JSON. Bodies that carry credentials (OpenID and LiveKit tokens, TURN passwords) are replaced by `"<redacted>"` |
+
+`filter` overrides the level per target in `RUST_LOG` syntax. Targets are Rust module paths and
+match by prefix: `widget_host_driver`, `widget_matrix_backend`, `widget_base_sdk`.
+
+```js
+// widget
+import init, { initLogging } from "widget-base-sdk";
+await init();
+initLogging("debug");                                      // or ("warn", "widget_base_sdk::client=trace")
+
+// host (web)
+import { LogConfig, LogLevel, setLogSink, setupLogging } from "@matrix-widget-tools/widget-host-bindings";
+setupLogging(LogConfig.create({ level: LogLevel.Info, filter: "widget_host_driver::driver=trace" }));
+setLogSink({ log: (record) => rageshake.append(`${record.target}: ${record.message}`) });   // optional
+```
+
+```kotlin
+// host (Android); Swift and Python have the same three functions
+setupLogging(LogConfig(level = LogLevel.DEBUG))            // then: adb logcat -s matrix-widget
+setLogSink(object : LogSink {
+    override fun log(record: LogRecord) = Timber.tag(record.target).d(record.message)
+})
+```
+
+A `LogSink` receives every record that passes the filter; set `writeToSystem = false` if the
+platform log should not get them as well. On native platforms the sink is called from one
+dedicated thread, and records are dropped (and counted, `droppedLogRecordCount()`) when it cannot
+keep up. `clearLogSink()` removes it. `logEvent(level, target, message)` writes a line of your own
+into the same stream.
 
 ## Development
 

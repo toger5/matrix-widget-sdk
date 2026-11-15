@@ -2,7 +2,7 @@
  * MSC4412 test widget on widget-base-sdk (wasm). Connects to the parent on load; requesting
  * capabilities and `notify_ready` are buttons (clicked automatically unless `?autostart=0`).
  */
-import init, { WidgetApi } from "widget-base-sdk";
+import init, { WidgetApi, initLogging } from "widget-base-sdk";
 
 import {
   DEFAULT_CAPABILITIES,
@@ -29,6 +29,9 @@ import {
 } from "../shared/ui";
 
 await init();
+// `?log=<level>&logFilter=<RUST_LOG spec>`: what the SDK writes to the console (default: warn).
+const params = new URLSearchParams(location.search);
+if (params.get("log")) initLogging(params.get("log")!, params.get("logFilter"));
 const api = WidgetApi.connectToParent();
 const refresh = () => showState(api.state);
 

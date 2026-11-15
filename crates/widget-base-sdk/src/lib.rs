@@ -19,6 +19,13 @@
 //! can simply `import { WidgetApi } from "widget-base-sdk"` without any transport glue.
 //!
 //! The client is single threaded (`!Send`), which is what browsers offer anyway.
+//!
+//! # Logging
+//!
+//! The client logs through the [`log`] facade and installs no logger. The `wasm32` build does:
+//! warnings, errors and panics reach the JavaScript console without any setup, and `initLogging`
+//! changes the level. Levels: `warn` for anything dropped or failed, `info` for the lifecycle,
+//! `debug` for one line per message, `trace` for the message bodies (credentials redacted).
 
 // See widget-actions: `WidgetClientError` wraps the full `WidgetError`.
 #![allow(clippy::result_large_err)]

@@ -92,7 +92,7 @@ impl WidgetHostDriver {
     ///
     /// The backend may call the sink from inside `subscribe_*`, so no driver lock is held here.
     /// A refused subscription only means that no live events arrive; the protocol has no message
-    /// for that, so the error is dropped.
+    /// for that, so the error is only logged.
     pub(super) fn resubscribe(&self) {
         let approved = self.approved();
         self.room_subscription.cancel();
@@ -100,14 +100,27 @@ impl WidgetHostDriver {
 
         let subjects = subjects_for(&approved);
         if !subjects.is_empty() {
-            if let Ok(subscription) = self.backend.subscribe_room(self.backend.room_id(), subjects, self.sink()) {
-                self.room_subscription.replace(subscription);
+            log::debug!(
+                "subscribing to the room: timeline {:?}, state {:?}",
+                subjects.timeline_event_types,
+                subjects.state_event_types
+            );
+            match self.backend.subscribe_room(self.backend.room_id(), subjects, self.sink()) {
+                Ok(subscription) => self.room_subscription.replace(subscription),
+                Err(e) => {
+                    log::warn!("the backend refused the room subscription, no events are forwarded: {}", e.reason())
+                }
             }
         }
         let to_device_types = to_device_types_for(&approved);
         if !to_device_types.is_empty() {
-            if let Ok(subscription) = self.backend.subscribe_to_device(to_device_types, self.sink()) {
-                self.to_device_subscription.replace(subscription);
+            log::debug!("subscribing to to-device messages: {to_device_types:?}");
+            match self.backend.subscribe_to_device(to_device_types, self.sink()) {
+                Ok(subscription) => self.to_device_subscription.replace(subscription),
+                Err(e) => log::warn!(
+                    "the backend refused the to-device subscription, no messages are forwarded: {}",
+                    e.reason()
+                ),
             }
         }
     }
@@ -120,8 +133,9 @@ impl WidgetHostDriver {
         if self.turn_subscription.is_set() {
             return;
         }
-        if let Ok(subscription) = self.backend.subscribe_turn_servers(self.sink()) {
-            self.turn_subscription.replace(subscription);
+        match self.backend.subscribe_turn_servers(self.sink()) {
+            Ok(subscription) => self.turn_subscription.replace(subscription),
+            Err(e) => log::warn!("the backend refused the TURN server subscription: {}", e.reason()),
         }
     }
 

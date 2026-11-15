@@ -68,6 +68,8 @@ URL parameters for scripted runs (e2e tests):
 | `autoload=1` | Clicks **Load widget** on start. |
 | `autoApprove=1` | Approves every capability request without a prompt. |
 | `wrapper=<url>` | Overrides the compat wrapper URL. |
+| `log=<level>` | Level of the driver's own log: `error`, `warn` (default), `info`, `debug`, `trace`. The records appear in the browser console and in the **Messages** log (grey `sdk` lines; warnings and errors in red). |
+| `logFilter=<spec>` | `RUST_LOG`-style overrides per module, e.g. `widget_host_driver::driver::requests=trace`. |
 
 Example: `http://localhost:5173/?autoload=1&autoApprove=1&event=%7B%22type%22%3A%22m.widget%22...%7D`
 
@@ -90,7 +92,8 @@ For the examples to work also start `../test-widgets` (port 5175) and, for legac
 Open the host with `event`, `autoload=1` and `autoApprove=1`, then read the page: the
 **Messages** log contains every envelope in both directions as JSON, the **Driver snapshot** shows
 the negotiated state, and the store panels show what the widget sent. Everything is plain DOM,
-so Playwright, Cypress or a headless `--dump-dom` run can assert on it. Widget-side assertions are
+so Playwright, Cypress or a headless `--dump-dom` run can assert on it. Why the driver refused
+or dropped something is in the same log as a red `warn …` line (see `log=` above). Widget-side assertions are
 available in the test widgets' own log.
 
 Ports are fixed (`strictPort`): host 5173, wrapper 5174, widgets 5175.

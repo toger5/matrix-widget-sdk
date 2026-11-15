@@ -45,6 +45,7 @@ New (`/new/`): `request_capabilities`, `notify_ready`, send `m.room.message`, se
 | page | parameter | meaning |
 |---|---|---|
 | both | `autostart=0` | Do nothing on load. Default: the legacy widget requests capabilities and starts; the new widget sends `request_capabilities` and `notify_ready`. |
+| new | `log=<level>` | What widget-base-sdk writes to the console: `off`, `error`, `warn` (default), `info`, `debug`, `trace`. `logFilter=<spec>` adds `RUST_LOG`-style overrides per module. |
 | legacy | `widgetId` | The widget id, as legacy clients pass it. Required for the legacy transport. |
 | legacy | `parentUrl` | The widget only posts to this origin (as Element widgets do). Without it, `*`. The compat wrapper always sets it to itself. |
 

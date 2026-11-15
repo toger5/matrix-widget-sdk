@@ -79,6 +79,10 @@ impl WidgetHostDriver {
     /// Create a driver for one widget. `backend` must be bound to the room the widget lives in.
     #[cfg_attr(feature = "uniffi", uniffi::constructor)]
     pub fn new(backend: Arc<dyn MatrixBackend>, platform: Arc<dyn WidgetHostPlatform>) -> Arc<Self> {
+        // On the web, warnings and errors reach the console without any setup.
+        #[cfg(all(feature = "uniffi", target_arch = "wasm32"))]
+        widget_logging::ensure_default();
+        log::debug!("widget host driver created for room {}", backend.room_id());
         Arc::new_cyclic(|this| Self {
             backend,
             platform,
@@ -98,44 +102,17 @@ impl WidgetHostDriver {
     /// [`DriverError::LegacyWidgetApi`] says that the message has the legacy shape (`api` instead
     /// of `source`): the first action a widget sends tells the two formats apart.
     pub async fn handle_message_from_widget(&self, json: String) -> Result<(), DriverError> {
-        let msg = WireMessage::from_json(&json).map_err(|e| {
-            let legacy = serde_json::from_str::<serde_json::Value>(&json)
-                .is_ok_and(|v| v.get("api").is_some() && v.get("source").is_none());
-            if legacy {
-                DriverError::LegacyWidgetApi
-            } else {
-                DriverError::NotAWidgetMessage { message: e.to_string() }
+        let result = self.dispatch(&json).await;
+        match &result {
+            Ok(()) => {}
+            // Hosts tend to pass every `message` event of the window, so this one is expected.
+            Err(DriverError::NotAWidgetMessage { message }) => {
+                log::debug!("ignored a message that is not a widget api message: {message}")
             }
-        })?;
-        if msg.kind() == MessageKind::WidgetRequest {
-            self.lock().widget_spoke = true;
+            Err(DriverError::LegacyWidgetApi) => log::info!("the widget speaks the legacy widget api"),
+            Err(error) => log::warn!("rejected a message from the widget: {error}"),
         }
-        let action = match Action::from_wire(&msg) {
-            Ok(action) => action,
-            // A request with a body of the wrong shape: the widget gets an error reply.
-            Err(ActionError::InvalidBody { message, .. }) if msg.kind() == MessageKind::WidgetRequest => {
-                self.send(
-                    &msg.error_response_to(WidgetError::invalid_request(format!("Invalid request body: {message}"))),
-                );
-                return Ok(());
-            }
-            // The widget rejected one of our requests. There is nothing to retry, so it counts
-            // as acknowledged.
-            Err(ActionError::ErrorResponse { .. }) if msg.kind() == MessageKind::HostResponse => {
-                return self.handle_ack(msg);
-            }
-            Err(other) => return Err(other.into()),
-        };
-        match action {
-            Action::WidgetRequest { request } => {
-                self.handle_request(msg, request).await;
-                Ok(())
-            }
-            Action::HostResponse { .. } => self.handle_ack(msg),
-            other => {
-                Err(DriverError::WrongDirection { message: format!("host received a {:?} message", other.kind()) })
-            }
-        }
+        result
     }
 
     /// Set the capabilities that are granted without asking the platform.
@@ -179,6 +156,12 @@ impl WidgetHostDriver {
             let update = HostRequest::UpdateCapabilities {
                 request: UpdateCapabilitiesRequest { allowed: state.approved.clone() },
             };
+            log::info!(
+                "capabilities approved: {} of {} requested were new, the widget holds {}",
+                state.approved.len() - before,
+                requested.len(),
+                state.approved.len()
+            );
             (update, state.approved.len() != before)
         };
         self.send_request(update);
@@ -203,6 +186,11 @@ impl WidgetHostDriver {
             if state.approved.len() == before {
                 return;
             }
+            log::info!(
+                "capabilities revoked: {} taken away, the widget holds {}",
+                before - state.approved.len(),
+                state.approved.len()
+            );
             HostRequest::UpdateCapabilities { request: UpdateCapabilitiesRequest { allowed: state.approved.clone() } }
         };
         self.send_request(update);
@@ -227,7 +215,16 @@ impl WidgetHostDriver {
         if pending.is_empty() {
             return;
         }
-        let token = if allowed { self.backend.openid_token().await.ok() } else { None };
+        log::info!("openid {} for {} pending request(s)", if allowed { "allowed" } else { "refused" }, pending.len());
+        let token = if allowed {
+            self.backend
+                .openid_token()
+                .await
+                .inspect_err(|e| log::warn!("the backend gave no openid token, answering `blocked`: {}", e.reason()))
+                .ok()
+        } else {
+            None
+        };
         for original_request_id in pending {
             let request = match &token {
                 Some(token) => ForwardOpenIdCredentialsRequest::allowed(original_request_id, token.clone()),
@@ -282,6 +279,8 @@ impl WidgetHostDriver {
     }
 
     fn send(&self, msg: &WireMessage) {
+        log::debug!("to widget: {} {:?} ({})", msg.action, msg.kind(), msg.request_id);
+        log::trace!("to widget: {}", msg.to_log_json());
         self.platform.send_to_widget(msg.to_json());
     }
 
@@ -290,6 +289,7 @@ impl WidgetHostDriver {
     fn push(&self, request: HostRequest) {
         if let Some(capability) = access::push_capability(&request) {
             if !self.lock().approved.contains(&capability) {
+                log::debug!("not sent, the widget does not hold {capability}");
                 return;
             }
         }
@@ -305,6 +305,7 @@ impl WidgetHostDriver {
         {
             let mut state = self.lock();
             if !state.widget_spoke {
+                log::debug!("not sent, the widget has not sent its first action yet");
                 return;
             }
             state.awaiting_ack.insert(id.clone(), request.clone());
@@ -318,6 +319,52 @@ impl WidgetHostDriver {
         match self.lock().awaiting_ack.remove(&msg.request_id) {
             Some(_) => Ok(()),
             None => Err(DriverError::UnexpectedResponse { request_id: msg.request_id }),
+        }
+    }
+
+    /// [`handle_message_from_widget`](Self::handle_message_from_widget) without the logging of
+    /// its result.
+    async fn dispatch(&self, json: &str) -> Result<(), DriverError> {
+        let msg = WireMessage::from_json(json).map_err(|e| {
+            let legacy = serde_json::from_str::<serde_json::Value>(json)
+                .is_ok_and(|v| v.get("api").is_some() && v.get("source").is_none());
+            if legacy {
+                DriverError::LegacyWidgetApi
+            } else {
+                DriverError::NotAWidgetMessage { message: e.to_string() }
+            }
+        })?;
+        log::debug!("from widget: {} {:?} ({})", msg.action, msg.kind(), msg.request_id);
+        log::trace!("from widget: {}", msg.to_log_json());
+        if msg.kind() == MessageKind::WidgetRequest {
+            self.lock().widget_spoke = true;
+        }
+        let action = match Action::from_wire(&msg) {
+            Ok(action) => action,
+            // A request with a body of the wrong shape: the widget gets an error reply.
+            Err(ActionError::InvalidBody { message, .. }) if msg.kind() == MessageKind::WidgetRequest => {
+                log::warn!("{} ({}) has an invalid request body: {message}", msg.action, msg.request_id);
+                self.send(
+                    &msg.error_response_to(WidgetError::invalid_request(format!("Invalid request body: {message}"))),
+                );
+                return Ok(());
+            }
+            // The widget rejected one of our requests. There is nothing to retry, so it counts
+            // as acknowledged.
+            Err(ActionError::ErrorResponse { .. }) if msg.kind() == MessageKind::HostResponse => {
+                return self.handle_ack(msg);
+            }
+            Err(other) => return Err(other.into()),
+        };
+        match action {
+            Action::WidgetRequest { request } => {
+                self.handle_request(msg, request).await;
+                Ok(())
+            }
+            Action::HostResponse { .. } => self.handle_ack(msg),
+            other => {
+                Err(DriverError::WrongDirection { message: format!("host received a {:?} message", other.kind()) })
+            }
         }
     }
 }

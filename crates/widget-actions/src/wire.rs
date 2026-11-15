@@ -170,6 +170,27 @@ impl WireMessage {
     pub fn to_value(&self) -> Value {
         serde_json::to_value(self).expect("WireMessage is always serializable")
     }
+
+    /// The message as JSON for (trace) logs.
+    ///
+    /// The body of the actions that carry credentials (OpenID tokens, LiveKit tokens, TURN
+    /// passwords) is replaced by `"<redacted>"`, so that a log never contains a secret.
+    pub fn to_log_json(&self) -> String {
+        const SECRET_ACTIONS: [&str; 4] =
+            ["get_openid", "forward_openid_credentials", "get_rtc_livekit_token", "update_turn_servers"];
+        let name = self.action.rsplit('.').next().unwrap_or_default();
+        if !SECRET_ACTIONS.contains(&name) {
+            return self.to_json();
+        }
+        let mut redacted = self.clone();
+        for body in [&mut redacted.request, &mut redacted.response].into_iter().flatten() {
+            // An error response has no secret, and is what one looks for in a log.
+            if WidgetError::from_response_body(&body.0).is_none() {
+                *body = JsonValue(Value::String("<redacted>".to_owned()));
+            }
+        }
+        redacted.to_json()
+    }
 }
 
 /// What an error `code` means to this crate, see [`WidgetError::kind`].
@@ -365,6 +386,25 @@ impl std::error::Error for WidgetError {}
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn log_json_hides_credentials_only() {
+        let plain = WireMessage::request(Source::Widget, "org.matrix.mscXXXX.send_event", "1", json!({"type": "t"}));
+        assert_eq!(plain.to_log_json(), plain.to_json());
+
+        let request = WireMessage::request(Source::Widget, "org.matrix.mscXXXX.get_openid", "2", json!({}));
+        let token = request.response_to(json!({"state": "allowed", "access_token": "secret"}));
+        let logged = token.to_log_json();
+        assert!(!logged.contains("secret"), "{logged}");
+        assert!(logged.contains("get_openid") && logged.contains("<redacted>"), "{logged}");
+        // The stable name is recognised as well.
+        let turn = WireMessage::request(Source::Host, "m.update_turn_servers", "3", json!({"password": "secret"}));
+        assert!(!turn.to_log_json().contains("secret"));
+
+        // An error response stays readable.
+        let failed = request.error_response_to(WidgetError::new("no token"));
+        assert_eq!(failed.to_log_json(), failed.to_json());
+    }
 
     #[test]
     fn roundtrip_request() {

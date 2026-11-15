@@ -12,7 +12,7 @@
     "ubrn:web": "ubrn build web --config ubrn.config.yaml --release",
     "ubrn:web:debug": "ubrn build web --config ubrn.config.yaml",
     "build": "tsc --noEmit",
-    "prepare": "cd ../.. && npm ci && npm run bindings"
+    "prepare": "npm run ubrn:web"
   },
   "dependencies": {
     "@ubjs/core": "0.31.0-6"

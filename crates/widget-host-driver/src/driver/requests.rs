@@ -28,6 +28,7 @@ impl WidgetHostDriver {
     pub(super) async fn handle_request(&self, msg: WireMessage, request: WidgetRequest) {
         if let Some(capability) = access::required_capability(&request) {
             if !self.approved().has(&capability) {
+                log::warn!("{} ({}) refused: the widget does not hold {capability}", msg.action, msg.request_id);
                 return self.send(&msg.error_response_to(access::missing(&capability)));
             }
         }
@@ -35,6 +36,7 @@ impl WidgetHostDriver {
             // These reply first, so that the widget sees the reply before what the request causes.
             WidgetRequest::NotifyReady => {
                 self.lock().ready = true;
+                log::info!("the widget is ready");
                 self.send(&msg.ack());
                 self.platform.on_ready();
             }
@@ -44,7 +46,10 @@ impl WidgetHostDriver {
             request => {
                 let reply = match self.answer(request, &msg.action).await {
                     Ok(response) => response.into_wire_reply(&msg),
-                    Err(error) => msg.error_response_to(error),
+                    Err(error) => {
+                        log::warn!("{} ({}) failed: {} ({})", msg.action, msg.request_id, error.message, error.code);
+                        msg.error_response_to(error)
+                    }
                 };
                 self.send(&reply);
             }
@@ -76,7 +81,10 @@ impl WidgetHostDriver {
             R::GetOpenId => W::GetOpenId {
                 response: match backend.openid_token().await {
                     Ok(token) => GetOpenIdResponse::allowed(token),
-                    Err(_) => GetOpenIdResponse::blocked(),
+                    Err(e) => {
+                        log::warn!("the backend gave no openid token, answering `blocked`: {}", e.reason());
+                        GetOpenIdResponse::blocked()
+                    }
                 },
             },
             R::UnwatchTurnServers => {
@@ -174,6 +182,7 @@ impl WidgetHostDriver {
             state.pending_requested = Some(pending);
             to_ask
         };
+        log::info!("the widget requests capabilities, {} of them need the platform's approval", to_ask.len());
         self.send(&msg.ack());
         if to_ask.is_empty() {
             self.approve_capabilities(Vec::new());
@@ -186,6 +195,7 @@ impl WidgetHostDriver {
     /// [`resolve_openid`](Self::resolve_openid) sends the outcome later.
     fn ask_for_openid(&self, msg: &WireMessage) {
         self.lock().pending_openid.push(msg.request_id.clone());
+        log::info!("the widget requests an openid token, asking the platform");
         self.send(&WidgetResponse::GetOpenId { response: GetOpenIdResponse::pending() }.into_wire_reply(msg));
         self.platform.on_openid_requested();
     }

@@ -164,6 +164,7 @@ impl WidgetClient {
         let (tx, rx) = oneshot::channel();
         let msg = request.into_wire(id.clone());
         self.inner.borrow_mut().pending.insert(id.clone(), (msg.action.clone(), tx));
+        log_sent(&msg);
         self.delegate.send_to_host(msg.to_json());
         self.delegate.on_request_sent(&id);
         let fut = async move {
@@ -186,6 +187,7 @@ impl WidgetClient {
             return false;
         };
         inner.timed_out.insert(request_id.to_owned());
+        log::warn!("{action} ({request_id}) timed out: the host did not answer");
         let _ = tx.send(Err(WidgetClientError::Timeout { action }));
         true
     }
@@ -517,18 +519,26 @@ impl WidgetClient {
     /// Feed a JSON message received from the host. Acknowledgements are sent through the
     /// delegate and pending request futures are resolved before this returns.
     pub fn handle_message_from_host(&self, json: &str) -> Result<(), WidgetClientError> {
-        self.handle_message(WireMessage::from_json(json)?)
+        let msg = WireMessage::from_json(json)
+            .inspect_err(|e| log::debug!("ignored a message that is not a widget api message: {e}"))?;
+        self.handle_message(msg)
     }
 
     /// Like [`handle_message_from_host`](Self::handle_message_from_host) for an already parsed envelope.
     pub fn handle_message(&self, msg: WireMessage) -> Result<(), WidgetClientError> {
         // Responses are parsed by the future awaiting them (see `request`), so a malformed body
         // is reported to the caller instead of failing here.
-        match msg.kind() {
+        log::debug!("from host: {} {:?} ({})", msg.action, msg.kind(), msg.request_id);
+        log::trace!("from host: {}", msg.to_log_json());
+        let result = match msg.kind() {
             MessageKind::WidgetResponse => self.resolve_response(msg),
             MessageKind::HostRequest => self.handle_host_request(msg),
             kind => Err(WidgetClientError::WrongDirection { message: format!("widget received a {kind:?} message") }),
+        };
+        if let Err(error) = &result {
+            log::warn!("rejected a message from the host: {error}");
         }
+        result
     }
 
     fn resolve_response(&self, msg: WireMessage) -> Result<(), WidgetClientError> {
@@ -536,6 +546,7 @@ impl WidgetClient {
             let mut inner = self.inner.borrow_mut();
             // A response to a request that timed out is ignored.
             if inner.timed_out.remove(&msg.request_id) {
+                log::debug!("ignored the late response to {} ({}), it timed out", msg.action, msg.request_id);
                 return Ok(());
             }
             inner.pending.remove(&msg.request_id)
@@ -554,6 +565,7 @@ impl WidgetClient {
         let request = match HostRequest::from_wire(&msg) {
             Ok(r) => r,
             Err(ActionError::InvalidBody { message, .. }) => {
+                log::warn!("{} ({}) has an invalid request body: {message}", msg.action, msg.request_id);
                 let error = WidgetError::invalid_request(format!("Invalid request body: {message}"));
                 self.send(msg.error_response_to(error));
                 return Ok(());
@@ -569,6 +581,7 @@ impl WidgetClient {
                     inner.state.pending_requested.clear();
                     inner.state.approved = request.allowed.clone();
                 }
+                log::info!("the host updated the capabilities, the widget holds {}", request.allowed.len());
                 self.send(msg.ack());
                 self.delegate.on_capabilities_changed(request.allowed);
             }
@@ -608,6 +621,7 @@ impl WidgetClient {
                 }
             }
             HostRequest::Unknown => {
+                log::warn!("the host sent the unknown action {} ({})", msg.action, msg.request_id);
                 self.send(msg.error_response_to(WidgetError::unknown_action(&msg.action)));
             }
         }
@@ -615,8 +629,14 @@ impl WidgetClient {
     }
 
     fn send(&self, msg: WireMessage) {
+        log_sent(&msg);
         self.delegate.send_to_host(msg.to_json());
     }
+}
+
+fn log_sent(msg: &WireMessage) {
+    log::debug!("to host: {} {:?} ({})", msg.action, msg.kind(), msg.request_id);
+    log::trace!("to host: {}", msg.to_log_json());
 }
 
 #[cfg(test)]

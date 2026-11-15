@@ -52,6 +52,7 @@ import {
 } from "./envelope";
 import { DOWNLOAD_FILE_ACTION, downloadResponseToLegacy, UPLOAD_FILE_ACTION, uploadRequestToNew } from "./files";
 import { renderLegacyUrl, type ClientContext, type MatrixContext } from "./template";
+import { log } from "./log";
 
 /** The context actions, in the unstable spelling the host emits (`docs/parity.md`). */
 export const MATRIX_CONTEXT_ACTION = `${PLACEHOLDER}.get_matrix_context`;
@@ -127,14 +128,18 @@ export class CompatBridge {
 
   /** Handle `event.data` of a message from the inner iframe. Anything that is not for this widget is ignored. */
   onWidgetMessage(data: unknown): void {
-    if (!isLegacyMessage(data) || data.widgetId !== this.o.widgetId) return;
+    if (!isLegacyMessage(data) || data.widgetId !== this.o.widgetId) {
+      return log.debug("ignored a message from the inner iframe that is not for this widget", data);
+    }
+    log.debug(`from widget: ${data.action} (${data.response !== undefined ? "response" : "request"} ${data.requestId})`);
     if (data.response !== undefined) return this.onWidgetResponse(data);
     if (data.api === "fromWidget") this.onWidgetRequest(data);
   }
 
   /** Handle `event.data` of a message from the parent window. Anything that is not MSC4412 is ignored. */
   onHostMessage(data: unknown): void {
-    if (!isNewMessage(data)) return;
+    if (!isNewMessage(data)) return log.debug("ignored a message from the host that is not MSC4412", data);
+    log.debug(`from host: ${data.action} (${data.response !== undefined ? "response" : "request"} ${data.request_id})`);
     if (data.response !== undefined) return this.onHostResponse(data);
     if (data.source === "host") this.onHostRequest(data);
   }
@@ -222,7 +227,7 @@ export class CompatBridge {
   private onHostResponse(m: NewMessage): void {
     if (this.answerOwnRequest(m.request_id, m.response)) return;
     const request = this.fromWidget.get(m.request_id);
-    if (!request) return;
+    if (!request) return log.warn(`dropped the host's response to ${m.action}: no request with id ${m.request_id}`);
     this.fromWidget.delete(m.request_id);
     const response = request.action === DOWNLOAD_FILE_ACTION ? downloadResponseToLegacy(m.response) : m.response;
     this.o.sendToWidget(legacyResponse(request, response));
@@ -234,6 +239,7 @@ export class CompatBridge {
     if (this.phase === "bootstrap") {
       // There is no widget yet. The only host request expected is the reply to `start()`.
       if (m.action !== UPDATE_CAPABILITIES_ACTION) {
+        log.warn(`refused ${m.action} from the host: the wrapped widget is not loaded yet`);
         const error = newErrorBody(ERROR_INVALID_REQUEST, "The wrapped widget is not loaded yet");
         return this.o.sendToHost(newResponse(m, error));
       }
@@ -249,7 +255,7 @@ export class CompatBridge {
   private onWidgetResponse(m: LegacyMessage): void {
     if (this.answerOwnRequest(m.requestId, m.response)) return;
     const request = this.fromHost.get(m.requestId);
-    if (!request) return;
+    if (!request) return log.warn(`dropped the widget's response to ${m.action}: no request with id ${m.requestId}`);
     this.fromHost.delete(m.requestId);
     this.o.sendToHost(newResponse(request, legacyResponseBodyToNew(m.response)));
   }

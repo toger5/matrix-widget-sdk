@@ -156,6 +156,10 @@ Ask for every change:
 | New widget: a button per action, log labels | `packages/test-widgets/new/main.ts` |
 | Legacy widget: only when matrix-widget-api itself gained the action | `packages/test-widgets/legacy/main.ts`, `legacy/capabilities.ts` |
 
+Logging needs no change for a new action: the driver and the client log every message by its
+action name. Only if the action's body carries a credential, add its name to `SECRET_ACTIONS` in
+`WireMessage::to_log_json` (`crates/widget-actions/src/wire.rs`) so trace logs redact it.
+
 ## 9. Docs
 
 | what | where |
