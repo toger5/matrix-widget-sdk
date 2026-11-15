@@ -6,7 +6,7 @@ in `../widget-host-bindings`. One React app (`src/`) with two modes that share e
 
 | mode | backend | for |
 |---|---|---|
-| logged in | `RustSdkBackend` (`src/sdk/rust/backend/`): a real room of a matrix-rust-sdk client. A `js` build uses `JsSdkBackend` (`src/sdk/js/backend/`) on matrix-js-sdk instead, see "Choosing the Matrix SDK" | opening and debugging the widgets of your rooms |
+| logged in | `RustSdkBackend` (`src/matrix_session/rust/backend/`): a real room of a matrix-rust-sdk client. A `js` build uses `JsSdkBackend` (`src/matrix_session/js/backend/`) on matrix-js-sdk instead, see "Choosing the Matrix SDK" | opening and debugging the widgets of your rooms |
 | in-memory store | the crate's `InMemoryBackend`, an in-memory Matrix room; nothing leaves the page | widget development without a homeserver, end-to-end tests of widgets and of the compat wrapper |
 
 The start page is the login screen. **Use the in-memory store (no login)** on it switches to the
@@ -20,11 +20,11 @@ and [`handover.md`](../../handover.md).
 - `src/session.ts` is what the UI needs from a Matrix client, as interfaces (login, session
   restore, room list, the widget state events of a room, a backend per room, device
   verification). The UI imports no SDK. Its `sessions` export picks the SDK and loads it lazily.
-- `src/sdk/js/session.ts` implements it on matrix-js-sdk: OAuth 2.0 (dynamic client
+- `src/matrix_session/js/session.ts` implements it on matrix-js-sdk: OAuth 2.0 (dynamic client
   registration, PKCE, in a popup that returns through `oidc-callback.html`) or a password,
-  `/sync` v2, end-to-end encryption, verification with a recovery key. `src/sdk/js/backend/` is the
-  `MatrixBackend` for one room. `src/sdk/js/` is the only folder that imports matrix-js-sdk.
-- `src/sdk/rust/session.ts` and `src/sdk/rust/backend/` are the same on matrix-rust-sdk
+  `/sync` v2, end-to-end encryption, verification with a recovery key. `src/matrix_session/js/backend/` is the
+  `MatrixBackend` for one room. `src/matrix_session/js/` is the only folder that imports matrix-js-sdk.
+- `src/matrix_session/rust/session.ts` and `src/matrix_session/rust/backend/` are the same on matrix-rust-sdk
   (`../matrix-sdk-uniffi-js`, with native sliding sync). A build has one SDK or the other, see
   "Choosing the Matrix SDK" below. This implementation has not run against a homeserver yet;
   `../../rust-sdk-port.md` says what it relies on and how it differs.

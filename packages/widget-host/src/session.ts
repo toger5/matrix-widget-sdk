@@ -117,6 +117,6 @@ function lazyProvider(load: () => Promise<SessionProvider>): SessionProvider {
  */
 export const sessions: SessionProvider = lazyProvider(
   import.meta.env.VITE_MATRIX_SDK === "js"
-    ? () => import("./sdk/js/session").then((m) => m.jsSdkSessions)
-    : () => import("./sdk/rust/session").then((m) => m.rustSdkSessions),
+    ? () => import("./matrix_session/js/session").then((m) => m.jsSdkSessions)
+    : () => import("./matrix_session/rust/session").then((m) => m.rustSdkSessions),
 );
