@@ -4,8 +4,10 @@ import { resolveWidget, widgetKey, type ResolvedWidget, type StateEvent } from "
 import type { LiveSession, RoomBackend, RoomSummary } from "./session";
 import { WidgetView, type WidgetOptions } from "./WidgetView";
 
-/** Where legacy widgets are loaded through; the compat wrapper's dev server by default. */
-const WRAPPER_URL = new URLSearchParams(location.search).get("wrapper") ?? "http://localhost:5174/";
+/** Where legacy widgets are loaded through; the compat wrapper this host serves itself by default. */
+const WRAPPER_URL =
+  new URLSearchParams(location.search).get("wrapper") ??
+  new URL(`${import.meta.env.BASE_URL}widget_compatibility_wrapper/`, location.origin).href;
 
 /** Numbers the backends handed to widget views; see `backend` below. */
 let nextGeneration = 0;

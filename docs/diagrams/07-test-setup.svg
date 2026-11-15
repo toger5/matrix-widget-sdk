@@ -21,7 +21,7 @@
   <rect width="1200" height="960" fill="#ffffff"/>
 
   <text x="30" y="42" class="h1">Test host, test widgets and the in-memory store</text>
-  <text x="30" y="66" class="s">A complete widget setup inside one browser tab, without a homeserver. npm run dev starts all three: host :5173, compat wrapper :5174, test widgets :5175.</text>
+  <text x="30" y="66" class="s">A complete widget setup inside one browser tab, without a homeserver. npm run dev starts both: host :5173 (serves the compat wrapper too), test widgets :5175.</text>
 
   <!-- ================= host page ================= -->
   <rect x="30" y="86" width="690" height="600" rx="14" fill="#eff6ff" stroke="#2563eb" stroke-width="1.5" stroke-dasharray="6 4"/>
@@ -99,7 +99,7 @@
   <text x="810" y="310" class="s">autostart: requests caps + notify_ready</text>
 
   <rect x="790" y="360" width="380" height="326" rx="14" fill="#ecfdf5" stroke="#059669" stroke-width="1.5" stroke-dasharray="6 4"/>
-  <text x="810" y="386" class="h2" style="fill:#047857">iframe: compat wrapper  ·  :5174</text>
+  <text x="810" y="386" class="h2" style="fill:#047857">iframe: compat wrapper  ·  served by the host</text>
   <text x="810" y="405" class="s">MSC4412 towards the host, legacy towards the widget</text>
   <rect x="810" y="420" width="340" height="250" rx="10" fill="#fef3c7" stroke="#b45309" stroke-width="1.5"/>
   <text x="826" y="444" class="h2">test-widgets /legacy/  ·  :5175</text>

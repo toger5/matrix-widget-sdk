@@ -215,6 +215,6 @@ grep -rn "<old_name>" --include='*.rs' --include='*.ts' --include='*.md' --inclu
   | grep -vE "node_modules|/dist/|/pkg/|/generated/|rust_modules|/target/"
 ```
 
-For a behaviour change, also run the browser setup (`npm run dev`: host on 5173, wrapper on 5174,
+For a behaviour change, also run the browser setup (`npm run dev`: host on 5173, which also serves the wrapper at `/widget_compatibility_wrapper/`,
 widgets on 5175) and load both test widgets. `packages/widget-host/README.md` lists the URL
 parameters for scripted runs (`autoload=1`, `autoApprove=1`, `event=<json>`).

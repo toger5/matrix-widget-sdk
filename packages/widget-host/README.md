@@ -115,7 +115,7 @@ URL parameters for scripted runs (e2e tests):
 | `autoApprove=1` | Approves every capability request without a prompt (in-memory mode). |
 | `mode=memory` | Starts in the in-memory mode without opening a widget. |
 | `room=<id>` / `user=<id>` | Ids of the in-memory room and its user. |
-| `wrapper=<url>` | Base URL of `../widget-compat-wrapper`, used for legacy events only (default `http://localhost:5174/`; both modes). |
+| `wrapper=<url>` | Base URL of the compat wrapper, used for legacy events only (both modes). Default: the copy this host serves itself at `/widget_compatibility_wrapper/`. Set it to test a wrapper hosted elsewhere, e.g. `../widget-compat-wrapper`'s own dev server on `http://localhost:5174/`. |
 | `log=<level>` | Level of the driver's own log: `error`, `warn` (default), `info`, `debug`, `trace`. The records appear in the browser console and in the **Messages** log (grey `sdk` lines; warnings and errors in red). |
 | `logFilter=<spec>` | `RUST_LOG`-style overrides per module, e.g. `widget_host_driver::driver::requests=trace`. |
 
@@ -130,8 +130,13 @@ npm run wasm             # once: widget-base-sdk for ../test-widgets (needs wasm
 npm run dev              # http://localhost:5173/
 ```
 
-For the examples to work also start `../test-widgets` (port 5175) and, for legacy widgets,
-`../widget-compat-wrapper` (port 5174). From the root, `npm run dev` starts all three.
+For the examples to work also start `../test-widgets` (port 5175). From the root, `npm run dev`
+starts both.
+
+The compat wrapper needs no server of its own: the host builds `../widget-compat-wrapper/src`
+into a second page, `/widget_compatibility_wrapper/` (`widget_compatibility_wrapper/index.html`),
+in the dev server and in `dist/` alike, and loads legacy widgets through it. That page has the
+host's origin, unlike a wrapper deployed for a real client.
 
 `npm run build` writes a static site to `dist/` that can be served by any web server.
 
@@ -145,4 +150,4 @@ so Playwright, Cypress or a headless `--dump-dom` run can assert on it. Why the 
 or dropped something is in the same log as a red `warn …` line (see `log=` above). Widget-side assertions are
 available in the test widgets' own log.
 
-Ports are fixed (`strictPort`): host 5173, wrapper 5174, widgets 5175.
+Ports are fixed (`strictPort`): host 5173 (including the compat wrapper), widgets 5175.

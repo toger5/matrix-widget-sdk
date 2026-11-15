@@ -54,7 +54,7 @@ Web packages (npm workspaces under `packages/`, see each README):
 npm install
 npm run wasm      # widget-base-sdk for the test widgets (needs wasm-pack)
 npm run bindings  # host bindings via ubrn (needs wasm-bindgen-cli 0.2.129, see packages/widget-host-bindings)
-npm run dev       # host on :5173, wrapper on :5174, widgets on :5175
+npm run dev       # host on :5173 (serves the compat wrapper at /widget_compatibility_wrapper/), widgets on :5175
 npm test          # wrapper unit tests
 ```
 

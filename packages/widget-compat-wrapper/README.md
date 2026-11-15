@@ -261,7 +261,7 @@ Always:
 ```sh
 npm install              # from the repository root (npm workspaces)
 npm test                 # vitest: envelope translation, handshake state machine, config parsing
-npm run dev              # http://localhost:5174/ (only useful when embedded by a host)
+npm run dev              # http://localhost:5174/ (standalone; the test host serves its own copy and does not need this)
 npm run build            # static output in dist/, serve it under its own origin
 ```
 
@@ -270,6 +270,7 @@ templating), `src/files.ts` (Blob ↔ base64), `src/bridge.ts` (bootstrap and ha
 `src/wrapper.ts` (URL config, iframe, `postMessage` routing), `src/main.ts`.
 
 For an end-to-end run use the test host in `../widget-host` with the legacy test widget from
-`../test-widgets`.
+`../test-widgets`. The host builds `src/main.ts` into its own page `/widget_compatibility_wrapper/`,
+so changes here show up there without starting this package's dev server.
 
 [matrix-widget-api]: https://github.com/matrix-org/matrix-widget-api
