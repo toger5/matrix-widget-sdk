@@ -119,14 +119,6 @@ export function DelayRow({ delay, onChange }: { delay: DelayDraft; onChange: (de
 
 export const timeOf = (timestamp?: number) => (timestamp === undefined ? "" : new Date(timestamp).toLocaleTimeString("en-GB"));
 
-/** A short, one-line summary of an event content for the collapsed rows. */
-export function previewOf(content: Record<string, unknown>): string {
-  if (typeof content.body === "string") return `“${content.body}”`;
-  if (typeof content.membership === "string") return content.membership;
-  const text = JSON.stringify(content);
-  return text.length > 80 ? `${text.slice(0, 79)}…` : text;
-}
-
 /** The current time, updated a few times per second while `active` (for countdowns). */
 export function useNow(active: boolean): number {
   const [now, setNow] = useState(() => Date.now());

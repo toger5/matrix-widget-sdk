@@ -1,9 +1,9 @@
-import { type MatrixClient, type MatrixEvent, type Room } from "matrix-js-sdk";
+import { EventTimeline, MatrixEventEvent, RoomEvent, type MatrixClient, type MatrixEvent, type Room } from "matrix-js-sdk";
 
 import type { AccountInfo, RawEvent, RoomDetails, RoomExport, RoomMember } from "../../session";
 
 /**
- * What the AccountView, the RoomOverview and "Copy to DevBackend" read from a matrix-js-sdk
+ * What the AccountView, the RoomOverview, the RoomTimeline and "Copy to DevBackend" read from a matrix-js-sdk
  * client. Functions of the client, apart from the session, so they can be tested with a faked one.
  * Everything a request fails for (the session may be suspended or offline) falls back to what the
  * client has locally.
@@ -28,6 +28,15 @@ function knownRoom(client: MatrixClient, roomId: string): Room {
   const room = client.getRoom(roomId);
   if (!room) throw new Error(`unknown room ${roomId}`);
   return room;
+}
+
+/**
+ * Paginate `limit` older events into `timeline`. Resolves whether there may be more. Once the start
+ * is reached the SDK drops the token, and a pagination without one would ask for the newest events.
+ */
+function paginateBack(client: MatrixClient, timeline: EventTimeline, limit: number): Promise<boolean> {
+  if (timeline.getPaginationToken(EventTimeline.BACKWARDS) === null) return Promise.resolve(false);
+  return client.paginateEventTimeline(timeline, { backwards: true, limit });
 }
 
 export async function accountInfo(client: MatrixClient): Promise<AccountInfo> {
@@ -93,7 +102,7 @@ export async function exportRoom(client: MatrixClient, roomId: string, lastEvent
   const events = () => timeline.getEvents().filter((event) => !event.status);
   try {
     for (let page = 0; events().length < lastEvents && page < EXPORT_MAX_PAGES; page++) {
-      const more = await client.paginateEventTimeline(timeline, { backwards: true, limit: Math.min(EXPORT_PAGE_SIZE, lastEvents - events().length) });
+      const more = await paginateBack(client, timeline, Math.min(EXPORT_PAGE_SIZE, lastEvents - events().length));
       if (!more) break;
     }
   } catch (e) {
@@ -101,4 +110,52 @@ export async function exportRoom(client: MatrixClient, roomId: string, lastEvent
   }
 
   return { roomId, name: room.name || roomId, state, timeline: lastEvents > 0 ? events().slice(-lastEvents).map(raw) : [] };
+}
+
+/** An event of the RoomTimeline: decrypted where the client could; one it could not decrypt as it arrived (`m.room.encrypted`), not the SDK's "Unable to decrypt" message. */
+const timelineRaw = (event: MatrixEvent): RawEvent => (event.isDecryptionFailure() ? ({ ...event.event } as unknown as RawEvent) : raw(event));
+
+/** The events of a room's live timeline, oldest first (the RoomTimeline); no local echoes of what is still being sent. */
+export function timelineEvents(client: MatrixClient, roomId: string): RawEvent[] {
+  return knownRoom(client, roomId)
+    .getLiveTimeline()
+    .getEvents()
+    .filter((event) => !event.status)
+    .map(timelineRaw);
+}
+
+/** Load up to `count` older events into the live timeline. Resolves whether the start of the room is reached. */
+export async function loadOlderEvents(client: MatrixClient, roomId: string, count: number): Promise<boolean> {
+  return !(await paginateBack(client, knownRoom(client, roomId).getLiveTimeline(), count));
+}
+
+/**
+ * Call `listener` whenever `timelineEvents(roomId)` may have changed: an event was added (also by
+ * a pagination), redacted, decrypted, or a local echo was sent; `reset` when a gap in the sync
+ * replaced the live timeline (the older events are gone).
+ */
+export function onTimelineChanged(client: MatrixClient, roomId: string, listener: (reset?: boolean) => void): () => void {
+  const ofRoom = (room: Room | undefined) => {
+    if (room?.roomId === roomId) listener();
+  };
+  const onEvent = (event: MatrixEvent) => {
+    if (event.getRoomId() === roomId) listener();
+  };
+  const onReset = (room: Room | undefined) => {
+    if (room?.roomId === roomId) listener(true);
+  };
+  const onTimeline = (_event: MatrixEvent, room: Room | undefined) => ofRoom(room);
+  const onRoomEvent = (_event: MatrixEvent, room: Room) => ofRoom(room);
+  client.on(RoomEvent.Timeline, onTimeline);
+  client.on(RoomEvent.Redaction, onRoomEvent);
+  client.on(RoomEvent.LocalEchoUpdated, onRoomEvent);
+  client.on(RoomEvent.TimelineReset, onReset);
+  client.on(MatrixEventEvent.Decrypted, onEvent);
+  return () => {
+    client.off(RoomEvent.Timeline, onTimeline);
+    client.off(RoomEvent.Redaction, onRoomEvent);
+    client.off(RoomEvent.LocalEchoUpdated, onRoomEvent);
+    client.off(RoomEvent.TimelineReset, onReset);
+    client.off(MatrixEventEvent.Decrypted, onEvent);
+  };
 }

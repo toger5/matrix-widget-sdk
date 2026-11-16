@@ -1,4 +1,4 @@
-/** The tab bar of a room panel: the room name (the first tab) and the widget tabs, closing, the keyboard, the dev tools button and the overflow menu. */
+/** The tab bar of a room panel: the room name (the first tab), the widget tabs and the Timeline tab, closing, the keyboard, the dev tools button and the overflow menu. */
 import { expect, LAB, LEGACY_WIDGET, NEW_WIDGET, test, widgetId } from "./host";
 
 const NEW = widgetId(LAB, NEW_WIDGET);
@@ -32,7 +32,7 @@ test.describe("lab room with both widgets open", () => {
 
     // Both widgets run in this panel: grayed out, "Jump to tab" only.
     await expect(overview.locator(".row.opened")).toHaveText([/New test widget.*open in this panel/, /Legacy test widget.*open in this panel/]);
-    await expect(overview.getByRole("button", { name: /^Open / })).toHaveCount(0);
+    await expect(overview.locator(".ov-widgets").getByRole("button", { name: /^Open / })).toHaveCount(0);
     await expect(overview.getByRole("button", { name: /^Move .* here$/ })).toHaveCount(0);
     await overview.getByRole("button", { name: "Jump to the tab of Legacy test widget" }).click();
     await expect(host.tab(/Legacy test widget/)).toHaveAttribute("aria-selected", "true");
@@ -133,6 +133,46 @@ test.describe("lab room with both widgets open", () => {
     await expect(host.page.getByRole("tab")).toHaveCount(1);
     await expect(host.tab(ROOM)).toBeFocused();
   });
+});
+
+test("the Timeline tab closes like a widget tab: ×, Delete and Alt+W; then Alt+W closes the panel. The room name selects the overview", async ({ host }) => {
+  await host.populate("lab", { sidePanel: null, behavior: { autoApproveCapabilities: true }, open: [{ room: LAB, widgets: [NEW_WIDGET], timeline: true }] });
+  await expect(host.page.getByRole("tab")).toHaveText([/Widget lab/, /New test widget/, /Timeline/]);
+  await expect(host.tab("Timeline")).toHaveAttribute("aria-selected", "true");
+  const overview = host.page.getByTestId("room-overview");
+  const open = async () => {
+    await host.tab(ROOM).click();
+    await expect(overview).toBeVisible();
+    await overview.getByRole("button", { name: "Open timeline" }).click();
+    await expect(host.tab("Timeline")).toHaveAttribute("aria-selected", "true");
+  };
+
+  // ×: the widget tab on its left is shown; the widget kept running behind the timeline.
+  await host.button("Close the timeline").click();
+  await expect(host.tab("Timeline")).toHaveCount(0);
+  await expect(host.tab(/New test widget/)).toHaveAttribute("aria-selected", "true");
+  await expect(host.iframe(NEW)).toBeVisible();
+  expect(await widgets(host)).toEqual([NEW]);
+
+  // Delete on the focused tab: the focus moves to the tab before it.
+  await open();
+  await host.tab("Timeline").focus();
+  await host.page.keyboard.press("Delete");
+  await expect(host.tab("Timeline")).toHaveCount(0);
+  await expect(host.tab(/New test widget/)).toBeFocused();
+
+  // Alt+W closes the shown tab; once only the room name is left, the panel.
+  await host.button("Close New test widget").click();
+  await open();
+  await expect(host.page.getByRole("tab")).toHaveText([/Widget lab/, /Timeline/]);
+  await expect(host.button("Close panel")).toHaveAttribute("title", "Close panel");
+  await host.page.keyboard.press("Alt+KeyW");
+  await expect(host.tab("Timeline")).toHaveCount(0);
+  await expect(host.tab(ROOM)).toHaveAttribute("aria-selected", "true");
+  await expect(overview).toBeVisible();
+  await expect(host.button("Close panel")).toHaveAttribute("title", "Close panel (Alt+W)");
+  await host.page.keyboard.press("Alt+KeyW");
+  await expect(host.panels).toHaveCount(0);
 });
 
 test("the dev tools button of a tab only exists while dev tools are enabled", async ({ host }) => {

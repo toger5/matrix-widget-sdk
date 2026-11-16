@@ -9,6 +9,7 @@ import {
   emptyWorkspace,
   findWidgetTab,
   focusPanel,
+  openTimelineTab,
   putTab,
   removePanel,
   removeTab,
@@ -70,6 +71,30 @@ describe("layout", () => {
     expect(activateTab(b.ws, a.panelId, "nope").roomsArea.focusedPanelId).toBe(a.panelId);
   });
 
+  it("opens the Timeline tab at the end of a panel, at most one per panel: a second open shows it; it is no widget tab", () => {
+    const a = addPanel(emptyWorkspace(), room("!a"));
+    const b = addPanel(putTab(a.ws, a.panelId, { kind: "widget", id: "t1", widgetId: "!a|w" }), room("!a"));
+    let ws = openTimelineTab(b.ws, a.panelId);
+    const tabs = roomOfPanel(ws, a.panelId)!.tabs;
+    expect(tabs.map((t) => t.kind)).toEqual(["widget", "timeline"]);
+    expect(roomOfPanel(ws, a.panelId)?.activeTabId).toBe(tabs[1].id);
+    expect(ws.roomsArea.focusedPanelId).toBe(a.panelId);
+    expect(workspaceWidgetIds(ws)).toEqual(["!a|w"]);
+
+    ws = openTimelineTab(activateTab(ws, a.panelId, "t1"), a.panelId);
+    expect(roomOfPanel(ws, a.panelId)?.tabs).toEqual(tabs);
+    expect(roomOfPanel(ws, a.panelId)?.activeTabId).toBe(tabs[1].id);
+    // The other panel of the same room gets its own.
+    ws = openTimelineTab(ws, b.panelId);
+    expect(roomOfPanel(ws, b.panelId)?.tabs.map((t) => t.kind)).toEqual(["timeline"]);
+    expect(roomOfPanel(ws, b.panelId)?.tabs[0].id).not.toBe(tabs[1].id);
+    // A picker panel has no room: nothing happens.
+    const p = addPanel(ws, picker);
+    expect(openTimelineTab(p.ws, p.panelId)).toBe(p.ws);
+    // Closing it shows its neighbour, like any tab.
+    expect(roomOfPanel(removeTab(ws, a.panelId, tabs[1].id), a.panelId)?.activeTabId).toBe("t1");
+  });
+
   it("upgrades a stored layout: only widget tabs are kept, a dropped active tab leaves the room name selected", () => {
     const stored = {
       roomsArea: {
@@ -108,6 +133,27 @@ describe("layout", () => {
     expect(ws.pip).toEqual(stored.pip);
     expect(ws.devTools).toEqual(stored.devTools);
     // A current layout comes back unchanged.
+    expect(upgradeWorkspace(JSON.parse(JSON.stringify(ws)))).toEqual(ws);
+  });
+
+  it("upgrades a stored layout with Timeline tabs: one per panel, in its place", () => {
+    const ws = upgradeWorkspace({
+      roomsArea: {
+        panels: [
+          {
+            id: "p1",
+            widthShare: 1,
+            content: { kind: "room", roomId: "!a", tabs: [{ kind: "timeline", id: "t1" }, { kind: "widget", id: "t2", widgetId: "!a|w" }, { kind: "timeline", id: "t3" }, { kind: "timeline" }], activeTabId: "t3" },
+          },
+          { id: "p2", widthShare: 1, content: { kind: "room", roomId: "!a", tabs: [{ kind: "timeline", id: "t1" }, { kind: "timeline", id: "t4" }], activeTabId: "t4" } },
+        ],
+      },
+    });
+    expect(ws.roomsArea.panels.map((p) => p.content)).toEqual([
+      { kind: "room", roomId: "!a", tabs: [{ kind: "timeline", id: "t1" }, { kind: "widget", id: "t2", widgetId: "!a|w" }], activeTabId: undefined },
+      // "t1" is taken by the first panel: its second Timeline tab is the one that is kept.
+      { kind: "room", roomId: "!a", tabs: [{ kind: "timeline", id: "t4" }], activeTabId: "t4" },
+    ]);
     expect(upgradeWorkspace(JSON.parse(JSON.stringify(ws)))).toEqual(ws);
   });
 

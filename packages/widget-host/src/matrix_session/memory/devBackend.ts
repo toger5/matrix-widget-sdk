@@ -11,7 +11,7 @@
 import { InMemoryBackend, type InMemoryBackendLike, type MatrixEvent, type TurnServer } from "@matrix-widget-tools/widget-host-bindings";
 
 import type { MockedRoomData, MockedStateEvent, MockedTimelineEvent, ToDeviceMessage } from "../../appViewModel";
-import type { AccountInfo, LiveSession, RawEvent, RoomBackend, RoomDetails, RoomExport, RoomMember, RoomSummary } from "../../session";
+import type { AccountInfo, LiveSession, RawEvent, RoomBackend, RoomDetails, RoomExport, RoomMember, RoomSummary, RoomTimeline } from "../../session";
 import { WIDGET_EVENT_TYPES, describesWidget, type StateEvent } from "../../widgetStateEvent";
 import { base64ToBytes, bytesToBase64, validateSeed, type DevBackendSeed, type SeedMedia, type SeedRoom } from "./seed";
 
@@ -129,6 +129,14 @@ const asObject = (value: unknown): Record<string, unknown> =>
 const asString = (value: unknown): string | undefined => (typeof value === "string" && value !== "" ? value : undefined);
 const serverOf = (id: string) => id.slice(id.indexOf(":") + 1) || "dev.local";
 
+/** Add a listener to the set of a room. Returns the unsubscribe function. */
+function listen(listeners: Map<string, Set<() => void>>, roomId: string, listener: () => void): () => void {
+  const ofRoom = listeners.get(roomId) ?? new Set<() => void>();
+  listeners.set(roomId, ofRoom);
+  ofRoom.add(listener);
+  return () => ofRoom.delete(listener);
+}
+
 function checkEvent(event: { type?: unknown; stateKey?: unknown; content?: unknown }, state: boolean): void {
   if (typeof event?.type !== "string" || event.type === "") throw new Error("an event needs a `type`");
   if (state && typeof event.stateKey !== "string") throw new Error("a state event needs a `stateKey` (it may be empty)");
@@ -166,6 +174,7 @@ export class DevBackend implements LiveSession {
   private readonly listeners = new Set<() => void>();
   private readonly roomListeners = new Set<() => void>();
   private readonly widgetListeners = new Map<string, Set<() => void>>();
+  private readonly timelineListeners = new Map<string, Set<() => void>>();
 
   constructor(options: { userId?: string } = {}) {
     this.user = options.userId ?? DEFAULT_USER_ID;
@@ -217,10 +226,20 @@ export class DevBackend implements LiveSession {
   }
 
   onWidgetsChanged(roomId: string, listener: () => void): () => void {
-    const listeners = this.widgetListeners.get(roomId) ?? new Set<() => void>();
-    this.widgetListeners.set(roomId, listeners);
-    listeners.add(listener);
-    return () => listeners.delete(listener);
+    return listen(this.widgetListeners, roomId, listener);
+  }
+
+  /** Every event of a mocked room, oldest first: the start of the room is always there. */
+  async timeline(roomId: string): Promise<RoomTimeline> {
+    return { events: this.room(roomId).content.raw.timeline, atStart: true, loadingOlder: false };
+  }
+
+  /** There is nothing older: `timeline()` has every event. */
+  async loadOlderEvents(): Promise<void> {}
+
+  /** Told by `refresh()` when the room's backend changed. */
+  onTimelineChanged(roomId: string, listener: () => void): () => void {
+    return listen(this.timelineListeners, roomId, listener);
   }
 
   /** Every widget of the room shares the room's backend. It lives as long as the room, so `dispose` does nothing. */
@@ -316,6 +335,7 @@ export class DevBackend implements LiveSession {
 
     let toDeviceChanged = this.toDeviceData.length !== this.toDeviceLog.length;
     const widgetsChanged: string[] = [];
+    const timelinesChanged: string[] = [];
     const inStore = new Map<Room, Set<string>>();
 
     for (const room of this.mocked.values()) {
@@ -326,6 +346,7 @@ export class DevBackend implements LiveSession {
       if (stamp !== room.stamp) {
         room.stamp = stamp;
         room.content = this.read(room, timeline, delayed, now);
+        timelinesChanged.push(room.id);
         changed = true;
       }
 
@@ -405,6 +426,7 @@ export class DevBackend implements LiveSession {
     if (!changed && !toDeviceChanged && !mediaChanged) return false;
     this.snapshots.clear();
     for (const roomId of widgetsChanged) this.widgetListeners.get(roomId)?.forEach((listener) => listener());
+    for (const roomId of timelinesChanged) this.timelineListeners.get(roomId)?.forEach((listener) => listener());
     if (changed) this.roomListeners.forEach((listener) => listener());
     this.listeners.forEach((listener) => listener());
     return true;

@@ -26,7 +26,7 @@
  *       ├─ devBackend?                 UI state of the DevBackendView
  *       ├─ workspaces[accountId]       WorkspaceLayout: persisted, one per account
  *       │  ├─ roomsArea                RoomsArea → RoomPanel → RoomPicker | RoomView → room name
- *       │  │                           (RoomOverview) + widget Tabs
+ *       │  │                           (RoomOverview) + Tabs (widgets, the RoomTimeline)
  *       │  ├─ pip                      PictureInPicturePanel: stacking, position, box size
  *       │  └─ devTools[widgetId]       dock and panels of each widget's WidgetDevToolBar
  *       ├─ data                        what the active account knows: rooms, recent widgets and rooms
@@ -309,7 +309,7 @@ export interface RoomPickerViewModel {
 
 /**
  * A tabbed room. Its first tab is the room name, which shows the RoomOverview; the others are
- * `tabs`. Two panels may show the same room (Alt+Shift+N). leaves roomview/*, tabs/*, overview/*, roomview2/*
+ * `tabs`. Two panels may show the same room (Alt+Shift+N). leaves roomview/*, tabs/*, overview/*, timeline/*, roomview2/*
  */
 export interface RoomViewModel {
   kind: "room";
@@ -326,11 +326,15 @@ export interface RoomViewModel {
 }
 
 /**
- * Shows a widget. Label, icon, load state and pin marker come from the widget (`widgets`). A
- * union with one member, so that a view of the host (a timeline) can become a tab kind again.
+ * A tab after the room name.
+ *
+ * - `widget` shows a widget. Label, icon, load state and pin marker come from the widget (`widgets`).
+ * - `timeline` shows the RoomTimeline of the panel's room, at most one per room panel. Its events
+ *   are not in the view model: `useViewEnv().useRoomTimeline(roomId)`. leaves tabs/timeline-active, timeline/*
+ *
  * Stored layouts can hold the removed kinds "native" (the overview) and "new": they are dropped on load.
  */
-export type TabViewModel = { kind: "widget"; id: TabId; widgetId: WidgetInstanceId };
+export type TabViewModel = { kind: "widget"; id: TabId; widgetId: WidgetInstanceId } | { kind: "timeline"; id: TabId };
 
 /**
  * The floating container of the always-on-screen widgets whose tab is not shown. Which widgets
@@ -421,6 +425,9 @@ export interface CapabilityPromptViewModel {
  */
 export const CAPABILITY_APPROVE_DELAY_MS = 3000;
 
+/** How many older events "Load older events" of the RoomTimeline asks the session for (`room/loadOlderEvents`). */
+export const OLDER_EVENTS_PER_LOAD = 50;
+
 // ---------------------------------------------------------------------------------------------
 // Derived values: computed from the model, never stored in it.
 
@@ -480,10 +487,10 @@ export function widgetSlot(m: MainViewModel, id: WidgetInstanceId, narrow = fals
 }
 
 /**
- * "Collapsing the LeftBar while only one widget is open, and shown, renders the widget fullscreen":
- * no rounded containers. The header keeps the room name, without the tab and without the + button
- * of the tab bar (both appear while the header is hovered or focused). Selecting the room name
- * ends it. leaves app/fullscreen*
+ * "Collapsing the LeftBar while the only tab open is a widget, and shown, renders the widget
+ * fullscreen": no rounded containers. The header keeps the room name, without the tab and without
+ * the + button of the tab bar (both appear while the header is hovered or focused). Selecting the
+ * room name ends it. leaves app/fullscreen*
  */
 export function fullscreenWidget(vm: AppViewModel): WidgetInstanceId | undefined {
   const m = mainOf(vm);
@@ -493,17 +500,18 @@ export function fullscreenWidget(vm: AppViewModel): WidgetInstanceId | undefined
   const only = panels.length === 1 ? panels[0].content : undefined;
   if (only?.kind !== "room" || only.tabs.length !== 1) return undefined;
   const tab = only.tabs[0];
-  return only.activeTabId === tab.id ? tab.widgetId : undefined;
+  return tab.kind === "widget" && only.activeTabId === tab.id ? tab.widgetId : undefined;
 }
 
 /** Docked left or right: the bar is a vertical strip, the panels stack and the size is `size.side`. */
 export const sideDock = (dock: WidgetDevToolsLayout["dock"]): boolean => dock === "left" || dock === "right";
 
 /**
- * Alt+W closes the shown tab of a panel that has a tab, and else the panel itself. While the room
- * name is selected in a panel with tabs it does nothing.
+ * Alt+W closes the shown tab of a panel that has a tab besides the room name (a widget or the
+ * timeline), and else the panel itself. While the room name is selected in a panel with tabs it
+ * does nothing.
  */
-export const hasWidgetTab = (panel: RoomPanelViewModel): boolean => panel.content.kind === "room" && panel.content.tabs.length > 0;
+export const hasTab = (panel: RoomPanelViewModel): boolean => panel.content.kind === "room" && panel.content.tabs.length > 0;
 
 // ---------------------------------------------------------------------------------------------
 // Intents: what a user can ask for. A controller turns an intent into model changes and effects
@@ -554,9 +562,10 @@ export type AppIntent =
   | { type: "tab/showOverview"; panelId: PanelId } // the room name tab and the + button of the tab bar: selects the room name, the body shows the RoomOverview; the tab left behind may enter the PiP panel
   | { type: "tab/openWidget"; panelId: PanelId; widgetKey: WidgetKey } // a widget of the RoomOverview: a new tab at the end; already running: jumps to its tab
   | { type: "tab/moveWidgetHere"; panelId: PanelId; widgetId: WidgetInstanceId } // "move widget here" of the RoomOverview: closes its tab in the other room panel and opens it in this one; the widget keeps running
+  | { type: "tab/openTimeline"; panelId: PanelId } // "Open timeline" / "Show timeline" of the RoomOverview: activates the panel's timeline tab, a new one at the end if it has none; the tab left behind may enter the PiP panel
   | { type: "tab/activate"; panelId: PanelId; tabId: TabId } // the tab of an always-on-screen widget: takes it out of the PiP panel; the tab left behind may enter it
   | { type: "tab/move"; panelId: PanelId; tabId: TabId; toIndex: number }
-  | { type: "tab/close"; panelId: PanelId; tabId: TabId } // Alt+W while a tab is shown; stops the widget, unless it is always on screen: then it keeps running in the PiP panel (assumption, see designFeedback.md). The last one returns the room view to its RoomOverview
+  | { type: "tab/close"; panelId: PanelId; tabId: TabId } // Alt+W while a tab is shown; a widget tab stops its widget, unless it is always on screen: then it keeps running in the PiP panel (assumption, see designFeedback.md). The last tab returns the room view to its RoomOverview
   // widgets
   | { type: "widget/reload"; widgetId: WidgetInstanceId } // "Retry" of a failed widget and the reload button of its dev tool bar: stops it and starts it again (new iframe and driver, the current URL of its state event); its dev tools data starts empty
   | { type: "widget/answerCapabilities"; widgetId: WidgetInstanceId; approved: string[] } // "Approve N selected" / "Deny all" (`approved: []`) of the capability prompt: answers every request it holds; an approval before `approveBlockedUntil` is ignored
@@ -577,8 +586,9 @@ export type AppIntent =
   | { type: "pip/move"; position: PipViewModel["position"] }
   | { type: "pip/resize"; boxSize: PipViewModel["boxSize"] }
   | { type: "pip/setStacking"; stacking: PipViewModel["stacking"] }
-  // RoomOverview and DevBackendView
+  // RoomOverview, RoomTimeline and DevBackendView
   | { type: "room/copyToDevBackend"; roomId: RoomId; lastEvents: number }
+  | { type: "room/loadOlderEvents"; roomId: RoomId } // "Load older events" of the RoomTimeline, once it shows every loaded event: the session loads up to OLDER_EVENTS_PER_LOAD older ones (from its store or the homeserver); a failure is a toast
   | { type: "mock/selectRoom"; roomId: RoomId }
   | { type: "mock/addRoom" }
   | { type: "mock/removeRoom"; roomId: RoomId }

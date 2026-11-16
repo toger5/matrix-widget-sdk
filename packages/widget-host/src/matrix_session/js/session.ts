@@ -16,9 +16,10 @@ import {
 import { AccountStore } from "./accountStore";
 import { JsSdkBackend } from "./backend/jsSdkBackend";
 import { FetchGate } from "./fetchGate";
-import { accountInfo, exportRoom, roomDetails } from "./roomData";
+import { accountInfo, exportRoom, loadOlderEvents, onTimelineChanged, roomDetails, timelineEvents } from "./roomData";
 import { needsVerification, onVerificationChanged, RecoveryKeySlot, startEmojiVerification, verifyWithRecoveryKey } from "./verification";
 import { AVATAR_SIZE, AvatarCache } from "../../lib/avatarCache";
+import { RoomTimelines } from "../roomTimelines";
 import { describesWidget, WIDGET_EVENT_TYPES, type StateEvent } from "../../widgetStateEvent";
 import {
   StoredLoginInvalidError,
@@ -30,6 +31,7 @@ import {
   type RoomDetails,
   type RoomExport,
   type RoomSummary,
+  type RoomTimeline,
   type SessionProvider,
 } from "../../session";
 
@@ -234,6 +236,8 @@ class JsSdkSession implements LiveSession {
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     return response.blob();
   });
+  /** The RoomTimelines: the start of the room, a running pagination, the listeners (`./roomData`). */
+  private readonly timelines = new RoomTimelines((roomId, changed) => onTimelineChanged(this.client, roomId, changed));
 
   private constructor(
     readonly accountId: string,
@@ -299,6 +303,19 @@ class JsSdkSession implements LiveSession {
 
   exportRoom(roomId: string, lastEvents: number): Promise<RoomExport> {
     return exportRoom(this.client, roomId, lastEvents);
+  }
+
+  async timeline(roomId: string): Promise<RoomTimeline> {
+    return this.timelines.timeline(roomId, timelineEvents(this.client, roomId));
+  }
+
+  /** While suspended the request fails (`./fetchGate`). */
+  loadOlderEvents(roomId: string, count: number): Promise<void> {
+    return this.timelines.loadOlder(roomId, () => loadOlderEvents(this.client, roomId, count));
+  }
+
+  onTimelineChanged(roomId: string, listener: () => void): () => void {
+    return this.timelines.listen(roomId, listener);
   }
 
   /**

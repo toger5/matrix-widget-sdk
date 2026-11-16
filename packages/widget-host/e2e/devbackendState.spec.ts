@@ -99,7 +99,8 @@ test("the widget form adds a test widget that opens, and a legacy one; a widget 
   const view = host.page.getByTestId("devbackend-view");
   const form = view.getByRole("form", { name: "Send state" });
   const openWhiteboard = host.panels.getByRole("button", { name: "Open Whiteboard" });
-  await expect(host.panels.getByTestId("room-overview").getByRole("button")).toHaveCount(2);
+  // The two test widgets of the room.
+  await expect(host.panels.getByTestId("room-overview").locator(".ov-widgets").getByRole("button")).toHaveCount(2);
 
   // Prefilled with the new test widget under the first free widget ID.
   await expect(form.getByLabel("Event type")).toHaveValue("m.widget");

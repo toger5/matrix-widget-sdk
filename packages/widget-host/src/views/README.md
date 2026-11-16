@@ -13,7 +13,7 @@ The views of the widget host, one folder per area of `appDesign.md`. Read this b
 A view
 
 - gets its slice of the view model as **props** (the `…Props` interface at the top of its file is the contract with its parent: extend it with optional props only, unless the design changes the contract; then update the parent and the stories in the same change);
-- sends intents with `useDispatch()` and reads the data that is not in the view model with the hooks of `useViewEnv()` (`src/views/env.tsx`): `useDevToolsData`, `useMockedRoomData`, `useRoomDetails`, `avatar`, `narrow`;
+- sends intents with `useDispatch()` and reads the data that is not in the view model with the hooks of `useViewEnv()` (`src/views/env.tsx`): `useDevToolsData`, `useMockedRoomData`, `useRoomDetails`, `useRoomTimeline`, `avatar`, `narrow`;
 - keeps **view state** that nobody else needs in `useState` (a form draft, a hover, a filter text, an open menu, which log row is expanded);
 - never imports `src/app/**`, `src/session.ts` values (types are fine), a session implementation, or the bindings;
 - derives instead of storing: use the functions at the bottom of `appViewModel.ts` (`widgetTab`, `widgetSlot`, `pipWidgetIds`, `fullscreenWidget`, `activeWorkspace`, …) and `src/views/helpers.ts` (`roomWidgets`, `roomOf`, `readyRooms`).

@@ -113,6 +113,8 @@ Login, sync, suspend/resume, device verification and the storage migration of bo
 | `concurrent-sessions` | both `session.ts` | Several accounts run at once, one client each; unverified with real SDK stores | restore all / only the active one | All are restored and kept syncing (suspended while the DevBackend is active) |
 | `rust-resume-room-subscription` | `rust/session.ts` | Whether a room's full-state subscription survives stop/start of the sync service | verify on a homeserver | It is requested again on resume |
 | `verification-incoming-requests` | `rust/verification.ts` (`didReceiveVerificationRequest`) | A verification request that another device of the account sends to this one | (a) ignore it (b) show it in the AccountView (design, view model, both SDKs) | (a): only this device starts a verification |
+| `rust-one-room-subscription` | `rust/session.ts` (`open`) | The rust session subscribes to one room with its full state at a time: opening the widgets or the Timeline tab of room B moves the subscription away from room A, whose widgets and timeline then only get what the room list syncs. Pre-existing for the widgets of two rooms side by side | (a) keep (b) subscribe to every room on screen, with an SDK addition next to `subscribeToRoomWithFullState` that takes the list | (a). A Timeline tab subscribes when it is shown, not again on each new event |
+| `rust-late-decryption-not-reported` | `rust/roomData.ts` (`onTimelineChanged`) | `subscribeToEventsRaw` reports the events a sync appends, not an event the event cache replaces (decrypted late, redacted): the RoomTimeline shows it as it was until the room's next event arrives | (a) an SDK addition that reports replaced events too (b) read again on a timer. Verify on a homeserver first | Neither |
 | `verification-cancel-on-suspend` | `src/app/controller.ts` (`switchAccount`) | Activating the DevBackend cancels a running verification, but the sessions are suspended right after, so the cancel likely never reaches the other device | (a) wait for the cancel (with a time limit) before suspending (b) let the other device time out | (b) |
 
 ## Trivial
@@ -129,6 +131,7 @@ Login, sync, suspend/resume, device verification and the storage migration of bo
 - Device verification: "Verify" is disabled while the recovery key field is empty; the field gets the focus when the form appears and after a refused key; activating the DevBackend (or a seed) ends a running verification like a failure, with the reason in the box and a toast; a failed `needsVerification` read keeps the last answer; the dispatch log leaves out the recovery key and the password of an intent (`loggableIntent`).
 - Avatars without an image derive their color from the id; the mockups use fixed hues.
 - `devbackend-timeline-not-virtualized`: the event list shows the newest 100 plus "Show more".
+- `room-timeline-not-virtualized`: the RoomTimeline renders the newest 200 events; "Load older events" first shows 200 more of the loaded ones, then asks the session for 50.
 - `devbackend-media-uploader-name`: a media row shows the widget key, not its name; `devbackend-add-member-content`: "add member" sends only `{membership: "join"}`.
 - The widget form's widget ID is the first free `widget-<n>` when the form is shown, so sending twice updates one widget. A legacy widget keeps the legacy test widget's `type`, `waitForIframeLoad` and `data` (`title`), whatever its name and URL.
 - `pip-menu-placement`: the overflow menu always opens above the container; `pip-menu-roles`: its rows have two menu items each instead of nested buttons.
@@ -149,7 +152,7 @@ Login, sync, suspend/resume, device verification and the storage migration of bo
 - `account-store-location`: the storage code shared by both SDK sessions lives under `matrix_session/js/`.
 - `restore()` of an unknown account rejects with a plain `Error`.
 - `AvatarCache` caches failures: an avatar requested while suspended stays missing after resume.
-- rust: `open()` holds one full-state room at a time, so a second room panel takes it over (pre-existing); an abandoned pending login leaves IndexedDB stores behind unless `discard()` is called (pre-existing).
+- rust: an abandoned pending login leaves IndexedDB stores behind unless `discard()` is called (pre-existing).
 - js: `onRoomsChanged` does not fire on member-count changes; one `/sync` response in flight may still be processed after `suspend()`.
 - `importRoom` drops timeline state events whose key is in the exported state. `toSeed()` does not keep event ids, timestamps, scheduled events, the to-device log or `copiedFrom`.
 - `MockedTimelineEvent` has no `stateKey`, though the timeline of a mocked room contains state events.

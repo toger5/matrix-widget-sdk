@@ -39,6 +39,9 @@ Every leaf of `design/index.html` (`design/src/leaves.mjs`), with the test in wh
 | `tabs/widget-active`, `tabs/overview-active` | `tabs.spec.ts` › the room name is the first tab: it shows the overview |
 | `tabs/pinned` | `widgetMove.spec.ts` › always on screen |
 | `tabs/overflow` | `tabs.spec.ts` › more tabs than fit |
+| `tabs/timeline-active`, `timeline/start` | `timeline.spec.ts` › “Open timeline” adds the Timeline tab at the end; its lines are the room's events, oldest first |
+| `timeline/events` | `timeline.spec.ts` › 250 events: the newest 200 are shown, … (the mocked room's events are messages, not one of every kind: `test/eventText.test.ts` checks the words for those of the leaf, story `rooms-roomtimeline--events`) |
+| `timeline/loading`, `timeline/error` | **not reachable**: the DevBackend's timeline is there at once and never fails (stories `rooms-roomtimeline--loading`, `--load-error`) |
 | `overview/plain` | `overview.spec.ts` › a room opens on its overview |
 | `overview/devtools` | **partly**: `overview.spec.ts` › with dev tools enabled a DevBackend room still has no "Copy to DevBackend" card (a widget open in this panel offers "Jump to tab"). The card needs a Matrix room (story `rooms-roomoverview--dev-tools`) |
 

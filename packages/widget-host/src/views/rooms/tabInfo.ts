@@ -11,19 +11,28 @@ export const roomTabDomId = (panelId: PanelId) => domId("roomtab", panelId);
 export const tabPanelDomId = (panelId: PanelId) => domId("tabpanel", panelId);
 
 export interface TabInfo {
+  /** The label. */
   name: string;
-  widgetKey: WidgetKey;
+  /** The `title` of the tab. */
+  title: string;
+  /** The accessible name of its × ("Close Whiteboard", "Close the timeline"). */
+  closeLabel: string;
+  /** A widget tab: its widget key (the avatar's color). The timeline tab has the message icon instead. */
+  widgetKey?: WidgetKey;
   /** The widget asked to be always on screen: the pin icon. */
   pinned: boolean;
   load?: "loading" | "ready" | "failed";
 }
 
-export function tabInfo(main: MainViewModel, room: RoomSummary | undefined, tab: TabViewModel): TabInfo {
+/** `roomName`: the name of the panel's room (the title of the timeline tab). */
+export function tabInfo(main: MainViewModel, room: RoomSummary | undefined, tab: TabViewModel, roomName: string): TabInfo {
+  if (tab.kind === "timeline") return { name: "Timeline", title: `Timeline of ${roomName}`, closeLabel: "Close the timeline", pinned: false };
   const widget = main.widgets[tab.widgetId];
   // A tab can outlive its widget for a moment (the layout is restored before the widgets start).
   const key = widget?.widgetKey ?? (room && tab.widgetId.startsWith(`${room.id}|`) ? tab.widgetId.slice(room.id.length + 1) : tab.widgetId);
   const name = widget?.widget.name ?? roomWidgets(room).find((w) => w.key === key)?.name ?? "Widget";
-  return { name, widgetKey: key, pinned: !!widget?.alwaysOnScreen, load: widget?.load.state };
+  const pinned = !!widget?.alwaysOnScreen;
+  return { name, title: `${name}${pinned ? " · always on screen" : ""}`, closeLabel: `Close ${name}`, widgetKey: key, pinned, load: widget?.load.state };
 }
 
 /** "call.example.org" of a widget URL, for the second line of a widget row of the RoomOverview. */

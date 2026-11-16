@@ -19,6 +19,7 @@ test("a room opens on its overview: the room name is selected; topic, members an
   await expect(overview.getByText("@carol:dev.local")).toBeVisible();
   await expect(overview.locator(".ov-widgets button")).toHaveText([/New test widget/, /Legacy test widget/]);
   await expect(overview.getByText("Copy to DevBackend")).toHaveCount(0);
+  await expect(overview.getByRole("button", { name: "Open timeline" })).toHaveAttribute("title", "Open the timeline of this room in a new tab");
   await host.leaf("overview/plain");
 });
 
@@ -35,7 +36,7 @@ test("pressing a widget in the overview opens it as a new tab at the end; the ro
   // A widget that is already open has no "Open" button: "Jump to tab" brings its tab to the front, no second one.
   await host.page.getByTitle(header).click();
   await expect(host.tab("Widget lab")).toHaveAttribute("aria-selected", "true");
-  await expect(overview.getByRole("button", { name: /^Open / })).toHaveCount(0);
+  await expect(overview.locator(".ov-widgets").getByRole("button", { name: /^Open / })).toHaveCount(0);
   await overview.getByRole("button", { name: "Jump to the tab of Legacy test widget" }).click();
   await expect(host.page.getByRole("tab")).toHaveCount(3);
   await expect(host.tab(/Legacy test widget/)).toHaveAttribute("aria-selected", "true");
@@ -44,12 +45,15 @@ test("pressing a widget in the overview opens it as a new tab at the end; the ro
 test("with dev tools enabled a DevBackend room still has no “Copy to DevBackend” card", async ({ host }) => {
   // A seed ends a panel on a widget tab (`active`) or on the room name (`overview`), not both.
   await expect(host.populate("lab", { sidePanel: null, open: [{ room: LAB, widgets: [NEW_WIDGET], overview: true, active: NEW_WIDGET }] })).rejects.toThrow(/both `active` and `overview`/);
-  await host.populate("lab", { sidePanel: null, open: [{ room: LAB, widgets: [NEW_WIDGET], overview: true }] });
+  await host.populate("lab", { sidePanel: null, open: [{ room: LAB, widgets: [NEW_WIDGET], timeline: true, overview: true }] });
   expect((await host.state()).settings.devTools).toBe(true);
   const overview = host.page.getByTestId("room-overview");
   await expect(overview.locator(".member")).toHaveCount(3);
   await expect(host.button("Dev tools of New test widget")).toHaveCount(1);
   await expect(overview.getByRole("button", { name: "Jump to the tab of New test widget" })).toBeVisible();
+  // The panel has its Timeline tab: the header shows it instead of opening a second one.
+  await expect(overview.getByRole("button", { name: "Show timeline" })).toHaveAttribute("title", "Show the timeline tab");
+  await expect(overview.getByRole("button", { name: "Open timeline" })).toHaveCount(0);
   // A DevBackend room is already in the DevBackend, so the dev tools card of the mockup is not reachable here.
   await expect(overview.getByText("Copy to DevBackend")).toHaveCount(0);
   await host.leaf("overview/devtools");

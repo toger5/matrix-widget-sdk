@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 
-import { mainVm, roomPanel, widgetTab, widgetVm, workspace } from "../fixtures";
+import { mainVm, roomPanel, timelineTab, widgetTab, widgetVm, workspace } from "../fixtures";
 import { RoomOverview } from "./RoomOverview";
 import { DEV_SETTINGS, SETTINGS, SoloPanel } from "./storyFrame";
 
@@ -13,7 +13,7 @@ type Story = StoryObj<typeof RoomOverview>;
 const empty = roomPanel("design", []);
 export const Plain: Story = { render: () => <SoloPanel main={mainVm({ workspaces: { ada: workspace([empty]) }, widgets: {} })} panel={empty} settings={SETTINGS} /> };
 
-// leaf overview/devtools: the call has a tab in this panel ("jump to tab"); the dashed dev card with "Copy to DevBackend"
-const withCall = roomPanel("design", [widgetTab("design", "call")], null);
+// leaf overview/devtools: the call has a tab in this panel ("jump to tab"), so has the timeline ("Show timeline"); the dashed dev card with "Copy to DevBackend"
+const withCall = roomPanel("design", [widgetTab("design", "call"), timelineTab("design")], null);
 const call = widgetVm("design", "call");
 export const DevTools: Story = { render: () => <SoloPanel main={mainVm({ workspaces: { ada: workspace([withCall]) }, widgets: { [call.id]: call } })} panel={withCall} settings={DEV_SETTINGS} /> };

@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 
 import type { MainViewModel, RoomPanelViewModel, WidgetInstanceViewModel } from "../../appViewModel";
-import { devToolsLayout, mainVm, roomPanel, widgetTab, widgetVm, workspace } from "../fixtures";
+import { devToolsLayout, mainVm, roomPanel, timelineTab, widgetTab, widgetVm, workspace } from "../fixtures";
 import { DEV_SETTINGS, HeadOnly, SETTINGS, SoloPanel } from "./storyFrame";
 import { TabBar } from "./TabBar";
 
@@ -35,6 +35,12 @@ export const Pinned: Story = {
       panel={pinned}
     />
   ),
+};
+
+// leaf tabs/timeline-active: the Timeline tab is active (dev tools enabled: ⋯ on the widget tabs only)
+const timeline = roomPanel("design", [widgetTab("design", "call"), widgetTab("design", "board"), timelineTab("design")], timelineTab("design").id);
+export const TimelineActive: Story = {
+  render: () => <HeadOnly main={vm(timeline, [widgetVm("design", "call"), widgetVm("design", "board")])} panel={timeline} settings={DEV_SETTINGS} />,
 };
 
 // leaf tabs/overflow: more tabs than fit; the widget tabs scroll and the "all tabs" button opens the menu

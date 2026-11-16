@@ -58,6 +58,19 @@ export interface RoomDetails {
 /** A Matrix event as plain JSON (`type`, `content`, `sender`, `event_id`, `origin_server_ts`, `state_key` for state). */
 export type RawEvent = Record<string, unknown> & { type: string; content: Record<string, unknown> };
 
+/** The events of a room as the RoomTimeline shows them. */
+export interface RoomTimeline {
+  /**
+   * The events the session holds of the room, oldest first: every kind, state events included,
+   * decrypted where it could (one it could not decrypt stays `m.room.encrypted`); no local echoes.
+   */
+  events: RawEvent[];
+  /** The room's first event is among `events`: there is nothing older to load. */
+  atStart: boolean;
+  /** `loadOlderEvents` runs for this room. */
+  loadingOlder: boolean;
+}
+
 /** A room as "Copy to DevBackend" takes it over: the whole current state and the last timeline events (oldest first). */
 export interface RoomExport {
   roomId: string;
@@ -121,6 +134,15 @@ export interface LiveSession {
   roomDetails(roomId: string): Promise<RoomDetails>;
   /** The room's current state and its last `lastEvents` timeline events, for "Copy to DevBackend". */
   exportRoom(roomId: string, lastEvents: number): Promise<RoomExport>;
+  /** The events of a room the session holds (the RoomTimeline). The rust session subscribes to the room for it, like `backendFor`. */
+  timeline(roomId: string): Promise<RoomTimeline>;
+  /**
+   * Load up to `count` older events of a room, from the store or the homeserver (it may load a few
+   * more). Resolves once they are in `timeline(roomId)`; a second call while one runs joins it.
+   */
+  loadOlderEvents(roomId: string, count: number): Promise<void>;
+  /** Call `listener` whenever `timeline(roomId)` may have changed: new, older, deleted or decrypted events, `loadingOlder`. Returns the unsubscribe function. */
+  onTimelineChanged(roomId: string, listener: () => void): () => void;
   /**
    * Stop talking to the homeserver (no sync, no requests) but stay logged in: the DevBackend is
    * active. `resume()` starts syncing again. Backends handed out before stay valid across both.

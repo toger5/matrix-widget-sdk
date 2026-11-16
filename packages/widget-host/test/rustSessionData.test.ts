@@ -1,6 +1,7 @@
 /**
- * What the AccountView, the RoomOverview and "Copy to DevBackend" read from a matrix-rust-sdk
- * client (`src/matrix_session/rust/roomData`), and the device verification
+ * What the AccountView, the RoomOverview, the RoomTimeline and "Copy to DevBackend" read from a
+ * matrix-rust-sdk client (`src/matrix_session/rust/roomData`, with the SDK-free
+ * `src/matrix_session/roomTimelines`), and the device verification
  * (`src/matrix_session/rust/verification`), on a faked client and room. The SDK's wasm module
  * is loaded because its enums and event type conversions live there.
  */
@@ -18,6 +19,7 @@ import {
   VerificationState,
   type ClientLike,
   type RoomLike,
+  type RawRoomEventsListener,
   type RoomMember,
   type RoomStateEvent,
   type SessionVerificationControllerDelegate,
@@ -27,7 +29,8 @@ import {
 import initSdkWasm from "../../matrix-sdk-uniffi-js/src/generated/wasm-bindgen/index.js";
 import * as sdkFfi from "../../matrix-sdk-uniffi-js/src/generated/matrix_sdk_ffi";
 import * as rumaEvents from "../../matrix-sdk-uniffi-js/src/generated/ruma_events";
-import { accountInfo, exportRoom, LOAD_MEMBERS_UP_TO, roomDetails } from "../src/matrix_session/rust/roomData";
+import { RoomTimelines } from "../src/matrix_session/roomTimelines";
+import { accountInfo, exportRoom, LOAD_MEMBERS_UP_TO, loadOlderEvents, onTimelineChanged, roomDetails, timelineEvents } from "../src/matrix_session/rust/roomData";
 import { needsVerification, onVerificationChanged, startEmojiVerification, verifyWithRecoveryKey } from "../src/matrix_session/rust/verification";
 
 const require = createRequire(import.meta.url);
@@ -56,8 +59,9 @@ const stored = (type: string, stateKey: string, content: unknown, eventId?: stri
   timestamp: eventId ? 7n : undefined,
 });
 
-function fakeSdk(options: { joinedCount?: number; encryption?: EncryptionState; events?: Record<string, unknown>[]; older?: Record<string, unknown>[] } = {}) {
+function fakeSdk(options: { joinedCount?: number; encryption?: EncryptionState; events?: Record<string, unknown>[]; older?: Record<string, unknown>[]; reachesStart?: boolean } = {}) {
   const calls: string[] = [];
+  const eventListeners = new Set<RawRoomEventsListener>();
   const members = [member("@carol:example.org", 0n), member(USER, "infinite", "Alice"), member("@bob:example.org", 50n, "Bob"), member("@gone:example.org", 100n, "Gone", false)];
   const iterator = () => {
     let done = false;
@@ -81,7 +85,11 @@ function fakeSdk(options: { joinedCount?: number; encryption?: EncryptionState; 
     paginateEventsRawBackwards: async (count: number) => {
       calls.push(`paginate ${count}`);
       cached.unshift(...(options.older ?? []).map((ev) => JSON.stringify(ev)));
-      return true;
+      return options.reachesStart ?? true;
+    },
+    subscribeToEventsRaw: (listener: RawRoomEventsListener) => {
+      eventListeners.add(listener);
+      return { cancel: () => (calls.push("cancel events"), eventListeners.delete(listener)), isFinished: () => false };
     },
     // By the enum tag of the type, like the SDK's store: this fake has no state of custom types.
     stateEvents: async (type: rumaEvents.StateEventType) => (type.tag === "Custom" ? [] : ([...state.entries()].find(([key]) => rumaEvents.stateEventTypeFromString(key).tag === type.tag)?.[1] ?? [])),
@@ -96,7 +104,12 @@ function fakeSdk(options: { joinedCount?: number; encryption?: EncryptionState; 
     cachedAvatarUrl: async () => "mxc://example.org/cached",
     accountUrl: async () => (calls.push("accountUrl"), "https://auth.example.org/account"),
   } as unknown as ClientLike;
-  return { client, room, calls };
+  /** A sync appends events to the room. */
+  const sync = (...events: Record<string, unknown>[]) => {
+    cached.push(...events.map((ev) => JSON.stringify(ev)));
+    eventListeners.forEach((listener) => listener.onEvents(events.map((ev) => JSON.stringify(ev))));
+  };
+  return { client, room, calls, sync };
 }
 
 afterEach(() => vi.unstubAllGlobals());
@@ -184,6 +197,92 @@ describe("matrix-rust-sdk session data", () => {
     expect(exported.timeline.map((ev) => ev.event_id)).toEqual(["$c"]);
     expect(fetched).not.toHaveBeenCalled();
     expect(calls).toEqual([]);
+  });
+});
+
+describe("matrix-rust-sdk RoomTimeline", () => {
+  const message = (id: string) => ({ type: "m.room.message", event_id: id, sender: USER, origin_server_ts: 1, content: { msgtype: "m.text", body: id } });
+
+  it("the events of the event cache, oldest first; older ones are paginated in; a sync tells the listener until it unsubscribes", async () => {
+    const { room, calls, sync } = fakeSdk({ events: [message("$3")], older: [message("$1"), message("$2")] });
+    expect((await timelineEvents(room)).map((ev) => ev.event_id)).toEqual(["$3"]);
+
+    expect(await loadOlderEvents(room, 50)).toBe(true);
+    expect(calls).toEqual(["paginate 50"]);
+    expect((await timelineEvents(room)).map((ev) => ev.event_id)).toEqual(["$1", "$2", "$3"]);
+
+    const listener = vi.fn();
+    const stop = onTimelineChanged(room, listener);
+    sync(message("$4"), message("$5"));
+    expect(listener).toHaveBeenCalledTimes(1);
+    expect((await timelineEvents(room)).at(-1)).toEqual(message("$5"));
+    stop();
+    sync(message("$6"));
+    expect(listener).toHaveBeenCalledTimes(1);
+    expect(calls.at(-1)).toBe("cancel events");
+  });
+
+  it("RoomTimelines: the start is reached by a pagination or the create event; loadingOlder while one runs, a second load joins it; the room is followed while it has listeners", async () => {
+    const { room, calls, sync } = fakeSdk({ events: [message("$3")], older: [message("$2")], reachesStart: false });
+    const timelines = new RoomTimelines((_roomId, changed) => onTimelineChanged(room, () => changed()));
+    const read = async () => timelines.timeline(ROOM, await timelineEvents(room));
+    expect(await read()).toMatchObject({ atStart: false, loadingOlder: false });
+    expect(timelines.timeline(ROOM, [{ type: "m.room.create", state_key: "", content: {} }]).atStart).toBe(true);
+
+    const seen: boolean[] = [];
+    const stopA = timelines.listen(ROOM, () => seen.push(timelines.timeline(ROOM, []).loadingOlder));
+    const stopB = timelines.listen(ROOM, () => undefined);
+    expect(timelines.followed(ROOM)).toBe(true);
+    const first = timelines.loadOlder(ROOM, () => loadOlderEvents(room, 50));
+    const second = timelines.loadOlder(ROOM, () => loadOlderEvents(room, 50));
+    expect(second).toBe(first);
+    expect(timelines.timeline(ROOM, []).loadingOlder).toBe(true);
+    await first;
+    expect(calls).toEqual(["paginate 50"]);
+    expect(seen).toEqual([true, false]);
+    expect(await read()).toMatchObject({ atStart: false, loadingOlder: false });
+    expect((await read()).events.map((ev) => ev.event_id)).toEqual(["$2", "$3"]);
+
+    // A pagination that reaches the start.
+    await timelines.loadOlder(ROOM, async () => true);
+    expect((await read()).atStart).toBe(true);
+
+    sync(message("$4"));
+    expect(seen).toHaveLength(5);
+    stopA();
+    expect(calls).not.toContain("cancel events");
+    stopB();
+    expect(calls.at(-1)).toBe("cancel events");
+    expect(timelines.followed(ROOM)).toBe(false);
+  });
+
+  it("RoomTimelines: a failed pagination rejects and ends loadingOlder; a reset forgets the start", async () => {
+    let changed: (reset?: boolean) => void = () => undefined;
+    const timelines = new RoomTimelines((_roomId, onChange) => ((changed = onChange), () => undefined));
+    const listener = vi.fn();
+    timelines.listen(ROOM, listener);
+    await expect(timelines.loadOlder(ROOM, async () => Promise.reject(new Error("offline")))).rejects.toThrow("offline");
+    expect(timelines.timeline(ROOM, []).loadingOlder).toBe(false);
+    expect(listener).toHaveBeenCalledTimes(2);
+
+    await timelines.loadOlder(ROOM, async () => true);
+    expect(timelines.timeline(ROOM, []).atStart).toBe(true);
+    changed(true);
+    expect(timelines.timeline(ROOM, []).atStart).toBe(false);
+    expect(listener).toHaveBeenCalledTimes(5);
+  });
+
+  it("RoomTimelines: the start is forgotten once nobody listens (a reset would go unnoticed)", async () => {
+    const timelines = new RoomTimelines(() => () => undefined);
+    const stopA = timelines.listen(ROOM, () => undefined);
+    const stopB = timelines.listen(ROOM, () => undefined);
+    await timelines.loadOlder(ROOM, async () => true);
+    stopA();
+    stopA();
+    expect(timelines.timeline(ROOM, []).atStart).toBe(true);
+    stopB();
+    expect(timelines.followed(ROOM)).toBe(false);
+    expect(timelines.timeline(ROOM, []).atStart).toBe(false);
   });
 });
 

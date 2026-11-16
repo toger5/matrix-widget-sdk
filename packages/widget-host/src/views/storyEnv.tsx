@@ -2,14 +2,17 @@
 import type { Decorator } from "@storybook/react-vite";
 import type { ReactNode } from "react";
 
-import { DEFAULT_VIEW_ENV, ViewEnvContext, type ViewEnv } from "./env";
-import { DEV_TOOLS_DATA, MOCKED_ROOM_DATA, ROOM_DETAILS } from "./fixtures";
+import { DEFAULT_VIEW_ENV, ViewEnvContext, type RoomTimelineData, type ViewEnv } from "./env";
+import { DEV_TOOLS_DATA, MOCKED_ROOM_DATA, ROOM_DETAILS, ROOM_TIMELINE } from "./fixtures";
+
+const TIMELINE: RoomTimelineData = { timeline: { status: "ready", value: ROOM_TIMELINE }, retry: () => console.info("retry the timeline") };
 
 export const STORY_ENV: ViewEnv = {
   ...DEFAULT_VIEW_ENV,
   useDevToolsData: () => DEV_TOOLS_DATA,
   useMockedRoomData: () => MOCKED_ROOM_DATA,
   useRoomDetails: () => ({ status: "ready", value: ROOM_DETAILS }),
+  useRoomTimeline: () => TIMELINE,
 };
 
 /** Wrap a story to override parts of the environment, e.g. `<StoryEnv env={{ narrow: true }}>`. */

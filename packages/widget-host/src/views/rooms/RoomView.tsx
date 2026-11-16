@@ -4,6 +4,7 @@ import type { MainViewModel, PanelId, RoomViewModel, SettingsViewModel } from ".
 import type { RenderWidget } from "../app/AppShell";
 import { roomOf } from "../helpers";
 import { RoomOverview } from "./RoomOverview";
+import { RoomTimeline } from "./RoomTimeline";
 import { TabBar } from "./TabBar";
 import { roomTabDomId, tabDomId, tabPanelDomId } from "./tabInfo";
 
@@ -20,9 +21,10 @@ export interface RoomViewProps {
 }
 
 /**
- * A tabbed room: the header (the room name tab, the widget tabs) and the body of the selected tab:
- * the shown widget, or the RoomOverview while the room name is selected. It renders the two
- * children of a `.roompanel`, so it is used inside a `RoomPanel`. leaves roomview/*, tabs/*, overview/*, roomview2/*
+ * A tabbed room: the header (the room name tab, the tabs of widgets and the timeline) and the body
+ * of the selected tab: the shown widget, the RoomTimeline, or the RoomOverview while the room name
+ * is selected. It renders the two children of a `.roompanel`, so it is used inside a `RoomPanel`.
+ * leaves roomview/*, tabs/*, overview/*, timeline/*, roomview2/*
  */
 export function RoomView({ main, settings, panelId, content, fullscreen = false, renderWidget, headerEnd }: RoomViewProps) {
   const { roomId, tabs, activeTabId } = content;
@@ -41,7 +43,13 @@ export function RoomView({ main, settings, panelId, content, fullscreen = false,
         {headerEnd}
       </header>
       <div className="rp-body" id={tabPanelDomId(panelId)} role="tabpanel" aria-labelledby={active ? tabDomId(panelId, active.id) : roomTabDomId(panelId)} data-testid="room-view" data-room-id={roomId}>
-        {active ? renderWidget(active.widgetId) : <RoomOverview main={main} panelId={panelId} roomId={roomId} devTools={settings.devTools} />}
+        {active?.kind === "widget" ? (
+          renderWidget(active.widgetId)
+        ) : active?.kind === "timeline" ? (
+          <RoomTimeline roomId={roomId} />
+        ) : (
+          <RoomOverview main={main} panelId={panelId} roomId={roomId} devTools={settings.devTools} timelineOpen={tabs.some((t) => t.kind === "timeline")} />
+        )}
       </div>
     </>
   );

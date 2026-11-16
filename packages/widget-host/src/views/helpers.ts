@@ -37,3 +37,11 @@ export const roomOf = (m: MainViewModel, roomId: RoomId): RoomSummary | undefine
 
 /** "1 widget" / "3 widgets". */
 export const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
+
+/** A short, one-line summary of an event content: the DevBackendView's event rows, the RoomTimeline's unknown event types. */
+export function previewOf(content: Record<string, unknown>): string {
+  if (typeof content.body === "string") return `“${content.body}”`;
+  if (typeof content.membership === "string") return content.membership;
+  const text = JSON.stringify(content);
+  return text.length > 80 ? `${text.slice(0, 79)}…` : text;
+}

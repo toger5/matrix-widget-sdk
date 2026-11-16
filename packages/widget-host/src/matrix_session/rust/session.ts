@@ -21,9 +21,10 @@ import {
 } from "matrix-sdk-uniffi-js";
 
 import { RustSdkBackend } from "./backend/rustSdkBackend";
-import { accountInfo, exportRoom, roomDetails } from "./roomData";
+import { accountInfo, exportRoom, loadOlderEvents, onTimelineChanged, roomDetails, timelineEvents } from "./roomData";
 import { needsVerification, onVerificationChanged, startEmojiVerification, verifyWithRecoveryKey } from "./verification";
 import { AccountStore } from "../js/accountStore";
+import { RoomTimelines } from "../roomTimelines";
 import { AVATAR_SIZE, AvatarCache } from "../../lib/avatarCache";
 import { describesWidget, WIDGET_EVENT_TYPES, type StateEvent } from "../../widgetStateEvent";
 import {
@@ -36,6 +37,7 @@ import {
   type RoomDetails,
   type RoomExport,
   type RoomSummary,
+  type RoomTimeline,
   type SessionProvider,
 } from "../../session";
 
@@ -279,6 +281,17 @@ class RustSdkSession implements LiveSession {
     if (this.suspended) throw new Error("the session is suspended");
     return this.client.getMediaThumbnail(MediaSource.fromUrl(mxcUrl), BigInt(AVATAR_SIZE), BigInt(AVATAR_SIZE));
   });
+  /** The RoomTimelines: the start of the room, a running pagination, the listeners (`./roomData`). */
+  private readonly timelines = new RoomTimelines((roomId, changed) => {
+    const room = this.client.getRoom(roomId);
+    const stop = room ? onTimelineChanged(room, () => changed()) : () => {};
+    return () => {
+      stop();
+      this.timelineOpened.delete(roomId);
+    };
+  });
+  /** The rooms whose shown RoomTimeline has subscribed to its room (`open`) since it got its first listener. */
+  private readonly timelineOpened = new Set<string>();
 
   private constructor(
     private readonly client: ClientLike,
@@ -347,6 +360,32 @@ class RustSdkSession implements LiveSession {
 
   async exportRoom(roomId: string, lastEvents: number): Promise<RoomExport> {
     return exportRoom(this.client, this.knownRoom(roomId), lastEvents, !this.suspended);
+  }
+
+  /**
+   * The events of the event cache. The first read of a shown timeline subscribes to its room
+   * (`open`), so that the sliding sync delivers the room's timeline; the reads after a change do
+   * not, else every event would take the subscription back from another room's widgets.
+   */
+  async timeline(roomId: string): Promise<RoomTimeline> {
+    let room: RoomLike;
+    if (this.timelineOpened.has(roomId)) room = this.knownRoom(roomId);
+    else {
+      room = await this.open(roomId);
+      if (this.timelines.followed(roomId)) this.timelineOpened.add(roomId);
+    }
+    return this.timelines.timeline(roomId, await timelineEvents(room));
+  }
+
+  loadOlderEvents(roomId: string, count: number): Promise<void> {
+    return this.timelines.loadOlder(roomId, async () => {
+      if (this.suspended) throw new Error("the session is suspended");
+      return loadOlderEvents(this.knownRoom(roomId), count);
+    });
+  }
+
+  onTimelineChanged(roomId: string, listener: () => void): () => void {
+    return this.timelines.listen(roomId, listener);
   }
 
   private knownRoom(roomId: string): RoomLike {
@@ -442,13 +481,20 @@ class RustSdkSession implements LiveSession {
   /**
    * The SDK only syncs the state types it needs itself. Widgets are state events too, and a widget
    * may read any state type, so the room in view is subscribed to with its full state. Resolves
-   * when that state is in the SDK's store.
+   * when that state is in the SDK's store. The RoomTimeline opens its room too: the subscription
+   * makes the sliding sync deliver the room's timeline.
    */
+  // TODO-FINDING rust-one-room-subscription - the session subscribes to exactly one room at a time: opening the widgets or the timeline of room B moves the full-state subscription away from room A, whose widgets and timeline then only get what the room list syncs (no full state, a short timeline). This predates the timeline (widgets of two rooms side by side). Options: keep it; or subscribe to every room on screen, with an SDK addition next to `subscribeToRoomWithFullState` that takes a list of rooms (the SDK's `set_room_subscriptions_with_full_state` it calls already does, and replaces the previous list).
   private async open(roomId: string): Promise<RoomLike> {
     const room = this.client.getRoom(roomId);
     if (!room) throw new Error(`unknown room ${roomId}`);
     if (this.opened?.roomId !== roomId) {
-      this.opened = { roomId, ready: this.roomListService.subscribeToRoomWithFullState(roomId, FULL_STATE_TIMEOUT_MS) };
+      const opened = { roomId, ready: this.roomListService.subscribeToRoomWithFullState(roomId, FULL_STATE_TIMEOUT_MS) };
+      this.opened = opened;
+      // A failed subscription is asked for again by the next `open` (the timeline's "Try again", a widget).
+      opened.ready.catch(() => {
+        if (this.opened === opened) this.opened = undefined;
+      });
     }
     await this.opened.ready;
     return room;

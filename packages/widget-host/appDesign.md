@@ -83,7 +83,7 @@ The RoomsArea is the main area of the logged-in view. It allows opening multiple
 
 - By default there is one panel per room.
 - Ctrl+N opens a new panel on the right with the [room picker](#room-picker) (a pick turns it into that room), Ctrl+Shift+N one showing the same room.
-- Ctrl+W closes the shown widget tab of the focused panel, and a panel without a widget tab.
+- Ctrl+W closes the shown tab of the focused panel, and a panel whose only tab is the room name.
 
 ### Room picker
 
@@ -95,31 +95,37 @@ No title. From top to bottom, a group without entries is left out:
 
 ## RoomView
 
-A room view is a tabbed container, shown inside a room panel. Its first tab is the room name, which shows the [RoomOverview](#roomoverview); every other tab holds an open widget (see [Tabs](#tabs)). This is the main way to open multiple widgets per room.
+A room view is a tabbed container, shown inside a room panel. Its first tab is the room name, which shows the [RoomOverview](#roomoverview); the other tabs hold open widgets and the [RoomTimeline](#roomtimeline) (see [Tabs](#tabs)).
 
-- A room opens on its RoomOverview and returns to it when its last widget tab is closed. Closing another tab shows its neighbour.
-- A widget opened from the RoomOverview becomes a new tab at the end.
+- A room opens on its RoomOverview and returns to it when its last tab is closed. Closing another tab shows its neighbour.
+- A widget or the timeline opened from the RoomOverview becomes a new tab at the end.
 - The + button of the tab bar selects the room name.
 - A widget runs only once per account, also when two room views show the same room.
 
 ## Tabs
 
 - **Room name**: avatar, room name and the number of widgets and users. It cannot be closed. Unselected it is plain header text; selected it looks like an active tab.
-- **WidgetTab**: contains the full widget. The tab name is the widget name, with the widget icon/avatar if available. It has a close button and, with dev tools enabled, an overflow button (three dots) that opens the [WidgetDevToolBar](#widgetdevtoolbar).
-
-A widget that is set to always on screen gets a marker on its tab: a pin icon (see [PictureInPicturePanel](#pictureinpicturepanel)).
+- **WidgetTab**: contains the full widget. The tab name is the widget name, with the widget icon/avatar if available. It has a close button and, with dev tools enabled, an overflow button (three dots) that opens the [WidgetDevToolBar](#widgetdevtoolbar). An always-on-screen widget gets a pin icon (see [PictureInPicturePanel](#pictureinpicturepanel)).
+- **Timeline**: the [RoomTimeline](#roomtimeline), at most one per room view. A message icon, "Timeline" and a close button.
 
 ## RoomOverview
 
-What the room name shows: the room in a pretty layout that follows all best practices.
-
-- Avatar, name, ID and description
+- Avatar, name, ID and description, and "Open timeline" ("Show timeline" when this room view has it).
 - Widget list, first and full width. Pressing a widget opens it. A widget that is already open is grayed out, says where it is open and offers:
   - "jump to tab"
   - "move widget here", if it is open in another room view: it closes the tab there and opens the widget in this room view.
 - Encryption status
 - Member list
 - Devtools (only if dev tools are enabled). For now just one button: copy to DevBackend.
+
+## RoomTimeline
+
+The events of the room, for debugging. No composer.
+
+- Oldest at the top, newest at the bottom. New events (also the ones widgets send) appear live; while scrolled to the bottom, it stays there.
+- One line per event, under a heading per day: time, sender (user ID), what happened in words, event type. State events are muted. Nothing is hidden: undecryptable and deleted events, reactions and edits get a line too.
+- Pressing a line shows the event's JSON.
+- At the top: "Load older events", or "Start of the room" once it is reached.
 
 ## Capability prompt
 
@@ -243,12 +249,9 @@ A simple fullscreen login. It allows skipping the login, which immediately ends 
 
 # Custom behavior
 
-- Collapsing the LeftBar while only one widget is open, and shown, renders the widget fullscreen: no rounded containers anymore.
-  - The room header stays: it is important information.
-  - The + button of the tab bar is not shown by default.
-  - The tab is not shown, as only one widget is open.
-  - no close button shown
-  - also the header spreads to the full page size (no rounded corners on the header as well, no padding for the room view)
+- Collapsing the LeftBar while the only tab open is a widget, and shown, renders the widget fullscreen: no rounded containers anymore.
+  - The room header stays (it is important information); the tab, the + button and the close button are not shown.
+  - The header spans the full page: no rounded corners, no padding for the room view.
 
 # Required visualisations
 
@@ -310,10 +313,15 @@ The mockups needed to review the full design. Each leaf is one state to draw. Do
       - Room name selected, no widget tab (name, number of widgets and users)
       - WidgetTab active / room name selected
       - Tab marked as always on screen (pin icon)
+      - Timeline tab active
       - More tabs than fit
     - RoomOverview
       - No widget open, dev tools disabled
       - A widget open in this panel ("jump to tab"), dev tools enabled (copy to DevBackend)
+    - RoomTimeline
+      - Events of every kind, one showing its JSON, "Load older events"
+      - Start of the room reached
+      - Loading / failed to load
     - WidgetTab
       - WidgetView
         - Loading / failed to load

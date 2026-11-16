@@ -4,7 +4,7 @@ import type { AccountInfo, RawEvent, RoomDetails, RoomExport, RoomMember } from 
 import { WIDGET_EVENT_TYPES } from "../../widgetStateEvent";
 
 /**
- * What the AccountView, the RoomOverview and "Copy to DevBackend" read from a matrix-rust-sdk
+ * What the AccountView, the RoomOverview, the RoomTimeline and "Copy to DevBackend" read from a matrix-rust-sdk
  * client. Functions of the client and the room, apart from the session, so they can be tested
  * with faked ones. `online: false` (the session is suspended) keeps them to what the SDK has in
  * its store, as far as the bindings say which calls make a request.
@@ -99,6 +99,29 @@ export async function roomDetails(room: RoomLike, online = true): Promise<RoomDe
     memberCount,
     members: iterator ? members : undefined,
   };
+}
+
+/**
+ * The events the SDK's event cache holds of a room, oldest first (the RoomTimeline): every kind,
+ * state events included, decrypted where it could; one it could not decrypt stays `m.room.encrypted`.
+ */
+export async function timelineEvents(room: RoomLike): Promise<RawEvent[]> {
+  return (await room.eventsRaw()).map((json) => JSON.parse(json) as RawEvent);
+}
+
+/** Load up to `count` older events into the event cache (from its store or the homeserver). Resolves whether the start of the room is reached. */
+export function loadOlderEvents(room: RoomLike, count: number): Promise<boolean> {
+  return room.paginateEventsRawBackwards(count);
+}
+
+/**
+ * Call `listener` when a sync adds events to the room. The SDK reports nothing else (a pagination
+ * resolves `loadOlderEvents`); a redaction arrives as an event, so it is seen too.
+ */
+// TODO-FINDING rust-late-decryption-not-reported - `subscribeToEventsRaw` reports the events a sync appends, not an event the event cache replaces in place (decrypted late, when its room key arrives after the event; or redacted). The RoomTimeline shows such an event as it was until the next sync of the room adds an event. Options: an SDK addition that also reports replaced events, or re-reading the timeline on a timer. Not verified against a homeserver: when the SDK decrypts late, and whether a redaction redacts the cached event before the redaction event is reported.
+export function onTimelineChanged(room: RoomLike, listener: () => void): () => void {
+  const handle = room.subscribeToEventsRaw({ onEvents: () => listener() });
+  return () => handle.cancel();
 }
 
 /** The whole current state of a room, as the homeserver answers `GET /rooms/{roomId}/state`. */

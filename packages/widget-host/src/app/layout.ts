@@ -76,6 +76,17 @@ export function putTab(ws: WorkspaceLayout, panelId: PanelId, tab: TabViewModel)
 }
 
 /**
+ * "Open timeline" / "Show timeline" of the RoomOverview: show the panel's Timeline tab, a new one at
+ * the end if it has none (at most one per panel), and focus the panel.
+ */
+export function openTimelineTab(ws: WorkspaceLayout, panelId: PanelId): WorkspaceLayout {
+  const room = roomOfPanel(ws, panelId);
+  if (!room) return ws;
+  const existing = room.tabs.find((t) => t.kind === "timeline");
+  return existing ? activateTab(ws, panelId, existing.id) : focusPanel(putTab(ws, panelId, { kind: "timeline", id: newId("tab") }), panelId);
+}
+
+/**
  * Show a tab of a panel, or with `tabId` undefined its room name (the RoomOverview), and focus the
  * panel. An unknown tab changes nothing but the focus.
  */
@@ -191,11 +202,18 @@ interface SeenIds {
   widgets: Set<string>;
 }
 
-function upgradeTab(value: unknown, roomId: string, seen: SeenIds): TabViewModel | undefined {
-  // Only widget tabs are left. Older layouts also stored "native" (the room overview, now the room name) and "new" tabs.
-  if (!isObject(value) || value.kind !== "widget" || typeof value.id !== "string" || typeof value.widgetId !== "string") return undefined;
+/** `timeline`: the panel has a Timeline tab already (at most one per panel). */
+function upgradeTab(value: unknown, roomId: string, seen: SeenIds, timeline: boolean): TabViewModel | undefined {
+  if (!isObject(value) || typeof value.id !== "string" || seen.tabs.has(value.id)) return undefined;
+  if (value.kind === "timeline") {
+    if (timeline) return undefined;
+    seen.tabs.add(value.id);
+    return { kind: "timeline", id: value.id };
+  }
+  // Older layouts also stored "native" (the room overview, now the room name) and "new" tabs.
+  if (value.kind !== "widget" || typeof value.widgetId !== "string") return undefined;
   // A widget of another room, or a second tab of a widget, would break `widgetSlot` (one place per widget).
-  if (!value.widgetId.startsWith(`${roomId}|`) || seen.tabs.has(value.id) || seen.widgets.has(value.widgetId)) return undefined;
+  if (!value.widgetId.startsWith(`${roomId}|`) || seen.widgets.has(value.widgetId)) return undefined;
   seen.tabs.add(value.id);
   seen.widgets.add(value.widgetId);
   return { kind: "widget", id: value.id, widgetId: value.widgetId };
@@ -213,7 +231,11 @@ function upgradePanel(value: unknown, seen: SeenIds): RoomPanelViewModel | undef
   if (content.kind !== "room" || typeof content.roomId !== "string") return undefined;
   seen.panels.add(value.id);
   const roomId = content.roomId;
-  const tabs = (Array.isArray(content.tabs) ? content.tabs : []).flatMap((t) => upgradeTab(t, roomId, seen) ?? []);
+  const tabs: TabViewModel[] = [];
+  for (const t of Array.isArray(content.tabs) ? content.tabs : []) {
+    const tab = upgradeTab(t, roomId, seen, tabs.some((other) => other.kind === "timeline"));
+    if (tab) tabs.push(tab);
+  }
   // A room without a shown tab shows its RoomOverview: so does one whose active tab was dropped.
   const activeTabId = tabs.find((t) => t.id === content.activeTabId)?.id;
   return { id: value.id, widthShare, content: { kind: "room", roomId: content.roomId, tabs, activeTabId } };
@@ -232,13 +254,13 @@ function upgradeDevTools(value: Record<string, unknown>): WidgetDevToolsLayout {
 }
 
 /**
- * A stored layout (`localStorage`, any version) as the current `WorkspaceLayout`: tabs other than
- * widget tabs are dropped (a room whose active tab was dropped shows its RoomOverview), and what
- * is malformed (also a repeated id, a widget tab in the wrong room) is left out or replaced by its
- * default, so a broken entry never breaks the app. It rebuilds the layout field by field: a new
- * field of `WorkspaceLayout` (or of what it contains) has to be read here too, else it is lost on
- * reload. A widget whose state event is gone keeps its tab here; the controller's `reconcile`
- * decides about it once the rooms are known.
+ * A stored layout (`localStorage`, any version) as the current `WorkspaceLayout`: tabs of removed
+ * kinds and a second Timeline tab of a panel are dropped (a room whose active tab was dropped
+ * shows its RoomOverview), and what is malformed (also a repeated id, a widget tab in the wrong
+ * room) is left out or replaced by its default, so a broken entry never breaks the app. It
+ * rebuilds the layout field by field: a new field of `WorkspaceLayout` (or of what it contains) has
+ * to be read here too, else it is lost on reload. A widget whose state event is gone keeps its tab
+ * here; the controller's `reconcile` decides about it once the rooms are known.
  */
 export function upgradeWorkspace(stored: unknown): WorkspaceLayout {
   const empty = emptyWorkspace();

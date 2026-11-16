@@ -4,13 +4,13 @@
  * the `<slot>`s of the views pick them up. See "Moving widgets without a reload" in
  * `implementationPlan.md`.
  */
-import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 
 import { widgetTab, type Loadable, type MockedRoomData, type WidgetDevToolsData, type WidgetInstanceViewModel } from "../appViewModel";
-import type { RoomDetails } from "../session";
+import type { RoomDetails, RoomTimeline } from "../session";
 import { AppShell } from "../views/app/AppShell";
-import { EMPTY_DEV_TOOLS_DATA, EMPTY_MOCKED_ROOM_DATA, ViewEnvContext, type ViewEnv } from "../views/env";
+import { EMPTY_DEV_TOOLS_DATA, EMPTY_MOCKED_ROOM_DATA, ViewEnvContext, type RoomTimelineData, type ViewEnv } from "../views/env";
 import { widgetSlotName } from "../views/ui/WidgetSlot";
 import type { AppController } from "./controller";
 
@@ -62,6 +62,43 @@ function viewEnv(controller: AppController, narrow: boolean): ViewEnv {
         };
       }, [session, roomId]);
       return details;
+    },
+    useRoomTimeline: (roomId): RoomTimelineData => {
+      const session = controller.activeSession();
+      const [timeline, setTimeline] = useState<Loadable<RoomTimeline>>({ status: "loading" });
+      const [attempt, setAttempt] = useState(0);
+      useEffect(() => {
+        if (!session) return;
+        let cancelled = false;
+        // One read at a time; a change during a read leads to one more read after it.
+        let running = false;
+        let again = false;
+        const load = async () => {
+          if (running) return void (again = true);
+          running = true;
+          do {
+            again = false;
+            try {
+              const value = await session.timeline(roomId);
+              if (!cancelled) setTimeline({ status: "ready", value });
+            } catch (e) {
+              if (!cancelled) setTimeline({ status: "error", error: e instanceof Error ? e.message : String(e) });
+            }
+          } while (again && !cancelled);
+          running = false;
+        };
+        const stop = session.onTimelineChanged(roomId, () => void load());
+        void load();
+        return () => {
+          cancelled = true;
+          stop();
+        };
+      }, [session, roomId, attempt]);
+      const retry = useCallback(() => {
+        setTimeline({ status: "loading" });
+        setAttempt((n) => n + 1);
+      }, []);
+      return useMemo(() => ({ timeline, retry }), [timeline, retry]);
     },
     avatar: async (mxcUrl) => controller.activeSession()?.avatar(mxcUrl),
   };

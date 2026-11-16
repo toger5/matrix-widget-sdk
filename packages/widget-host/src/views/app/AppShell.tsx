@@ -6,7 +6,7 @@ import {
   activeWorkspace,
   devBackendActive,
   fullscreenWidget,
-  hasWidgetTab,
+  hasTab,
   pipWidgetIds,
   widgetTab,
   type AppViewModel,
@@ -117,7 +117,7 @@ function MainScreen({ vm, main }: { vm: AppViewModel; main: MainViewModel }) {
 
   // Keyboard shortcuts (appDesign.md, Details > Keyboard). `code`, not `key`: Alt changes `key` on macOS.
   const activeTabId = focusedPanel?.content.kind === "room" ? focusedPanel.content.activeTabId : undefined;
-  const altWClosesPanel = !!focusedPanel && !hasWidgetTab(focusedPanel);
+  const altWClosesPanel = !!focusedPanel && !hasTab(focusedPanel);
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.defaultPrevented) return;

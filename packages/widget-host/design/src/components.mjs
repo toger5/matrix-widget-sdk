@@ -370,11 +370,13 @@ export function devBackendView({ state = "state", tool = null, toolHeight } = {}
 // Tabs and the room panel
 
 /**
- * A widget tab. t: { widget: key, active?, pinned?, devOpen? }
- * devTools adds the overflow (⋯) button. altW: the panel has a tab, so Alt+W closes the shown tab
- * and its × names the shortcut (else Alt+W closes the panel).
+ * A tab after the room name. t: { kind: "widget", widget: key, active?, pinned?, devOpen? } or
+ * { kind: "timeline", active? }. devTools adds the overflow (⋯) button to widget tabs. altW: the
+ * panel has a tab, so Alt+W closes the shown tab and its × names the shortcut (else Alt+W closes the
+ * panel). room: the room key, for the title of the timeline tab.
  */
-export function tab(t, devTools = false, altW = true) {
+export function tab(t, devTools = false, altW = true, room = "design") {
+  if (t.kind === "timeline") return timelineTab(t, altW, room);
   const cls = `tab widget ${t.active ? "active" : ""} ${t.pinned ? "pinned" : ""}`;
   const name = WIDGETS[t.widget].name;
   const main = `<button class="tab-main" role="tab" aria-selected="${!!t.active}" tabindex="${t.active ? 0 : -1}" title="${name}${t.pinned ? " · always on screen" : ""}">${wico(t.widget, 16)}<span class="tab-label">${name}</span>${t.pinned ? `<span class="tab-pin">${icon("pin", 13)}</span><span class="vh">, always on screen</span>` : ""}</button>`;
@@ -383,6 +385,16 @@ export function tab(t, devTools = false, altW = true) {
   const close = t.active ? `<button class="tab-btn" title="Close ${name}${altW ? " (Alt+W)" : ""}" aria-label="Close ${name}">${icon("x", 12)}</button>` : "";
   return `<div class="${cls}">${main}${dev}${close}</div>`;
 }
+
+/**
+ * The RoomTimeline's tab: a host tab, so a message icon instead of an avatar, and no ⋯ (dev tools)
+ * and no pin. At most one per room panel.
+ */
+const timelineTab = (t, altW, room) => {
+  const main = `<button class="tab-main" role="tab" aria-selected="${!!t.active}" tabindex="${t.active ? 0 : -1}" title="Timeline of ${ROOMS[room].name}">${icon("message", 15, "tab-ico")}<span class="tab-label">Timeline</span></button>`;
+  const close = t.active ? `<button class="tab-btn" title="Close the timeline${altW ? " (Alt+W)" : ""}" aria-label="Close the timeline">${icon("x", 12)}</button>` : "";
+  return `<div class="tab timeline ${t.active ? "active" : ""}">${main}${close}</div>`;
+};
 
 /**
  * The room name: the first tab of a room panel. Selected (no widget tab is shown), it looks like an
@@ -408,7 +420,7 @@ export function roomPanel(o) {
   const roomSelected = !tabs.some((t) => t.active);
   // Alt+W closes the shown tab while the panel has a tab, else the panel.
   const altWClosesTab = tabs.length > 0;
-  const widgetTabs = showTabs ? `<span class="rp-div"></span><div class="tabs ${o.overflow ? "overflowing" : ""}">${tabs.map((t) => tab(t, o.devTools, altWClosesTab)).join("")}</div>` : "";
+  const widgetTabs = showTabs ? `<span class="rp-div"></span><div class="tabs ${o.overflow ? "overflowing" : ""}">${tabs.map((t) => tab(t, o.devTools, altWClosesTab, o.room)).join("")}</div>` : "";
   const tabList = o.room ? `<div class="rp-tabs" role="tablist" aria-label="Tabs of ${ROOMS[o.room].name}">${roomTab(o.room, roomSelected)}${widgetTabs}</div>` : "";
   const close = `<button class="ibtn " title="Close panel${altWClosesTab ? "" : " (Alt+W)"}" aria-label="Close panel">${icon("x", 16)}</button>`;
   // The + selects the room name, whose RoomOverview opens widgets.
@@ -418,10 +430,13 @@ export function roomPanel(o) {
   return `<section class="roompanel ${o.cls ?? ""}" style="${o.style ?? ""}"><header class="rp-head">${head}</header><div class="rp-body">${o.body ?? ""}</div>${o.menu ?? ""}</section>`;
 }
 
-/** The menu of the "all tabs" button: the widget tabs (the room name never scrolls away). */
+/** The menu of the "all tabs" button: the tabs after the room name (it never scrolls away). */
 export const tabMenu = (tabs, style = "") =>
   `<div class="dropdown tab-menu" role="menu" style="${style}">${tabs
-    .map((t) => `<div class="dd-row ${t.active ? "on" : ""}" role="menuitem">${wico(t.widget, 18)}<span><b>${WIDGETS[t.widget].name}</b></span>${t.pinned ? icon("pin", 12) : ""}${t.active ? icon("check", 14, "end") : ""}</div>`)
+    .map((t) => {
+      const [ico, name] = t.kind === "timeline" ? [icon("message", 16, "tab-ico"), "Timeline"] : [wico(t.widget, 18), WIDGETS[t.widget].name];
+      return `<div class="dd-row ${t.active ? "on" : ""}" role="menuitem">${ico}<span><b>${name}</b></span>${t.pinned ? icon("pin", 12) : ""}${t.active ? icon("check", 14, "end") : ""}</div>`;
+    })
     .join("")}</div>`;
 
 // --- The room picker: the body of an empty room panel, and the Room list of the SidePanel ---
@@ -521,16 +536,19 @@ const overviewWidget = (k, where) => {
 };
 
 /**
- * The RoomOverview: what the room name tab shows, and where a room opens. The widget list comes
+ * The RoomOverview: what the room name tab shows, and where a room opens. The header offers the
+ * RoomTimeline ("Show timeline" when the panel has its tab: `timeline`). The widget list comes
  * first, then encryption, members and (dev tools enabled) the dev card.
  * opened: { widgetKey: "here" | "other" }, see `overviewWidget`.
  */
-export function overviewBody({ room = "design", devTools = false, opened = {} } = {}) {
+export function overviewBody({ room = "design", devTools = false, opened = {}, timeline = false } = {}) {
   const r = ROOMS[room];
   const widgets = ROOM_WIDGETS[room] ?? ROOM_WIDGETS.design;
   const members = ROOM_MEMBERS[room] ?? MEMBERS;
   return `<div class="ov"><div class="ov-in">
-    <header class="ov-hero">${roomAv(room, 72)}<div><h1>${r.name}</h1><span class="mono muted">${r.id}</span>${r.topic ? `<p>${r.topic}</p>` : ""}</div></header>
+    <header class="ov-hero">${roomAv(room, 72)}<div><h1>${r.name}</h1><span class="mono muted">${r.id}</span>${r.topic ? `<p>${r.topic}</p>` : ""}</div>${
+      timeline ? btn("Show timeline", { ico: "goToTab", title: "Show the timeline tab" }) : btn("Open timeline", { ico: "message", title: "Open the timeline of this room in a new tab" })
+    }</header>
     <div class="ov-grid">
       <section class="card span"><h3>${icon("grid", 15)}Widgets <em>${widgets.length}</em></h3><div class="ov-widgets">${widgets.map((k) => overviewWidget(k, opened[k])).join("") || `<p class="muted">This room has no widgets.</p>`}</div></section>
       <section class="card span"><h3>${icon("shield", 15)}Encryption</h3><p class="ok-text"><b>End-to-end encrypted</b></p><p class="muted">Messages and widget events in this room are encrypted. This device is verified.</p></section>
@@ -541,6 +559,85 @@ export function overviewBody({ room = "design", devTools = false, opened = {} } 
           : ""
       }
     </div></div></div>`;
+}
+
+/**
+ * One event of the RoomTimeline: time, sender, what happened in words, the event type. o: { ico,
+ * state (muted), mono (a content preview), open: the event JSON shown below the line }.
+ */
+const tlEvent = ([time, sender, type, text, o = {}]) =>
+  `<li class="tl-ev ${o.state ? "state" : ""} ${o.open ? "open" : ""}"><button class="tl-h" aria-expanded="${!!o.open}"><span class="tl-time">${time}</span><span class="tl-s">${sender}</span><span class="tl-p">${o.ico ? icon(o.ico, 13) : ""}<span class="${o.mono ? "mono" : ""}">${esc(text)}</span></span><span class="mono tl-t">${type}</span></button>${o.open ? `<pre class="code">${json(o.open)}</pre>` : ""}</li>`;
+
+/**
+ * The events of one day: a heading and the list it names. The section has no name, so a day is not
+ * a landmark. The ids are fixed here; the app makes them unique.
+ */
+const tlDay = (id, label, events) => `<section class="tl-day"><h3 class="tl-day-h" id="${id}">${label}</h3><ul class="tl-list" aria-labelledby="${id}">${events.map(tlEvent).join("")}</ul></section>`;
+
+const TL_DESIGN = [
+  [
+    "Yesterday",
+    [
+      ["17:40:02", "@mira:example.org", "m.room.member", "joined the room", { ico: "users", state: true }],
+      ["17:41:15", "@ada:example.org", "m.room.topic", `changed the topic to “${ROOMS.design.topic}”`, { ico: "edit", state: true }],
+      ["17:43:50", "@ada:example.org", "im.vector.modular.widgets", `added the widget ${WIDGETS.call.name}`, { ico: "grid", state: true }],
+    ],
+  ],
+  [
+    "Today",
+    [
+      ["12:01:08", "@jonas:example.org", "m.room.message", "Morning! The screenshots are on the whiteboard."],
+      ["12:01:31", "@mira:example.org", "m.reaction", "reacted 👍"],
+      [
+        "12:02:47",
+        "@ada:example.org",
+        "m.room.message",
+        "Starting the call now",
+        { open: { event_id: "$Wq3bH0kTzNcEw7aLrY2mPq", type: "m.room.message", sender: "@ada:example.org", origin_server_ts: 1763294567000, content: { msgtype: "m.text", body: "Starting the call now" } } },
+      ],
+      ["12:02:49", "@ada:example.org", "org.matrix.msc3401.call.member", "joined the call · device KJQWPLXBTA", { ico: "phone", state: true }],
+      ["12:03:02", "@sam:matrix.example", "m.room.encrypted", "Unable to decrypt", { ico: "lock" }],
+      ["12:03:40", "@jonas:example.org", "m.room.message", "edited: The screenshots are on the whiteboard, page 2.", { ico: "edit" }],
+      ["12:04:05", "@priya:example.org", "m.room.message", "Deleted message", { ico: "trash" }],
+      ["12:04:12", "@tomas:corp.example", "m.sticker", "sticker: party parrot", { ico: "image" }],
+      ["12:04:33", "@ada:example.org", "org.matrix.msc3381.poll.start", '{"org.matrix.msc3381.poll.start":{"question":{"body":"Ship the new tab bar?"},"kin…', { mono: true }],
+    ],
+  ],
+];
+
+const TL_LAB = [
+  [
+    "Today",
+    [
+      ["09:12:01", "@alice:dev.local", "m.room.create", "created the room", { ico: "hash", state: true }],
+      ["09:12:01", "@alice:dev.local", "m.room.member", "joined the room", { ico: "users", state: true }],
+      ["09:12:01", "@alice:dev.local", "m.room.power_levels", "changed the power levels", { ico: "shield", state: true }],
+      ["09:12:02", "@alice:dev.local", "m.room.name", `named the room “${ROOMS.lab.name}”`, { ico: "edit", state: true }],
+      ["09:12:02", "@alice:dev.local", "m.widget", `added the widget ${WIDGETS.call.name}`, { ico: "grid", state: true }],
+      ["09:12:02", "@alice:dev.local", "m.widget", `added the widget ${WIDGETS.notes.name}`, { ico: "grid", state: true }],
+      ["09:14:30", "@bob:dev.local", "m.room.member", "joined the room", { ico: "users", state: true }],
+      ["09:15:03", "@bob:dev.local", "m.room.message", "Can you hear me?"],
+      ["09:15:10", "@alice:dev.local", "org.matrix.msc4143.rtc.member", "joined the call · device ALICEDEV", { ico: "phone" }],
+      ["09:16:44", "@alice:dev.local", "org.example.ping", '{"seq":1}', { mono: true }],
+    ],
+  ],
+];
+
+/**
+ * The RoomTimeline: what the Timeline tab shows. Oldest at the top, newest at the bottom (it is
+ * scrolled to the bottom and stays there while new events arrive). A heading per day; state events
+ * are muted; pressing a line shows its JSON.
+ * state: "events" (Design crit: "Load older events" at the top, one event open) | "start" (Widget
+ * lab: the start of the room is reached) | "loading" | "error".
+ */
+export function timelineBody({ state = "events" } = {}) {
+  if (state === "loading") return `<div class="tl"><div class="empty tl-state" role="status"><span class="spinner"></span><b>Loading the timeline…</b></div></div>`;
+  if (state === "error")
+    return `<div class="tl"><div class="empty tl-state" role="alert">${icon("alert", 28, "danger")}<b>The timeline could not be loaded</b><p>The homeserver did not answer (example.org, timeout after 30 s).</p>${btn("Try again", { kind: "primary", ico: "refresh" })}</div></div>`;
+  const start = state === "start";
+  const top = start ? `<p class="tl-top tl-start">Start of the room</p>` : `<div class="tl-top">${btn("Load older events", { sm: true })}</div>`;
+  const days = (start ? TL_LAB : TL_DESIGN).map(([day, events], i) => tlDay(`tl-day-${i}`, day, events)).join("");
+  return `<div class="tl"><div class="tl-in">${top}${days}</div></div>`;
 }
 
 // ---------------------------------------------------------------------------------------------

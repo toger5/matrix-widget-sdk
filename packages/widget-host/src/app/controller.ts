@@ -10,6 +10,7 @@ import {
   activeWorkspace,
   approveBlockedUntil,
   loggableIntent,
+  OLDER_EVENTS_PER_LOAD,
   widgetInstanceId,
   type AccountDataViewModel,
   type AccountId,
@@ -47,6 +48,7 @@ import {
   focusPanel,
   moveTab,
   newId,
+  openTimelineTab,
   panelOf,
   putTab,
   removePanel,
@@ -107,10 +109,11 @@ export interface HostSeed extends DevBackendSeed {
   settings?: Partial<SettingsViewModel>;
   /**
    * Room panels to open, left to right. `widgets` are `widgetKey`s (`m.widget/<state key>`) or state
-   * keys; each gets a tab, and the last one is shown. `active` shows another one of them, `overview`
-   * the room name (the RoomOverview); a panel without widgets shows the RoomOverview anyway.
+   * keys; each gets a tab, and the last one is shown. `timeline` adds the Timeline tab after them,
+   * shown. `active` shows one of the widgets instead, `overview` the room name (the RoomOverview); a
+   * panel without tabs shows the RoomOverview anyway.
    */
-  open?: { room: RoomId; widgets?: string[]; active?: string; overview?: boolean }[];
+  open?: { room: RoomId; widgets?: string[]; timeline?: boolean; active?: string; overview?: boolean }[];
   /** The SidePanel view; `null` closes it. Default: the DevBackendView, like after activating the DevBackend. */
   sidePanel?: "devBackend" | "settings" | "account" | "rooms" | null;
   /** WidgetHostBehavior of the DevBackend (all mocked rooms). "Fail sends" is the content field `failSends`. */
@@ -460,6 +463,7 @@ export class AppController {
         continue;
       }
       for (const tab of tabs) {
+        if (tab.kind !== "widget") continue;
         const key = tab.widgetId.slice(roomId.length + 1);
         if (m.widgets[tab.widgetId]) continue;
         if (known(roomId, key)) this.startWidget(roomId, key);
@@ -630,13 +634,14 @@ export class AppController {
   }
 
   /**
-   * Close a tab. Its widget stops, unless it is always on screen: then it keeps running in the PiP
-   * panel. The neighbour is shown, and after the last tab the room name (`removeTab`).
+   * Close a tab. A widget tab's widget stops, unless it is always on screen: then it keeps running
+   * in the PiP panel. The neighbour is shown, and after the last tab the room name (`removeTab`).
    */
   private closeTab(panelId: string, tabId: string): void {
     const tab = this.workspace && roomOfPanel(this.workspace, panelId)?.tabs.find((t) => t.id === tabId);
     if (!tab) return;
     this.setWorkspace((ws) => removeTab(ws, panelId, tabId));
+    if (tab.kind !== "widget") return;
     // TODO-FINDING close-tab-of-always-on-screen-widget - closing the tab (or the room panel) of an always-on-screen widget keeps it running in the PiP panel; only the PiP close button stops it. This is the reading of designFeedback.md ("How I read four points", 4) and is not in appDesign.md. The alternative: closing the tab stops the widget like any other.
     if (!this.main?.widgets[tab.widgetId]?.alwaysOnScreen) this.stopWidget(tab.widgetId, false);
   }
@@ -894,6 +899,7 @@ export class AppController {
       });
       this.addRecent(room.id);
       for (const name of open.widgets ?? []) this.openWidget(panelId, keyOf(name));
+      if (open.timeline) this.dispatch({ type: "tab/openTimeline", panelId });
       if (open.overview) this.dispatch({ type: "tab/showOverview", panelId });
       if (open.active) {
         const tab = findWidgetTab(this.workspace!, widgetInstanceId(room.id, keyOf(open.active)));
@@ -1035,6 +1041,8 @@ export class AppController {
           return focusPanel(putTab(without, intent.panelId, { kind: "widget", id: newId("tab"), widgetId: intent.widgetId }), intent.panelId);
         });
       }
+      case "tab/openTimeline":
+        return this.setWorkspace((ws) => openTimelineTab(ws, intent.panelId));
       case "tab/activate":
         return this.setWorkspace((ws) => activateTab(ws, intent.panelId, intent.tabId));
       case "tab/move":
@@ -1136,6 +1144,10 @@ export class AppController {
           }
         })();
       }
+      case "room/loadOlderEvents":
+        return void this.activeSession()
+          ?.loadOlderEvents(intent.roomId, OLDER_EVENTS_PER_LOAD)
+          .catch((e: unknown) => this.toast(`Loading older events failed: ${errorText(e)}`));
       case "mock/selectRoom":
         return this.setDevVm((d) => ({ ...d, selectedRoomId: intent.roomId }));
       case "mock/addRoom": {

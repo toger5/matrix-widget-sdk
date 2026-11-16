@@ -28,6 +28,7 @@ change depends on real SDK behaviour; the open questions are in `implementation_
 | `src/matrix_session/js/backend/` | `JsSdkBackend`, `events.ts`, `errors.ts` |
 | `src/matrix_session/js/accountStore.ts` | `AccountStore`: one `localStorage` entry per login, legacy migration; SDK free, used by both (finding `account-store-location`) |
 | `src/matrix_session/verificationCancel.ts` | the reason text of a verification cancel code; SDK free, used by both |
+| `src/matrix_session/roomTimelines.ts` | `RoomTimelines`: the start of the room, a running pagination and the listeners of each room's RoomTimeline; SDK free, used by both |
 | `src/matrix_session/memory/devBackend.ts` | the DevBackend: the same `LiveSession` without a homeserver (its device is always verified) |
 | `src/app/runtime/deviceVerification.ts` | `AccountVerification`: `verified` and the verification flows of one account, for the controller |
 | `oidc-callback.html` | the OAuth redirect target, opened in the login popup |

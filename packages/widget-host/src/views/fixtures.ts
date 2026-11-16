@@ -20,7 +20,7 @@ import {
   type WidgetInstanceViewModel,
   type WorkspaceLayout,
 } from "../appViewModel";
-import type { RoomDetails, RoomSummary, VerificationEmoji } from "../session";
+import type { RawEvent, RoomDetails, RoomSummary, RoomTimeline, VerificationEmoji } from "../session";
 import type { StateEvent } from "../widgetStateEvent";
 
 const widgetEvent = (key: string, name: string, host: string): StateEvent => ({
@@ -110,6 +110,8 @@ export function widgetVm(room: RoomKey, widget: WidgetName, o: Partial<WidgetIns
 }
 
 export const widgetTab = (room: RoomKey, widget: WidgetName): TabViewModel => ({ kind: "widget", id: `tab-${room}-${widget}`, widgetId: widgetInstanceId(ROOMS[room].id, wk(widget)) });
+/** The Timeline tab of a fixture room's panel. */
+export const timelineTab = (room: RoomKey): TabViewModel => ({ kind: "timeline", id: `tab-${room}-timeline` });
 /** A room panel showing the tab `activeTabId` (default: the first tab); `null`: the room name is selected, the body is the RoomOverview. */
 export function roomPanel(room: RoomKey, tabs: TabViewModel[], activeTabId: TabId | null = tabs[0]?.id ?? null, id = `panel-${room}`): RoomPanelViewModel {
   return { id, widthShare: 1, content: { kind: "room", roomId: ROOMS[room].id, tabs, activeTabId: activeTabId ?? undefined } };
@@ -252,5 +254,55 @@ export const MOCKED_ROOM_DATA: MockedRoomData = {
     { mxcUri: "mxc://example.org/demo-landscape", mimetype: "image/png", bytes: 48_211, name: "landscape.png" },
     { mxcUri: "mxc://example.org/demo-notes", mimetype: "text/plain", bytes: 312, name: "notes.txt" },
     { mxcUri: "mxc://dev.local/upload-1", mimetype: "image/jpeg", bytes: 120_944 },
+  ],
+};
+
+/** A time today (or yesterday, `daysAgo` 1) at the local time `hh:mm:ss`, as `origin_server_ts`. */
+export function localTime(time: string, daysAgo = 0): number {
+  const [h, m, sec] = time.split(":").map(Number);
+  const now = new Date();
+  return new Date(now.getFullYear(), now.getMonth(), now.getDate() - daysAgo, h, m, sec).getTime();
+}
+
+let eventCounter = 0;
+/** A raw event of a fixture timeline, at the local `time` (`hh:mm:ss`) `daysAgo` days ago; `more` adds a `state_key`, `unsigned` or a fixed `event_id`. */
+export function rawEvent(time: string, daysAgo: number, sender: string, type: string, content: Record<string, unknown>, more: Partial<RawEvent> = {}): RawEvent {
+  return { event_id: `$fixture${(eventCounter++).toString(36)}`, type, sender, origin_server_ts: localTime(time, daysAgo), content, ...more };
+}
+
+/**
+ * The RoomTimeline of "Design crit" (leaf timeline/events): an event of every kind the timeline
+ * describes, yesterday and today. The fourth event of today is the one the leaf shows open.
+ */
+export const ROOM_TIMELINE: RoomTimeline = {
+  atStart: false,
+  loadingOlder: false,
+  events: [
+    rawEvent("17:40:02", 1, "@mira:example.org", "m.room.member", { membership: "join", displayname: "Mira Köhler" }, { state_key: "@mira:example.org" }),
+    rawEvent("17:41:15", 1, "@ada:example.org", "m.room.topic", { topic: ROOM_DETAILS.topic }, { state_key: "" }),
+    rawEvent("17:43:50", 1, "@ada:example.org", "im.vector.modular.widgets", { type: "m.custom", name: "Element Call", url: "https://call.example.org/room" }, { state_key: "call" }),
+    rawEvent("12:01:08", 0, "@jonas:example.org", "m.room.message", { msgtype: "m.text", body: "Morning! The screenshots are on the whiteboard." }, { event_id: "$Mk2pXr8sLw0bQe4tNa1cVu" }),
+    rawEvent("12:01:31", 0, "@mira:example.org", "m.reaction", { "m.relates_to": { rel_type: "m.annotation", event_id: "$Mk2pXr8sLw0bQe4tNa1cVu", key: "👍" } }),
+    rawEvent("12:02:47", 0, "@ada:example.org", "m.room.message", { msgtype: "m.text", body: "Starting the call now" }, { event_id: "$Wq3bH0kTzNcEw7aLrY2mPq" }),
+    rawEvent(
+      "12:02:49",
+      0,
+      "@ada:example.org",
+      "org.matrix.msc3401.call.member",
+      { application: "m.call", call_id: "", scope: "m.room", device_id: "KJQWPLXBTA", focus_active: { type: "livekit", focus_selection: "oldest_membership" }, foci_preferred: [] },
+      { state_key: "_@ada:example.org_KJQWPLXBTA" },
+    ),
+    rawEvent("12:03:02", 0, "@sam:matrix.example", "m.room.encrypted", { algorithm: "m.megolm.v1.aes-sha2", ciphertext: "AwgAEoAB…", device_id: "SAMPHONE", sender_key: "Fw2l…", session_id: "Xb7o…" }),
+    rawEvent("12:03:40", 0, "@jonas:example.org", "m.room.message", {
+      msgtype: "m.text",
+      body: "* The screenshots are on the whiteboard, page 2.",
+      "m.new_content": { msgtype: "m.text", body: "The screenshots are on the whiteboard, page 2." },
+      "m.relates_to": { rel_type: "m.replace", event_id: "$Mk2pXr8sLw0bQe4tNa1cVu" },
+    }),
+    rawEvent("12:04:05", 0, "@priya:example.org", "m.room.message", {}, { unsigned: { redacted_because: { type: "m.room.redaction", sender: "@priya:example.org", content: {} } } }),
+    rawEvent("12:04:12", 0, "@tomas:corp.example", "m.sticker", { body: "party parrot", url: "mxc://corp.example/parrot", info: { mimetype: "image/gif", w: 128, h: 128 } }),
+    rawEvent("12:04:33", 0, "@ada:example.org", "org.matrix.msc3381.poll.start", {
+      "org.matrix.msc3381.poll.start": { question: { body: "Ship the new tab bar?" }, kind: "org.matrix.msc3381.poll.disclosed", max_selections: 1, answers: [{ id: "yes", "org.matrix.msc1767.text": "Yes" }] },
+    }),
   ],
 };

@@ -22,7 +22,7 @@ The app is built as MVVM from the design in [`appDesign.md`](appDesign.md) (mock
 - `src/app/` is the controller and the runtime. `controller.ts` holds the view model in a store, turns intents into changes and effects, and feeds runtime events back. `layout.ts` has the pure panel/tab transitions. `runtime/widgetRuntime.ts` is one running widget: its `WidgetHostDriver`, the message pump to its iframe, the capability and OpenID answers and the data of its dev tools. `AppRoot.tsx` connects both to the views and renders the widget iframes. `testHook.ts` is `window.widgetHost`.
 - `src/views/` holds the views, one folder per area (`app`, `sidepanel`, `devbackend`, `rooms`, `widget`, `pip`). A view renders a slice of the view model and sends intents; it imports no session, no bindings and nothing from `src/app`. Rules: [`src/views/README.md`](src/views/README.md). Each view has stories (`npm run storybook`).
 - `src/styles/app.css` is the stylesheet (it started as a copy of `design/mock.css`).
-- `src/session.ts` is what the app needs from a Matrix client, as interfaces (login, several stored logins, room list, the widget state events of a room, a backend per room, account and room details, suspend/resume, device verification). Its `sessions` export picks the SDK and loads it lazily.
+- `src/session.ts` is what the app needs from a Matrix client, as interfaces (login, several stored logins, room list, the widget state events of a room, a backend per room, account and room details, a room's timeline, suspend/resume, device verification). Its `sessions` export picks the SDK and loads it lazily.
 - `src/matrix_session/js/` implements it on matrix-js-sdk: OAuth 2.0 (dynamic client registration, PKCE, in a popup that returns through `oidc-callback.html`) or a password, `/sync` v2, end-to-end encryption, device verification (emoji or recovery key). It is the only folder that imports matrix-js-sdk.
 - `src/matrix_session/rust/` is the same on matrix-rust-sdk (`../matrix-sdk-uniffi-js`, with native sliding sync). A build has one SDK or the other, see "Choosing the Matrix SDK" below. This implementation has not run against a homeserver yet. The SDK API it adds is in [`../matrix-sdk-uniffi-js/README.md`](../matrix-sdk-uniffi-js/README.md) ("API added to the SDK"), its open questions in [`implementation_findings.md`](implementation_findings.md) ("Matrix sessions").
 - `src/matrix_session/memory/devBackend.ts` is the DevBackend: the same `LiveSession` on the crate's `InMemoryBackend`, with several mocked rooms, an editing API for the DevBackendView and a JSON seed format (`seed.ts`).
@@ -32,7 +32,9 @@ The app is built as MVVM from the design in [`appDesign.md`](appDesign.md) (mock
 ## Logged in
 
 Enter a homeserver, log in, pick a room (in an empty room panel or the Room list of the left bar,
-under the recently opened widgets and rooms), open one of its widgets. Widgets come from `m.widget`,
+under the recently opened widgets and rooms), open one of its widgets. **Open timeline** in the
+room's overview adds a Timeline tab: every event of the room, one line each (newest at the bottom,
+live), its JSON on a press; the session's older events are loaded with **Load older events**. Widgets come from `m.widget`,
 `org.matrix.msc4411.widget` and `im.vector.modular.widgets` state; the list follows the room
 state. If the account has cross-signing and this device is not verified, the AccountView offers
 to verify it ("Verify this device"): by comparing emoji with another device of the account (the
@@ -113,6 +115,8 @@ hands it to the driver of each widget of that room like any other `MatrixBackend
     (`mxc://example.org/demo-landscape`, `…/demo-tiles`, `…/demo-notes`). Upload more; files a
     widget uploads appear here too. Every file has a button to copy its `mxc://` URI.
   Approving capabilities also pushes the current permitted state (`update_state`) at once.
+- **Timeline tab** (**Open timeline** in the room overview): every event of the mocked room, the
+  ones widgets send included, as they arrive.
 - **Dev tools of a widget** (the ⋯ button of its tab; enable dev tools in the settings), docked
   top, bottom, left or right: **Messages** (every envelope in both directions, expandable),
   **Stats** (counters, and a bar graph of the characters sent per 5 s: both directions, to or from
@@ -213,7 +217,7 @@ Open the host with the URL parameters above (or `?seed=<url of a seed json>`), t
 
 | call | gives |
 |---|---|
-| `populate(seed)` | Resets the app to the DevBackend with exactly this content and screen (`HostSeed` in `src/app/controller.ts`, examples in `e2e/seeds/`) |
+| `populate(seed)` | Resets the app to the DevBackend with exactly this content and screen (`HostSeed` in `src/app/controller.ts`, examples in `e2e/seeds/`); `open: [{ room, widgets, timeline, active, overview }]` are the room panels and their tabs |
 | `messages(widgetId)` | Every envelope of a widget in both directions, as it crossed the wire |
 | `driverSnapshot(widgetId)` | The negotiated state of its driver |
 | `store(roomId)` | Timeline, state, delayed events and sent to-device messages of a mocked room |

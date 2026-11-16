@@ -13,7 +13,7 @@
 import { createContext, useContext } from "react";
 
 import { loggableIntent, type AppIntent, type Loadable, type MockedRoomData, type RoomId, type WidgetDevToolsData, type WidgetInstanceId } from "../appViewModel";
-import type { RoomDetails } from "../session";
+import type { RoomDetails, RoomTimeline } from "../session";
 
 export interface ViewEnv {
   /** Send an intent to the controller. Stable for the lifetime of the app. */
@@ -26,8 +26,17 @@ export interface ViewEnv {
   useMockedRoomData: () => MockedRoomData;
   /** Hook: what the RoomOverview shows beyond the `RoomSummary` (topic, members, encryption). */
   useRoomDetails: (roomId: RoomId) => Loadable<RoomDetails>;
+  /** Hook: the RoomTimeline of a room (`LiveSession.timeline`), kept up to date; `retry` loads it again after an error. */
+  useRoomTimeline: (roomId: RoomId) => RoomTimelineData;
   /** Resolve an `mxc://` avatar to a URL an `<img>` can show (`LiveSession.avatar`). */
   avatar: (mxcUrl: string) => Promise<string | undefined>;
+}
+
+/** What `useRoomTimeline` returns. */
+export interface RoomTimelineData {
+  timeline: Loadable<RoomTimeline>;
+  /** Load the timeline again (the "Try again" of its error state). */
+  retry: () => void;
 }
 
 export const EMPTY_DEV_TOOLS_DATA: WidgetDevToolsData = {
@@ -40,6 +49,7 @@ export const EMPTY_DEV_TOOLS_DATA: WidgetDevToolsData = {
 export const EMPTY_MOCKED_ROOM_DATA: MockedRoomData = { rooms: [], state: [], timeline: [], scheduled: [], toDevice: [], failSends: false, media: [] };
 
 const LOADING: Loadable<RoomDetails> = { status: "loading" };
+const LOADING_TIMELINE: RoomTimelineData = { timeline: { status: "loading" }, retry: () => {} };
 
 export const DEFAULT_VIEW_ENV: ViewEnv = {
   dispatch: (intent) => console.info("intent", loggableIntent(intent)),
@@ -47,6 +57,7 @@ export const DEFAULT_VIEW_ENV: ViewEnv = {
   useDevToolsData: () => EMPTY_DEV_TOOLS_DATA,
   useMockedRoomData: () => EMPTY_MOCKED_ROOM_DATA,
   useRoomDetails: () => LOADING,
+  useRoomTimeline: () => LOADING_TIMELINE,
   avatar: async () => undefined,
 };
 

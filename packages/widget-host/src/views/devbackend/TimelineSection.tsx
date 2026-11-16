@@ -3,8 +3,9 @@ import { useId, useState, type FormEvent } from "react";
 
 import type { DevBackendViewModel, MockedRoomData, MockedTimelineEvent, RoomId } from "../../appViewModel";
 import { useDispatch } from "../env";
+import { previewOf } from "../helpers";
 import { Button, Field, Icon, Json, Toggle } from "../ui/atoms";
-import { DelayRow, FormChips, FormError, JsonArea, NO_DELAY, Sub, delayOf, parseJsonObject, pretty, previewOf, timeOf, useNow } from "./parts";
+import { DelayRow, FormChips, FormError, JsonArea, NO_DELAY, Sub, delayOf, parseJsonObject, pretty, timeOf, useNow } from "./parts";
 
 type SendForm = DevBackendViewModel["sendForm"];
 type NewEvent = Pick<MockedTimelineEvent, "type" | "sender" | "content">;

@@ -219,6 +219,45 @@ describe("DevBackend: events", () => {
     expect(exported.timeline).toEqual([expect.objectContaining({ event_id: sent.event_id, origin_server_ts: newest.timestamp, room_id: room })]);
   });
 
+  it("has the RoomTimeline of a room: every event oldest first, the start always reached; its listeners hear what refresh() finds in that room", async () => {
+    const dev = new DevBackend();
+    const room = dev.addRoom({ name: "Lab" });
+    const other = dev.addRoom();
+    const changed = vi.fn();
+    const otherChanged = vi.fn();
+    const stop = dev.onTimelineChanged(room, changed);
+    dev.onTimelineChanged(other, otherChanged);
+
+    const start = await dev.timeline(room);
+    expect(start.atStart).toBe(true);
+    expect(start.loadingOlder).toBe(false);
+    expect(start.events.map((ev) => ev.type)).toEqual(["m.room.create", "m.room.name", "m.room.member"]);
+    // Unchanged, the same list: the view renders nothing again.
+    expect((await dev.timeline(room)).events).toBe(start.events);
+
+    await dev.sendEvent(room, { type: "m.room.message", content: { body: "one" } });
+    expect(changed).toHaveBeenCalledTimes(1);
+    expect((await dev.timeline(room)).events.at(-1)).toMatchObject({ type: "m.room.message", sender: "@alice:dev.local", content: { body: "one" }, room_id: room });
+
+    // A widget's event, once refreshed.
+    const { ask, grant } = behindDriver(await dev.backendFor(room));
+    await grant([`widget:${X}send_event.timeline:org.example.ping`]);
+    const sent = await ask(`${X}send_event`, { type: "org.example.ping", content: { seq: 1 } });
+    expect(changed).toHaveBeenCalledTimes(1);
+    dev.refresh();
+    expect(changed).toHaveBeenCalledTimes(2);
+    expect((await dev.timeline(room)).events.at(-1)).toMatchObject({ event_id: sent.event_id, type: "org.example.ping" });
+    dev.refresh();
+    expect(changed).toHaveBeenCalledTimes(2);
+
+    await dev.loadOlderEvents();
+    expect(otherChanged).not.toHaveBeenCalled();
+    stop();
+    await dev.sendEvent(room, { type: "m.room.message", content: { body: "two" } });
+    expect(changed).toHaveBeenCalledTimes(2);
+    await expect(dev.timeline("!nope:dev.local")).rejects.toThrow("unknown room");
+  });
+
   it("schedules delayed events in the backend, next to the ones a widget scheduled", async () => {
     const dev = new DevBackend();
     const room = dev.addRoom();

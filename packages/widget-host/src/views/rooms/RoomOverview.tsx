@@ -12,18 +12,20 @@ export interface RoomOverviewProps {
   roomId: RoomId;
   /** `settings.devTools`: shows the "Copy to DevBackend" card. */
   devTools: boolean;
+  /** The panel has a Timeline tab: the header offers "Show timeline" instead of "Open timeline". */
+  timelineOpen?: boolean;
 }
 
 const DEFAULT_LAST_EVENTS = 50;
 
 /**
  * What the room name tab shows, and where a room opens. leaves overview/plain, overview/devtools,
- * roomview2/same. The widget list comes first: a widget opens as a new tab; one that is already
+ * roomview2/same. The header opens the RoomTimeline (or shows its tab). The widget list comes first: a widget opens as a new tab; one that is already
  * open (a widget runs once per account) is grayed out and offers "jump to tab", and "move widget
  * here" when its tab is in another panel. Then encryption, members and, with dev tools enabled,
  * the dev card. Topic, members and encryption come from `useViewEnv().useRoomDetails(roomId)`.
  */
-export function RoomOverview({ main, panelId, roomId, devTools }: RoomOverviewProps) {
+export function RoomOverview({ main, panelId, roomId, devTools, timelineOpen = false }: RoomOverviewProps) {
   const dispatch = useDispatch();
   const details = useViewEnv().useRoomDetails(roomId);
   const [lastEvents, setLastEvents] = useState(String(DEFAULT_LAST_EVENTS));
@@ -64,6 +66,15 @@ export function RoomOverview({ main, panelId, roomId, devTools }: RoomOverviewPr
             {details.status === "loading" && loading("the description")}
             {failed("description")}
           </div>
+          {timelineOpen ? (
+            <Button icon="goToTab" title="Show the timeline tab" onClick={() => dispatch({ type: "tab/openTimeline", panelId })}>
+              Show timeline
+            </Button>
+          ) : (
+            <Button icon="message" title="Open the timeline of this room in a new tab" onClick={() => dispatch({ type: "tab/openTimeline", panelId })}>
+              Open timeline
+            </Button>
+          )}
         </header>
         <div className="ov-grid">
           <section className="card span">

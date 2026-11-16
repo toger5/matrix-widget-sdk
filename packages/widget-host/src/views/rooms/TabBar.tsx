@@ -5,7 +5,7 @@ import type { RoomSummary } from "../../session";
 import { useDispatch } from "../env";
 import { roomWidgets } from "../helpers";
 import { Avatar, Icon, initials } from "../ui/atoms";
-import { roomTabDomId, tabDomId, tabInfo, tabPanelDomId } from "./tabInfo";
+import { roomTabDomId, tabDomId, tabInfo, tabPanelDomId, type TabInfo } from "./tabInfo";
 
 export interface TabBarProps {
   main: MainViewModel;
@@ -16,11 +16,11 @@ export interface TabBarProps {
   room: RoomSummary | undefined;
   /** The room name tab, and the name of the tab list ("Tabs of Design crit"). */
   roomName: string;
-  /** The widget tabs, after the room name. */
+  /** The tabs after the room name: widgets and the timeline. */
   tabs: TabViewModel[];
   /** `undefined` (or a tab that does not exist): the room name is selected. */
   activeTabId?: TabId;
-  /** The header hides the widget tabs until it is hovered or has the focus inside: the room name is the tab stop then. */
+  /** The header hides the tabs until it is hovered or has the focus inside: the room name is the tab stop then. */
   fullscreen?: boolean;
 }
 
@@ -29,10 +29,10 @@ const FADE = 36;
 
 /**
  * The tab bar of a room panel, rendered into its header: the room name (the first tab, it shows the
- * RoomOverview), the widget tabs, the + button and, when the widget tabs do not fit, the "all tabs"
- * button with its menu. leaves roomview/header, tabs/*. ARIA tabs pattern: the tab is a button, its
- * ⋯ (dev tools) and × buttons are siblings; the tablist wrapper is `display: contents`, so only the
- * widget tabs (`.tabs`) scroll.
+ * RoomOverview), the tabs of widgets and the timeline, the + button and, when the tabs do not fit,
+ * the "all tabs" button with its menu. leaves roomview/header, tabs/*. ARIA tabs pattern: the tab is
+ * a button, its ⋯ (dev tools, widget tabs only) and × buttons are siblings; the tablist wrapper is
+ * `display: contents`, so only the tabs after the room name (`.tabs`) scroll.
  */
 export function TabBar({ main, settings, panelId, roomId, room, roomName, tabs, activeTabId, fullscreen = false }: TabBarProps) {
   const dispatch = useDispatch();
@@ -115,7 +115,7 @@ export function TabBar({ main, settings, panelId, roomId, room, roomName, tabs, 
     if (refocus) allRef.current?.focus();
   };
 
-  /** Arrow keys move the focus between the tabs, the room name first; Enter or Space (the button) activates; Delete closes a widget tab (the focus moves on: `focusAfterClose`). */
+  /** Arrow keys move the focus between the tabs, the room name first; Enter or Space (the button) activates; Delete closes a tab other than the room name (the focus moves on: `focusAfterClose`). */
   // TODO-FINDING tab-arrow-keys-manual-activation - arrow keys only move the focus, they do not activate the tab ("manual activation" of the ARIA tabs pattern): activating a tab moves widgets in and out of the PiP panel, which is too much for a key that is used to walk through the tabs. appDesign.md says "arrow keys switch".
   const onTabKeyDown = (e: KeyboardEvent<HTMLButtonElement>, tab?: TabViewModel) => {
     const all = Array.from(tablistRef.current?.querySelectorAll<HTMLElement>('[role="tab"]') ?? []);
@@ -149,10 +149,10 @@ export function TabBar({ main, settings, panelId, roomId, room, roomName, tabs, 
   };
 
   const roomSelected = !tabs.some((t) => t.id === activeTabId);
-  // The tab that can be reached with the Tab key: the active widget tab, else the room name (also
-  // while the fullscreen header hides the widget tabs).
+  // The tab that can be reached with the Tab key: the active tab, else the room name (also while
+  // the fullscreen header hides the tabs).
   const tabStop = roomSelected || fullscreen ? undefined : activeTabId;
-  // Alt+W closes the shown tab while the panel has a tab, else the panel (`hasWidgetTab`).
+  // Alt+W closes the shown tab while the panel has a tab, else the panel (`hasTab`).
   const altWClosesTab = tabs.length > 0;
   const widgetCount = roomWidgets(room).length;
 
@@ -200,9 +200,10 @@ export function TabBar({ main, settings, panelId, roomId, room, roomName, tabs, 
           onScroll={measure}
         >
           {tabs.map((tab) => {
-            const info = tabInfo(main, room, tab);
+            const info = tabInfo(main, room, tab, roomName);
             const active = tab.id === activeTabId;
-            const devOpen = !!devTools[tab.widgetId]?.open;
+            const widgetId = tab.kind === "widget" ? tab.widgetId : undefined;
+            const devOpen = widgetId !== undefined && !!devTools[widgetId]?.open;
             const close = () => dispatch({ type: "tab/close", panelId, tabId: tab.id });
             return (
               <div
@@ -226,13 +227,13 @@ export function TabBar({ main, settings, panelId, roomId, room, roomName, tabs, 
                   aria-selected={active}
                   aria-controls={active ? tabPanelDomId(panelId) : undefined}
                   tabIndex={tab.id === tabStop ? 0 : -1}
-                  title={`${info.name}${info.pinned ? " · always on screen" : ""}`}
+                  title={info.title}
                   data-tab-id={tab.id}
-                  data-widget-id={tab.widgetId}
+                  data-widget-id={widgetId}
                   onClick={() => dispatch({ type: "tab/activate", panelId, tabId: tab.id })}
                   onKeyDown={(e) => onTabKeyDown(e, tab)}
                 >
-                  <Avatar name={info.name} id={info.widgetKey} size={16} square label={initials(info.name)} />
+                  <TabIcon info={info} size={16} iconSize={15} />
                   <span className="tab-label">{info.name}</span>
                   {info.load === "loading" && (
                     <>
@@ -259,14 +260,14 @@ export function TabBar({ main, settings, panelId, roomId, room, roomName, tabs, 
                 {/* TODO-FINDING inactive-tab-buttons-overlay - on an inactive tab the buttons lie over the end of the label (no layout shift on hover). An inactive tab with open dev tools keeps its ⋯ visible and reserves 22px for the ×, so it is wider than in leaf tabs/overview-active. */}
                 {/* TODO-FINDING tab-reorder-not-implemented - `tab/move` exists, but dragging a tab is not drawn and not built. */}
                 {/* TODO-FINDING widget-avatar-initials - the mockups label widget avatars with two letters ("WB"); `initials("Whiteboard")` gives "W", and the hue comes from the widget key, not from the mockup. Widgets have no avatar URL in the view model. */}
-                {settings.devTools && (
+                {settings.devTools && widgetId !== undefined && (
                   <button
                     type="button"
                     className={`tab-btn ${devOpen ? "on" : ""}`}
                     title={`Dev tools of ${info.name}`}
                     aria-label={`Dev tools of ${info.name}`}
                     aria-pressed={devOpen}
-                    onClick={() => dispatch({ type: "devTools/toggle", widgetId: tab.widgetId })}
+                    onClick={() => dispatch({ type: "devTools/toggle", widgetId })}
                   >
                     <Icon name="dots" size={14} />
                   </button>
@@ -274,8 +275,8 @@ export function TabBar({ main, settings, panelId, roomId, room, roomName, tabs, 
                 <button
                   type="button"
                   className="tab-btn tab-close"
-                  title={active && altWClosesTab ? `Close ${info.name} (Alt+W)` : `Close ${info.name}`}
-                  aria-label={`Close ${info.name}`}
+                  title={active && altWClosesTab ? `${info.closeLabel} (Alt+W)` : info.closeLabel}
+                  aria-label={info.closeLabel}
                   // `detail` 0: pressed with Enter or Space, not clicked
                   onClick={(e) => (e.detail === 0 ? closeFromKeyboard(tab) : close())}
                 >
@@ -295,7 +296,7 @@ export function TabBar({ main, settings, panelId, roomId, room, roomName, tabs, 
           ref={allRef}
           type="button"
           className={`ibtn tab-all ${menuOpen ? "on" : ""}`}
-          // TODO-FINDING all-tabs-button-name - the accessible name is the mockup's "All N tabs" (it changes with the number of tabs; N counts the widget tabs, the room name never scrolls away); tests should match /^All \d+ tabs$/.
+          // TODO-FINDING all-tabs-button-name - the accessible name is the mockup's "All N tabs" (it changes with the number of tabs; N counts the tabs after the room name, which never scrolls away); tests should match /^All \d+ tabs$/.
           title={`All ${tabs.length} tabs`}
           aria-label={`All ${tabs.length} tabs`}
           aria-haspopup="menu"
@@ -313,7 +314,7 @@ export function TabBar({ main, settings, panelId, roomId, room, roomName, tabs, 
       {overflow.overflowing && menuOpen && (
         <div ref={menuRef} className="dropdown tab-menu" role="menu" aria-label={`All tabs of ${roomName}`} onKeyDown={onMenuKeyDown}>
           {tabs.map((tab) => {
-            const info = tabInfo(main, room, tab);
+            const info = tabInfo(main, room, tab, roomName);
             const active = tab.id === activeTabId;
             return (
               <button
@@ -329,7 +330,7 @@ export function TabBar({ main, settings, panelId, roomId, room, roomName, tabs, 
                   closeMenu(true);
                 }}
               >
-                <Avatar name={info.name} id={info.widgetKey} size={18} square label={initials(info.name)} />
+                <TabIcon info={info} size={18} iconSize={16} />
                 <span>
                   <b>{info.name}</b>
                 </span>
@@ -347,4 +348,10 @@ export function TabBar({ main, settings, panelId, roomId, room, roomName, tabs, 
       )}
     </>
   );
+}
+
+/** The widget's avatar, or the message icon of the timeline tab (a host tab). */
+function TabIcon({ info, size, iconSize }: { info: TabInfo; size: number; iconSize: number }) {
+  if (info.widgetKey === undefined) return <Icon name="message" size={iconSize} className="tab-ico" />;
+  return <Avatar name={info.name} id={info.widgetKey} size={size} square label={initials(info.name)} />;
 }

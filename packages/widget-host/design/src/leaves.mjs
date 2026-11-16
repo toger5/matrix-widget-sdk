@@ -16,6 +16,7 @@ import {
   roomPanel,
   settingsView,
   tabMenu,
+  timelineBody,
   widgetView,
 } from "./components.mjs";
 
@@ -25,6 +26,7 @@ const TOAST = "Press <kbd>Esc</kbd> to show the expand button";
 const VERIFY = "AccountView: device verification";
 
 const wt = (widgetKey, o = {}) => ({ kind: "widget", widget: widgetKey, ...o });
+const tl = (o = {}) => ({ kind: "timeline", ...o });
 
 /** The "Design crit" room with the call widget open: the default content of most screens. */
 const designCall = (o = {}) =>
@@ -233,6 +235,11 @@ export const LEAVES = [
   { id: "tabs/widget-active", section: "RoomsArea", group: "RoomView (1) › Tab bar", title: "WidgetTab active, the other WidgetTab and the room name inactive", w: 860, h: 72, html: headOnly({ room: "design", tabs: [wt("call", { active: true }), wt("board")] }) },
   { id: "tabs/overview-active", section: "RoomsArea", group: "RoomView (1) › Tab bar", title: "Room name selected (dev tools enabled: ⋯ on widget tabs)", w: 860, h: 72, note: "The room name looks like the active tab; the body is the RoomOverview. The + button selects the room name too.", html: headOnly({ room: "design", devTools: true, tabs: [wt("call"), wt("board", { devOpen: true })] }) },
   { id: "tabs/pinned", section: "RoomsArea", group: "RoomView (1) › Tab bar", title: "Tabs marked as always on screen (pin icon)", w: 960, h: 72, note: "Element Call is pinned and active: it is shown in its tab. The whiteboard is pinned and not active: it is shown in the PictureInPicturePanel until its tab is pressed.", html: headOnly({ room: "design", tabs: [wt("call", { active: true, pinned: true }), wt("board", { pinned: true }), wt("poll")] }) },
+  {
+    id: "tabs/timeline-active", section: "RoomsArea", group: "RoomView (1) › Tab bar", title: "Timeline tab active (dev tools enabled)", w: 860, h: 72,
+    note: "The timeline is a host tab: a message icon, “Timeline” and ×, but no ⋯ and no pin. A room view has at most one; it goes at the end when it is opened. Alt+W closes it like a widget tab.",
+    html: headOnly({ room: "design", devTools: true, tabs: [wt("call"), wt("board"), tl({ active: true })] }),
+  },
   (() => {
     const tabs = [wt("call", { pinned: true }), wt("board"), wt("poll", { active: true }), wt("notes"), wt("timer"), wt("retro"), wt("stream")];
     return { id: "tabs/overflow", section: "RoomsArea", group: "RoomView (1) › Tab bar", title: "More tabs than fit (scroll + menu of all tabs)", w: 860, h: 360, note: "Element Call is always on screen and not the active tab, so it is in the floating panel. Only the widget tabs scroll; the room name stays.", html: app({ panels: [roomPanel({ room: "design", tabs, overflow: true, body: widgetView({ kind: "poll" }), menu: tabMenu(tabs) })], pip: pip({ items: [{ room: "design", widget: "call" }], style: "right:auto;left:28px;bottom:24px" }) }) };
@@ -280,14 +287,27 @@ export const LEAVES = [
 
   {
     id: "overview/plain", section: "RoomsArea", group: "RoomView (1) › RoomOverview", title: "No widget open, dev tools disabled", w: 900, h: 800,
-    note: "A room opens here, and comes back here when its last widget tab is closed. Pressing a widget opens it as a new tab at the end.",
+    note: "A room opens here, and comes back here when its last tab is closed. Pressing a widget, or “Open timeline”, opens it as a new tab at the end.",
     html: solo(roomPanel({ room: "design", tabs: [], body: overviewBody() })),
   },
   {
     id: "overview/devtools", section: "RoomsArea", group: "RoomView (1) › RoomOverview", title: "A widget open in this panel (“jump to tab”), dev tools enabled (copy to DevBackend)", w: 900, h: 940,
-    note: "Element Call has a tab in this panel: it is grayed out and only offers “jump to tab”. A DevBackend room has no dev card: it is already in the DevBackend.",
-    html: solo(roomPanel({ room: "design", devTools: true, tabs: [wt("call")], body: overviewBody({ devTools: true, opened: { call: "here" } }) })),
+    note: "Element Call has a tab in this panel: it is grayed out and only offers “jump to tab”. The panel has its timeline tab, so the header offers “Show timeline”. A DevBackend room has no dev card: it is already in the DevBackend.",
+    html: solo(roomPanel({ room: "design", devTools: true, tabs: [wt("call"), tl()], body: overviewBody({ devTools: true, opened: { call: "here" }, timeline: true }) })),
   },
+
+  {
+    id: "timeline/events", section: "RoomsArea", group: "RoomView (1) › RoomTimeline", title: "Events of every kind, one showing its JSON, “Load older events”", w: 900, h: 800,
+    note: "Oldest at the top, newest at the bottom; scrolled to the bottom, it stays there while new events arrive. One line per event: time, sender, what happened, event type. State events are muted; undecryptable and deleted events, reactions, edits and unknown types (a content preview) get a line too. Pressing a line shows the event's JSON. “Load older events” first shows loaded events that are not rendered (the newest 200 are), then asks the session for 50 more; while it loads it reads “Loading older events…” and is disabled.",
+    html: solo(roomPanel({ room: "design", tabs: [wt("call"), tl({ active: true })], body: timelineBody() })),
+  },
+  {
+    id: "timeline/start", section: "RoomsArea", group: "RoomView (1) › RoomTimeline", title: "Start of the room reached", w: 900, h: 640,
+    note: "A mocked room: the DevBackend holds every event, so the start is always reached there. The last events were sent by a widget (the RTC member event and a custom type).",
+    html: solo(roomPanel({ room: "lab", tabs: [tl({ active: true })], body: timelineBody({ state: "start" }) })),
+  },
+  { id: "timeline/loading", section: "RoomsArea", group: "RoomView (1) › RoomTimeline", title: "Loading", w: 700, h: 440, html: solo(roomPanel({ room: "design", tabs: [tl({ active: true })], body: timelineBody({ state: "loading" }) })) },
+  { id: "timeline/error", section: "RoomsArea", group: "RoomView (1) › RoomTimeline", title: "Failed to load", w: 700, h: 440, note: "“Try again” loads the timeline again.", html: solo(roomPanel({ room: "design", tabs: [tl({ active: true })], body: timelineBody({ state: "error" }) })) },
 
   { id: "roomview2/different", section: "RoomsArea", group: "RoomView (2)", title: "A different room next to RoomView (1)", ...FULL, html: app({ leftBar: {}, panels: [designCall(), roomPanel({ room: "rtc", tabs: [wt("notes", { active: true }), wt("call")], body: widgetView({ kind: "notes" }) })] }) },
   {

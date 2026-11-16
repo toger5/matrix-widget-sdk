@@ -1,24 +1,30 @@
 /**
  * The parts of the matrix-js-sdk session that can run on a faked client: what the AccountView,
- * the RoomOverview and "Copy to DevBackend" read (`src/matrix_session/js/roomData`), the
+ * the RoomOverview, the RoomTimeline and "Copy to DevBackend" read (`src/matrix_session/js/roomData`), the
  * device verification (`src/matrix_session/js/verification`), and the gate that refuses requests
  * while the session is suspended (`src/matrix_session/js/fetchGate`).
  */
 import { EventEmitter } from "node:events";
 
-import type { MatrixClient } from "matrix-js-sdk";
+import { MatrixEventEvent, RoomEvent, type MatrixClient } from "matrix-js-sdk";
 import { CryptoEvent, encodeRecoveryKey, VerificationPhase, VerificationRequestEvent } from "matrix-js-sdk/lib/crypto-api";
 import { SECRET_STORAGE_ALGORITHM_V1_AES, ServerSideSecretStorageImpl } from "matrix-js-sdk/lib/secret-storage";
 import { describe, expect, it, vi } from "vitest";
 
 import { FetchGate, SuspendedError } from "../src/matrix_session/js/fetchGate";
-import { accountInfo, exportRoom, LOAD_MEMBERS_UP_TO, MEMBER_LIMIT, roomDetails } from "../src/matrix_session/js/roomData";
+import { accountInfo, exportRoom, loadOlderEvents, LOAD_MEMBERS_UP_TO, MEMBER_LIMIT, onTimelineChanged, roomDetails, timelineEvents } from "../src/matrix_session/js/roomData";
 import { needsVerification, onVerificationChanged, RecoveryKeySlot, startEmojiVerification, verifyWithRecoveryKey } from "../src/matrix_session/js/verification";
 
 const ROOM = "!room:example.org";
 const USER = "@alice:example.org";
 
-const event = (raw: Record<string, unknown>, status: string | null = null) => ({ status, getEffectiveEvent: () => raw, getContent: () => raw.content });
+const event = (raw: Record<string, unknown>, status: string | null = null) => ({ status, event: raw, isDecryptionFailure: () => false, getEffectiveEvent: () => raw, getContent: () => raw.content });
+/** An event the client could not decrypt: the SDK puts its "Unable to decrypt" message in place of the content. */
+const undecryptable = (raw: Record<string, unknown>) => ({
+  ...event(raw),
+  isDecryptionFailure: () => true,
+  getEffectiveEvent: () => ({ ...raw, type: "m.room.message", content: { msgtype: "m.bad.encrypted", body: "** Unable to decrypt **" } }),
+});
 const member = (userId: string, powerLevel: number, name?: string, avatar?: string) => ({
   userId,
   powerLevel,
@@ -27,7 +33,7 @@ const member = (userId: string, powerLevel: number, name?: string, avatar?: stri
   getMxcAvatarUrl: () => avatar ?? null,
 });
 
-function fakeClient(options: { members?: ReturnType<typeof member>[]; joinedCount?: number; offline?: boolean; older?: Record<string, unknown>[][] } = {}) {
+function fakeClient(options: { members?: ReturnType<typeof member>[]; joinedCount?: number; offline?: boolean; older?: Record<string, unknown>[][]; undecryptable?: Record<string, unknown> } = {}) {
   const offline = () => Promise.reject(new Error("offline"));
   const members = options.members ?? [member(USER, 100, "Alice", "mxc://example.org/alice"), member("@bob:example.org", 50, "Bob"), member("@carol:example.org", 0)];
   const calls: string[] = [];
@@ -36,10 +42,17 @@ function fakeClient(options: { members?: ReturnType<typeof member>[]; joinedCoun
     { type: "m.room.member", state_key: USER, content: { membership: "join" }, sender: USER, event_id: "$alice" },
   ];
   const serverState = [...localState, { type: "m.room.member", state_key: "@bob:example.org", content: { membership: "join" }, sender: "@bob:example.org", event_id: "$bob", room_id: ROOM }];
-  const timeline = [event({ type: "m.room.message", content: { body: "3" }, event_id: "$3" }), event({ type: "m.room.message", content: { body: "echo" } }, "sending")];
+  const timeline = [
+    ...(options.undecryptable ? [undecryptable(options.undecryptable)] : []),
+    event({ type: "m.room.message", content: { body: "3" }, event_id: "$3" }),
+    event({ type: "m.room.message", content: { body: "echo" } }, "sending"),
+  ];
   const older = [...(options.older ?? [])];
-  const liveTimeline = { getEvents: () => timeline };
+  /** The SDK drops the token of the live timeline once a pagination reached the start of the room. */
+  let backwardToken: string | null = "older";
+  const liveTimeline = { getEvents: () => timeline, getPaginationToken: () => backwardToken };
   const room = {
+    roomId: ROOM,
     name: "Widgets",
     getJoinedMemberCount: () => options.joinedCount ?? members.length,
     loadMembersIfNeeded: async () => (calls.push("loadMembersIfNeeded"), true),
@@ -57,7 +70,10 @@ function fakeClient(options: { members?: ReturnType<typeof member>[]; joinedCoun
       ]),
     },
   };
+  const emitter = new EventEmitter();
   const client = {
+    on: (name: string, listener: (...args: unknown[]) => void) => emitter.on(name, listener),
+    off: (name: string, listener: (...args: unknown[]) => void) => emitter.off(name, listener),
     getSafeUserId: () => USER,
     getDeviceId: () => "DEVICE",
     getHomeserverUrl: () => "https://hs.example.org",
@@ -70,12 +86,13 @@ function fakeClient(options: { members?: ReturnType<typeof member>[]; joinedCoun
       calls.push(`paginate ${opts.limit}`);
       if (options.offline) throw new Error("offline");
       const page = older.shift();
+      if (older.length === 0) backwardToken = null;
       if (!page) return false;
       timeline.unshift(...page.map((raw) => event(raw)));
       return older.length > 0;
     },
   };
-  return { client: client as unknown as MatrixClient, calls, serverState, localState };
+  return { client: client as unknown as MatrixClient, calls, serverState, localState, room, emitter };
 }
 
 describe("matrix-js-sdk session data", () => {
@@ -145,6 +162,49 @@ describe("matrix-js-sdk session data", () => {
     expect(exported.state).toEqual(localState);
     expect(exported.timeline.map((ev) => ev.event_id)).toEqual(["$3"]);
     expect((await exportRoom(client, ROOM, 0)).timeline).toEqual([]);
+  });
+});
+
+describe("matrix-js-sdk RoomTimeline", () => {
+  it("the live timeline, oldest first, without local echoes; an event the client could not decrypt as it arrived", () => {
+    const encrypted = { type: "m.room.encrypted", content: { algorithm: "m.megolm.v1.aes-sha2", ciphertext: "x" }, event_id: "$2", sender: USER };
+    const { client } = fakeClient({ undecryptable: encrypted });
+    expect(timelineEvents(client, ROOM)).toEqual([encrypted, { type: "m.room.message", content: { body: "3" }, event_id: "$3" }]);
+    expect(() => timelineEvents(client, "!other:example.org")).toThrow(/unknown room/);
+  });
+
+  it("older events are paginated into the live timeline, until the start of the room", async () => {
+    const { client, calls } = fakeClient({ older: [[{ type: "m.room.message", content: { body: "2" }, event_id: "$2" }], [{ type: "m.room.create", state_key: "", content: {}, event_id: "$1" }]] });
+    expect(await loadOlderEvents(client, ROOM, 50)).toBe(false);
+    expect(await loadOlderEvents(client, ROOM, 50)).toBe(true);
+    // At the start the SDK has no token left: no request (without one it would ask for the newest events).
+    expect(await loadOlderEvents(client, ROOM, 50)).toBe(true);
+    expect(calls).toEqual(["paginate 50", "paginate 50"]);
+    expect(timelineEvents(client, ROOM).map((ev) => ev.event_id)).toEqual(["$1", "$2", "$3"]);
+    await expect(loadOlderEvents(fakeClient({ offline: true }).client, ROOM, 50)).rejects.toThrow("offline");
+  });
+
+  it("onTimelineChanged: new, deleted, sent and decrypted events of the room call it, other rooms' do not; a timeline reset says so; unsubscribing stops it", () => {
+    const { client, room, emitter } = fakeClient();
+    const other = { roomId: "!other:example.org" };
+    const ofRoom = { getRoomId: () => ROOM };
+    const calls: (boolean | undefined)[] = [];
+    const stop = onTimelineChanged(client, ROOM, (reset) => calls.push(reset));
+    emitter.emit(RoomEvent.Timeline, ofRoom, other);
+    emitter.emit(RoomEvent.Redaction, ofRoom, other);
+    emitter.emit(MatrixEventEvent.Decrypted, { getRoomId: () => other.roomId });
+    emitter.emit(RoomEvent.TimelineReset, other);
+    expect(calls).toEqual([]);
+    emitter.emit(RoomEvent.Timeline, ofRoom, room);
+    emitter.emit(RoomEvent.Redaction, ofRoom, room);
+    emitter.emit(RoomEvent.LocalEchoUpdated, ofRoom, room);
+    emitter.emit(MatrixEventEvent.Decrypted, ofRoom);
+    emitter.emit(RoomEvent.TimelineReset, room);
+    expect(calls).toEqual([undefined, undefined, undefined, undefined, true]);
+    stop();
+    emitter.emit(RoomEvent.Timeline, ofRoom, room);
+    expect(calls).toHaveLength(5);
+    expect(emitter.eventNames()).toEqual([]);
   });
 });
 
