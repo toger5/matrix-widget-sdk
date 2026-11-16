@@ -55,16 +55,15 @@ Not decisions, but statements in the documents that turned out wrong or outdated
 | `devbackend-destructive-confirm` | `DevBackendView.tsx` | Clear room / remove room lose state | confirm or not | Not confirmed |
 | `devbackend-rtc-member-shape` | `src/views/devbackend/TimelineSection.tsx` | Which event the "RTC member" form sends | (a) `org.matrix.msc4143.rtc.member` timeline event (b) `org.matrix.msc3401.call.member` state event | (a), with a guessed content (empty = left) |
 | `devbackend-raw-form-shape` | `TimelineSection.tsx` | Raw JSON: one editor for `{type, sender, content}` (leaf) or type + content fields | either | One editor |
-| `devbackend-todevice-sender` | `src/views/devbackend/OtherSections.tsx` | The mockup has one sender select | select / separate fields | Separate user id and device id fields |
-| `devbackend-todevice-placement` | `OtherSections.tsx` | To-device messages are account-wide but sit in the per-room page (open point 7) | per-room page / next to the media box | Per-room page |
-| `devbackend-extra-store-tools` | `DevBackendView.tsx` | The old store tools have no place in the design: push TURN credentials, room account data, RTC transports, fire the oldest delayed event | a fifth section / drop them | Not in the UI; they exist as methods of `DevBackend` |
+| `devbackend-todevice-sender` | `src/views/devbackend/ClientBox.tsx` | The mockup has one sender select | select / separate fields | Separate user id and device id fields |
+| `devbackend-extra-store-tools` | `DevBackendView.tsx` | The old store tools have no place in the design: push TURN credentials, room account data, RTC transports, fire the oldest delayed event | sections of the Client Backend Tool (room account data: of the room box) / drop them | Not in the UI; they exist as methods of `DevBackend` |
 | `devbackend-delayed-sender` | `src/views/devbackend/TimelineSection.tsx`, `devBackend.ts` | The send form offers any sender, but the backend only schedules a delayed event for the DevBackend user | disable the sender field while "Delayed" is on / allow it in the backend | The refusal is shown as a toast |
 
 The DevBackend runtime (`src/matrix_session/memory/devBackend.ts`):
 
 | Name | Where | Question | Options | Now |
 | --- | --- | --- | --- | --- |
-| `devbackend-shared-account-store` | `devBackend.ts` | Media and to-device messages are account-scoped, `InMemoryBackend` keeps them per room | (a) mirror them between the rooms' backends in TypeScript (b) an account-level store in the Rust `InMemoryBackend` | (a). Two rooms can issue the same `media-<n>` URI; the first seen wins |
+| `devbackend-shared-account-store` | `devBackend.ts` | Media, to-device messages and "fail sends" are account-scoped, `InMemoryBackend` keeps them per room | (a) mirror them between the rooms' backends in TypeScript (b) an account-level store in the Rust `InMemoryBackend` | (a). Two rooms can issue the same `media-<n>` URI; the first seen wins |
 | `devbackend-no-change-notification` | `devBackend.ts` (`refresh`) | `InMemoryBackend` does not say when it changed | (a) a callback or a version counter in Rust (b) re-read | (b): the controller calls `refresh()` after every widget message; it re-reads every room including all media bytes |
 | `devbackend-delayed-events-do-not-fire` | `devBackend.ts` | A scheduled event never fires by itself | (a) manual "Send now" only (b) a timer per event | (a) |
 | `devbackend-clear-room-keeps-skeleton` | `devBackend.ts` (`clearRoom`) | What "Clear room" leaves | (a) nothing (b) create event, name and the own membership | (b); the widgets go |

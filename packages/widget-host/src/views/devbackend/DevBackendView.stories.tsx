@@ -59,7 +59,7 @@ export const TimelineRawJson: Story = {
   args: { devBackend: devBackend({ openSections: ["timeline"], sendForm: "raw" }) },
 };
 
-/** leaf devbackend/media-open */
-export const MediaOpen: Story = {
-  args: { devBackend: devBackend({ openSections: ["widgetHostBehavior"], media: { open: true, heightShare: 0.4 } }) },
+/** leaf devbackend/tools-collapsed: the room box with its sections closed, the tools as buttons. The open tools are in ToolBox.stories.tsx. */
+export const ToolsCollapsed: Story = {
+  args: { devBackend: devBackend({ openSections: [] }) },
 };

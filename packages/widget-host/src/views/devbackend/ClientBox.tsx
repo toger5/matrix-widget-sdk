@@ -1,31 +1,53 @@
-/** The "Widget host behavior" and "To-device messages" sections (mockup functions `behaviorSection`, `toDeviceSection`). leaves devbackend/behavior, devbackend/todevice */
+/**
+ * The Client Backend Tool (mockup functions `clientBox`, `behaviorSection`, `toDeviceSection`): what
+ * the mocked rooms share, in collapsible sections. leaves devbackend/behavior, devbackend/todevice
+ */
 import { useState, type FormEvent } from "react";
 
-import type { RoomId, ToDeviceMessage, WidgetHostBehavior } from "../../appViewModel";
+import type { DevBackendSection, MockedRoomData, ToDeviceMessage, WidgetHostBehavior } from "../../appViewModel";
 import { useDispatch } from "../env";
 import { Button, Field, Json, Toggle } from "../ui/atoms";
-import { FormError, JsonArea, Sub, parseJsonObject, timeOf } from "./parts";
+import { Acc, FormError, JsonArea, Sub, parseJsonObject, timeOf } from "./parts";
+import { ToolBox } from "./ToolBox";
+
+export function ClientBox({ openSections, heightShare, behavior, data }: { openSections: DevBackendSection[]; heightShare: number; behavior: WidgetHostBehavior; data: MockedRoomData }) {
+  const dispatch = useDispatch();
+  const isOpen = (section: DevBackendSection) => openSections.includes(section);
+  const toggle = (section: DevBackendSection) => () => dispatch({ type: "mock/toggleSection", section });
+  return (
+    <ToolBox tool="client" heightShare={heightShare} className="devb">
+      <Acc id="widgetHostBehavior" title="Widget host behavior" open={isOpen("widgetHostBehavior")} onToggle={toggle("widgetHostBehavior")}>
+        <BehaviorSection behavior={behavior} failSends={data.failSends} />
+      </Acc>
+      <Acc id="toDevice" title="To-device messages" open={isOpen("toDevice")} count={String(data.toDevice.length)} onToggle={toggle("toDevice")}>
+        <ToDeviceSection toDevice={data.toDevice} userId={data.userId} />
+      </Acc>
+    </ToolBox>
+  );
+}
 
 const BEHAVIORS: { key: keyof WidgetHostBehavior; label: string; hint: string }[] = [
   { key: "autoApproveCapabilities", label: "Auto-approve capabilities", hint: "Grant everything a widget asks for, without the prompt." },
   { key: "autoApproveOpenId", label: "Auto-approve OpenID tokens", hint: "Answer get_openid without asking." },
   { key: "rememberCapabilities", label: "Remember capabilities", hint: "Off: a widget asks again every time it starts." },
-  { key: "failSends", label: "Fail sends", hint: "Every send from a widget is answered with an error." },
 ];
 
-export function BehaviorSection({ roomId, behavior }: { roomId: RoomId; behavior?: WidgetHostBehavior }) {
+/** How the host answers widgets (`WidgetHostBehavior`), and "fail sends", which the DevBackend does. */
+export function BehaviorSection({ behavior, failSends }: { behavior: WidgetHostBehavior; failSends: boolean }) {
   const dispatch = useDispatch();
+  const row = (label: string, hint: string, on: boolean, onChange: (on: boolean) => void) => (
+    <div key={label} className="set-row">
+      <div>
+        <b>{label}</b>
+        <small>{hint}</small>
+      </div>
+      <Toggle on={on} label={label} onChange={onChange} />
+    </div>
+  );
   return (
     <>
-      {BEHAVIORS.map(({ key, label, hint }) => (
-        <div key={key} className="set-row">
-          <div>
-            <b>{label}</b>
-            <small>{hint}</small>
-          </div>
-          <Toggle on={behavior?.[key] ?? false} label={label} onChange={(on) => dispatch({ type: "mock/setBehavior", roomId, behavior: { [key]: on } })} />
-        </div>
-      ))}
+      {BEHAVIORS.map(({ key, label, hint }) => row(label, hint, behavior[key], (on) => dispatch({ type: "mock/setBehavior", behavior: { [key]: on } })))}
+      {row("Fail sends", "Every send from a widget is answered with an error.", failSends, (on) => dispatch({ type: "mock/setFailSends", on }))}
     </>
   );
 }

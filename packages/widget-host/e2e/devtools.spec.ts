@@ -279,7 +279,7 @@ test("driver panel: revoke one capability and all (confirm modal), add a capabil
   expect(await approved(host)).toEqual([]);
 
   // "Add" pre-approves: the capability is granted without a prompt the next time the widget asks for it.
-  await host.dispatch({ type: "mock/setBehavior", roomId: LAB, behavior: { autoApproveCapabilities: false } });
+  await host.dispatch({ type: "mock/setBehavior", behavior: { autoApproveCapabilities: false } });
   await driver.getByRole("textbox", { name: "Add capability" }).fill(SEND_MESSAGE);
   await driver.getByRole("button", { name: "Add" }).click();
   await expect(driver.getByRole("list", { name: "Auto-approved capabilities" }).getByRole("listitem")).toHaveText(/send_event\.timeline:m\.room\.message/);

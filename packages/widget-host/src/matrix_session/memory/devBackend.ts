@@ -86,7 +86,6 @@ interface Room {
   id: string;
   store: InMemoryBackendLike;
   copiedFrom?: { accountId: string; roomId: string };
-  failSends: boolean;
   /** Cheap fingerprint of the backend's content at the last `refresh()`. */
   stamp: string;
   content: RoomContent;
@@ -148,6 +147,8 @@ export class DevBackend implements LiveSession {
   private readonly files = new Map<string, StoredFile>();
   /** Both directions, oldest first. */
   private toDeviceLog: ToDeviceMessage[] = [];
+  /** "Fail sends": account-wide, so every room's backend fails a widget's sends, also a room added later. */
+  private sendsFail = false;
   private turnServer?: TurnServer;
   private rtcTransports?: unknown;
   /** For generated ids. Never reset, so an id is not used twice in the lifetime of the page. */
@@ -289,6 +290,7 @@ export class DevBackend implements LiveSession {
         timeline: content?.timeline ?? NO_TIMELINE,
         scheduled: content?.scheduled ?? NO_SCHEDULED,
         toDevice: this.toDeviceData,
+        failSends: this.sendsFail,
         media: this.mediaData,
       };
       this.snapshots.set(key, snapshot);
@@ -539,15 +541,16 @@ export class DevBackend implements LiveSession {
     return this.updateScheduled(roomId, delayId, "send");
   }
 
-  /** Make every send of a widget in the room fail (also uploads and scheduling), or succeed again. Host edits are not affected. */
-  setFailSends(roomId: string, on: boolean): void {
-    const room = this.room(roomId);
-    room.failSends = on;
-    room.store.failSends(on ? FAIL_MESSAGE : undefined);
+  /** Make every send of a widget in every room fail (also uploads and scheduling), or succeed again. Host edits are not affected. */
+  setFailSends(on: boolean): void {
+    this.sendsFail = on;
+    for (const room of this.mocked.values()) room.store.failSends(on ? FAIL_MESSAGE : undefined);
+    this.dirty = true;
+    this.refresh();
   }
 
-  failSends(roomId: string): boolean {
-    return this.room(roomId).failSends;
+  failSends(): boolean {
+    return this.sendsFail;
   }
 
   // -------------------------------------------------------------------------------------------
@@ -615,11 +618,12 @@ export class DevBackend implements LiveSession {
    * invalid or a file cannot be loaded.
    */
   async populate(seed: DevBackendSeed): Promise<void> {
-    const { userId, rooms = [], media = [], demoMedia } = validateSeed(seed);
+    const { userId, rooms = [], media = [], demoMedia, failSends } = validateSeed(seed);
     const files = [...(demoMedia ? await loadDemoMedia() : []), ...(await Promise.all(media.map(loadSeedMedia)))];
 
     this.reset();
     this.user = userId ?? DEFAULT_USER_ID;
+    this.sendsFail = failSends === true;
     for (const file of files) this.putMedia(file);
     for (const seeded of rooms) {
       const room = this.createRoom(seeded.id, seeded.name);
@@ -631,10 +635,6 @@ export class DevBackend implements LiveSession {
       for (const widget of seeded.widgets ?? []) this.inject(room, { type: widget.type, stateKey: widget.state_key, content: widget.content });
       for (const event of seeded.state ?? []) this.inject(room, event);
       for (const event of seeded.timeline ?? []) this.inject(room, event);
-      if (seeded.failSends) {
-        room.failSends = true;
-        room.store.failSends(FAIL_MESSAGE);
-      }
     }
     this.refresh();
   }
@@ -679,7 +679,6 @@ export class DevBackend implements LiveSession {
         ...(widgets.length ? { widgets } : {}),
         ...(state.length ? { state } : {}),
         ...(timeline.length ? { timeline } : {}),
-        ...(room.failSends ? { failSends: true } : {}),
       };
     });
     const media = [...this.files.values()].map(({ mxcUri, name, mimetype, data }): SeedMedia => {
@@ -695,6 +694,7 @@ export class DevBackend implements LiveSession {
       ...(this.user === DEFAULT_USER_ID ? {} : { userId: this.user }),
       ...(rooms.length ? { rooms } : {}),
       ...(media.length ? { media } : {}),
+      ...(this.sendsFail ? { failSends: true } : {}),
     };
   }
 
@@ -718,7 +718,6 @@ export class DevBackend implements LiveSession {
     const room: Room = {
       id,
       store,
-      failSends: false,
       stamp: "",
       content: { ...EMPTY_CONTENT, name: id },
       scheduledAt: new Map(),
@@ -731,6 +730,7 @@ export class DevBackend implements LiveSession {
     for (const file of this.files.values()) store.addMedia(file.mxcUri, { data: file.data, mimetype: file.mimetype });
     if (this.turnServer) store.setTurnServer(this.turnServer);
     if (this.rtcTransports !== undefined) store.setRtcTransports(this.rtcTransports);
+    if (this.sendsFail) store.failSends(FAIL_MESSAGE);
     this.mocked.set(id, room);
     this.dirty = true;
     if (withSkeleton) this.skeleton(room, name ?? `Room ${this.mocked.size}`);
@@ -797,12 +797,12 @@ export class DevBackend implements LiveSession {
    * switch is for the widgets' sends. (A widget's send that lands in between succeeds too.)
    */
   private async unfailing<T>(room: Room, work: () => T | Promise<T>): Promise<T> {
-    if (!room.failSends) return work();
+    if (!this.sendsFail) return work();
     room.store.failSends(undefined);
     try {
       return await work();
     } finally {
-      if (room.failSends) room.store.failSends(FAIL_MESSAGE);
+      if (this.sendsFail) room.store.failSends(FAIL_MESSAGE);
     }
   }
 
@@ -834,6 +834,7 @@ export class DevBackend implements LiveSession {
     for (const file of this.files.values()) this.release(file);
     this.files.clear();
     this.toDeviceLog = [];
+    this.sendsFail = false;
     this.turnServer = undefined;
     this.rtcTransports = undefined;
     this.dirty = true;

@@ -95,7 +95,7 @@ export function leftBar({ devTools = false, devBackend = false, active = null, t
 // ---------------------------------------------------------------------------------------------
 // SidePanel views
 
-const sideBox = (head, body, cls = "") => `<section class="sidebox ${cls}"><header class="side-head">${head}</header><div class="side-body">${body}</div></section>`;
+const sideBox = (head, body, cls = "", attrs = "") => `<section class="sidebox ${cls}"${attrs}><header class="side-head">${head}</header><div class="side-body">${body}</div></section>`;
 const sideTitle = (title, sub = "") => `<div class="side-title"><b>${title}</b>${sub ? `<small>${sub}</small>` : ""}</div><span class="sp"></span>${ibtn("x", "Close panel")}`;
 
 const menuRow = (ico, label, o = {}) =>
@@ -291,42 +291,77 @@ const roomMenu = () =>
      <div class="dd-row add" role="option">${icon("plus", 16)}<span><b>Add room</b></span></div>
    </div>`;
 
-const mediaBox = () => {
+/** The tool boxes below the room box. Each tool is a button; at most one is open as a box, in the place of its button. */
+const TOOLS = {
+  client: { ico: "monitor", label: "Client Backend Tool", title: "Client backend", minimise: "Minimise the client backend tool", resize: "Resize the client backend box" },
+  media: { ico: "image", label: "Media Backend Tool", count: "3 files", title: "Media", minimise: "Minimise the media tool", resize: "Resize the media box" },
+};
+
+const toolButton = (tool) => {
+  const t = TOOLS[tool];
+  return `<button class="tool-btn" aria-expanded="false">${icon(t.ico, 16)}<span>${t.label}</span>${t.count ? `<em>${t.count}</em>` : ""}${icon("chevRight", 14, "end")}</button>`;
+};
+
+const toolSplit = (tool) =>
+  `<div class="vsplit" role="separator" aria-orientation="horizontal" aria-label="${TOOLS[tool].resize}" aria-valuenow="40" aria-valuemin="15" aria-valuemax="80" tabindex="0" title="Drag or use the arrow keys to resize · double click or Enter to reset"><i></i></div>`;
+
+const toolHead = (tool) => {
+  const t = TOOLS[tool];
+  return `${icon(t.ico, 16)}<div class="side-title"><b>${t.title}</b><small>shared by all mocked rooms</small></div><span class="sp"></span>${ibtn("minus", t.minimise)}`;
+};
+
+/** height: the box's height in px (dragged at the separator); default: its share of the column. */
+const toolStyle = (height) => (height ? ` style="flex-basis:${height}px"` : "");
+
+/** section: "behavior" | "todevice" | null (both closed) */
+const clientBox = (section, height) =>
+  sideBox(
+    toolHead("client"),
+    acc("Widget host behavior", section === "behavior", behaviorSection()) + acc("To-device messages", section === "todevice", toDeviceSection(), "2"),
+    "devb toolbox",
+    ` aria-label="Client backend"${toolStyle(height)}`,
+  );
+
+const mediaBox = (height) => {
   const rows = [
     ["image", "screenshot-call.png", "image/png · 184 kB", "uploaded here", "mxc://dev.local/a1B2c3D4"],
     ["image", "avatar-bob.jpg", "image/jpeg · 22 kB", "uploaded here", "mxc://dev.local/e5F6g7H8"],
     ["audio", "voice-message.ogg", "audio/ogg · 96 kB", "by Whiteboard", "mxc://dev.local/i9J0k1L2"],
   ];
-  const head = `${icon("image", 16)}<div class="side-title"><b>Media</b><small>shared by all mocked rooms</small></div><span class="sp"></span>${ibtn("minus", "Minimise the media tool")}`;
   const body = `<div class="drop">${icon("upload", 16)}<span>Drop files or <u>browse</u> to upload</span></div>
     <div class="media-list">${rows
       .map(([ico, name, meta, by, mxc]) => `<div class="media"><span class="thumb">${icon(ico, 16)}</span><span class="media-t"><b>${name}</b><small>${meta} · <i>${by}</i></small><small class="mono">${mxc}</small></span>${ibtn("copy", "Copy the MXC URI", "xs")}</div>`)
       .join("")}</div>`;
-  return sideBox(head, body, "mediabox");
+  return sideBox(toolHead("media"), body, "toolbox mediabox", ` aria-label="Media"${toolStyle(height)}`);
+};
+
+/** tool: null (only the buttons) | "client" | "behavior" | "todevice" (the Client Backend Tool open, with that section open) | "media" */
+const toolBoxes = (tool, height) => {
+  const client = ["client", "behavior", "todevice"].includes(tool) ? toolSplit("client") + clientBox(tool, height) : toolButton("client");
+  const media = tool === "media" ? toolSplit("media") + mediaBox(height) : toolButton("media");
+  return client + media;
 };
 
 /**
- * state: "none" | "dropdown" | "state" | "state-element-call" | "state-raw" | "state-edit" | "timeline" |
- * "timeline-raw" | "timeline-delayed" | "behavior" | "todevice". media: "collapsed" | "open".
+ * state (the room box): "none" | "dropdown" | "state" | "state-element-call" | "state-raw" | "state-edit" | "timeline" |
+ * "timeline-raw" | "timeline-delayed" | "closed" (all sections closed).
+ * tool: see `toolBoxes`; toolHeight: the open tool box's height in px.
  */
 const STATE_PAGES = { state: {}, "state-element-call": { form: "Element Call" }, "state-raw": { form: "Raw JSON" }, "state-edit": { editing: true } };
 
-export function devBackendView({ state = "state", media = "collapsed" } = {}) {
-  const mediaBtn = `<button class="media-btn">${icon("image", 16)}<span>Media Backend Tool</span><em>3 files</em>${icon("chevRight", 14, "end")}</button>`;
+export function devBackendView({ state = "state", tool = null, toolHeight } = {}) {
   const leave = `<button class="leave-link" title="Back to your Matrix account. The mocked rooms are kept.">Leave DevBackend${icon("logout", 14)}</button>`;
-  const tail = (media === "open" ? `<div class="vsplit" role="separator" aria-orientation="horizontal" aria-label="Resize the media box" aria-valuenow="42" aria-valuemin="20" aria-valuemax="80" tabindex="0" title="Drag or use the arrow keys to resize · double click or Enter to reset"><i></i></div>${mediaBox()}` : mediaBtn) + leave;
+  const tail = toolBoxes(tool, toolHeight) + leave;
   if (state === "none") {
     const head = `<div class="room-pick none"><span class="av sq ghost" style="--s:28px">${icon("hash", 14)}</span><div class="side-title"><b>No mocked room</b><small>DevBackend</small></div>${icon("chevDown", 14, "end")}</div>`;
     const body = `<div class="empty">${icon("cone", 28)}<b>No mocked rooms yet</b><p>Create an empty room, or copy a real one from its room overview (Dev tools › Copy to DevBackend).</p>${btn("Create a room", { kind: "primary", ico: "plus" })}</div>`;
     return sideBox(head, body, "devb") + tail;
   }
   const head = `<button class="room-pick ${state === "dropdown" ? "open" : ""}" aria-haspopup="listbox" aria-expanded="${state === "dropdown"}">${roomAv("lab", 28)}<div class="side-title"><b>Widget lab</b><small class="mono">!lab:dev.local</small></div>${icon("chevDown", 14, "end")}</button>${state === "dropdown" ? roomMenu() : ""}`;
-  const s = state === "dropdown" ? "state-closed" : state;
+  const s = state === "dropdown" ? "closed" : state;
   const body =
     acc("State", Object.hasOwn(STATE_PAGES, s), stateSection(STATE_PAGES[s]), "9 types") +
-    acc("Timeline", s.startsWith("timeline"), timelineSection({ form: s === "timeline-raw" ? "Raw JSON" : "Message", delayed: s === "timeline-delayed" }), "128 events") +
-    acc("Widget host behavior", s === "behavior", behaviorSection()) +
-    acc("To-device messages", s === "todevice", toDeviceSection(), "2");
+    acc("Timeline", s.startsWith("timeline"), timelineSection({ form: s === "timeline-raw" ? "Raw JSON" : "Message", delayed: s === "timeline-delayed" }), "128 events");
   return sideBox(head, body, "devb") + tail;
 }
 

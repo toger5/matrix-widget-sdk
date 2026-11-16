@@ -67,16 +67,17 @@ const VERIFICATION_STOPPED = "The DevBackend was activated, which stops the veri
 
 const errorText = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
-const DEFAULT_DEV_BEHAVIOR: WidgetHostBehavior = { autoApproveCapabilities: false, autoApproveOpenId: false, rememberCapabilities: false, failSends: false };
+const DEFAULT_DEV_BEHAVIOR: WidgetHostBehavior = { autoApproveCapabilities: false, autoApproveOpenId: false, rememberCapabilities: false };
 /** Matrix accounts: the user is asked, and the answer is remembered. */
-const MATRIX_BEHAVIOR: WidgetHostBehavior = { autoApproveCapabilities: false, autoApproveOpenId: false, rememberCapabilities: true, failSends: false };
+const MATRIX_BEHAVIOR: WidgetHostBehavior = { autoApproveCapabilities: false, autoApproveOpenId: false, rememberCapabilities: true };
 
 const defaultDevBackendVm = (): DevBackendViewModel => ({
-  openSections: ["state", "timeline"],
+  // "widgetHostBehavior" is a section of the Client Backend Tool: open once the tool is opened.
+  openSections: ["state", "timeline", "widgetHostBehavior"],
   sendForm: "message",
   stateForm: "widget",
-  media: { open: false, heightShare: 0.4 },
-  behavior: {},
+  tools: { open: null, heightShare: 0.5 },
+  behavior: DEFAULT_DEV_BEHAVIOR,
 });
 
 /**
@@ -89,7 +90,7 @@ export interface HostSeed extends DevBackendSeed {
   open?: { room: RoomId; widgets?: string[]; active?: string; overview?: boolean }[];
   /** The SidePanel view; `null` closes it. Default: the DevBackendView, like after activating the DevBackend. */
   sidePanel?: "devBackend" | "settings" | "account" | null;
-  /** WidgetHostBehavior of every seeded room. */
+  /** WidgetHostBehavior of the DevBackend (all mocked rooms). "Fail sends" is the content field `failSends`. */
   behavior?: Partial<WidgetHostBehavior>;
   leftBarCollapsed?: boolean;
   /** How long a widget has for `notify_ready` before it counts as failed. Default: 15 s (`NOTIFY_READY_TIMEOUT_MS`). */
@@ -441,9 +442,10 @@ export class AppController {
     }
   }
 
-  private behaviorOf(roomId: RoomId): WidgetHostBehavior {
+  /** How the host answers the widgets of the active account. The only reader of `WidgetHostBehavior`. */
+  private behavior(): WidgetHostBehavior {
     if (!this.devActive) return MATRIX_BEHAVIOR;
-    return { ...DEFAULT_DEV_BEHAVIOR, ...this.main?.devBackend?.behavior[roomId] };
+    return { ...DEFAULT_DEV_BEHAVIOR, ...this.main?.devBackend?.behavior };
   }
 
   private acquireBackend(session: LiveSession, roomId: RoomId): Promise<RoomBackend> {
@@ -481,7 +483,7 @@ export class AppController {
     this.acquireBackend(session, roomId).then(
       (backend) => {
         if (!stillWanted()) return this.releaseBackend(roomId);
-        const behavior = () => this.behaviorOf(roomId);
+        const behavior = () => this.behavior();
         const runtime = new WidgetRuntime({
           id,
           widget,
@@ -777,7 +779,7 @@ export class AppController {
     this.notifyReadyTimeoutMs = seed.notifyReadyTimeoutMs;
     this.stopWatchingRooms?.();
     // The DevBackend validates its seed strictly: hand it its own fields only.
-    const content: DevBackendSeed = { userId: seed.userId, rooms: seed.rooms, media: seed.media, demoMedia: seed.demoMedia };
+    const content: DevBackendSeed = { userId: seed.userId, rooms: seed.rooms, media: seed.media, demoMedia: seed.demoMedia, failSends: seed.failSends };
     if (this.devBackend) await this.devBackend.populate(content);
     else {
       this.devBackend = await DevBackend.fromSeed(content);
@@ -785,7 +787,7 @@ export class AppController {
     }
     const dev = this.devBackend;
     const rooms = dev.rooms();
-    const behavior = Object.fromEntries(rooms.map((r) => [r.id, { ...DEFAULT_DEV_BEHAVIOR, ...seed.behavior, failSends: seed.rooms?.find((s) => s.id === r.id)?.failSends ?? seed.behavior?.failSends ?? false }]));
+    const behavior = { ...DEFAULT_DEV_BEHAVIOR, ...seed.behavior };
     const matrixAccounts = (this.main?.accounts ?? []).filter((a) => a.kind === "matrix");
     // TODO-FINDING seed-dev-tools-off-in-devbackend - a seed with `settings: { devTools: false }` wins over the rule "dev tools cannot be turned off while the DevBackend is active" (`settings/set` enforces it). The result is a state no user can reach: the DevBackend account is not listed (`syncDevAccount`), so `devBackendActive` is false: no fence, no badge, no DevBackend button, although the DevBackend's rooms are shown. Options: force `devTools: true` here too, or keep it as the only way for tests to see the "dev tools disabled" views.
     this.store.update((vm) => ({ ...vm, settings: { ...vm.settings, devTools: true, ...seed.settings } }));
@@ -1096,16 +1098,18 @@ export class AppController {
       case "mock/sendToDevice":
         return void dev?.sendToDevice(intent.message);
       case "mock/setBehavior": {
-        this.setDevVm((d) => ({ ...d, behavior: { ...d.behavior, [intent.roomId]: { ...DEFAULT_DEV_BEHAVIOR, ...d.behavior[intent.roomId], ...intent.behavior } } }));
-        const behavior = this.behaviorOf(intent.roomId);
-        if (intent.behavior.failSends !== undefined) dev?.setFailSends(intent.roomId, behavior.failSends);
-        for (const widget of Object.values(this.main?.widgets ?? {})) if (widget.roomId === intent.roomId) this.runtimes.get(widget.id)?.setOpenIdAutoApproved(behavior.autoApproveOpenId);
+        this.setDevVm((d) => ({ ...d, behavior: { ...DEFAULT_DEV_BEHAVIOR, ...d.behavior, ...intent.behavior } }));
+        if (intent.behavior.autoApproveOpenId === undefined) return;
+        const { autoApproveOpenId } = this.behavior();
+        for (const runtime of this.runtimes.values()) runtime.setOpenIdAutoApproved(autoApproveOpenId);
         return;
       }
-      case "media/toggleBox":
-        return this.setDevVm((d) => ({ ...d, media: { ...d.media, open: !d.media.open } }));
-      case "media/resizeBox":
-        return this.setDevVm((d) => ({ ...d, media: { ...d.media, heightShare: Math.max(0.15, Math.min(intent.heightShare, 0.8)) } }));
+      case "mock/setFailSends":
+        return dev?.setFailSends(intent.on);
+      case "mock/toggleTool":
+        return this.setDevVm((d) => ({ ...d, tools: { ...d.tools, open: d.tools.open === intent.tool ? null : intent.tool } }));
+      case "mock/resizeTool":
+        return this.setDevVm((d) => ({ ...d, tools: { ...d.tools, heightShare: Math.max(0.15, Math.min(intent.heightShare, 0.8)) } }));
       case "media/upload":
         return void Promise.all(intent.files.map(async (file) => ({ name: file.name, mimetype: file.type || undefined, data: await file.arrayBuffer() }))).then(
           (files) => dev?.addMedia(files),

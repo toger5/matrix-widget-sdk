@@ -46,7 +46,7 @@ describe("DevBackend: rooms", () => {
     expect(dev.accountId).toBe("devBackend");
     expect(dev.userId).toBe("@alice:dev.local");
     expect(dev.rooms()).toEqual([]);
-    expect(dev.snapshot()).toEqual({ rooms: [], userId: "@alice:dev.local", state: [], timeline: [], scheduled: [], toDevice: [], media: [] });
+    expect(dev.snapshot()).toEqual({ rooms: [], userId: "@alice:dev.local", state: [], timeline: [], scheduled: [], toDevice: [], failSends: false, media: [] });
     expect((await dev.account()).userId).toBe("@alice:dev.local");
     expect(await dev.needsVerification()).toBe(false);
     expect(await dev.widgets("!nope:dev.local")).toEqual([]);
@@ -122,6 +122,7 @@ describe("DevBackend: rooms", () => {
     dev.addRoom();
     dev.addMedia([{ data: bytes("x") }]);
     dev.sendToDevice({ type: "t", userId: "@bob:dev.local", deviceId: "B", encrypted: false, content: {} });
+    dev.setFailSends(true);
     const revoke = vi.spyOn(URL, "revokeObjectURL");
     const notified = vi.fn();
     dev.subscribe(notified);
@@ -129,7 +130,7 @@ describe("DevBackend: rooms", () => {
     await dev.logout();
     expect(notified).toHaveBeenCalledTimes(1);
     expect(revoke).toHaveBeenCalledTimes(1);
-    expect(dev.snapshot()).toEqual({ rooms: [], userId: "@alice:dev.local", state: [], timeline: [], scheduled: [], toDevice: [], media: [] });
+    expect(dev.snapshot()).toEqual({ rooms: [], userId: "@alice:dev.local", state: [], timeline: [], scheduled: [], toDevice: [], failSends: false, media: [] });
     revoke.mockRestore();
   });
 });
@@ -251,8 +252,9 @@ describe("DevBackend: events", () => {
     const { ask, grant } = behindDriver(await dev.backendFor(room));
     await grant([`widget:${X}send_event.timeline:m.room.message`]);
 
-    dev.setFailSends(room, true);
-    expect(dev.failSends(room)).toBe(true);
+    dev.setFailSends(true);
+    expect(dev.failSends()).toBe(true);
+    expect(dev.snapshot().failSends).toBe(true);
     const failed = await ask(`${X}send_event`, { type: "m.room.message", content: { body: "hi" } });
     expect((failed.error as { message: string }).message).toContain("simulated failure");
 
@@ -263,8 +265,20 @@ describe("DevBackend: events", () => {
     // Still on for the widget.
     expect((await ask(`${X}send_event`, { type: "m.room.message", content: { body: "hi" } })).error).toBeDefined();
 
-    dev.setFailSends(room, false);
+    dev.setFailSends(false);
     expect((await ask(`${X}send_event`, { type: "m.room.message", content: { body: "hi" } })).event_id).toBeDefined();
+  });
+
+  it("fails the widgets' sends in every room, also in rooms added later", async () => {
+    const dev = new DevBackend();
+    const before = dev.addRoom();
+    dev.setFailSends(true);
+    const after = dev.addRoom();
+    for (const room of [before, after]) {
+      const { ask, grant } = behindDriver(await dev.backendFor(room));
+      await grant([`widget:${X}send_event.timeline:m.room.message`]);
+      expect((await ask(`${X}send_event`, { type: "m.room.message", content: { body: "hi" } })).error).toBeDefined();
+    }
   });
 });
 
@@ -443,7 +457,6 @@ describe("DevBackend: seeds", () => {
           { type: "m.room.message", sender: "@bob:seed.local", content: { msgtype: "m.text", body: "hi" } },
           { type: "m.room.message", content: { msgtype: "m.text", body: "hello" } },
         ],
-        failSends: true,
       },
       { id: "!two:seed.local", name: "Two" },
     ],
@@ -451,6 +464,7 @@ describe("DevBackend: seeds", () => {
       { mxcUri: "mxc://seed.local/notes", name: "notes.txt", mimetype: "text/plain", text: "some notes" },
       { mxcUri: "mxc://seed.local/bin", mimetype: "application/octet-stream", base64: "AAECAwQ=" },
     ],
+    failSends: true,
   };
 
   it("builds the rooms, widgets, members, messages and media of a seed", async () => {
@@ -461,7 +475,7 @@ describe("DevBackend: seeds", () => {
       { id: "!two:seed.local", name: "Two", widgetEvents: [], memberCount: 1 },
     ]);
     expect(await dev.roomDetails("!one:seed.local")).toMatchObject({ topic: "The first", memberCount: 3 });
-    expect(dev.failSends("!one:seed.local")).toBe(true);
+    expect(dev.failSends()).toBe(true);
     expect(dev.snapshot("!one:seed.local").timeline.slice(0, 2)).toMatchObject([
       { sender: "@dev:seed.local", content: { body: "hello" } },
       { sender: "@bob:seed.local", content: { body: "hi" } },
@@ -509,7 +523,7 @@ describe("DevBackend: seeds", () => {
       return "valid";
     };
     expect(error([])).toBe("Invalid DevBackend seed: seed: expected an object, got an array");
-    expect(error({ room: [] })).toBe("Invalid DevBackend seed: seed.room: unknown field (known: userId, rooms, media, demoMedia)");
+    expect(error({ room: [] })).toBe("Invalid DevBackend seed: seed.room: unknown field (known: userId, rooms, media, demoMedia, failSends)");
     expect(error({ userId: "alice" })).toContain("seed.userId: expected a user id like @alice:dev.local");
     expect(error({ rooms: [{ id: "!a:b", name: "A" }, { id: "!a:b", name: "B" }] })).toContain("seed.rooms[1].id: !a:b is used by an earlier room");
     expect(error({ rooms: [{}] })).toContain("seed.rooms[0].name: expected a string, got a undefined");

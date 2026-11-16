@@ -1,4 +1,4 @@
-/** DevBackendView: the mocked rooms (dropdown, add, clear, remove), the widget host behavior, to-device messages and the media box. */
+/** DevBackendView: the mocked rooms (dropdown, add, clear, remove) and the tools: the Client Backend Tool (widget host behavior, to-device messages) and the Media Backend Tool. */
 import { expect, LAB, NEW_WIDGET, test, widgetId } from "./host";
 
 const NEW = widgetId(LAB, NEW_WIDGET);
@@ -78,29 +78,48 @@ test("clear room: the events and the widgets are gone, the room stays", async ({
   expect(store.state.some((e) => e.eventType === "m.widget")).toBe(false);
 });
 
-test("widget host behavior: without auto-approve the widget asks for permissions", async ({ host }) => {
-  await host.populate("lab", { behavior: { autoApproveCapabilities: true }, open: [{ room: LAB }] });
+test("widget host behavior: the same for every room; without auto-approve the widget asks for permissions", async ({ host }) => {
+  await host.populate("two-rooms", { behavior: { autoApproveCapabilities: true }, open: [{ room: LAB }] });
   const view = host.page.getByTestId("devbackend-view");
+  const side = host.page.getByTestId("sidepanel");
   await view.getByRole("button", { name: /^State \d/ }).click();
   await view.getByRole("button", { name: /^Timeline \d/ }).click();
-  await view.getByRole("button", { name: "Widget host behavior" }).click();
-  const autoApprove = view.getByRole("switch", { name: "Auto-approve capabilities" });
+  await side.getByRole("button", { name: "Client Backend Tool" }).click();
+  // "Widget host behavior" is open when the tool opens.
+  const client = host.page.getByTestId("devbackend-client");
+  const autoApprove = client.getByRole("switch", { name: "Auto-approve capabilities" });
   await expect(autoApprove).toBeChecked();
+  await expect(side.getByRole("separator", { name: "Resize the client backend box" })).toBeVisible();
   await host.leaf("devbackend/behavior");
+
+  // The tool belongs to the account: another room shows the same behavior.
+  await view.getByRole("button", { name: /^Widget lab !lab/ }).click();
+  await host.page.getByRole("listbox", { name: "Mocked rooms" }).getByRole("option", { name: /Standup/ }).click();
+  await expect(view).toHaveAttribute("data-room-id", STANDUP);
+  await expect(autoApprove).toBeChecked();
 
   await autoApprove.click();
   await expect(autoApprove).not.toBeChecked();
-  expect((await host.main()).devBackend?.behavior[LAB].autoApproveCapabilities).toBe(false);
+  expect((await host.main()).devBackend?.behavior.autoApproveCapabilities).toBe(false);
   await host.button("Open New test widget").click();
   await expect(host.page.getByTestId("capability-prompt")).toBeVisible();
   expect((await host.main()).widgets[NEW].prompts.capabilities).toBeDefined();
+
+  // By keyboard: the control that replaces the pressed one takes the focus.
+  const minimise = client.getByRole("button", { name: "Minimise the client backend tool" });
+  await minimise.press("Enter");
+  await expect(client).toHaveCount(0);
+  const button = side.getByRole("button", { name: "Client Backend Tool" });
+  await expect(button).toBeFocused();
+  await button.press("Enter");
+  await expect(minimise).toBeFocused();
 });
 
 test("widget host behavior: “fail sends” answers the widget's send with an error", async ({ host }) => {
   await host.populate("lab", { behavior: { autoApproveCapabilities: true }, open: [{ room: LAB, widgets: [NEW_WIDGET] }] });
   await host.ready(NEW);
-  const view = host.page.getByTestId("devbackend-view");
-  await view.getByRole("button", { name: "Widget host behavior" }).click();
+  await host.page.getByTestId("sidepanel").getByRole("button", { name: "Client Backend Tool" }).click();
+  const view = host.page.getByTestId("devbackend-client");
   await view.getByRole("switch", { name: "Fail sends" }).click();
   await expect(view.getByRole("switch", { name: "Fail sends" })).toBeChecked();
 
@@ -117,10 +136,20 @@ test("widget host behavior: “fail sends” answers the widget's send with an e
 test("to-device: a message sent from the view reaches the widget, one sent by the widget is listed", async ({ host }) => {
   await host.populate("lab", { behavior: { autoApproveCapabilities: true }, open: [{ room: LAB, widgets: [NEW_WIDGET] }] });
   await host.ready(NEW);
-  const view = host.page.getByTestId("devbackend-view");
-  await view.getByRole("button", { name: /^State \d/ }).click();
-  await view.getByRole("button", { name: /^Timeline \d/ }).click();
+  const room = host.page.getByTestId("devbackend-view");
+  await room.getByRole("button", { name: /^State \d/ }).click();
+  await room.getByRole("button", { name: /^Timeline \d/ }).click();
+  await host.page.getByTestId("sidepanel").getByRole("button", { name: "Client Backend Tool" }).click();
+  const view = host.page.getByTestId("devbackend-client");
+  await view.getByRole("button", { name: "Widget host behavior" }).click();
   await view.getByRole("button", { name: /^To-device messages/ }).click();
+  // Higher, as in the leaf: by keyboard (End is the largest share).
+  const separator = host.page.getByRole("separator", { name: "Resize the client backend box" });
+  await separator.press("End");
+  await expect(separator).toHaveAttribute("aria-valuenow", "80");
+  await separator.press("ArrowDown");
+  await expect(separator).toHaveAttribute("aria-valuenow", "75");
+  expect((await host.main()).devBackend?.tools.heightShare).toBe(0.75);
   const form = view.getByRole("form", { name: "Send to-device message" });
   const messages = view.getByRole("list", { name: "To-device messages" }).getByRole("listitem");
 
@@ -145,25 +174,41 @@ test("to-device: a message sent from the view reaches the widget, one sent by th
   await expect(messages).toHaveCount(2);
 });
 
-test("media box: open, upload a file, copy its MXC URI, minimise", async ({ host }) => {
+test("media tool: open (closing the client tool), upload a file, copy its MXC URI, minimise", async ({ host }) => {
   await host.populate("lab");
   const side = host.page.getByTestId("sidepanel");
   const view = host.page.getByTestId("devbackend-view");
   await view.getByRole("button", { name: /^State \d/ }).click();
   await view.getByRole("button", { name: /^Timeline \d/ }).click();
-  await expect(side.getByRole("button", { name: /Media Backend Tool/ })).toBeVisible();
-  await host.leaf("devbackend/media-collapsed");
+  await expect(side.getByRole("button", { name: "Client Backend Tool" })).toBeVisible();
+  await expect(side.getByRole("button", { name: /Media Backend Tool/ })).toContainText("3 files");
+  await host.leaf("devbackend/tools-collapsed");
 
-  await view.getByRole("button", { name: "Widget host behavior" }).click();
+  // Only one tool box is open at a time.
+  await side.getByRole("button", { name: "Client Backend Tool" }).click();
+  await expect(host.page.getByTestId("devbackend-client")).toBeVisible();
   await side.getByRole("button", { name: /Media Backend Tool/ }).click();
+  await expect(host.page.getByTestId("devbackend-client")).toHaveCount(0);
+  await expect(side.getByRole("button", { name: "Client Backend Tool" })).toBeVisible();
   const box = host.page.getByTestId("devbackend-media");
   const files = box.getByRole("list", { name: "Media files" }).getByRole("listitem");
   await expect(box.getByRole("button", { name: /Drop files or browse/ })).toBeVisible();
-  await expect(side.getByRole("separator", { name: "Resize the media box" })).toBeVisible();
+  const separator = side.getByRole("separator", { name: "Resize the media box" });
+  await expect(separator).toHaveAttribute("aria-valuenow", "50");
   await expect(files).toHaveText([/landscape\.png/, /tiles\.png/, /notes\.txt/]);
-  expect((await host.main()).devBackend?.media.open).toBe(true);
+  expect((await host.main()).devBackend?.tools.open).toBe("media");
   await expect.poll(() => files.first().locator("img").evaluate((img: HTMLImageElement) => img.complete && img.naturalWidth > 0)).toBe(true);
   await host.leaf("devbackend/media-open");
+
+  // Dragging the handle up makes the box larger; a double click resets it.
+  const at = (await separator.boundingBox())!;
+  await host.page.mouse.move(at.x + at.width / 2, at.y + at.height / 2);
+  await host.page.mouse.down();
+  await host.page.mouse.move(at.x + at.width / 2, at.y + at.height / 2 - 100, { steps: 5 });
+  await host.page.mouse.up();
+  await expect.poll(async () => Number(await separator.getAttribute("aria-valuenow"))).toBeGreaterThan(55);
+  await separator.dblclick();
+  await expect(separator).toHaveAttribute("aria-valuenow", "50");
 
   await box.getByLabel("Upload media files").setInputFiles({ name: "upload.txt", mimeType: "text/plain", buffer: Buffer.from("hello media") });
   await expect(files).toHaveCount(4);
@@ -181,7 +226,7 @@ test("media box: open, upload a file, copy its MXC URI, minimise", async ({ host
   await expect(side.getByRole("button", { name: /Media Backend Tool/ })).toContainText("4 files");
 });
 
-test("media box: a file the widget uploads is listed with the widget as uploader", async ({ host }) => {
+test("media tool: a file the widget uploads is listed with the widget as uploader", async ({ host }) => {
   await host.populate("lab", { behavior: { autoApproveCapabilities: true }, open: [{ room: LAB, widgets: [NEW_WIDGET] }] });
   await host.ready(NEW);
   await host.page.getByTestId("sidepanel").getByRole("button", { name: /Media Backend Tool/ }).click();

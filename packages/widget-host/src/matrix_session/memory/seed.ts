@@ -37,8 +37,6 @@ export interface SeedRoom {
   state?: SeedStateEvent[];
   /** Oldest first. */
   timeline?: SeedTimelineEvent[];
-  /** Every send of a widget in this room fails. */
-  failSends?: boolean;
 }
 
 /** One file of the (account-wide) media repository. Exactly one of `base64`, `text` and `url` gives the bytes. */
@@ -60,6 +58,8 @@ export interface DevBackendSeed {
   media?: SeedMedia[];
   /** Add the demo files of `public/demo/` (what the test widgets download by default). */
   demoMedia?: boolean;
+  /** Every send of a widget in every room fails ("fail sends"). */
+  failSends?: boolean;
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -135,7 +135,7 @@ function timelineEvent(value: unknown, path: string): SeedTimelineEvent {
 }
 
 function room(value: unknown, path: string): SeedRoom {
-  const o = object(value, path, ["id", "name", "topic", "members", "widgets", "state", "timeline", "failSends"]);
+  const o = object(value, path, ["id", "name", "topic", "members", "widgets", "state", "timeline"]);
   return compact({
     id: optional(o.id, `${path}.id`, (v, p) => prefixed(v, p, "!", "a room id like !lab:dev.local")),
     name: string(o.name, `${path}.name`),
@@ -144,7 +144,6 @@ function room(value: unknown, path: string): SeedRoom {
     widgets: optional(o.widgets, `${path}.widgets`, (v, p) => list(v, p, widget)),
     state: optional(o.state, `${path}.state`, (v, p) => list(v, p, stateEvent)),
     timeline: optional(o.timeline, `${path}.timeline`, (v, p) => list(v, p, timelineEvent)),
-    failSends: optional(o.failSends, `${path}.failSends`, boolean),
   });
 }
 
@@ -176,12 +175,13 @@ function media(value: unknown, path: string): SeedMedia {
  * does not silently seed nothing.
  */
 export function validateSeed(json: unknown): DevBackendSeed {
-  const o = object(json, "seed", ["userId", "rooms", "media", "demoMedia"]);
+  const o = object(json, "seed", ["userId", "rooms", "media", "demoMedia", "failSends"]);
   const seed = compact({
     userId: optional(o.userId, "seed.userId", userId),
     rooms: optional(o.rooms, "seed.rooms", (v, p) => list(v, p, room)),
     media: optional(o.media, "seed.media", (v, p) => list(v, p, media)),
     demoMedia: optional(o.demoMedia, "seed.demoMedia", boolean),
+    failSends: optional(o.failSends, "seed.failSends", boolean),
   });
   const ids = new Set<string>();
   seed.rooms?.forEach(({ id }, i) => {

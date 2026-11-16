@@ -3,11 +3,12 @@ import type { CSSProperties } from "react";
 import type { DevBackendSection, DevBackendViewModel, MockedRoomData } from "../../appViewModel";
 import { useDispatch, useViewEnv } from "../env";
 import { Avatar, Button, Icon, IconButton } from "../ui/atoms";
-import { MediaBox, MediaButton, MediaSeparator } from "./MediaBox";
-import { BehaviorSection, ToDeviceSection } from "./OtherSections";
+import { ClientBox } from "./ClientBox";
+import { MediaBox, filesLabel } from "./MediaBox";
 import { Acc, usePopup } from "./parts";
 import { StateSection } from "./StateSection";
 import { TimelineSection } from "./TimelineSection";
+import { ToolButton, ToolSeparator } from "./ToolBox";
 
 export interface DevBackendViewProps {
   devBackend: DevBackendViewModel;
@@ -19,8 +20,9 @@ type MockedRoom = MockedRoomData["rooms"][number];
 
 /**
  * leaves devbackend/*. The content of the mocked rooms comes from `useViewEnv().useMockedRoomData()`.
- * It renders the children of the SidePanel column (`.sidecol`): the room box, the media box or
- * its button, and the leave link.
+ * It renders the children of the SidePanel column (`.sidecol`): the room box, the tools (the
+ * Client Backend Tool and the Media Backend Tool, each a button or, at most one, its box) and the
+ * leave link.
  */
 // TODO-FINDING devbackend-extra-store-tools - the old app had store tools without a place in the design: push TURN credentials, set room account data, set RTC transports, fire the oldest delayed event. Not ported.
 // TODO-FINDING devbackend-raw-form-shape - the raw JSON form is one editor for the whole event ({ type, sender, content }) as in leaf devbackend/timeline-raw, not separate type + content fields.
@@ -32,6 +34,7 @@ export function DevBackendView({ devBackend, canLeave }: DevBackendViewProps) {
   const toggle = (section: DevBackendSection) => () => dispatch({ type: "mock/toggleSection", section });
   const members = data.state.filter((e) => e.type === "m.room.member").map((e) => e.stateKey);
   const stateTypes = new Set(data.state.map((e) => e.type)).size;
+  const tools = devBackend.tools;
 
   return (
     <>
@@ -49,13 +52,6 @@ export function DevBackendView({ devBackend, canLeave }: DevBackendViewProps) {
               </Acc>
               <Acc id="timeline" title="Timeline" open={isOpen("timeline")} count={`${data.timeline.length} event${data.timeline.length === 1 ? "" : "s"}`} onToggle={toggle("timeline")}>
                 <TimelineSection key={room.id} roomId={room.id} sendForm={devBackend.sendForm} timeline={data.timeline} scheduled={data.scheduled} userId={data.userId} members={members} />
-              </Acc>
-              <Acc id="widgetHostBehavior" title="Widget host behavior" open={isOpen("widgetHostBehavior")} onToggle={toggle("widgetHostBehavior")}>
-                <BehaviorSection roomId={room.id} behavior={devBackend.behavior[room.id]} />
-              </Acc>
-              {/* TODO-FINDING devbackend-todevice-placement - to-device messages are account-wide but shown in the per-room page (designFeedback "Still open" 7). Kept as in the mockup. */}
-              <Acc id="toDevice" title="To-device messages" open={isOpen("toDevice")} count={String(data.toDevice.length)} onToggle={toggle("toDevice")}>
-                <ToDeviceSection toDevice={data.toDevice} userId={data.userId} />
               </Acc>
             </>
           ) : data.rooms.length ? (
@@ -76,13 +72,21 @@ export function DevBackendView({ devBackend, canLeave }: DevBackendViewProps) {
           )}
         </div>
       </section>
-      {devBackend.media.open ? (
+      {tools.open === "client" ? (
         <>
-          <MediaSeparator heightShare={devBackend.media.heightShare} />
-          <MediaBox media={data.media} heightShare={devBackend.media.heightShare} />
+          <ToolSeparator tool="client" heightShare={tools.heightShare} />
+          <ClientBox openSections={devBackend.openSections} heightShare={tools.heightShare} behavior={devBackend.behavior} data={data} />
         </>
       ) : (
-        <MediaButton count={data.media.length} />
+        <ToolButton tool="client" />
+      )}
+      {tools.open === "media" ? (
+        <>
+          <ToolSeparator tool="media" heightShare={tools.heightShare} />
+          <MediaBox media={data.media} heightShare={tools.heightShare} />
+        </>
+      ) : (
+        <ToolButton tool="media" count={filesLabel(data.media.length)} />
       )}
       {canLeave && (
         <button type="button" className="leave-link" title="Back to your Matrix account. The mocked rooms are kept." onClick={() => dispatch({ type: "devBackend/leave" })}>

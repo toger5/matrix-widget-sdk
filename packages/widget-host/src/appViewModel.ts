@@ -220,7 +220,7 @@ export interface SidePanelViewModel {
 
 /**
  * UI state of the DevBackendView. The content of the mocked rooms (state, timeline, scheduled
- * events, to-device messages, media) is `MockedRoomData`, read from the DevBackend's store.
+ * events, to-device messages, "fail sends", media) is `MockedRoomData`, read from the DevBackend's store.
  */
 export interface DevBackendViewModel {
   /** `undefined`: no rooms yet (leaf devbackend/none). */
@@ -230,26 +230,32 @@ export interface DevBackendViewModel {
   sendForm: "message" | "sticker" | "rtcMember" | "media" | "raw";
   /** Which predefined form "send state" shows. "raw" is type, state key and a JSON editor. leaves devbackend/state, devbackend/state-element-call, devbackend/state-raw */
   stateForm: "widget" | "elementCall" | "raw";
-  media: {
-    /** Closed: only the "Media Backend Tool" button below the room box. leaves devbackend/media-* */
-    open: boolean;
-    /** Share of the SidePanel height the box takes while open (0..1). */
+  /** The tool boxes below the room box. leaves devbackend/tools-collapsed, devbackend/behavior, devbackend/todevice, devbackend/media-open */
+  tools: {
+    /** The one open tool box; the other tools are buttons. `null`: only the buttons. */
+    open: DevBackendTool | null;
+    /** Share of the SidePanel height the open box takes (0..1). */
     heightShare: number;
   };
-  /** Per mocked room. */
-  behavior: Record<RoomId, WidgetHostBehavior>;
+  /** For all mocked rooms. */
+  behavior: WidgetHostBehavior;
 }
 
+/** The sections of the room box ("state", "timeline") and of the Client Backend Tool. */
 export type DevBackendSection = "state" | "timeline" | "widgetHostBehavior" | "toDevice";
+/** "client": the Client Backend Tool (behavior, to-device messages). "media": the Media Backend Tool. */
+export type DevBackendTool = "client" | "media";
 
-/** How the host answers widgets in a mocked room, without a user in the loop. leaf devbackend/behavior */
+/**
+ * How the host answers widgets while the DevBackend is active, without a user in the loop.
+ * "Fail sends" is not part of it: the DevBackend does that (`MockedRoomData.failSends`).
+ * leaf devbackend/behavior
+ */
 export interface WidgetHostBehavior {
   autoApproveCapabilities: boolean;
   autoApproveOpenId: boolean;
   /** `false`: every start of a widget asks again (what the in-memory mode does today). */
   rememberCapabilities: boolean;
-  /** Answer every send with an error, to test a widget's error handling. */
-  failSends: boolean;
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -519,10 +525,11 @@ export type AppIntent =
   | { type: "mock/sendEvent"; roomId: RoomId; event: Pick<MockedTimelineEvent, "type" | "sender" | "content">; delayMs?: number }
   | { type: "mock/updateScheduled"; roomId: RoomId; delayId: string; update: "send" | "restart" | "cancel" }
   | { type: "mock/sendToDevice"; message: Omit<ToDeviceMessage, "direction"> }
-  | { type: "mock/setBehavior"; roomId: RoomId; behavior: Partial<WidgetHostBehavior> }
+  | { type: "mock/setBehavior"; behavior: Partial<WidgetHostBehavior> } // for all mocked rooms
+  | { type: "mock/setFailSends"; on: boolean } // every send of a widget in every mocked room fails (or succeeds again)
   | { type: "mock/clearRoom"; roomId: RoomId } // drops all events of the mocked room
-  | { type: "media/toggleBox" }
-  | { type: "media/resizeBox"; heightShare: number }
+  | { type: "mock/toggleTool"; tool: DevBackendTool } // opens the tool box (closing the open one) or minimises it
+  | { type: "mock/resizeTool"; heightShare: number } // the share of the open tool box
   | { type: "media/upload"; files: File[] }
   | { type: "media/copyMxcUri"; mxcUri: string };
 
@@ -593,6 +600,8 @@ export interface MockedRoomData {
   scheduled: { delayId: string; type: string; stateKey?: string; delayMs: number; restarts: number; scheduledAt?: number }[];
   /** Account-scoped, not per room. */
   toDevice: ToDeviceMessage[];
+  /** Account-scoped: every send of a widget is answered with an error. */
+  failSends: boolean;
   /** Not per room. `name` and `uploadedBy` need the store to record them. */
   media: { mxcUri: string; mimetype?: string; bytes: number; name?: string; uploadedBy?: WidgetInstanceId; /** An object URL for a preview or a download. */ url?: string }[];
 }

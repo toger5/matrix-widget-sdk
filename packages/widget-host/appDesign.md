@@ -214,22 +214,22 @@ Each room has these sections:
 - Timeline
   - send event (also delayed), with a menu of predefined forms so that users don't need to know the raw JSON: message, sticker, RTC member, image/audio. The default is a predefined form; the last option is raw JSON with a text editor.
   - show the list of events
-- WidgetHostBehavior
-  - auto-approve capabilities
-- To-device messages: sending and reading
 
-**Media**
+**Tools**
 
-Media is a special case, as it is not per room. It gets its own box:
+What is not per room is in tool boxes below the room box: the "Client Backend Tool" and the "Media Backend Tool".
 
-- The per-room box does not go all the way to the bottom of the SidePanel. There is enough space below it for a button: "Media Backend Tool".
-- Pressing the button creates a second box below, very similar to the per-room one. The two boxes can be resized by dragging between them.
-- The header of this box has a minimise/hide button to collapse it again (full space for the per-room box).
-- Content: upload media, a list of all media (including media uploaded by widgets), and buttons to copy the MXC URI of each item.
+- The room box does not go all the way to the bottom of the SidePanel. Below it, each tool is a button.
+- Pressing a button turns it into the tool's box; the box and the room box are resized by dragging between them. Only one tool box is open at a time: opening one closes the other.
+- The header of a tool box has a minimise button that turns it back into its button.
+- Client Backend Tool, with collapsible sections like the room box:
+  - Widget host behavior, for all mocked rooms: auto-approve capabilities, auto-approve OpenID tokens, remember capabilities, fail sends (every send of a widget is answered with an error)
+  - To-device messages: sending and reading
+- Media Backend Tool: upload media, a list of all media (including media uploaded by widgets), and buttons to copy the MXC URI of each item. Its button shows the number of files.
 
 **Leave**
 
-At the very bottom of the view, below the media box: "Leave DevBackend" followed by a leave icon. It is just a text button, styled like a link (the icon may be colored). No header and no box: it should not draw attention.
+At the very bottom of the view, below the tools: "Leave DevBackend" followed by a leave icon. It is just a text button, styled like a link (the icon may be colored). No header and no box: it should not draw attention.
 
 Remove the leave options in case there is no logged in account to fallback to.
 
@@ -279,11 +279,10 @@ The mockups needed to review the full design. Each leaf is one state to draw. Do
     - Room page
       - State: shortcuts, send state with the widget form / the Element Call form / as raw JSON, state explorer, edit state
       - Timeline: send event with a predefined form, send event as raw JSON, send delayed event, event list
-      - WidgetHostBehavior
-      - To-device messages
-    - Media box
-      - Collapsed (only the "Media Backend Tool" button)
-      - Open below the room box (resize handle, minimise button, media list)
+    - Tools
+      - Collapsed (the "Client Backend Tool" and "Media Backend Tool" buttons)
+      - Client Backend Tool open below the room box (resize handle, minimise button): WidgetHostBehavior / To-device messages
+      - Media Backend Tool open below the room box (media list)
     - "Leave DevBackend" text button at the bottom (part of every DevBackendView state)
 - PictureInPicturePanel
   - Idle: borderless boxes, 1 widget / 4 widgets
@@ -342,7 +341,6 @@ Notes for the implementation. They add to the design above, they do not change i
 - Moving an iframe in the DOM reloads it, and a shadow DOM does not prevent that. To move a widget between a tab and the PictureInPicturePanel without a reload, keep every iframe mounted in one persistent layer and position it over its current slot.
 - Only absolute `http:` / `https:` widget URLs are embedded, for both widget kinds (a legacy URL is checked as its template, so one starting with `$variable` is refused); any other widget is a disabled tile with the reason.
 - The host cannot read the console of a cross-origin iframe. The WidgetDevToolConsolePanel needs the widget side (SDK or compat wrapper) to forward its logs.
-- To-device messages are account-scoped, not room-scoped. The section may fit better next to the media box than in the per-room page.
 
 **DevBackend forms**
 

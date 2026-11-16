@@ -99,11 +99,12 @@ hands it to the driver of each widget of that room like any other `MatrixBackend
     `host:…forward_event.*` / `host:…update_state` capability was approved. Events the widget
     sends are echoed back the same way. **Scheduled** lists the delayed events (MSC4157) with
     send now / restart / cancel; nothing fires by itself.
-  - **Widget host behavior**: auto-approve capabilities, auto-approve OpenID tokens, remember
-    capabilities, and **fail sends** (every `send_event` and `upload_file` from the widget fails
-    with an error response).
-  - **To-device messages** (MSC3819): send one to the widgets, and read what widgets sent.
-  - **Media Backend Tool**: the store starts with three demo files from `public/demo/`
+  - **Client Backend Tool** (below the room box, shared by all mocked rooms; one tool box is open
+    at a time): **Widget host behavior** (auto-approve capabilities, auto-approve OpenID tokens,
+    remember capabilities, and **fail sends**: every `send_event` and `upload_file` from a widget
+    fails with an error response) and **To-device messages** (MSC3819): send one to the widgets,
+    and read what widgets sent.
+  - **Media Backend Tool** (below the Client Backend Tool): the store starts with three demo files from `public/demo/`
     (`mxc://example.org/demo-landscape`, `…/demo-tiles`, `…/demo-notes`). Upload more; files a
     widget uploads appear here too. Every file has a button to copy its `mxc://` URI.
   Approving capabilities also pushes the current permitted state (`update_state`) at once.

@@ -156,7 +156,7 @@ test("OpenID prompt: block, allow, and auto-approve", async ({ host }) => {
   await expect(widgetLog(host, NEW).locator("pre").first()).toContainText(/get_openid →.*access_token/);
 
   // "auto-approve OpenID tokens" of the DevBackendView applies to the running widget.
-  await host.dispatch({ type: "mock/setBehavior", roomId: LAB, behavior: { autoApproveOpenId: true } });
+  await host.dispatch({ type: "mock/setBehavior", behavior: { autoApproveOpenId: true } });
   await press(host, NEW, "get_openid");
   await expect(widgetLog(host, NEW).locator("pre", { hasText: /get_openid →.*access_token/ })).toHaveCount(2);
   await expect(prompt).toHaveCount(0);

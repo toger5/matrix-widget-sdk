@@ -167,8 +167,8 @@ export function devMainVm(o: Partial<MainViewModel> = {}): MainViewModel {
       openSections: ["state"],
       sendForm: "message",
       stateForm: "widget",
-      media: { open: false, heightShare: 0.4 },
-      behavior: { [ROOMS.lab.id]: { autoApproveCapabilities: true, autoApproveOpenId: false, rememberCapabilities: false, failSends: false } },
+      tools: { open: null, heightShare: 0.5 },
+      behavior: { autoApproveCapabilities: true, autoApproveOpenId: false, rememberCapabilities: false },
     },
     workspaces: { ada: workspace([]), [ACCOUNTS.dev.id]: workspace([roomPanel("lab", [widgetTab("lab", "call"), widgetTab("lab", "notes")])]) },
     data: { rooms: { status: "ready", value: [ROOMS.lab, ROOMS.empty] }, recents: [{ roomId: ROOMS.lab.id, widgetKey: wk("call"), lastOpened: 1_763_300_000_000 }] },
@@ -243,6 +243,7 @@ export const MOCKED_ROOM_DATA: MockedRoomData = {
     { direction: "fromWidget", type: "org.example.ping", userId: "@bob:dev.local", deviceId: "BOBDEVICE", encrypted: false, content: { n: 1 }, timestamp: 1_763_300_002_000 },
     { direction: "toWidget", type: "org.example.pong", userId: "@bob:dev.local", deviceId: "BOBDEVICE", encrypted: true, content: { n: 1 }, timestamp: 1_763_300_002_400 },
   ],
+  failSends: false,
   media: [
     { mxcUri: "mxc://example.org/demo-landscape", mimetype: "image/png", bytes: 48_211, name: "landscape.png" },
     { mxcUri: "mxc://example.org/demo-notes", mimetype: "text/plain", bytes: 312, name: "notes.txt" },

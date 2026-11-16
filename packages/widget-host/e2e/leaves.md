@@ -48,9 +48,9 @@ Every leaf of `design/index.html` (`design/src/leaves.mjs`), with the test in wh
 | --- | --- |
 | `devbackend/none`, `app/devbackend-empty` | `devbackend.spec.ts` › no rooms yet: the RoomsArea is empty, "Create a room" adds and selects the first room |
 | `devbackend/dropdown` | `devbackend.spec.ts` › room dropdown: select a room, add a room and open it in a new room panel |
-| `devbackend/behavior` | `devbackend.spec.ts` › widget host behavior: without auto-approve the widget asks for permissions |
+| `devbackend/behavior` | `devbackend.spec.ts` › widget host behavior: the same for every room; without auto-approve the widget asks for permissions |
 | `devbackend/todevice` | `devbackend.spec.ts` › to-device: a message sent from the view reaches the widget, one sent by the widget is listed |
-| `devbackend/media-collapsed`, `devbackend/media-open` | `devbackend.spec.ts` › media box: open, upload a file, copy its MXC URI, minimise |
+| `devbackend/tools-collapsed`, `devbackend/media-open` | `devbackend.spec.ts` › media tool: open (closing the client tool), upload a file, copy its MXC URI, minimise |
 | `devbackend/state`, `devbackend/state-raw` | `devbackendState.spec.ts` › send state and the state explorer (the widget form, then raw JSON) |
 | `devbackend/state-element-call` | `devbackendState.spec.ts` › the Element Call form writes the call widget as Element Web describes it, and the compat wrapper fills in its URL |
 | `devbackend/state-edit` | `devbackendState.spec.ts` › edit state: saving the editor sends a new state event |

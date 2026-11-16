@@ -37,7 +37,7 @@ export const EMPTY_DEV_TOOLS_DATA: WidgetDevToolsData = {
   console: [],
 };
 
-export const EMPTY_MOCKED_ROOM_DATA: MockedRoomData = { rooms: [], state: [], timeline: [], scheduled: [], toDevice: [], media: [] };
+export const EMPTY_MOCKED_ROOM_DATA: MockedRoomData = { rooms: [], state: [], timeline: [], scheduled: [], toDevice: [], failSends: false, media: [] };
 
 const LOADING: Loadable<RoomDetails> = { status: "loading" };
 

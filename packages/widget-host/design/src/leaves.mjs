@@ -79,11 +79,11 @@ export const LEAVES = [
   },
   {
     id: "complete/devbackend", section: "Complete views", group: "", title: "DevBackend: mocked room, media tool, dev tools on the right", ...BIG,
-    note: "Construction-fence background and DevBackend badge. The DevBackendView with the media box open; dev tools docked right.",
+    note: "Construction-fence background and DevBackend badge. The DevBackendView with the Media Backend Tool open; dev tools docked right.",
     html: app({
       fence: true,
       leftBar: { devTools: true, devBackend: true, active: "devbackend" },
-      side: devBackendView({ state: "timeline", media: "open" }),
+      side: devBackendView({ state: "timeline", tool: "media" }),
       panels: [labCall({ pinNotes: true, dev: { dock: "right", panels: ["messages", "driver"], size: 400 } })],
       pip: pip({ items: [{ room: "lab", widget: "notes" }], style: "right:470px;top:70px;bottom:auto" }),
     }),
@@ -108,7 +108,7 @@ export const LEAVES = [
   {
     id: "app/devbackend", section: "App", group: "", title: "DevBackend active: construction fence + badge", ...FULL,
     note: "The badge sits in the LeftBar, so the mode is not signalled by the background alone.",
-    html: app({ fence: true, leftBar: { devTools: true, devBackend: true, active: "devbackend" }, side: devBackendView({ state: "behavior" }), panels: [labCall({ dev: { dock: "top", panels: [] } })] }),
+    html: app({ fence: true, leftBar: { devTools: true, devBackend: true, active: "devbackend" }, side: devBackendView({ state: "timeline" }), panels: [labCall({ dev: { dock: "top", panels: [] } })] }),
   },
   {
     id: "app/devbackend-collapsed", section: "App", group: "", title: "DevBackend active, LeftBar collapsed: floating badge (extra)", ...FULL,
@@ -173,10 +173,10 @@ export const LEAVES = [
   { id: "devbackend/timeline", section: "SidePanel", group: "DevBackendView › Room page", title: "Timeline: send event with a predefined form, event list", w: 348, h: 840, html: side(devBackendView({ state: "timeline" }), true) },
   { id: "devbackend/timeline-raw", section: "SidePanel", group: "DevBackendView › Room page", title: "Timeline: send event as raw JSON", w: 348, h: 880, html: side(devBackendView({ state: "timeline-raw" }), true) },
   { id: "devbackend/timeline-delayed", section: "SidePanel", group: "DevBackendView › Room page", title: "Timeline: send delayed event", w: 348, h: 1050, html: side(devBackendView({ state: "timeline-delayed" }), true) },
-  { id: "devbackend/behavior", section: "SidePanel", group: "DevBackendView › Room page", title: "WidgetHostBehavior", w: 348, h: 590, html: side(devBackendView({ state: "behavior" }), true) },
-  { id: "devbackend/todevice", section: "SidePanel", group: "DevBackendView › Room page", title: "To-device messages", w: 348, h: 780, html: side(devBackendView({ state: "todevice" }), true) },
-  { id: "devbackend/media-collapsed", section: "SidePanel", group: "DevBackendView › Media box", title: "Collapsed (only the “Media Backend Tool” button)", w: 348, h: 420, html: side(devBackendView({ state: "closed" }), true) },
-  { id: "devbackend/media-open", section: "SidePanel", group: "DevBackendView › Media box", title: "Open below the room box (resize handle, minimise button, media list)", w: 348, h: 850, html: side(devBackendView({ state: "behavior", media: "open" }), true) },
+  { id: "devbackend/tools-collapsed", section: "SidePanel", group: "DevBackendView › Tools", title: "Collapsed (the “Client Backend Tool” and “Media Backend Tool” buttons)", w: 348, h: 470, html: side(devBackendView({ state: "closed" }), true) },
+  { id: "devbackend/behavior", section: "SidePanel", group: "DevBackendView › Tools", title: "Client Backend Tool open below the room box: WidgetHostBehavior (resize handle, minimise button)", w: 348, h: 850, html: side(devBackendView({ state: "closed", tool: "behavior" }), true) },
+  { id: "devbackend/todevice", section: "SidePanel", group: "DevBackendView › Tools", title: "Client Backend Tool open below the room box: to-device messages (dragged higher)", w: 348, h: 900, html: side(devBackendView({ state: "closed", tool: "todevice", toolHeight: 640 }), true) },
+  { id: "devbackend/media-open", section: "SidePanel", group: "DevBackendView › Tools", title: "Media Backend Tool open below the room box (media list)", w: 348, h: 850, html: side(devBackendView({ state: "closed", tool: "media" }), true) },
 
   // ---- PictureInPicturePanel --------------------------------------------------------------
   { id: "pip/idle-1", section: "PictureInPicturePanel", group: "", title: "Idle: borderless box, 1 widget", w: 560, h: 360, html: floating(pip({ items: [{ room: "design", widget: "board" }] })) },

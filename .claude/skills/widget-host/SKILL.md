@@ -125,7 +125,7 @@ their tests) is the `matrix-session` skill (`.claude/skills/matrix-session/SKILL
 
 - The DevBackend is an account (`DEV_ACCOUNT_ID`); activating it switches `activeAccountId`. Its
   content lives in memory only, so its workspace is not persisted.
-- One `InMemoryBackend` per mocked room. Account-scoped data (media, to-device, TURN, RTC
+- One `InMemoryBackend` per mocked room. Account-scoped data (media, to-device, "fail sends", TURN, RTC
   transports) is mirrored across them in `devBackend.ts`. The backend has no change notification:
   the controller calls `refresh()` after every widget message, so keep `refresh()` cheap;
   `snapshot()` returns the same object until `refresh()` finds a change (`useSyncExternalStore`).
