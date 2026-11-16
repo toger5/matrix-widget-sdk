@@ -4,13 +4,20 @@
  * hands it over with `attach()`. A runtime is created when a widget starts and disposed when it
  * stops; a reload (`widget/reload`: "Retry", the reload button of the dev tool bar) disposes it and
  * creates a new one.
+ *
+ * A runtime also decides the iframe's `sandbox` and `allow` (`webview`), once, from the webview
+ * capabilities the widget gets without asking: remembered ones, a legacy client's set for a legacy
+ * widget, and what the controller kept from the start before (`keptWebview`). When the widget
+ * comes to hold one the iframe does not have, or one is revoked, it reports `webviewChanged`, and
+ * the controller starts the widget again with the new attributes (`src/lib/webview.ts`).
  */
 import { capabilityIsKnown, WidgetHostDriver, type DriverSnapshot, type MatrixBackend, type WidgetHostPlatform } from "@matrix-widget-tools/widget-host-bindings";
 
-import { MAX_STATS_BUCKETS, STATS_BUCKET_MS, type WidgetDevToolsData, type WidgetInstanceId, type WidgetMessage } from "../../appViewModel";
+import { MAX_STATS_BUCKETS, STATS_BUCKET_MS, type WebviewAttributes, type WidgetDevToolsData, type WidgetInstanceId, type WidgetMessage } from "../../appViewModel";
 import { loadCapabilities, saveCapabilities } from "../../lib/capabilityStore";
 import { onDriverLog } from "../../lib/hostLogging";
-import { LEGACY_AUTO_APPROVED, type ResolvedWidget } from "../../widgetStateEvent";
+import { sameWebview, webviewCapabilities, webviewFor } from "../../lib/webview";
+import { LEGACY_AUTO_APPROVED, LEGACY_WEBVIEW, type ResolvedWidget } from "../../widgetStateEvent";
 import { Store } from "../store";
 
 /** MSC4412 recommends showing an error when `notify_ready` has not arrived after 15 seconds. */
@@ -31,6 +38,14 @@ export interface WidgetRuntimeEvents {
   alwaysOnScreen(value: boolean): void;
   /** A message was handled: the backend may have changed (the DevBackend has no change notification). */
   activity(): void;
+  /**
+   * The iframe's attributes (`WidgetRuntime.webview`) are not what the widget should have any more: it
+   * holds a webview capability they lack (granted after the widget asked, "Add" of the driver panel),
+   * or one was revoked. `kept`: the webview capabilities for the next start, besides the remembered and
+   * the legacy ones (the next `keptWebview`). The widget has been told (`update_capabilities`); start it
+   * again to apply them. At most once per runtime.
+   */
+  webviewChanged(kept: string[]): void;
 }
 
 export interface WidgetRuntimeOptions {
@@ -45,6 +60,11 @@ export interface WidgetRuntimeOptions {
   theme: () => "light" | "dark";
   /** How long the widget has for `notify_ready`. Default: `NOTIFY_READY_TIMEOUT_MS`; scripted runs shorten it (`HostSeed.notifyReadyTimeoutMs`). */
   notifyReadyTimeoutMs?: number;
+  /**
+   * Webview capabilities the iframe gets from the start besides the remembered and the legacy ones,
+   * and that are granted without a prompt: what the start before reported as `kept` (`webviewChanged`).
+   */
+  keptWebview?: string[];
   events: WidgetRuntimeEvents;
 }
 
@@ -66,7 +86,7 @@ const isError = (response: unknown) => typeof response === "object" && response 
 const emptyData = (): WidgetDevToolsData => ({
   messages: [],
   stats: { actionsFromWidget: 0, actionsToWidget: 0, eventsSharedWithWidget: 0, eventsSentFromWidget: 0, charactersTotal: { toWidget: 0, fromWidget: 0 }, characters: [] },
-  capabilities: { approved: [], autoApproved: [], denied: [], singleUse: [] },
+  capabilities: { approved: [], autoApproved: [], denied: [], singleUse: [], webview: { applied: [], sandbox: "", allow: "" } },
   console: [],
 });
 
@@ -76,6 +96,12 @@ export class WidgetRuntime {
   readonly devTools = new Store<WidgetDevToolsData>(emptyData());
   /** Every envelope in both directions, as it crossed the wire, oldest first. For the e2e test hook only. */
   readonly wireLog: { direction: "fromWidget" | "toWidget"; message: unknown }[] = [];
+  /**
+   * The webview capabilities this start's iframe is built from (the base `sandbox` tokens are always
+   * in, listed or not) and its `sandbox` and `allow`, which `WidgetIframes` renders. Fixed for the
+   * runtime: a change is a new start (`webviewChanged`).
+   */
+  readonly webview: { applied: string[] } & WebviewAttributes;
 
   private readonly driver: WidgetHostDriver;
   private readonly origin: string;
@@ -96,6 +122,10 @@ export class WidgetRuntime {
    * the prompt can show it. Empty once it is answered.
    */
   private asked: string[] = [];
+  /** The `keptWebview` of the options, without what was revoked since. */
+  private keptWebview: string[];
+  /** `webviewChanged` was reported: the controller starts the widget again. */
+  private webviewReported = false;
   private disposed = false;
 
   constructor(private readonly options: WidgetRuntimeOptions) {
@@ -104,6 +134,9 @@ export class WidgetRuntime {
     // The origin of the page the iframe loads: `widget.url` is its `src` (`WidgetIframes`), the URL
     // `embed_widget` checked and serialised, resolved here as the iframe resolves its `src`.
     this.origin = new URL(widget.url, document.baseURI).origin;
+    this.keptWebview = webviewCapabilities(options.keptWebview ?? []);
+    const applied = this.webviewToApply(this.keptWebview);
+    this.webview = { applied, ...webviewFor(applied) };
 
     // The driver calls these synchronously from inside its own methods, so anything that calls
     // back into the driver, or changes the view model, is deferred.
@@ -145,6 +178,7 @@ export class WidgetRuntime {
     this.driver = new WidgetHostDriver(backend, platform);
     this.remember(this.preApproved());
     this.refreshCapabilities();
+    if (applied.length > 0) this.log("info", `the iframe has webview capabilities: sandbox "${this.webview.sandbox}", allow "${this.webview.allow}"`);
 
     const onMessage = (ev: MessageEvent) => {
       if (!this.iframe || ev.source !== this.iframe.contentWindow) return;
@@ -225,8 +259,10 @@ export class WidgetRuntime {
    */
   revoke(capabilities: string[] | "all"): void {
     const approved = this.driver.snapshot().approved;
-    const revoked = capabilities === "all" ? [...new Set([...approved, ...this.preApproved()])] : capabilities;
+    const revoked = capabilities === "all" ? [...new Set([...approved, ...this.preApproved(), ...this.keptWebview])] : capabilities;
     this.driver.revokeCapabilities(revoked);
+    // A revoked webview capability is no longer applied from the next start on (`checkWebview` starts it again at once).
+    this.keptWebview = this.keptWebview.filter((cap) => !revoked.includes(cap));
     this.remember(this.preApproved().filter((cap) => !revoked.includes(cap)));
     this.log("info", `revoked ${revoked.length} ${revoked.length === 1 ? "capability" : "capabilities"}`);
     this.refreshCapabilities();
@@ -242,6 +278,7 @@ export class WidgetRuntime {
     this.denied.delete(capability);
     this.remember([...this.preApproved(), capability]);
     this.log("info", `pre-approved ${capability}: granted without a prompt the next time the widget asks`);
+    // A webview capability applies with a new start of the iframe (`checkWebview`).
     this.refreshCapabilities();
   }
 
@@ -281,6 +318,29 @@ export class WidgetRuntime {
     return this.options.capabilityKey ? loadCapabilities(this.options.capabilityKey) : this.keptWhileRunning;
   }
 
+  /** The webview capabilities a start with `kept` applies: a legacy client's set for a legacy widget, the remembered ones, `kept`. */
+  private webviewToApply(kept: readonly string[]): string[] {
+    return webviewCapabilities([...(this.options.widget.legacy ? LEGACY_WEBVIEW : []), ...this.preApproved(), ...kept]);
+  }
+
+  /**
+   * Report `webviewChanged` when the iframe's attributes are not those of a start with what is kept
+   * now: the kept ones that were not revoked, every webview capability the widget holds, and those
+   * pre-approved while it runs without a store ("Add"; with a store they are remembered).
+   * Revoking one that the iframe has, or the widget coming to hold one it lacks, starts it again;
+   * a denial changes nothing. Called after every change of the capabilities.
+   */
+  private checkWebview(approved: readonly string[]): void {
+    if (this.webviewReported || this.disposed) return;
+    const kept = webviewCapabilities([...this.keptWebview, ...approved, ...(this.options.capabilityKey ? [] : this.keptWhileRunning)]);
+    const next = webviewFor(this.webviewToApply(kept));
+    if (sameWebview(next, this.webview)) return;
+    this.webviewReported = true;
+    this.log("info", `restarting to apply the webview capabilities: sandbox "${next.sandbox}", allow "${next.allow}"`);
+    // After the driver's `update_capabilities` has gone out (it is sent from inside the call that granted).
+    queueMicrotask(() => !this.disposed && this.options.events.webviewChanged(kept));
+  }
+
   /**
    * Remember `capabilities` for this widget (in the store, or without one while it runs) and have
    * the driver grant them, and what a legacy widget gets anyway, without a prompt from now on.
@@ -291,12 +351,14 @@ export class WidgetRuntime {
     if (capabilityKey) saveCapabilities(capabilityKey, unique);
     else this.keptWhileRunning = unique;
     // What a legacy client gave a widget without asking; the compat wrapper requests these as capabilities.
-    this.autoApproved = [...new Set([...(widget.legacy ? LEGACY_AUTO_APPROVED : []), ...unique])];
+    // And what the iframe was built with: the widget's request for it is granted at once, without a new start.
+    this.autoApproved = [...new Set([...(widget.legacy ? LEGACY_AUTO_APPROVED : []), ...unique, ...this.webview.applied])];
     this.driver.setAutoApproved(this.autoApproved);
   }
 
   private refreshCapabilities(): void {
     const { approved, singleUse } = this.driver.snapshot();
+    this.checkWebview(approved);
     const old = this.data.capabilities;
     const next = {
       approved: [...approved].sort(),
@@ -304,6 +366,7 @@ export class WidgetRuntime {
       // TODO-FINDING driver-denied-list - `DriverSnapshot` has no denied list; this is what this host denied itself since the widget started, minus what was granted later.
       denied: [...this.denied].filter((cap) => !approved.includes(cap)).sort(),
       singleUse: [...singleUse].sort(),
+      webview: { ...this.webview, applied: [...this.webview.applied].sort() },
     };
     if (JSON.stringify(old) === JSON.stringify(next)) return;
     this.data = { ...this.data, capabilities: next };

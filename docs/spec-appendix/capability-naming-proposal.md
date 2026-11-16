@@ -35,6 +35,10 @@ action can be derived from the action's name, in both directions.
 6. **One widget, one room.** No capability names a room. A widget acts in the room it is embedded
    in and nowhere else, see [One widget, one room](#one-widget-one-room).
 
+Rules 1 to 5 are about the sources `widget` and `host`. The source `webview` is about no action: its
+capabilities are the browser permissions of the widget's iframe, see
+[Webview capabilities](#webview-capabilities).
+
 ## The schema
 
 ```text
@@ -42,6 +46,7 @@ capability    = source ":" action [ "." modifier ] [ ":" modifier_data ]
 
 source        = "widget"                           ; the widget sends this action (a request)
               / "host"                             ; the host sends this action (a subscription)
+              / "webview"                          ; no action: the widget's iframe, see below
 action        = namespace "." name                 ; the value of the action's `action` property
 namespace     = "m"                                ; the action is part of the spec
               / unstable prefix of the MSC that defines the action, e.g. "org.matrix.msc2876"
@@ -56,7 +61,11 @@ modifier_data = additional constraints that are arbitrary data outside the modif
 
 - `source` is the value of the `source` field of the MSC4412 envelope: `widget` for messages the
   widget starts, `host` for messages the host starts. All capabilities are held by the widget;
-  `source` only says who sends the action.
+  `source` only says who sends the action. **Every capability of the sources `widget` and `host`
+  maps to exactly one action.** Other MSCs can define further sources for capabilities that are
+  about no action ([`spec/patch/msc4412/capability-sources.md`](../../spec/patch/msc4412/capability-sources.md));
+  `webview` is the only one so far. They have the same shape, the source is not namespaced, and a
+  host grants nothing of a source it does not know.
 - The action part is **exactly the string in the `action` property** of the action, namespace
   included. While an action is sent as `org.matrix.msc2876.read_events`, its capability is
   `widget:org.matrix.msc2876.read_events.timeline:<type>`; once it is `m.read_events`, the
@@ -110,6 +119,33 @@ can request reaches beyond the room the user put it in.
 
 Requests that carry a `room_id` / `room_ids` field are only valid for the widget's own room. Today's
 `msc2762.timeline:<room_id>` capability has no equivalent and is never granted.
+
+### Webview capabilities
+
+The widget's iframe (webview) starts strict: `sandbox="allow-scripts allow-same-origin"` and an
+empty `allow` ([`spec/patch/msc4411/strict-webview-defaults.md`](../../spec/patch/msc4411/strict-webview-defaults.md)).
+Everything else is a capability of the source `webview`, requested and granted like any other
+([`spec/patch/new/webview-capabilities.md`](../../spec/patch/new/webview-capabilities.md)):
+
+```text
+webview_capability = "webview:" namespace ".sandbox:" token      ; a token of the iframe's `sandbox`
+                   / "webview:" namespace ".allow:" feature      ; a feature of its `allow` (Permissions Policy)
+token, feature     = one web token: [a-z][a-z0-9-]*, at most 64 characters
+```
+
+```text
+webview:m.sandbox:allow-popups      the widget's iframe may open popups
+webview:m.allow:camera              the widget's iframe may use the camera (the browser still asks)
+```
+
+- One token or feature per capability, as the web platform names it. Anything else (a space, `;`,
+  `'`, `*`, upper case) is no capability and grants nothing, so nothing but single tokens reaches
+  the attributes. The host builds the attributes itself; `allow` features get the allowlist `'src'`.
+- `sandbox:allow-scripts` and `sandbox:allow-same-origin` are the base: granted without asking.
+  `sandbox:allow-top-navigation` (and its variants) is never granted and never asked about.
+- A grant applies with a reload of the widget: the host loads it again with the new attributes,
+  and the widget's next request for them is granted without a prompt. Revoking one reloads too.
+- The namespace is the one of the MSC draft: `org.matrix.mscXXXX` until it has a number.
 
 ### A grant can be limited, the string cannot
 
@@ -216,8 +252,8 @@ timeline events, so `#` narrows `m.room.message` to one `msgtype`.
 
 ## Examples
 
-A video call widget that publishes its membership as a sticky event, schedules a delayed leave and
-follows the other members:
+A video call widget that publishes its membership as a sticky event, schedules a delayed leave,
+follows the other members and uses the camera, the microphone and screen sharing:
 
 ```text
 widget:m.send_event.timeline:m.rtc.member
@@ -229,6 +265,9 @@ host:m.forward_event.sticky
 widget:m.get_rtc_transports
 widget:m.get_rtc_livekit_token
 widget:m.delegate_rtc_livekit_delayed_leave
+webview:m.allow:camera
+webview:m.allow:microphone
+webview:m.allow:display-capture
 ```
 
 A widget that only reads and follows text messages:
@@ -258,7 +297,11 @@ its whole expansion:
 
 Theme, language and visibility updates had no capability so far. The wrapper always requests
 `host:m.update_theme`, `host:m.update_language` and `host:m.update_visibility` on behalf of a
-legacy widget, to keep today's behaviour. `get_openid` had no capability either, but the user was
+legacy widget, to keep today's behaviour. The same goes for the iframe: a legacy client gave every
+widget Element Web's `sandbox` and `allow` (plus fullscreen), so the wrapper requests them as
+webview capabilities when it starts (`webview:m.sandbox:allow-popups`, `webview:m.allow:camera`, ...,
+fifteen in all), the host grants them without asking, and the wrapper gives its inner iframe the
+same set. A legacy widget cannot request webview capabilities itself. `get_openid` had no capability either, but the user was
 asked per token: the wrapper requests `widget:m.get_openid` when the legacy widget asks for a token,
 and answers it in the legacy shape (`state`, then `openid_credentials`).
 

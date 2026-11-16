@@ -144,6 +144,12 @@ one capability per action, written `source:action[.modifier][:data]`.
 * No capability names a room: a widget acts in the room it is embedded in.
 * A widget can only ask for more capabilities. Only the host removes them, by sending
   `update_capabilities` with a shorter list.
+* The source `webview` is about no action but the widget's iframe: `webview:…sandbox:<token>` and
+  `webview:…allow:<feature>`, one web token each (`webview:org.matrix.mscXXXX.allow:camera`). Every
+  iframe starts strict (`sandbox="allow-scripts allow-same-origin"`, empty `allow`); the driver
+  grants those two tokens without asking and `allow-top-navigation` never, and `webview_attributes`
+  builds the attributes from what the widget holds. A grant applies with a reload of the iframe
+  ([`spec/patch/new/webview-capabilities.md`](spec/patch/new/webview-capabilities.md)).
 * The matrix-widget-api capability names (`org.matrix.msc2762.send.event:<type>`, ...) and action
   names (`content_loaded`, `theme_change`, host `send_event`, any name without a namespace) are
   **not** understood by the driver. Legacy widgets run behind the
@@ -256,6 +262,11 @@ window.addEventListener("message", (ev) => {
   if (ev.source === iframe.contentWindow) driver.handleMessageFromWidget(JSON.stringify(ev.data));
 });
 ```
+
+The iframe's attributes come from the driver too: `webviewAttributes(capabilities)` gives
+`{ sandbox, allow }` for the webview capabilities a widget holds (the strict default for none), and
+`embedUrlProblem` / `embedWidget` check a widget URL first, also against the client's own origin
+(`EmbedOptions.clientOrigin`). A grant of a webview capability applies with a new iframe.
 
 A real client replaces `InMemoryBackend` with its own `MatrixBackend` object (a matrix-js-sdk
 backed one is the next step); `packages/widget-host` is the smallest complete host.
@@ -397,7 +408,10 @@ python3 -m http.server 8088 -d /tmp/site        # http://localhost:8088/matrix-w
 **What to know about it:**
 
 - **Do not log in with an account you care about.** The host and the test widgets share one
-  origin (the widgets run with `allow-same-origin`), and on `*.github.io` the site also shares it
+  origin (the widgets run with `allow-same-origin`: the host refuses widgets of its own origin
+  except these, its own, `ownWidgetDirs` in `packages/widget-host/src/lib/widgetEvents.ts`; the
+  legacy test widget runs without it, the compat wrapper's rule for a widget of its own origin),
+  and on `*.github.io` the site also shares it
   with every other GitHub Pages site of the same owner. Any page of that origin can read what the
   host stores in the browser: the access token and the encryption keys of a logged-in account. Use
   the DevBackend or a test account, or give the site a domain of its own. The landing page says

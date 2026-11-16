@@ -1,8 +1,16 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
 
 import { log, setLogLevel } from "../src/log";
 
-import { parseConfig } from "../src/wrapper";
+import { INNER_ALLOW, INNER_SANDBOX, innerIframe, parseConfig } from "../src/wrapper";
+
+/** The `client_origin` part of the driver's table of widget URLs: here the wrapper is on the client's origin. */
+const CLIENT_ORIGIN = (
+  JSON.parse(readFileSync(new URL("../../../crates/widget-host-driver/tests/widget_urls.json", import.meta.url), "utf8")) as {
+    client_origin: { client: string } & Record<"refused" | "own_widgets" | "other_origins", Record<string, string>>;
+  }
+).client_origin;
 
 describe("parseConfig", () => {
   const legacy = "https://widget.example/app/?widgetId=w1&x=$matrix_user_id";
@@ -66,4 +74,27 @@ describe("parseConfig", () => {
   it("fails without a widget id", () => {
     expect(() => parseConfig(new URLSearchParams({ legacy_widget_url: "https://widget.example/" }))).toThrow(/legacy_widget_id/);
   });
+});
+
+describe("innerIframe", () => {
+  const wrapperOrigin = CLIENT_ORIGIN.client;
+
+  it("has the attributes of a legacy client's iframe (Element Web), constant", () => {
+    expect(INNER_SANDBOX).toBe("allow-forms allow-popups allow-popups-to-escape-sandbox allow-same-origin allow-scripts allow-presentation allow-downloads");
+    expect(INNER_ALLOW).toBe("microphone; camera; encrypted-media; autoplay; display-capture; clipboard-write; clipboard-read; fullscreen");
+  });
+
+  it.each(Object.entries(CLIENT_ORIGIN.other_origins))("loads a legacy widget of another origin with them, messages to its origin: %s", (_, url) => {
+    expect(innerIframe(url, wrapperOrigin)).toEqual({ sandbox: INNER_SANDBOX, allow: INNER_ALLOW, targetOrigin: new URL(url).origin });
+  });
+
+  it.each(Object.entries({ ...CLIENT_ORIGIN.refused, ...CLIENT_ORIGIN.own_widgets }))(
+    "loads a legacy widget of the wrapper's own origin without allow-same-origin, messages to `*`: %s",
+    (_, url) => {
+      const inner = innerIframe(url, wrapperOrigin);
+      expect(inner.sandbox.split(" ")).not.toContain("allow-same-origin");
+      expect(inner.sandbox).toBe("allow-forms allow-popups allow-popups-to-escape-sandbox allow-scripts allow-presentation allow-downloads");
+      expect(inner).toMatchObject({ allow: INNER_ALLOW, targetOrigin: "*" });
+    },
+  );
 });

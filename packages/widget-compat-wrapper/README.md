@@ -59,7 +59,8 @@ wrapper; it sets `legacy_widget_url`, `legacy_widget_id`,
 ### Bootstrap: templating the legacy URL
 
 Before the inner iframe exists the wrapper sends `request_capabilities` for
-`widget:org.matrix.mscXXXX.get_matrix_context` and `widget:org.matrix.mscXXXX.get_client_context`,
+`widget:org.matrix.mscXXXX.get_matrix_context` and `widget:org.matrix.mscXXXX.get_client_context`
+(and the webview capabilities of a legacy client's iframe, see [The iframes](#the-iframes)),
 waits for the host's `update_capabilities`, requests both contexts
 (`org.matrix.mscXXXX.get_matrix_context`, `org.matrix.mscXXXX.get_client_context`) and
 renders the URL:
@@ -81,10 +82,32 @@ This means a host prompts twice for a wrapped widget: once for the wrapper's con
 capabilities, once for the capabilities the legacy widget itself asks for. A host may of course
 grant the context capabilities without prompting.
 
+### The iframes
+
+A host with strict iframes ([`spec/patch/msc4411/strict-webview-defaults.md`](../../spec/patch/msc4411/strict-webview-defaults.md))
+gives a widget only `sandbox="allow-scripts allow-same-origin"` until it holds webview capabilities
+([`spec/patch/new/webview-capabilities.md`](../../spec/patch/new/webview-capabilities.md)). A legacy
+widget was written for the iframe Element Web gives every widget, so the wrapper requests that set
+in its first `request_capabilities` (`LEGACY_WEBVIEW_CAPABILITIES` in `src/capabilities.ts`, fifteen
+in all):
+
+| `sandbox` (`webview:org.matrix.mscXXXX.sandbox:<token>`) | `allow` (`webview:org.matrix.mscXXXX.allow:<feature>`) |
+|---|---|
+| `allow-forms`, `allow-popups`, `allow-popups-to-escape-sandbox`, `allow-same-origin`, `allow-scripts`, `allow-presentation`, `allow-downloads` | `microphone`, `camera`, `encrypted-media`, `autoplay`, `display-capture`, `clipboard-write`, `clipboard-read`, `fullscreen` |
+
+A host that keeps legacy widgets working grants them without a prompt and builds the wrapper's
+iframe with them from the start (this repository's test host does), so the request needs no reload.
+The wrapper's own iframe for the legacy widget (`innerIframe` in `src/wrapper.ts`) always has these
+attributes (`INNER_SANDBOX`, `INNER_ALLOW`), whatever the host granted: a legacy widget cannot request
+webview capabilities (a `webview:` string in its list expands to nothing). One exception: a legacy
+widget on the wrapper's own origin, which is often the client's, would share that origin with
+`allow-same-origin`. It loads without it, so its origin is opaque, and the wrapper posts to it with
+the target origin `*` (it is still only that iframe's window that gets the message).
+
 ### Which URLs the wrapper loads
 
 The wrapper is often served from its client's own origin (this repository's test host does that),
-the client gives its iframe `allow-same-origin`, and the inner iframe has no sandbox. A
+and the client gives its iframe `allow-same-origin`. A
 `javascript:` URL in the inner iframe would run on the client's origin, and `data:`, `blob:`,
 `about:` pages or a URL resolved against the wrapper page (`/x`, `http:/x`) would be pages of that
 origin. So the wrapper loads only an **absolute `http:` or `https:` URL that names its own host**:
@@ -201,6 +224,8 @@ with: `org.matrix.msc2876.` (`read_events`), `org.matrix.msc3869.` (`read_relati
   `host:…update_language`, `host:…update_visibility`. The legacy api has no capability for these;
   a legacy host simply allows them. A host that wants the legacy behaviour grants them without a
   prompt (`setAutoApproved`).
+- **Webview capabilities** (`webview:…`) of a legacy client's iframe are requested when the wrapper
+  starts (see [The iframes](#the-iframes)); the legacy widget cannot request any.
 - **`widget:…get_openid` is requested per token**, when the widget asks for one (see
   [OpenID](#openid-get_openid-and-openid_credentials)), not up front: a host grants it for one
   token at a time.

@@ -10,11 +10,13 @@ import {
   EXTRA_CAPABILITIES,
   RELATION_CAPABILITIES,
   TO_DEVICE_CAPABILITIES,
+  WEBVIEW_CAPABILITIES,
 } from "./capabilities";
 import {
   TO_DEVICE_MESSAGES,
   button,
   capabilityList,
+  el,
   fileControls,
   input,
   lastDelay,
@@ -45,6 +47,31 @@ api.onVisibilityChange((visible: boolean) => log("update_visibility", visible));
 api.onCapabilitiesChanged((allowed: string[]) => (log("update_capabilities", { allowed }), refresh()));
 
 const content = () => ({ msgtype: "m.text", body: valueOf("body") });
+
+/** The Permissions Policy features this widget's iframe may use, as Chromium reports them (`document.featurePolicy`). */
+const FEATURES = ["camera", "microphone", "display-capture", "clipboard-write", "fullscreen", "autoplay"];
+const featurePolicy = () => {
+  const policy = (document as Document & { featurePolicy?: { allowsFeature(feature: string): boolean } }).featurePolicy;
+  if (!policy) throw new Error("this browser has no document.featurePolicy");
+  return Object.fromEntries(FEATURES.map((feature) => [feature, policy.allowsFeature(feature)]));
+};
+
+/** The webview row: browser permissions of the iframe (webview capabilities), and what the iframe may do. */
+const webviewControls = (): Node[] => [
+  el("h3", { textContent: "webview" }),
+  button("webview: request camera + microphone", () => api.requestCapabilities(WEBVIEW_CAPABILITIES.split(",")).finally(refresh)),
+  button("webview: try camera", async () => {
+    const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+    stream.getTracks().forEach((track) => track.stop());
+    return { camera: "allowed" };
+  }),
+  button("webview: open popup", () => {
+    const popup = window.open("about:blank", "_blank");
+    popup?.close();
+    return { popup: popup ? "opened" : "blocked" };
+  }),
+  button("webview: feature policy", featurePolicy),
+];
 mount("MSC4412 test widget (widget-base-sdk)", [
   input(
     "caps",
@@ -90,6 +117,7 @@ mount("MSC4412 test widget (widget-base-sdk)", [
   ),
   button("get_matrix_context", () => api.getMatrixContext()),
   button("get_client_context", () => api.getClientContext()),
+  ...webviewControls(),
 ]);
 refresh();
 if (new URLSearchParams(location.search).get("autostart") !== "0") {

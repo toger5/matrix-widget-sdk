@@ -33,8 +33,16 @@
 //! [`WidgetDefinition`] reads the widget state events of a room (MSC4411 `m.widget`, and the
 //! legacy `im.vector.modular.widgets`): [`WidgetDefinition::parse`] tells which events are widgets,
 //! [`WidgetDefinition::embed`] what a client loads for one, after the URL check
-//! ([`widget_url_problem`], and [`embed_url_problem`]: never the client's own compat wrapper); a
-//! legacy widget is loaded through the compat wrapper.
+//! ([`widget_url_problem`], and [`embed_url_problem`]: never the client's own compat wrapper, never
+//! a page of the client's own origin, see [`EmbedOptions`]); a legacy widget is loaded through the
+//! compat wrapper.
+//!
+//! The iframe (webview) of a widget starts strict: `sandbox="allow-scripts allow-same-origin"`,
+//! nothing in `allow`. Everything else is a webview capability (`webview:…sandbox:<token>`,
+//! `webview:…allow:<feature>`) the widget requests like any other; [`WebviewPolicy`] grants the
+//! base tokens without asking and never the `allow-top-navigation` ones, and
+//! [`webview_attributes`] builds the iframe's attributes from what the widget holds. Applying a
+//! grant takes a reload of the iframe, which is the platform's part.
 //!
 //! With the `uniffi` feature this crate's `cdylib` carries the UniFFI scaffolding of this crate,
 //! `widget-matrix-backend` and `widget-actions`; it is what the Kotlin/Swift/Python bindings and
@@ -56,19 +64,21 @@ mod error;
 #[cfg(feature = "uniffi")]
 pub mod logging;
 mod platform;
+mod webview;
 mod widget_event;
 mod widget_url;
 
 pub use driver::{DriverSnapshot, WidgetHostDriver};
 pub use error::{DriverError, PlatformError};
 pub use platform::WidgetHostPlatform;
+pub use webview::{webview_attributes, WebviewAttributes, WebviewPolicy, BASE_SANDBOX};
 pub use widget_actions;
 pub use widget_event::{
     embed_widget, parse_widget_state_event, widget_event_types, LegacyWidget, WidgetDefinition, WidgetEmbed,
     WidgetEventError, WIDGET_EVENT_TYPE, WIDGET_EVENT_TYPES, WIDGET_EVENT_TYPE_LEGACY, WIDGET_EVENT_TYPE_UNSTABLE,
 };
 pub use widget_matrix_backend::{self, MatrixBackend};
-pub use widget_url::{embed_url_problem, widget_url_problem};
+pub use widget_url::{embed_url_problem, widget_url_problem, EmbedOptions};
 
 #[cfg(feature = "uniffi")]
 uniffi::setup_scaffolding!();

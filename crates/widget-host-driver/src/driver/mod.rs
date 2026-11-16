@@ -14,7 +14,7 @@ use widget_actions::{
 };
 use widget_matrix_backend::MatrixBackend;
 
-use crate::{DriverError, WidgetHostPlatform};
+use crate::{DriverError, WebviewPolicy, WidgetHostPlatform};
 
 mod access;
 mod requests;
@@ -74,14 +74,15 @@ impl State {
         Some(single_use)
     }
 
-    /// The open question: the pending capabilities without those the widget holds already and
-    /// those granted without asking. What [`WidgetHostPlatform::on_capabilities_requested`] gets
-    /// when a request adds to it.
+    /// The open question: the pending capabilities without those the widget holds already, those
+    /// granted without asking, and the webview capabilities that are granted or refused by policy
+    /// ([`WebviewPolicy`]). What [`WidgetHostPlatform::on_capabilities_requested`] gets when a
+    /// request adds to it.
     fn question(&self) -> Vec<Capability> {
         self.pending_requested
             .iter()
             .flatten()
-            .filter(|c| !self.approved.contains(c) && !self.auto_approved.contains(c))
+            .filter(|c| !self.approved.contains(c) && !self.auto_approved.contains(c) && WebviewPolicy::asks(c))
             .cloned()
             .collect()
     }
@@ -153,8 +154,10 @@ impl WidgetHostDriver {
     ///
     /// Typical use: `widget:…get_matrix_context` and `widget:…get_client_context` for a legacy
     /// widget behind the compat wrapper, because a legacy client passed the same facts as URL
-    /// parameters.
-    /// Replaces the previous list and affects only future requests.
+    /// parameters; and the webview capabilities the widget's iframe was built with, so that the
+    /// widget's request for them is granted at once.
+    /// Replaces the previous list and affects only future requests. A webview capability that is
+    /// never granted ([`WebviewPolicy::Never`]) stays refused.
     pub fn set_auto_approved(&self, capabilities: Vec<Capability>) {
         self.lock().auto_approved = capabilities;
     }
@@ -166,6 +169,8 @@ impl WidgetHostDriver {
     /// * Only capabilities the widget requested are granted; the rest of `approved` is ignored.
     ///   A requested capability that is not in `approved` (and not auto-approved) is denied.
     /// * Requested capabilities that are auto-approved are granted as well.
+    /// * Webview capabilities follow [`WebviewPolicy`]: the base `sandbox` tokens are granted
+    ///   whatever `approved` says, the `allow-top-navigation` tokens never.
     /// * The widget gets `update_capabilities` with everything it holds now.
     /// * If new capabilities were granted, the driver subscribes to the backend again. The backend
     ///   then delivers the current room state, which reaches the widget as `update_state`.
@@ -179,7 +184,8 @@ impl WidgetHostDriver {
             };
             let before = state.approved.len();
             for capability in &requested {
-                let granted = approved.contains(capability) || state.auto_approved.contains(capability);
+                let approved = approved.contains(capability) || state.auto_approved.contains(capability);
+                let granted = WebviewPolicy::grants(capability, approved);
                 if granted && !state.approved.contains(capability) {
                     state.approved.push(capability.clone());
                 }
@@ -239,9 +245,9 @@ impl WidgetHostDriver {
     /// For the next use the widget requests the capability again. It does not know in advance
     /// that a grant is limited.
     ///
-    /// * Not used up: host capabilities (`host:…`, the host's pushes; they are dropped from
-    ///   `capabilities`) and the capabilities a request is checked against by its body
-    ///   (`send_event.*`, `read_events.*`, ...).
+    /// * Not used up: host capabilities (`host:…`, the host's pushes), webview capabilities (no
+    ///   request uses them; both are dropped from `capabilities`) and the capabilities a request is
+    ///   checked against by its body (`send_event.*`, `read_events.*`, ...).
     /// * A single-use capability that is also auto-approved ([`set_auto_approved`](Self::set_auto_approved))
     ///   is granted again, without asking, each time the widget requests it: that is how a client
     ///   remembers "always" for it. Do not remember an approval of a single-use capability
@@ -252,10 +258,10 @@ impl WidgetHostDriver {
     /// Replaces the previous list. A capability the widget holds already becomes single use too:
     /// its next use ends it.
     pub fn set_single_use(&self, capabilities: Vec<Capability>) {
-        let (widget, host): (Vec<_>, Vec<_>) =
-            capabilities.into_iter().partition(|c| !c.to_unstable_string().starts_with("host:"));
-        if !host.is_empty() {
-            log::warn!("ignored {} host capabilities for single use: a push does not use a capability up", host.len());
+        let (widget, other): (Vec<_>, Vec<_>) =
+            capabilities.into_iter().partition(|c| !c.to_unstable_string().starts_with("host:") && !c.is_webview());
+        if !other.is_empty() {
+            log::warn!("ignored {} host or webview capabilities for single use: no request uses one up", other.len());
         }
         self.lock().single_use = widget;
     }

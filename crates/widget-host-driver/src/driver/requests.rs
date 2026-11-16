@@ -18,7 +18,7 @@ use widget_matrix_backend::{BackendError, MediaFile, ToDeviceMessage};
 
 use super::access;
 use super::WidgetHostDriver;
-use crate::PlatformError;
+use crate::{PlatformError, WebviewPolicy};
 
 /// Number of events `read_events` returns when the widget gives no `limit`.
 const DEFAULT_READ_LIMIT: u32 = 50;
@@ -187,6 +187,9 @@ impl WidgetHostDriver {
     ///   request. If the request added something to decide, the platform is asked again, about
     ///   the whole question.
     ///
+    /// Webview capabilities that are granted or refused by policy ([`WebviewPolicy`]: the base
+    /// `sandbox` tokens, `allow-top-navigation`) need no decision; the platform is not asked about them.
+    ///
     /// The ack grants nothing. A widget can only ever ask for more.
     fn request_capabilities(&self, msg: &WireMessage, requested: Vec<Capability>) {
         enum Next {
@@ -200,6 +203,9 @@ impl WidgetHostDriver {
             let before = state.question();
             let pending = state.pending_requested.get_or_insert_with(Vec::new);
             for capability in requested {
+                if WebviewPolicy::of(&capability) == Some(WebviewPolicy::Never) {
+                    log::warn!("the widget requests {capability}, which is never granted");
+                }
                 if !pending.contains(&capability) {
                     pending.push(capability);
                 }

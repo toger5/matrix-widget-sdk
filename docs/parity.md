@@ -60,8 +60,38 @@ matrix-widget-api's `WidgetParser.parseRoomWidget` treats `m.widget` and
 `m.widget` / `org.matrix.msc4411.widget` (a string `name` and `url`, else a removed widget) and
 needs only a string `url` for the legacy event (`type` is optional, the name falls back to the
 state key). `WidgetDefinition::embed` checks the URL (absolute `http(s)`, parsed per WHATWG, not
-relative to the page that embeds it) and loads a legacy widget through the compat wrapper with
+relative to the page that embeds it; no page of the client's compat wrapper; no page of the
+client's own origin, `EmbedOptions`) and loads a legacy widget through the compat wrapper with
 its URL untemplated. One parser for every client: the browser host calls it through the bindings.
+
+### The widget iframe
+
+Element Web gives every widget the same iframe (`AppTile.tsx`, `apps/web/src/components/views/elements/`):
+
+```text
+sandbox="allow-forms allow-popups allow-popups-to-escape-sandbox allow-same-origin allow-scripts allow-presentation allow-downloads"
+allow="microphone; camera; encrypted-media; autoplay; display-capture; clipboard-write; clipboard-read;"
+allowFullscreen
+```
+
+Its comment on `allow-scripts` with `allow-same-origin`: the pair would let a page lift its sandbox,
+"but this would only be for content hosted on the same origin as the element client". MSC4411 used
+to recommend this set (without `allowFullscreen`).
+
+| | Element Web | here |
+|---|---|---|
+| widget of MSC4411 | the set above | `sandbox="allow-scripts allow-same-origin"`, empty `allow`; more only as webview capabilities it requests and the user grants (`webview:…sandbox:<token>`, `webview:…allow:<feature>`), applied with a reload |
+| legacy widget (`im.vector.modular.widgets`) | the set above | the wrapper's iframe: the same set plus `fullscreen` in `allow`, as webview capabilities the wrapper requests and the host grants without asking; the wrapper's inner iframe: the same, constant |
+| a widget of the client's own origin | loaded with the set above | refused ("a widget cannot be a page of this client's own origin"); the dev site's own test widgets are the exception |
+| `allow` features | `camera` (default allowlist `'src'`) | `camera 'src'`, spelled out |
+| top navigation | not in the set | never granted, even if approved |
+
+**Decision (2026-11-16):** strict iframes and webview capabilities as a capability source of their
+own (`webview`), proposed in [`spec/patch/msc4411/strict-webview-defaults.md`](../spec/patch/msc4411/strict-webview-defaults.md),
+[`spec/patch/msc4412/capability-sources.md`](../spec/patch/msc4412/capability-sources.md) and
+[`spec/patch/new/webview-capabilities.md`](../spec/patch/new/webview-capabilities.md); widgets of
+the client's own origin are refused, except the test widgets the dev site serves from the host's
+origin.
 
 ## 2. Action inventory
 
@@ -153,6 +183,8 @@ nothing; that includes every matrix-widget-api capability string.
 | `host:…forward_to_device:<type>` | `ForwardToDevice` | `org.matrix.msc3819.receive.to_device:<type>` |
 | `host:…update_turn_servers` | `UpdateTurnServers` | `town.robin.msc3846.turn_servers` |
 | `host:…update_theme` / `update_language` / `update_visibility` | `UpdateTheme` / `UpdateLanguage` / `UpdateVisibility` | none (always requested by the wrapper) |
+| `webview:…sandbox:<token>` (`…` = `org.matrix.mscXXXX` or `m`) | `WebviewSandbox` (about no action: a token of the widget iframe's `sandbox`) | none: the wrapper requests Element Web's tokens for itself; a legacy widget cannot request one |
+| `webview:…allow:<feature>` | `WebviewAllow` (a feature of the iframe's `allow`) | none: the wrapper requests Element Web's features plus `fullscreen` for itself |
 | `org.matrix.msc2762.timeline:<room_id>` | `Other` | no equivalent: never requested by the wrapper, never granted |
 | `io.element.requires_client`, `m.sticker`, `m.capability.screenshot` | `Other` | passed through unchanged; nothing acts on them |
 
@@ -161,8 +193,9 @@ The namespace of a capability is the one of its action: `org.matrix.msc2876` (`r
 `org.matrix.msc4515` (`get_rtc_transports`), `org.matrix.msc3973` (`search_user_directory`),
 `org.matrix.msc4039` (`get_media_config`, `upload_file`, `download_file`), `org.matrix.msc4533`
 (`get_rtc_livekit_token`, `delegate_rtc_livekit_delayed_leave`), `org.matrix.msc2931` (`navigate`),
-`com.beeper` (`read_room_account_data`) and `org.matrix.mscXXXX` for everything else. The table
-lives in `namespace_of` (`crates/widget-actions/src/capabilities.rs`) and is repeated in
+`com.beeper` (`read_room_account_data`) and `org.matrix.mscXXXX` for everything else, the webview
+capabilities included (their MSC is a draft). The table lives in `namespace_of`
+(`crates/widget-actions/src/capabilities.rs`) and is repeated in
 `packages/widget-compat-wrapper/src/capabilities.ts` and `packages/test-widgets/new/capabilities.ts`.
 
 ## 3. `MatrixBackend` next to matrix-rust-rtc

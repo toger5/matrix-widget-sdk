@@ -67,7 +67,7 @@ export interface RoomTimelineData {
 export const EMPTY_DEV_TOOLS_DATA: WidgetDevToolsData = {
   messages: [],
   stats: { actionsFromWidget: 0, actionsToWidget: 0, eventsSharedWithWidget: 0, eventsSentFromWidget: 0, charactersTotal: { toWidget: 0, fromWidget: 0 }, characters: [] },
-  capabilities: { approved: [], autoApproved: [], denied: [], singleUse: [] },
+  capabilities: { approved: [], autoApproved: [], denied: [], singleUse: [], webview: { applied: [], sandbox: "allow-scripts allow-same-origin", allow: "" } },
   console: [],
 };
 

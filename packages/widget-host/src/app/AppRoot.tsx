@@ -133,25 +133,29 @@ function viewEnv(controller: AppController, narrow: boolean): ViewEnv {
 /**
  * The iframes of the running widgets: one flat list in the light DOM of the host element, keyed
  * by widget (and start), in the order the widgets were started. An iframe is never moved; the
- * `<slot name="widget-…">` a view renders decides where it is shown.
+ * `<slot name="widget-…">` a view renders decides where it is shown. Its `sandbox` and `allow` are
+ * those of the start (`WidgetInstanceViewModel.webview`, made by the driver from the widget's webview
+ * capabilities; strict unless granted): a change comes with a new start, so a new iframe.
  */
 function WidgetIframes({ controller, widgets }: { controller: AppController; widgets: WidgetInstanceViewModel[] }) {
-  return widgets
-    .filter((w) => w.generation !== undefined)
-    .map((w) => (
-      <iframe
-        key={`${w.id}#${w.generation}`}
-        ref={(iframe) => controller.attachIframe(w.id, w.generation!, iframe)}
-        slot={widgetSlotName(w.id)}
-        data-widget-id={w.id}
-        src={w.widget.url}
-        title={w.widget.name}
-        // Hidden until the widget reports that it is ready (`notify_ready`); the WidgetView shows the loading state meanwhile.
-        hidden={w.load.state !== "ready"}
-        sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-downloads"
-        allow="camera; microphone; display-capture; autoplay; clipboard-write; fullscreen"
-      />
-    ));
+  return widgets.flatMap(({ id, generation, webview, widget, load }) =>
+    generation === undefined || webview === undefined
+      ? []
+      : [
+          <iframe
+            key={`${id}#${generation}`}
+            ref={(iframe) => controller.attachIframe(id, generation, iframe)}
+            slot={widgetSlotName(id)}
+            data-widget-id={id}
+            src={widget.url}
+            title={widget.name}
+            // Hidden until the widget reports that it is ready (`notify_ready`); the WidgetView shows the loading state meanwhile.
+            hidden={load.state !== "ready"}
+            sandbox={webview.sandbox}
+            allow={webview.allow}
+          />,
+        ],
+  );
 }
 
 export function AppRoot({ controller, host }: { controller: AppController; host: HTMLElement }) {

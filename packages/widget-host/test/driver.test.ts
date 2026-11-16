@@ -195,6 +195,31 @@ describe("WidgetHostDriver through the JS bindings", () => {
     expect(drain().map((m) => m.action)).toEqual([`${X}update_theme`, `${X}update_language`, `${X}update_visibility`]);
   });
 
+  it("grants the base webview tokens without asking, never the top navigation, and builds the iframe attributes", async () => {
+    const { driver, ask, drain } = setup();
+    const asked: string[][] = [];
+    const camera = `webview:${X}allow:camera`;
+    const scripts = `webview:${X}sandbox:allow-scripts`;
+    const top = `webview:${X}sandbox:allow-top-navigation`;
+    // The platform of `setup` approves whatever it is asked about.
+    const spy = driver as unknown as { approveCapabilities(c: string[]): void };
+    const approve = spy.approveCapabilities.bind(driver);
+    spy.approveCapabilities = (c) => (asked.push(c), approve([...c, top]));
+    await ask(`${CORE}request_capabilities`, { capabilities: [scripts, camera, top] });
+    await new Promise((r) => setTimeout(r, 0));
+    expect(asked).toEqual([[camera]]);
+    expect(drain().find((m) => m.action === `${CORE}update_capabilities`)?.request).toEqual({ allowed: [scripts, camera] });
+    expect(hostDriver.webviewAttributes(driver.snapshot().approved)).toEqual({ sandbox: "allow-scripts allow-same-origin", allow: "camera 'src'" });
+    expect(hostDriver.webviewAttributes([])).toEqual({ sandbox: "allow-scripts allow-same-origin", allow: "" });
+  });
+
+  it("refuses a widget on the client's own origin, except in the client's own widget directories", () => {
+    const options = { wrapperUrl: undefined, clientOrigin: "http://localhost:5173", ownWidgetDirs: ["http://localhost:5173/widgets/"], allowHttp: true };
+    expect(hostDriver.embedUrlProblem("http://localhost:5173/", options)).toBe("a widget cannot be a page of this client's own origin");
+    expect(hostDriver.embedUrlProblem("http://localhost:5173/widgets/new/", options)).toBeUndefined();
+    expect(hostDriver.embedUrlProblem("http://localhost:5175/new/", options)).toBeUndefined();
+  });
+
   it("delivers log records to a host sink, filtered by level", async () => {
     const records: hostDriver.LogRecord[] = [];
     const { LogLevel } = hostDriver;

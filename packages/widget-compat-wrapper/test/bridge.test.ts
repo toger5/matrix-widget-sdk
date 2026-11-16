@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
-import { CompatBridge, CONTEXT_CAPABILITIES } from "../src/bridge";
-import { hostCapability as H, IMPLICIT_CAPABILITIES, widgetCapability as W } from "../src/capabilities";
+import { CompatBridge, CONTEXT_CAPABILITIES, START_CAPABILITIES } from "../src/bridge";
+import { hostCapability as H, IMPLICIT_CAPABILITIES, LEGACY_WEBVIEW_CAPABILITIES, widgetCapability as W } from "../src/capabilities";
 import type { LegacyMessage, NewMessage } from "../src/envelope";
 
 const X = "org.matrix.mscXXXX.";
@@ -56,9 +56,9 @@ function boot(s: S, contexts: { matrix?: unknown; client?: unknown } = { matrix:
 function answerBootstrap(s: S, contexts: { matrix?: unknown; client?: unknown } = { matrix: MATRIX, client: CLIENT }): void {
   s.bridge.start();
   const [caps] = s.take(s.toHost);
-  expect(caps).toMatchObject({ source: "widget", action: REQUEST, request: { capabilities: CONTEXT_CAPABILITIES } });
+  expect(caps).toMatchObject({ source: "widget", action: REQUEST, request: { capabilities: START_CAPABILITIES } });
   s.bridge.onHostMessage(hostResponse(caps, {}));
-  s.bridge.onHostMessage(fromHost(UPDATE, "n1", { allowed: CONTEXT_CAPABILITIES }));
+  s.bridge.onHostMessage(fromHost(UPDATE, "n1", { allowed: START_CAPABILITIES }));
   const [ack, matrix, client] = s.take(s.toHost);
   expect(ack).toEqual({ source: "host", request_id: "n1", action: UPDATE, response: {} });
   expect(CONTEXT_CAPABILITIES).toEqual(["widget:org.matrix.mscXXXX.get_matrix_context", "widget:org.matrix.mscXXXX.get_client_context"]);
@@ -69,6 +69,21 @@ function answerBootstrap(s: S, contexts: { matrix?: unknown; client?: unknown } 
 }
 
 describe("bootstrap", () => {
+  it("starts with the context capabilities and the webview capabilities of a legacy client's iframe", () => {
+    expect(START_CAPABILITIES).toEqual([...CONTEXT_CAPABILITIES, ...LEGACY_WEBVIEW_CAPABILITIES]);
+    expect(LEGACY_WEBVIEW_CAPABILITIES).toContain("webview:org.matrix.mscXXXX.allow:camera");
+    // A host that refuses the webview capabilities (or all of them) still gets the widget loaded.
+    const s = setup(true);
+    s.bridge.start();
+    const [caps] = s.take(s.toHost);
+    s.bridge.onHostMessage(hostResponse(caps, {}));
+    s.bridge.onHostMessage(fromHost(UPDATE, "n1", { allowed: [] }));
+    const [, matrix, client] = s.take(s.toHost);
+    s.bridge.onHostMessage(hostResponse(matrix, MATRIX));
+    s.bridge.onHostMessage(hostResponse(client, CLIENT));
+    expect(s.loaded).toHaveLength(1);
+  });
+
   it("templates the legacy url from both contexts and only then loads the widget", () => {
     const url = new URL(boot(setup(true)));
     expect(Object.fromEntries(url.searchParams)).toEqual({ u: "@alice:example.org", t: "Notes", widgetId: "w", parentUrl: "https://compat.example/" });

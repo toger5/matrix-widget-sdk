@@ -17,7 +17,7 @@
 use serde_json::Value;
 use widget_actions::JsonValue;
 
-use crate::widget_url::{checked_embed_url, checked_widget_url};
+use crate::widget_url::{checked_embed_url, checked_widget_url, EmbedOptions};
 
 /// Stable event type of the widget state event (MSC4411).
 pub const WIDGET_EVENT_TYPE: &str = "m.widget";
@@ -137,8 +137,8 @@ impl WidgetDefinition {
     }
 
     /// What the iframe (webview) of this widget loads, after the URL check ([`embed_url_problem`](crate::embed_url_problem):
-    /// [`widget_url_problem`](crate::widget_url_problem), and no page of the compat wrapper at
-    /// `wrapper_url`, for widgets of both kinds).
+    /// [`widget_url_problem`](crate::widget_url_problem), no page of the compat wrapper at
+    /// `options.wrapper_url` and no page of the client's own origin, for widgets of both kinds).
     ///
     /// An MSC4411 widget loads its own URL, serialised as the check parsed it (`  HTTPS://Bücher.example/a b`
     /// loads `https://xn--bcher-kva.example/a%20b`): no other URL parser gets to read the event's
@@ -148,16 +148,19 @@ impl WidgetDefinition {
     /// and, with data, `legacy_widget_data` (JSON) added to its query; they replace any the wrapper
     /// URL already has (the wrapper reads the first of a parameter, so one in the wrapper URL would
     /// load another widget than this one). The host never fills in the template: the wrapper asks
-    /// for the values through `get_matrix_context` / `get_client_context`. `allow_http`: also
-    /// `http:` URLs (MSC4411: in developer tools).
-    pub fn embed(&self, wrapper_url: Option<&str>, allow_http: bool) -> Result<WidgetEmbed, WidgetEventError> {
+    /// for the values through `get_matrix_context` / `get_client_context`. `options.allow_http`:
+    /// also `http:` URLs (MSC4411: in developer tools).
+    pub fn embed(&self, options: &EmbedOptions) -> Result<WidgetEmbed, WidgetEventError> {
         let refused = |reason: String| WidgetEventError::Refused { reason };
-        let checked = checked_embed_url(&self.url, wrapper_url, allow_http).map_err(refused)?;
+        let checked = checked_embed_url(&self.url, options).map_err(refused)?;
         let Some(legacy) = &self.legacy else {
             return Ok(WidgetEmbed { url: checked.into(), uses_widget_api: self.uses_widget_api });
         };
-        let wrapper_url = wrapper_url.ok_or_else(|| refused("a legacy widget needs the compat wrapper".to_owned()))?;
-        let mut url = checked_widget_url(wrapper_url, allow_http)
+        let wrapper_url = options
+            .wrapper_url
+            .as_deref()
+            .ok_or_else(|| refused("a legacy widget needs the compat wrapper".to_owned()))?;
+        let mut url = checked_widget_url(wrapper_url, options.allow_http)
             .map_err(|problem| refused(format!("compat wrapper: {problem}")))?;
         if url.query_pairs().any(|(key, _)| WRAPPER_PARAMETERS.contains(&key.as_ref())) {
             let kept: Vec<(String, String)> = url
@@ -193,12 +196,8 @@ pub fn parse_widget_state_event(
 
 /// [`WidgetDefinition::embed`] for foreign code.
 #[cfg_attr(feature = "uniffi", uniffi::export)]
-pub fn embed_widget(
-    widget: WidgetDefinition,
-    wrapper_url: Option<String>,
-    allow_http: bool,
-) -> Result<WidgetEmbed, WidgetEventError> {
-    widget.embed(wrapper_url.as_deref(), allow_http)
+pub fn embed_widget(widget: WidgetDefinition, options: EmbedOptions) -> Result<WidgetEmbed, WidgetEventError> {
+    widget.embed(&options)
 }
 
 /// [`WIDGET_EVENT_TYPES`] for foreign code: the state event types to read for a room's widgets.
@@ -218,6 +217,11 @@ mod tests {
     use crate::widget_url_problem;
 
     const WRAPPER: &str = "http://localhost:5173/widget_compatibility_wrapper/";
+
+    /// A client with its compat wrapper at `wrapper` (none: `None`), and nothing else.
+    fn options(wrapper: Option<&str>, allow_http: bool) -> EmbedOptions {
+        EmbedOptions { wrapper_url: wrapper.map(str::to_owned), allow_http, ..EmbedOptions::default() }
+    }
 
     fn parse(event_type: &str, content: Value) -> Result<WidgetDefinition, WidgetEventError> {
         WidgetDefinition::parse(event_type, "w", &content)
@@ -329,7 +333,7 @@ mod tests {
     #[test]
     fn an_msc4411_widget_loads_its_url_as_checked() {
         for url in table("allowed").into_values() {
-            let embed = new_widget(&url).embed(Some(WRAPPER), true).unwrap();
+            let embed = new_widget(&url).embed(&options(Some(WRAPPER), true)).unwrap();
             assert_eq!(embed, WidgetEmbed { url: Url::parse(&url).unwrap().into(), uses_widget_api: true });
         }
         // Serialised: what the iframe loads is what the check parsed, not the event's string.
@@ -340,10 +344,10 @@ mod tests {
             ("HTTP:\\\\example.org\\a", "http://example.org/a"),
             ("https://example.org/?room=$matrix_room_id", "https://example.org/?room=$matrix_room_id"),
         ] {
-            assert_eq!(new_widget(url).embed(None, true).unwrap().url, loaded, "{url:?}");
+            assert_eq!(new_widget(url).embed(&options(None, true)).unwrap().url, loaded, "{url:?}");
         }
         let plain = parse("m.widget", json!({ "name": "n", "url": "https://x/" })).unwrap();
-        assert!(!plain.embed(None, true).unwrap().uses_widget_api);
+        assert!(!plain.embed(&options(None, true)).unwrap().uses_widget_api);
     }
 
     #[test]
@@ -355,20 +359,50 @@ mod tests {
         let expected =
             Err(WidgetEventError::Refused { reason: "a widget cannot load this client's compat wrapper".to_owned() });
         for (label, url) in refused {
-            assert_eq!(new_widget(&url).embed(Some(wrapper), true), expected, "{label}");
-            assert_eq!(legacy_widget(&url).embed(Some(wrapper), true), expected, "{label}");
+            assert_eq!(new_widget(&url).embed(&options(Some(wrapper), true)), expected, "{label}");
+            assert_eq!(legacy_widget(&url).embed(&options(Some(wrapper), true)), expected, "{label}");
         }
         // The attack: an MSC4411 widget that is this host's compat wrapper with a `javascript:` widget.
         let attack = "http://localhost:5173/widget_compatibility_wrapper/?legacy_widget_url=javascript:top.__pwned=1//";
-        assert_eq!(new_widget(attack).embed(Some(WRAPPER), true), expected);
+        assert_eq!(new_widget(attack).embed(&options(Some(WRAPPER), true)), expected);
         // Other pages of the wrapper's origin are widgets as before.
-        assert!(new_widget("http://localhost:5173/widgets/new/").embed(Some(WRAPPER), true).is_ok());
+        assert!(new_widget("http://localhost:5173/widgets/new/").embed(&options(Some(WRAPPER), true)).is_ok());
+    }
+
+    #[test]
+    fn no_widget_of_either_kind_on_the_clients_origin_but_its_own() {
+        let table: Value = serde_json::from_str(include_str!("../tests/widget_urls.json")).unwrap();
+        let table = &table["client_origin"];
+        let client = table["client"].as_str().unwrap();
+        let options = EmbedOptions {
+            wrapper_url: Some(format!("{client}/widget_compatibility_wrapper/")),
+            client_origin: Some(client.to_owned()),
+            own_widget_dirs: serde_json::from_value(table["own_widget_dirs"].clone()).unwrap(),
+            allow_http: true,
+        };
+        let expected = Err(WidgetEventError::Refused {
+            reason: "a widget cannot be a page of this client's own origin".to_owned(),
+        });
+        let part = |name: &str| -> BTreeMap<String, String> { serde_json::from_value(table[name].clone()).unwrap() };
+        for (label, url) in part("refused") {
+            assert_eq!(new_widget(&url).embed(&options), expected, "{label}");
+            assert_eq!(legacy_widget(&url).embed(&options), expected, "{label}");
+        }
+        for (label, url) in part("own_widgets").into_iter().chain(part("other_origins")) {
+            assert_eq!(new_widget(&url).embed(&options).unwrap().url, Url::parse(&url).unwrap().as_str(), "{label}");
+            // A legacy widget there runs in the compat wrapper, which is on the client's origin itself.
+            let embed = legacy_widget(&url).embed(&options).unwrap();
+            assert!(
+                embed.url.starts_with(&format!("{client}/widget_compatibility_wrapper/?legacy_widget_url=")),
+                "{label}"
+            );
+        }
     }
 
     #[test]
     fn a_legacy_widget_loads_the_compat_wrapper() {
         for url in table("allowed").into_values() {
-            let embed = legacy_widget(&url).embed(Some(WRAPPER), true).unwrap();
+            let embed = legacy_widget(&url).embed(&options(Some(WRAPPER), true)).unwrap();
             assert!(embed.uses_widget_api);
             assert!(embed.url.starts_with(&format!("{WRAPPER}?legacy_widget_url=")), "{}", embed.url);
             assert_eq!(
@@ -385,7 +419,7 @@ mod tests {
             json!({ "url": "https://x/?t=$title", "waitForIframeLoad": false, "data": { "title": "Notes & more" } }),
         )
         .unwrap();
-        let embed = with_data.embed(Some(WRAPPER), true).unwrap();
+        let embed = with_data.embed(&options(Some(WRAPPER), true)).unwrap();
         assert_eq!(
             query(&embed.url)[2..],
             [
@@ -394,8 +428,9 @@ mod tests {
             ]
         );
         // A wrapper URL with a query and a fragment keeps both; the widget goes into the query.
-        let embed =
-            legacy_widget("https://x/").embed(Some("https://wrapper.example/w?log_level=debug#f"), true).unwrap();
+        let embed = legacy_widget("https://x/")
+            .embed(&options(Some("https://wrapper.example/w?log_level=debug#f"), true))
+            .unwrap();
         assert!(embed
             .url
             .starts_with("https://wrapper.example/w?log_level=debug&legacy_widget_url=https%3A%2F%2Fx%2F&"));
@@ -404,7 +439,7 @@ mod tests {
         // reads the first one); its other parameters stay.
         let planted = "https://wrapper.example/w?legacy_widget_url=javascript:x&log_level=debug&legacy_widget_id=evil\
                        &legacy_widget_data=%7B%7D&legacy_wait_for_iframe_load=false";
-        let embed = legacy_widget("https://x/").embed(Some(planted), true).unwrap();
+        let embed = legacy_widget("https://x/").embed(&options(Some(planted), true)).unwrap();
         assert_eq!(
             query(&embed.url),
             [
@@ -419,8 +454,8 @@ mod tests {
     #[test]
     fn refused_urls_are_never_loaded() {
         for (label, url) in table("refused") {
-            let new = new_widget(&url).embed(Some(WRAPPER), true).unwrap_err();
-            let legacy = legacy_widget(&url).embed(Some(WRAPPER), true).unwrap_err();
+            let new = new_widget(&url).embed(&options(Some(WRAPPER), true)).unwrap_err();
+            let legacy = legacy_widget(&url).embed(&options(Some(WRAPPER), true)).unwrap_err();
             let expected = WidgetEventError::Refused { reason: widget_url_problem(&url, true).unwrap() };
             assert_eq!((&new, &legacy), (&expected, &expected), "{label}");
         }
@@ -429,18 +464,21 @@ mod tests {
         };
         // `?wrapper=` can replace the compat wrapper by a link, so its URL is checked too.
         assert_eq!(
-            legacy_widget("https://example.org/").embed(Some("javascript:top.__pwned=1//"), true),
+            legacy_widget("https://example.org/").embed(&options(Some("javascript:top.__pwned=1//"), true)),
             refused("compat wrapper: javascript: URLs are not allowed, only http: and https:")
         );
         assert_eq!(
-            legacy_widget("https://example.org/").embed(None, true),
+            legacy_widget("https://example.org/").embed(&options(None, true)),
             refused("a legacy widget needs the compat wrapper")
         );
         // Without `allow_http`, the wrapper too must be https.
         assert_eq!(
-            legacy_widget("https://example.org/").embed(Some(WRAPPER), false),
+            legacy_widget("https://example.org/").embed(&options(Some(WRAPPER), false)),
             refused("compat wrapper: http: URLs are not allowed, only https:")
         );
-        assert_eq!(new_widget("http://x/").embed(None, false), refused("http: URLs are not allowed, only https:"));
+        assert_eq!(
+            new_widget("http://x/").embed(&options(None, false)),
+            refused("http: URLs are not allowed, only https:")
+        );
     }
 }

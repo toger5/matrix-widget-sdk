@@ -10,7 +10,7 @@ import type { StateEvent } from "./widgetStateEvent";
  * (the dev site sets it, see `scripts/build-dev-site.mjs`), else the dev server of `npm run dev`.
  * A path is resolved against this app's base URL, so `../widgets/` names a sibling of the app.
  */
-const TEST_WIDGETS_URL = new URL(
+export const TEST_WIDGETS_URL = new URL(
   import.meta.env.VITE_TEST_WIDGETS_URL || "http://localhost:5175/",
   new URL(import.meta.env.BASE_URL, globalThis.location?.origin ?? "http://localhost"),
 ).href;

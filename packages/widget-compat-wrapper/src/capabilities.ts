@@ -52,6 +52,48 @@ export function namespaceOf(rest: string): string {
 export const widgetCapability = (rest: string): string => `widget:${namespaceOf(rest)}.${rest}`;
 /** A capability for an action the host sends (a subscription). */
 export const hostCapability = (rest: string): string => `host:${namespaceOf(rest)}.${rest}`;
+/**
+ * A capability of the webview (iframe) the widget runs in; `rest` is `sandbox:<token>` or
+ * `allow:<feature>` (`spec/patch/new/webview-capabilities.md`). It is about no action; its
+ * namespace is the one of its MSC draft, the placeholder.
+ */
+export const webviewCapability = (rest: string): string => `webview:${PLACEHOLDER_NAMESPACE}.${rest}`;
+
+/**
+ * The `sandbox` tokens Element Web gives every widget iframe (`AppTile`): what legacy widgets were
+ * written for. The base of MSC4412 hosts (`allow-scripts`, `allow-same-origin`) is among them.
+ */
+export const LEGACY_SANDBOX: readonly string[] = [
+  "allow-forms",
+  "allow-popups",
+  "allow-popups-to-escape-sandbox",
+  "allow-same-origin",
+  "allow-scripts",
+  "allow-presentation",
+  "allow-downloads",
+];
+/** The `allow` features Element Web gives every widget iframe (`AppTile`), plus `fullscreen` (its `allowFullscreen`). */
+export const LEGACY_ALLOW: readonly string[] = [
+  "microphone",
+  "camera",
+  "encrypted-media",
+  "autoplay",
+  "display-capture",
+  "clipboard-write",
+  "clipboard-read",
+  "fullscreen",
+];
+
+/**
+ * The webview capabilities the wrapper requests for a legacy widget when it starts: the iframe of a
+ * legacy client ({@link LEGACY_SANDBOX}, {@link LEGACY_ALLOW}). A host that keeps legacy widgets
+ * working grants them without asking and builds the wrapper's iframe with them from the start, so
+ * the request needs no reload; the wrapper's inner iframe gets the same set (`wrapper.ts`).
+ */
+export const LEGACY_WEBVIEW_CAPABILITIES: readonly string[] = [
+  ...LEGACY_SANDBOX.map((token) => webviewCapability(`sandbox:${token}`)),
+  ...LEGACY_ALLOW.map((feature) => webviewCapability(`allow:${feature}`)),
+];
 
 /**
  * Capabilities the wrapper always requests for a legacy widget.
@@ -143,10 +185,14 @@ const LEGACY_RULES: LegacyRule[] = [
  *
  * - A legacy capability is accepted with its MSC's unstable prefix or with the stable `m.`.
  * - `timeline:<room>` expands to nothing: it cannot be granted.
+ * - A webview capability (`webview:…`) expands to nothing too: the legacy widget's iframe is the
+ *   wrapper's, with constant attributes (`wrapper.ts`), so the host's answer would change nothing
+ *   for the widget and only restart the wrapper.
  * - Any other string (a capability this table does not know, `m.sticker`, something custom) is
  *   passed through unchanged, so the host decides about it.
  */
 export function expandLegacyCapability(legacy: string): string[] {
+  if (legacy.startsWith("webview:")) return [];
   for (const rule of LEGACY_RULES) {
     for (const prefix of [rule.prefix, LEGACY_STABLE_PREFIX]) {
       if (!legacy.startsWith(prefix + rule.body)) continue;
@@ -166,14 +212,15 @@ export function capabilitiesToRequest(legacy: readonly string[]): string[] {
 
 /**
  * A capability with the stable namespace rewritten to the unstable one of its action, so that the
- * spellings `widget:m.navigate` and `widget:org.matrix.msc2931.navigate` compare equal. Strings
- * that are not capabilities of the naming scheme are returned unchanged.
+ * spellings `widget:m.navigate` and `widget:org.matrix.msc2931.navigate` compare equal (and
+ * `webview:m.allow:camera` and `webview:org.matrix.mscXXXX.allow:camera`). Strings that are not
+ * capabilities of the naming scheme are returned unchanged.
  */
 export function normalizeCapability(capability: string): string {
-  const match = /^(widget|host):m\./.exec(capability);
+  const match = /^(widget|host|webview):m\./.exec(capability);
   if (!match) return capability;
   const rest = capability.slice(match[0].length);
-  return `${match[1]}:${namespaceOf(rest)}.${rest}`;
+  return match[1] === "webview" ? webviewCapability(rest) : `${match[1]}:${namespaceOf(rest)}.${rest}`;
 }
 
 /**

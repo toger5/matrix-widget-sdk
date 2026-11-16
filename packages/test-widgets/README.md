@@ -40,6 +40,13 @@ New (`/new/`): `request_capabilities`, `notify_ready`, send `m.room.message`, se
 `widget:org.matrix.mscXXXX.send_event.timeline:m.room.message`. Incoming `forward_event`,
 `update_state` and `update_capabilities` are logged and the state panel shows the SDK's state.
 
+The **webview** buttons of the new widget are about its own iframe, which a host with strict
+iframes builds with `sandbox="allow-scripts allow-same-origin"` and nothing in `allow`:
+**request camera + microphone** requests `WEBVIEW_CAPABILITIES` (`webview:org.matrix.mscXXXX.allow:camera`
+and `…:microphone`, not in the default list; the host restarts the widget to apply a grant),
+**try camera** calls `getUserMedia`, **open popup** logs whether `window.open` was blocked, and
+**feature policy** logs which features the iframe may use (`document.featurePolicy`, Chromium).
+
 ## URL parameters
 
 | page | parameter | meaning |

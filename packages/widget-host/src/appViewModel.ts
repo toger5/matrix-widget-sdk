@@ -34,7 +34,8 @@
  *       ├─ data                        what the active account knows: rooms, local widgets, recent widgets and rooms
  *       ├─ widgetWrite?                "Add widget" to the room: being sent, or why the room refused it
  *       ├─ widgets[widgetId]           runtime state of every running widget (one iframe each):
- *       │                              load state, always on screen, the capability prompt
+ *       │                              load state, always on screen, the capability prompt,
+ *       │                              the iframe's sandbox / allow of this start
  *       └─ modal, toasts
  * ```
  *
@@ -460,12 +461,27 @@ export interface WidgetInstanceViewModel {
    */
   generation?: number;
   /**
+   * The `sandbox` and `allow` attributes of this start's iframe, set with `generation`: the strict
+   * default plus the webview capabilities the widget holds or gets without asking (remembered,
+   * granted while it ran, a legacy client's set). A grant or a revocation applies with a new
+   * generation (the runtime's `webviewChanged`).
+   */
+  webview?: WebviewAttributes;
+  /**
    * Set and cleared by the widget. Its tab gets the pin icon; the widget keeps running, and is
    * shown in the PictureInPicturePanel, whenever its tab is not shown. story `rooms-tabbar--pinned`
    */
   alwaysOnScreen: boolean;
   /** Questions of the widget that wait for the user. An OpenID token is a capability (`get_openid`), granted for one use. stories `widget-widgetview--capability-prompt*` */
   prompts: { capabilities?: CapabilityPromptViewModel };
+}
+
+/** The attributes of a widget's iframe that its webview capabilities make (`webview_attributes` of the driver). */
+export interface WebviewAttributes {
+  /** Space-separated tokens, at least `allow-scripts allow-same-origin`. */
+  sandbox: string;
+  /** Permissions Policy, `<feature> 'src'` separated by `; `; empty: no feature. */
+  allow: string;
 }
 
 /**
@@ -758,9 +774,11 @@ export interface WidgetDevToolsData {
   stats: WidgetStats;
   /**
    * story `widget-devtools--driver`. From `DriverSnapshot`; "denied" needs the driver to report it. `singleUse`:
-   * what the driver grants for one use (`DriverSnapshot.singleUse`); an approved one is marked "once".
+   * what the driver grants for one use (`DriverSnapshot.singleUse`); an approved one is marked "once". `webview`:
+   * the webview capabilities this start's iframe was built from (`applied`; the base tokens are not listed) and
+   * its attributes (not shown yet).
    */
-  capabilities: { approved: string[]; autoApproved: string[]; denied: string[]; singleUse: string[] };
+  capabilities: { approved: string[]; autoApproved: string[]; denied: string[]; singleUse: string[]; webview: { applied: string[] } & WebviewAttributes };
   /** The widget's own console, forwarded by the widget SDK / compat wrapper. story `widget-devtools--console` */
   console: { level: "log" | "info" | "warn" | "error"; timestamp: number; text: string }[];
 }

@@ -111,6 +111,13 @@ const MATRIX_BEHAVIOR: WidgetHostBehavior = { autoApproveCapabilities: false, re
 const SCHEDULED_SLACK_MS = 1000;
 /** The longest a `setTimeout` waits; a longer delay would fire at once. */
 const MAX_TIMER_MS = 2 ** 31 - 1;
+/**
+ * The loop guard of the webview reloads: a widget that is started again for its webview capabilities
+ * more than `MAX_WEBVIEW_RELOADS` times within `WEBVIEW_RELOAD_WINDOW_MS` fails instead. A grant that
+ * the next start applies needs no further reload, so only a fault gets there.
+ */
+const MAX_WEBVIEW_RELOADS = 2;
+const WEBVIEW_RELOAD_WINDOW_MS = 10_000;
 /** The views `HostSeed.sidePanel` may name. */
 const SEED_SIDE_PANEL_VIEWS: readonly string[] = ["roomTools", "settings", "account", "rooms"];
 
@@ -155,6 +162,13 @@ export class AppController {
   private readonly verifications = new Map<AccountId, AccountVerification>();
   private devBackend: DevBackend | undefined;
   private readonly runtimes = new Map<WidgetInstanceId, WidgetRuntime>();
+  /**
+   * Per running widget: the webview capabilities its next start applies besides the remembered and the
+   * legacy ones (`WidgetRuntimeEvents.webviewChanged`). Kept across reloads, forgotten when it stops.
+   */
+  private readonly webviewKept = new Map<WidgetInstanceId, string[]>();
+  /** Per running widget: when it was started again for its webview capabilities (the loop guard). */
+  private readonly webviewReloads = new Map<WidgetInstanceId, number[]>();
   /** Room backends of the active account, shared by the widgets of a room and released with the last one. */
   private readonly backends = new Map<RoomId, { backend: Promise<RoomBackend>; refs: number }>();
   /** Per account, newest first; persisted for Matrix accounts. */
@@ -559,16 +573,19 @@ export class AppController {
           autoApproveCapabilities: () => behavior().autoApproveCapabilities,
           theme: () => this.resolvedTheme(),
           notifyReadyTimeoutMs: this.notifyReadyTimeoutMs,
+          keptWebview: this.webviewKept.get(id),
           events: {
             ready: () => this.setWidget(id, (w) => ({ ...w, load: { state: "ready" } })),
             failed: (error) => this.setWidget(id, (w) => (w.load.state === "ready" ? w : { ...w, load: { state: "failed", error } })),
             capabilitiesRequested: (question) => this.setWidget(id, (w) => ({ ...w, prompts: { ...w.prompts, capabilities: question && joinCapabilityPrompt(w.prompts.capabilities, question, Date.now()) } })),
             alwaysOnScreen: (value) => this.setAlwaysOnScreen(id, value),
             activity: () => this.devBackend?.refresh(id),
+            webviewChanged: (kept) => this.applyWebview(id, kept),
           },
         });
         this.runtimes.set(id, runtime);
-        this.setWidget(id, (w) => ({ ...w, generation: ++this.generation }));
+        const { sandbox, allow } = runtime.webview;
+        this.setWidget(id, (w) => ({ ...w, generation: ++this.generation, webview: { sandbox, allow } }));
       },
       (e: unknown) => {
         this.releaseBackend(roomId);
@@ -582,6 +599,8 @@ export class AppController {
   private stopWidget(id: WidgetInstanceId, closeTab: boolean): void {
     const widget = this.main?.widgets[id];
     const runtime = this.runtimes.get(id);
+    this.webviewKept.delete(id);
+    this.webviewReloads.delete(id);
     if (runtime) {
       runtime.dispose();
       this.runtimes.delete(id);
@@ -728,6 +747,34 @@ export class AppController {
     this.setWorkspace((w) => addPanel(w, { kind: "room", roomId: widget.roomId, tabs: [{ kind: "widget", id: tabId, widgetId: id }], activeTabId: tabId }).ws);
   }
 
+  /**
+   * A running widget holds webview capabilities its iframe lacks, or one was revoked
+   * (`WidgetRuntimeEvents.webviewChanged`): keep `kept` for its next starts and start it again, which
+   * builds the iframe with them. A widget that gets here too often in a short time fails instead.
+   */
+  private applyWebview(id: WidgetInstanceId, kept: string[]): void {
+    // TODO-FINDING webview-restart-asks-again - only the webview capabilities are kept across this restart. Without remembered capabilities the new start asks again for the widget's other capabilities, approved together with the webview one a moment ago. Option: carry everything the widget held across a webview restart (not across a manual reload).
+    const widget = this.main?.widgets[id];
+    if (!widget) return;
+    this.webviewKept.set(id, kept);
+    const now = Date.now();
+    const recent = (this.webviewReloads.get(id) ?? []).filter((at) => now - at < WEBVIEW_RELOAD_WINDOW_MS);
+    if (recent.length >= MAX_WEBVIEW_RELOADS) {
+      // Stopped, not left running hidden: "Retry" (`widget/reload`) starts it again, with what is kept.
+      this.webviewReloads.delete(id);
+      const runtime = this.runtimes.get(id);
+      if (runtime) {
+        runtime.dispose();
+        this.runtimes.delete(id);
+        this.releaseBackend(widget.roomId);
+      }
+      const error = `The widget was restarted ${recent.length} times within ${WEBVIEW_RELOAD_WINDOW_MS / 1000} seconds to change the permissions of its iframe, and is stopped.`;
+      return this.setWidget(id, (w) => ({ ...w, generation: undefined, webview: undefined, load: { state: "failed", error } }));
+    }
+    this.webviewReloads.set(id, [...recent, now]);
+    this.reloadWidget(id);
+  }
+
   /** Start a running widget again (a new generation), e.g. after its definition changed. */
   private reloadWidget(id: WidgetInstanceId): void {
     const widget = this.main?.widgets[id];
@@ -812,8 +859,11 @@ export class AppController {
       }
     };
     const urlChanged = old.content.url !== event.content.url || embeds(old) !== embeds(event);
-    if (urlChanged) this.forgetWidgetCapabilities(roomId, key);
     const id = widgetInstanceId(roomId, key);
+    if (urlChanged) {
+      this.forgetWidgetCapabilities(roomId, key);
+      this.webviewKept.delete(id);
+    }
     const running = this.main?.widgets[id];
     if (!running) return;
     const resolved = resolveWidget(event);

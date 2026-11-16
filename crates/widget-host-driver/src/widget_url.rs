@@ -1,11 +1,36 @@
 //! The URL check in front of every widget iframe (webview): which `url` of a widget state event a
-//! client may load at all, and that it is not the client's own compat wrapper.
+//! client may load at all, that it is not the client's own compat wrapper, and not a page of the
+//! client's own origin.
 
 use percent_encoding::percent_decode_str;
-use url::Url;
+use url::{Origin, Url};
 
 /// Why [`embed_url_problem`] refuses a page of the client's compat wrapper.
 const LOADS_THE_WRAPPER: &str = "a widget cannot load this client's compat wrapper";
+/// Why [`embed_url_problem`] refuses a page of the client's own origin.
+const ON_THE_CLIENTS_ORIGIN: &str = "a widget cannot be a page of this client's own origin";
+
+/// What a client tells [`embed_url_problem`] and [`WidgetDefinition::embed`](crate::WidgetDefinition::embed)
+/// about itself.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+pub struct EmbedOptions {
+    /// Where the client's compat wrapper is: no widget may be a page of it, and legacy widgets are
+    /// loaded through it. `None`: the client has none and loads no legacy widget.
+    pub wrapper_url: Option<String>,
+    /// The origin of the client's own pages (`https://app.example`, `location.origin` in a
+    /// browser). A widget there would get the client's origin in its iframe (`allow-same-origin`,
+    /// one of the base `sandbox` tokens), so it is refused, unless it is in `own_widget_dirs`.
+    /// `None`, or something that is no http(s) origin: not checked (a native client).
+    pub client_origin: Option<String>,
+    /// Directories (URLs ending in `/`, or the directory of a URL) of pages the client ships
+    /// itself as widgets, for example the test widgets of a developer site: the exception to the
+    /// rule of `client_origin`. They run the client's own code. A directory at the root of an
+    /// origin is ignored: it would hold the client itself.
+    pub own_widget_dirs: Vec<String>,
+    /// Also `http:` URLs (MSC4411 allows them in developer tools).
+    pub allow_http: bool,
+}
 
 /// Why `url` cannot be loaded as a widget, or `None` when it can.
 ///
@@ -35,8 +60,10 @@ pub fn widget_url_problem(url: &str, allow_http: bool) -> Option<String> {
     checked_widget_url(url, allow_http).err()
 }
 
-/// Why a client whose compat wrapper is at `wrapper_url` must not load `url` as a widget (of either
-/// kind), or `None` when it can: [`widget_url_problem`], or `url` is a page of that compat wrapper.
+/// Why a client must not load `url` as a widget (of either kind), or `None` when it can:
+/// [`widget_url_problem`] (with [`EmbedOptions::allow_http`]); `url` is a page of the client's
+/// compat wrapper ([`EmbedOptions::wrapper_url`]); or it is a page of the client's own origin
+/// ([`EmbedOptions::client_origin`]) outside the client's own widget directories.
 /// [`WidgetDefinition::embed`](crate::WidgetDefinition::embed) refuses the same URLs.
 ///
 /// A client typically serves the compat wrapper from its own origin, and the wrapper loads whatever
@@ -51,9 +78,18 @@ pub fn widget_url_problem(url: &str, allow_http: bool) -> Option<String> {
 /// `/WIDGET_COMPATIBILITY_WRAPPER/`, `//widget_compatibility_wrapper/` and
 /// `/x/..%2Fwidget_compatibility_wrapper/`). A `wrapper_url` that is no widget URL itself
 /// ([`widget_url_problem`] with `http:`) cannot be loaded, so nothing is a page of it.
+///
+/// Every widget iframe gets `allow-scripts allow-same-origin` (the base of the webview
+/// capabilities, `crate::webview`), so a page of the client's own origin in one would not be
+/// sandboxed from the client: it could reach the client's window, storage and logins
+/// (`spec/patch/msc4411/strict-webview-defaults.md`). Such pages are refused, whole origin, unless
+/// they are in one of [`EmbedOptions::own_widget_dirs`]: same origin, and the path in the
+/// directory both as written and as a server may read it (decoded, dot segments resolved, in lower
+/// case; see above), so that `/widgets/..%2F` and `/WIDGETS/` (on a case-sensitive server another
+/// page, maybe the client itself) are not in `/widgets/`.
 #[cfg_attr(feature = "uniffi", uniffi::export)]
-pub fn embed_url_problem(url: &str, wrapper_url: Option<String>, allow_http: bool) -> Option<String> {
-    checked_embed_url(url, wrapper_url.as_deref(), allow_http).err()
+pub fn embed_url_problem(url: &str, options: EmbedOptions) -> Option<String> {
+    checked_embed_url(url, &options).err()
 }
 
 /// [`widget_url_problem`], with the URL as the check parsed it.
@@ -80,13 +116,24 @@ pub(crate) fn checked_widget_url(url: &str, allow_http: bool) -> Result<Url, Str
 }
 
 /// [`embed_url_problem`], with the URL as the check parsed it.
-pub(crate) fn checked_embed_url(url: &str, wrapper_url: Option<&str>, allow_http: bool) -> Result<Url, String> {
-    let parsed = checked_widget_url(url, allow_http)?;
-    let wrapper = wrapper_url.and_then(|wrapper| checked_widget_url(wrapper, true).ok());
+pub(crate) fn checked_embed_url(url: &str, options: &EmbedOptions) -> Result<Url, String> {
+    let parsed = checked_widget_url(url, options.allow_http)?;
+    let wrapper = options.wrapper_url.as_deref().and_then(|wrapper| checked_widget_url(wrapper, true).ok());
     if wrapper.is_some_and(|wrapper| is_compat_wrapper_page(&parsed, &wrapper)) {
         return Err(LOADS_THE_WRAPPER.to_owned());
     }
+    if client_origin(options).is_some_and(|origin| parsed.origin() == origin)
+        && !options.own_widget_dirs.iter().any(|dir| is_own_widget_page(&parsed, dir))
+    {
+        return Err(ON_THE_CLIENTS_ORIGIN.to_owned());
+    }
     Ok(parsed)
+}
+
+/// [`EmbedOptions::client_origin`] if it is an http(s) origin.
+fn client_origin(options: &EmbedOptions) -> Option<Origin> {
+    let parsed = Url::parse(options.client_origin.as_deref()?).ok()?;
+    matches!(parsed.scheme(), "http" | "https").then(|| parsed.origin())
 }
 
 /// Whether a web server could answer `url` with a page of the compat wrapper at `wrapper` (see
@@ -100,6 +147,22 @@ fn is_compat_wrapper_page(url: &Url, wrapper: &Url) -> bool {
     let directory = &wrapper_path[..wrapper_path.rfind('/').unwrap_or(0)];
     let path = served_path(url);
     path == directory || path.starts_with(&format!("{directory}/"))
+}
+
+/// Whether `url` is a page in the own widget directory `dir` (see [`embed_url_problem`]): the
+/// opposite direction of [`is_compat_wrapper_page`], so a page counts only if it is in the
+/// directory however a server reads it.
+fn is_own_widget_page(url: &Url, dir: &str) -> bool {
+    let Ok(dir) = checked_widget_url(dir, true) else { return false };
+    // The directory with its trailing slash; never the root of the origin.
+    let literal = &dir.path()[..=dir.path().rfind('/').unwrap_or(0)];
+    let served = served_path(&dir);
+    let served = &served[..=served.rfind('/').unwrap_or(0)];
+    url.origin() == dir.origin()
+        && literal != "/"
+        && served != "/"
+        && url.path().starts_with(literal)
+        && served_path(url).starts_with(served)
 }
 
 /// The path of `url` as a web server may read it: percent-decoded, `\` as `/`, dot segments
@@ -142,6 +205,23 @@ mod tests {
         allowed: BTreeMap<String, String>,
         refused: BTreeMap<String, String>,
         compat_wrapper: WrapperTable,
+        client_origin: ClientOriginTable,
+    }
+
+    /// Its `client_origin` part: pages of the client's origin, in its own widget directories, and
+    /// of other origins.
+    #[derive(Deserialize)]
+    struct ClientOriginTable {
+        client: String,
+        own_widget_dirs: Vec<String>,
+        refused: BTreeMap<String, String>,
+        own_widgets: BTreeMap<String, String>,
+        other_origins: BTreeMap<String, String>,
+    }
+
+    /// The options of a client with a compat wrapper at `wrapper`, nothing else.
+    fn with_wrapper(wrapper: &str) -> EmbedOptions {
+        EmbedOptions { wrapper_url: Some(wrapper.to_owned()), allow_http: true, ..EmbedOptions::default() }
     }
 
     /// Its `compat_wrapper` part: pages of the wrapper and other pages of its origin.
@@ -202,21 +282,18 @@ mod tests {
     #[test]
     fn the_compat_wrapper_is_no_widget() {
         let WrapperTable { wrapper, allowed, refused } = table().compat_wrapper;
+        let without = EmbedOptions { allow_http: true, ..EmbedOptions::default() };
         for (label, url) in refused {
             assert_eq!(widget_url_problem(&url, true), None, "{label}: a widget URL on its own");
-            assert_eq!(
-                embed_url_problem(&url, Some(wrapper.clone()), true).as_deref(),
-                Some(LOADS_THE_WRAPPER),
-                "{label}"
-            );
+            assert_eq!(embed_url_problem(&url, with_wrapper(&wrapper)).as_deref(), Some(LOADS_THE_WRAPPER), "{label}");
             // A client without a compat wrapper has none to protect.
-            assert_eq!(embed_url_problem(&url, None, true), None, "{label}");
+            assert_eq!(embed_url_problem(&url, without.clone()), None, "{label}");
         }
         for (label, url) in allowed {
-            assert_eq!(embed_url_problem(&url, Some(wrapper.clone()), true), None, "{label}: {url}");
+            assert_eq!(embed_url_problem(&url, with_wrapper(&wrapper)), None, "{label}: {url}");
         }
         // The URL check comes first; a wrapper URL that cannot be loaded protects nothing.
-        let problem = |url: &str, wrapper: &str| embed_url_problem(url, Some(wrapper.to_owned()), true);
+        let problem = |url: &str, wrapper: &str| embed_url_problem(url, with_wrapper(wrapper));
         assert_eq!(
             problem("javascript:x", &wrapper).unwrap(),
             "javascript: URLs are not allowed, only http: and https:"
@@ -230,7 +307,7 @@ mod tests {
 
     #[test]
     fn the_wrappers_directory_is_refused() {
-        let wrapper_page = |url: &str, wrapper: &str| embed_url_problem(url, Some(wrapper.to_owned()), true).is_some();
+        let wrapper_page = |url: &str, wrapper: &str| embed_url_problem(url, with_wrapper(wrapper)).is_some();
         // A wrapper page that is a file: the other files of its directory may be the wrapper too.
         assert!(wrapper_page("https://c.example/compat/other.html", "https://c.example/compat/wrapper.html"));
         assert!(wrapper_page("https://c.example/compat", "https://c.example/compat/wrapper.html"));
@@ -240,6 +317,47 @@ mod tests {
             assert!(wrapper_page(url, "https://compat.example/?log_level=debug"), "{url}");
         }
         assert!(!wrapper_page("https://widgets.example/", "https://compat.example/"));
+    }
+
+    #[test]
+    fn no_page_of_the_clients_origin_but_its_own_widgets() {
+        let ClientOriginTable { client, own_widget_dirs, refused, own_widgets, other_origins } = table().client_origin;
+        let options = EmbedOptions {
+            wrapper_url: Some(format!("{client}/widget_compatibility_wrapper/")),
+            client_origin: Some(client.clone()),
+            own_widget_dirs: own_widget_dirs.clone(),
+            allow_http: true,
+        };
+        for (label, url) in refused {
+            assert_eq!(widget_url_problem(&url, true), None, "{label}: a widget URL on its own");
+            assert_eq!(embed_url_problem(&url, options.clone()).as_deref(), Some(ON_THE_CLIENTS_ORIGIN), "{label}");
+            // Without the client's origin (a native client) nothing is checked.
+            let native = EmbedOptions { client_origin: None, ..options.clone() };
+            assert_eq!(embed_url_problem(&url, native), None, "{label}");
+        }
+        for (label, url) in own_widgets {
+            assert_eq!(embed_url_problem(&url, options.clone()), None, "{label}: {url}");
+            // Only as the client's own widgets.
+            let none = EmbedOptions { own_widget_dirs: vec![], ..options.clone() };
+            assert_eq!(embed_url_problem(&url, none).as_deref(), Some(ON_THE_CLIENTS_ORIGIN), "{label}");
+        }
+        for (label, url) in other_origins {
+            assert_eq!(embed_url_problem(&url, options.clone()), None, "{label}: {url}");
+        }
+        // The compat wrapper's own refusal comes first, also inside an own widget directory.
+        let wrapper_in_dir = EmbedOptions { own_widget_dirs: vec![format!("{client}/")], ..options.clone() };
+        let wrapper = format!("{client}/widget_compatibility_wrapper/");
+        assert_eq!(embed_url_problem(&wrapper, wrapper_in_dir.clone()).as_deref(), Some(LOADS_THE_WRAPPER));
+        // A directory at the root of the origin is no exception: it would hold the client.
+        assert_eq!(embed_url_problem(&format!("{client}/"), wrapper_in_dir).as_deref(), Some(ON_THE_CLIENTS_ORIGIN));
+        // A client origin that is no http(s) origin checks nothing.
+        for origin in ["null", "", "file:///home/", "/relative"] {
+            let odd = EmbedOptions { client_origin: Some(origin.to_owned()), ..options.clone() };
+            assert_eq!(embed_url_problem(&format!("{client}/app/"), odd), None, "{origin:?}");
+        }
+        // Any spelling of the origin.
+        let spelled = EmbedOptions { client_origin: Some(format!("{}/some/page?x", client.to_uppercase())), ..options };
+        assert_eq!(embed_url_problem(&format!("{client}/app/"), spelled).as_deref(), Some(ON_THE_CLIENTS_ORIGIN));
     }
 
     #[test]

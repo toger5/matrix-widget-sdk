@@ -8,7 +8,9 @@
  *    Before loading the widget, the bridge asks the host for the `get_matrix_context` and
  *    `get_client_context` capabilities, fetches both contexts and fills in the URL (template.ts).
  *    If the host refuses, the variables stay empty and the widget still loads. A templated URL
- *    that is not an absolute http(s) URL is never loaded (url.ts).
+ *    that is not an absolute http(s) URL is never loaded (url.ts). In the same request it asks
+ *    for the webview capabilities of a legacy client's iframe (`LEGACY_WEBVIEW_CAPABILITIES`), so
+ *    that a host with strict iframes gives the wrapper's iframe what legacy widgets expect.
  * 2. **Startup handshake.** The two protocols start differently:
  *    - Legacy capabilities are requested by the host (`capabilities` to the widget). MSC4412
  *      capabilities are requested by the widget (`request_capabilities`). The bridge plays the
@@ -37,7 +39,7 @@
  */
 import { CurrentApiVersions } from "matrix-widget-api";
 
-import { capabilitiesToRequest, collapseApproved, normalizeCapability, widgetCapability } from "./capabilities";
+import { capabilitiesToRequest, collapseApproved, LEGACY_WEBVIEW_CAPABILITIES, normalizeCapability, widgetCapability } from "./capabilities";
 import {
   ERROR_INVALID_REQUEST,
   ERROR_MISSING_CAPABILITY,
@@ -69,6 +71,8 @@ export const MATRIX_CONTEXT_ACTION = `${PLACEHOLDER}.get_matrix_context`;
 export const CLIENT_CONTEXT_ACTION = `${PLACEHOLDER}.get_client_context`;
 /** The capabilities for the context actions. */
 export const CONTEXT_CAPABILITIES = [widgetCapability("get_matrix_context"), widgetCapability("get_client_context")];
+/** What `start()` requests: the context capabilities and the webview capabilities of a legacy client's iframe. */
+export const START_CAPABILITIES = [...CONTEXT_CAPABILITIES, ...LEGACY_WEBVIEW_CAPABILITIES];
 /** The legacy widget's `get_openid`, which the bridge answers itself (see the module comment). */
 const LEGACY_GET_OPENID = "get_openid";
 /** The host's name of it, and its capability. */
@@ -144,9 +148,12 @@ export class CompatBridge {
 
   constructor(private readonly o: BridgeOptions) {}
 
-  /** Start the bootstrap by requesting the context capabilities. The host answers with `update_capabilities`. */
+  /**
+   * Start the bootstrap by requesting the context capabilities and the webview capabilities of a
+   * legacy client ({@link START_CAPABILITIES}). The host answers with `update_capabilities`.
+   */
   start(): void {
-    this.requestHost(REQUEST_CAPABILITIES_ACTION, { capabilities: CONTEXT_CAPABILITIES });
+    this.requestHost(REQUEST_CAPABILITIES_ACTION, { capabilities: START_CAPABILITIES });
   }
 
   /** The inner iframe fired `load`. This also happens when the widget reloads itself. */

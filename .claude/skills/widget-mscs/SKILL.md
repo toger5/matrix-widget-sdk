@@ -42,7 +42,8 @@ gh api repos/matrix-org/matrix-spec-proposals/pulls/4412/comments --paginate \
 **MSC4411** defines what a widget is: a room state event that places it in the room.
 Proposal → State Event (`m.widget`: `name`, `url`, `avatar_url`; the state key is the widget id;
 Power Levels) → Accessing and rendering widgets → Default webview capabilities (the iframe
-`sandbox` / `allow` defaults) → Remove `$matrix_widget_id` → Intentionally skipped topics →
+`sandbox` / `allow` defaults; Element Web's set upstream, strict in the proposed
+`spec/patch/msc4411/strict-webview-defaults.md`) → Remove `$matrix_widget_id` → Intentionally skipped topics →
 Alternatives (including "Add iframe capabilities to this (state event) MSC") → Security
 considerations → Potential issues (comparison with `im.vector.modular.widgets`, URL template
 parameters, the widget API message wrapper, Migration) → Unstable prefix
@@ -62,12 +63,12 @@ envelope fields and `uses_widget_api` are not prefixed) → Dependencies (MSC441
 | MSC part | here |
 |---|---|
 | MSC4411 `m.widget` content and event types (`m.widget`, `org.matrix.msc4411.widget`, legacy `im.vector.modular.widgets`): which events are widgets (removed ones have no string `name` / `url`), what a client loads (legacy: through the compat wrapper) | `crates/widget-host-driver/src/widget_event.rs` (`WidgetDefinition::parse` / `embed`; exported as `parse_widget_state_event`, `embed_widget`); the browser host calls it through `packages/widget-host/src/lib/widgetEvents.ts` |
-| MSC4411 "Clients MUST validate the url" | `crates/widget-host-driver/src/widget_url.rs` (`widget_url_problem`: absolute http(s), WHATWG, not relative to the embedding page; `embed_url_problem`: also no page of the client's compat wrapper; table `tests/widget_urls.json`) |
-| MSC4411 iframe `sandbox` / `allow` | `packages/widget-host/src/app/AppRoot.tsx` |
+| MSC4411 "Clients MUST validate the url" | `crates/widget-host-driver/src/widget_url.rs` (`widget_url_problem`: absolute http(s), WHATWG, not relative to the embedding page; `embed_url_problem` with `EmbedOptions`: also no page of the client's compat wrapper, no page of the client's own origin; table `tests/widget_urls.json`) |
+| MSC4411 iframe `sandbox` / `allow` (proposed strict default: `spec/patch/msc4411/strict-webview-defaults.md`) and the webview capabilities (draft `spec/patch/new/webview-capabilities.md`) | `crates/widget-host-driver/src/webview.rs` (`WebviewPolicy`, `webview_attributes`); the capability source in `crates/widget-actions/src/capabilities.rs`; the host: `packages/widget-host/src/app/runtime/widgetRuntime.ts`, `src/app/AppRoot.tsx` `WidgetIframes`; legacy widgets: `packages/widget-compat-wrapper/src/wrapper.ts` (`innerIframe`) |
 | MSC4411 URL templates (removed; legacy widgets only) | `packages/widget-compat-wrapper/src/template.ts` |
 | MSC4412 envelope, namespaces (`MSC4412_NAMESPACE`, `PLACEHOLDER_NAMESPACE`, `STABLE_NAMESPACE`), errors (`WidgetError`), timeouts | `crates/widget-actions/src/wire.rs` |
 | MSC4412 action naming: wire names, stable `m.` aliases | serde `rename` / `alias` in `crates/widget-actions/src/actions/{widget,host}/mod.rs` |
-| MSC4412 capability format | `crates/widget-actions/src/capabilities.rs`; all actions and their capabilities in `docs/spec-appendix/capability-naming-proposal.md` |
+| MSC4412 capability format (proposed sources of other MSCs: `spec/patch/msc4412/capability-sources.md`) | `crates/widget-actions/src/capabilities.rs`; all actions and their capabilities in `docs/spec-appendix/capability-naming-proposal.md` |
 | MSC4412 core actions | `crates/widget-actions/src/actions/widget/{notify_ready,request_capabilities}.rs`, `crates/widget-actions/src/actions/host/update_capabilities.rs`; handshake and approval in `crates/widget-host-driver/src/driver/` and `platform.rs` |
 | MSC4412 limited grants (proposed: `spec/patch/msc4412/capability-lifetimes.md`) | single use in the driver: `WidgetHostDriver::set_single_use` (`driver/mod.rs`), used up in `driver/requests.rs` `handle_request`; time limits are the platform's timer plus `revoke_capabilities` |
 | MSC4412 transport | widget: `crates/widget-base-sdk/src/wasm.rs`; host: `packages/widget-host/src/app/runtime/widgetRuntime.ts` |

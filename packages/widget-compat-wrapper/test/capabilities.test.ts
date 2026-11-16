@@ -6,7 +6,11 @@ import {
   expandLegacyCapability,
   hostCapability,
   IMPLICIT_CAPABILITIES,
+  LEGACY_ALLOW,
+  LEGACY_SANDBOX,
+  LEGACY_WEBVIEW_CAPABILITIES,
   normalizeCapability,
+  webviewCapability,
   widgetCapability,
 } from "../src/capabilities";
 
@@ -45,6 +49,31 @@ const MIGRATION: [string, string | undefined, string[]][] = [
   ],
   ["m.always_on_screen", undefined, ["widget:org.matrix.mscXXXX.set_always_on_screen"]],
 ];
+
+describe("webview capabilities", () => {
+  it("are `webview:<namespace>.sandbox:<token>` and `webview:<namespace>.allow:<feature>`, about no action", () => {
+    expect(webviewCapability("allow:camera")).toBe("webview:org.matrix.mscXXXX.allow:camera");
+    expect(webviewCapability("sandbox:allow-popups")).toBe("webview:org.matrix.mscXXXX.sandbox:allow-popups");
+    expect(normalizeCapability("webview:m.allow:camera")).toBe("webview:org.matrix.mscXXXX.allow:camera");
+    expect(normalizeCapability("webview:org.matrix.mscXXXX.allow:camera")).toBe("webview:org.matrix.mscXXXX.allow:camera");
+  });
+
+  it("of a legacy client: Element Web's iframe (AppTile) with fullscreen", () => {
+    expect(LEGACY_SANDBOX.join(" ")).toBe("allow-forms allow-popups allow-popups-to-escape-sandbox allow-same-origin allow-scripts allow-presentation allow-downloads");
+    expect(LEGACY_ALLOW.join("; ")).toBe("microphone; camera; encrypted-media; autoplay; display-capture; clipboard-write; clipboard-read; fullscreen");
+    expect(LEGACY_WEBVIEW_CAPABILITIES).toHaveLength(15);
+    expect(LEGACY_WEBVIEW_CAPABILITIES.every((c) => /^webview:org\.matrix\.mscXXXX\.(sandbox|allow):[a-z][a-z0-9-]*$/.test(c))).toBe(true);
+    // Never the top navigation.
+    expect(LEGACY_WEBVIEW_CAPABILITIES.some((c) => c.includes("top-navigation"))).toBe(false);
+  });
+
+  it("cannot be asked for by a legacy widget: its iframe has constant attributes", () => {
+    const usb = "webview:org.matrix.mscXXXX.allow:usb";
+    expect(expandLegacyCapability(usb)).toEqual([]);
+    expect(capabilitiesToRequest([usb, "webview:m.allow:camera"])).toEqual(IMPLICIT_CAPABILITIES);
+    expect(collapseApproved([usb], [usb])).toEqual([]);
+  });
+});
 
 describe("new capability names", () => {
   it("are `source:action[.modifier][:data]` with the action's own unstable namespace", () => {

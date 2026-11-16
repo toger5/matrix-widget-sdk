@@ -55,10 +55,36 @@ export const LOCAL_WIDGET_PREFIX = "local:";
 export const localWidgetKey = (event: Pick<StateEvent, "type" | "state_key">) => `${LOCAL_WIDGET_PREFIX}${widgetKey(event)}`;
 
 /**
+ * The webview capabilities of a legacy widget: the iframe of a legacy client (Element Web's
+ * `sandbox` and `allow`, plus `fullscreen`), which the compat wrapper requests when it starts
+ * (`LEGACY_WEBVIEW_CAPABILITIES` of `packages/widget-compat-wrapper`; a test compares the two).
+ * The iframe of a legacy widget has them from the start, so the request is granted at once, without
+ * a prompt and without a reload.
+ */
+export const LEGACY_WEBVIEW = [
+  "webview:org.matrix.mscXXXX.sandbox:allow-forms",
+  "webview:org.matrix.mscXXXX.sandbox:allow-popups",
+  "webview:org.matrix.mscXXXX.sandbox:allow-popups-to-escape-sandbox",
+  "webview:org.matrix.mscXXXX.sandbox:allow-same-origin",
+  "webview:org.matrix.mscXXXX.sandbox:allow-scripts",
+  "webview:org.matrix.mscXXXX.sandbox:allow-presentation",
+  "webview:org.matrix.mscXXXX.sandbox:allow-downloads",
+  "webview:org.matrix.mscXXXX.allow:microphone",
+  "webview:org.matrix.mscXXXX.allow:camera",
+  "webview:org.matrix.mscXXXX.allow:encrypted-media",
+  "webview:org.matrix.mscXXXX.allow:autoplay",
+  "webview:org.matrix.mscXXXX.allow:display-capture",
+  "webview:org.matrix.mscXXXX.allow:clipboard-write",
+  "webview:org.matrix.mscXXXX.allow:clipboard-read",
+  "webview:org.matrix.mscXXXX.allow:fullscreen",
+];
+
+/**
  * Capabilities granted to a legacy widget (behind the compat wrapper) without a prompt, because a
- * legacy client did not ask for them either: the facts it put into the widget URL, and the theme,
- * language and visibility updates. Not `get_openid`: a legacy client asked the user per token, and
- * the single-use capability is how this host asks (the wrapper requests it per token).
+ * legacy client did not ask for them either: the facts it put into the widget URL, the theme,
+ * language and visibility updates, and the webview capabilities of its iframe (`LEGACY_WEBVIEW`).
+ * Not `get_openid`: a legacy client asked the user per token, and the single-use capability is how
+ * this host asks (the wrapper requests it per token).
  */
 export const LEGACY_AUTO_APPROVED = [
   "widget:org.matrix.mscXXXX.get_matrix_context",
@@ -66,4 +92,5 @@ export const LEGACY_AUTO_APPROVED = [
   "host:org.matrix.mscXXXX.update_theme",
   "host:org.matrix.mscXXXX.update_language",
   "host:org.matrix.mscXXXX.update_visibility",
+  ...LEGACY_WEBVIEW,
 ];

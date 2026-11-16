@@ -1485,3 +1485,85 @@ fn auto_approved_capabilities_skip_the_platform() {
         }
     );
 }
+
+// ---- webview capabilities (`spec/patch/new/webview-capabilities.md`) ---------------------------
+
+#[test]
+fn base_webview_capabilities_are_granted_without_asking() {
+    let (driver, _, platform) = setup();
+    let base = vec![Capability::webview_sandbox("allow-scripts"), Capability::webview_sandbox("allow-same-origin")];
+    request_caps(&driver, base.clone(), "w1");
+    // Nothing to decide: answered at once, the platform is not asked.
+    assert!(platform.requested.lock().unwrap().is_empty());
+    assert_eq!(updates(&platform.drain()), std::slice::from_ref(&base));
+
+    // Together with something to decide: granted whatever the answer says.
+    let camera = Capability::webview_allow("camera");
+    let popups = Capability::webview_sandbox("allow-popups");
+    driver.revoke_capabilities(base.clone());
+    platform.drain();
+    request_caps(&driver, [base.clone(), vec![camera.clone(), popups.clone()]].concat(), "w2");
+    assert_eq!(platform.requested.lock().unwrap().as_slice(), &[vec![camera.clone(), popups]]);
+    driver.approve_capabilities(vec![camera.clone()]);
+    assert_eq!(updates(&platform.drain()), [[base, vec![camera]].concat()]);
+}
+
+#[test]
+fn top_navigation_is_never_asked_about_nor_granted() {
+    let (driver, _, platform) = setup();
+    let camera = Capability::webview_allow("camera");
+    let never: Vec<_> =
+        ["allow-top-navigation", "allow-top-navigation-by-user-activation", "allow-top-navigation-to-custom-protocols"]
+            .into_iter()
+            .map(Capability::webview_sandbox)
+            .collect();
+    // Not even auto-approval grants it.
+    driver.set_auto_approved(never.clone());
+    request_caps(&driver, [never.clone(), vec![camera.clone()]].concat(), "w1");
+    assert_eq!(platform.requested.lock().unwrap().as_slice(), &[vec![camera.clone()]]);
+    // Not even an answer that approves it.
+    driver.approve_capabilities([never.clone(), vec![camera.clone()]].concat());
+    assert_eq!(updates(&platform.drain()), [vec![camera.clone()]]);
+
+    // A request of nothing else completes at once, with nothing new.
+    request_caps(&driver, never, "w2");
+    assert_eq!(platform.requested.lock().unwrap().len(), 1);
+    assert_eq!(updates(&platform.drain()), [vec![camera]]);
+}
+
+#[test]
+fn other_webview_capabilities_are_asked_about_and_can_be_auto_approved() {
+    let (driver, _, platform) = setup();
+    let (camera, microphone) = (Capability::webview_allow("camera"), Capability::webview_allow("microphone"));
+    // What the widget's iframe was built with: granted at once when the widget requests it.
+    driver.set_auto_approved(vec![camera.clone()]);
+    request_caps(&driver, vec![camera.clone(), microphone.clone()], "w1");
+    assert_eq!(platform.requested.lock().unwrap().as_slice(), &[vec![microphone.clone()]]);
+    driver.approve_capabilities(vec![]);
+    assert_eq!(updates(&platform.drain()), [vec![camera.clone()]]);
+    assert_eq!(driver.snapshot().approved, std::slice::from_ref(&camera));
+
+    // No request needs one, so none is single use.
+    driver.set_single_use(vec![camera.clone(), Capability::GetOpenId]);
+    assert_eq!(driver.snapshot().single_use, [Capability::GetOpenId]);
+
+    // Revoked like any other.
+    driver.revoke_capabilities(vec![camera]);
+    assert_eq!(updates(&platform.drain()), [vec![]]);
+}
+
+#[test]
+fn webview_capabilities_allow_no_action() {
+    let (driver, _, platform) = setup();
+    let all_webview = vec![Capability::webview_allow("camera"), Capability::webview_sandbox("allow-popups")];
+    grant(&driver, &platform, all_webview);
+    platform.drain();
+    block(feed(
+        &driver,
+        WidgetRequest::Navigate { request: widget_actions::NavigateRequest { uri: "https://matrix.to/#/#a:b".into() } },
+        "n1",
+    ))
+    .unwrap();
+    let reply = platform.drain().remove(0);
+    assert_eq!(reply.error().unwrap().kind(), ErrorKind::MissingCapability);
+}

@@ -94,8 +94,13 @@ grep -rlE '(from |import\()"(matrix-js-sdk|matrix-sdk-uniffi-js)' src | grep -vE
   `.storybook/mockup.css`).
 - Key presses and clicks inside an iframe never reach the host. `AppRoot` focuses the widget's
   panel when the window loses focus to an iframe.
-- The iframe `sandbox` and `allow` attributes are set in one place, `WidgetIframes`. Widening them
-  is a security decision: ask first.
+- The iframe `sandbox` and `allow` attributes are set in one place, `WidgetIframes`, from
+  `WidgetInstanceViewModel.webview`: strict (`allow-scripts allow-same-origin`, empty `allow`)
+  plus the webview capabilities the start applies (`webview:…`; remembered, a legacy client's set
+  for a legacy widget, `webviewKept`), built by the driver's `webview_attributes`
+  (`src/lib/webview.ts`). Never hard-code them. A grant or revocation of one restarts the widget
+  (`WidgetRuntimeEvents.webviewChanged` → controller `applyWebview`, a new generation, a reload
+  guard). Changing the default or the legacy set is a security decision: ask first.
 - `WidgetRuntime` owns the driver of one widget. The driver calls the platform callbacks
   synchronously from inside its own methods, so anything that calls back into the driver or
   changes the view model is deferred (`later`, a microtask). Messages are accepted only from the
@@ -107,8 +112,9 @@ grep -rlE '(from |import\()"(matrix-js-sdk|matrix-sdk-uniffi-js)' src | grep -vE
 - Which state events are widgets and how they are embedded (directly, or through the compat
   wrapper for `im.vector.modular.widgets`) is the driver's parser (`parse_widget_state_event`,
   `embed_widget`, `widget_url_problem`, `embed_url_problem` in `crates/widget-host-driver`; the
-  last refuses the host's own compat wrapper as a widget), used through
-  `src/lib/widgetEvents.ts` (`describesWidget`, `resolveWidget`, `hostWidgetEvents`, `wrapperUrl`).
+  last refuses the host's own compat wrapper and every other page of the host's origin, except
+  the test widgets it ships itself), used through `src/lib/widgetEvents.ts` (`describesWidget`,
+  `resolveWidget`, `hostWidgetEvents`, `wrapperUrl`, `embedOptions`, `ownWidgetDirs`).
   `src/widgetStateEvent.ts` keeps the host's types and keys (`widgetKey`, `localWidgetKey`), the
   event types, and which capabilities legacy widgets get without asking (`LEGACY_AUTO_APPROVED`).
 
@@ -158,7 +164,7 @@ their tests) is the `matrix-session` skill (`.claude/skills/matrix-session/SKILL
   DevBackend and always turns `settings.devBackend` on. `toSeed()` is the way back (content only).
   Examples: `e2e/seeds/*.json`.
 - `window.widgetHost` (`src/app/testHook.ts`): `populate`, `state`, `dispatch`, `widgets`,
-  `messages`, `driverSnapshot`, `devTools`, `store`. Extend it when a test needs a fact that is not
+  `messages`, `driverSnapshot`, `webview` (a widget's generation and iframe attributes), `devTools`, `store`. Extend it when a test needs a fact that is not
   on screen; return plain JSON.
 
 ## Where to add …

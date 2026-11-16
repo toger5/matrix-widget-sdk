@@ -20,7 +20,10 @@ It contains:
 * `Capability` / `CapabilitySet`: capability strings and the `allows_*` checks. A capability
   embeds the wire name of its action (`widget:org.matrix.msc2876.read_events.state:<type>`); the
   stable `m.` spelling is parsed as well. `capability_is_known` (exported to the bindings) tells
-  them from strings outside the scheme (`Capability::Other`).
+  them from strings outside the scheme (`Capability::Other`). The source `webview` is about no
+  action: `WebviewSandbox` / `WebviewAllow` are one token of the widget iframe's `sandbox` or
+  `allow` attribute (`webview:org.matrix.mscXXXX.allow:camera`, `is_webview`); a value that is no
+  single web token (`is_webview_value`) is `Other`.
 * `MatrixEvent`, `WidgetError` and the other shared payload types.
 
 ![widget-actions: wire vs. typed](../../docs/diagrams/04-actions-crate.svg)

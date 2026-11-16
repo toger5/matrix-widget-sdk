@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 906" width="1200" height="906" font-family="-apple-system, 'Segoe UI', Helvetica, Arial, sans-serif">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 950" width="1200" height="950" font-family="-apple-system, 'Segoe UI', Helvetica, Arial, sans-serif">
   <style>
     text { fill: #1f2937; white-space: pre; }
     .h1 { font-size: 22px; font-weight: 700; }
@@ -15,7 +15,7 @@
       <path d="M0,0 L10,5 L0,10 z" fill="#374151"/>
     </marker>
   </defs>
-  <rect width="1200" height="906" fill="#ffffff"/>
+  <rect width="1200" height="950" fill="#ffffff"/>
 
   <text x="30" y="42" class="h1">Using legacy widgets with the new driver</text>
   <text x="30" y="66" class="s">The client speaks MSC4412 only. A legacy widget is embedded inside the hosted compat wrapper, which translates envelopes, capabilities and action names, and templates the URL.</text>
@@ -41,20 +41,21 @@
   <text x="330" y="118" class="m">m.widget</text>
   <text x="330" y="134" class="m">msc4411.widget</text>
 
-  <rect x="450" y="98" width="400" height="94" rx="10" fill="#f3e8ff" stroke="#7c3aed" stroke-width="1.5"/>
+  <rect x="450" y="98" width="400" height="114" rx="10" fill="#f3e8ff" stroke="#7c3aed" stroke-width="1.5"/>
   <text x="470" y="124" class="h2">iframe: content.url</text>
   <rect x="738" y="110" width="100" height="22" rx="11" fill="#7c3aed"/>
   <text x="788" y="125" class="badge" text-anchor="middle">MSC4412</text>
   <text x="470" y="147" class="b">new widget, e.g. on widget-base-sdk</text>
   <text x="470" y="167" class="s">loaded directly, hidden until notify_ready (15 s)</text>
   <text x="470" y="183" class="s">no template variables in the URL</text>
+  <text x="470" y="200" class="s">strict iframe; more only as webview:… capabilities</text>
 
   <!-- legacy branch -->
   <polyline points="390,263 448,263" fill="none" stroke="#374151" stroke-width="1.5" marker-end="url(#arr)"/>
   <text x="250" y="340" class="s">legacy:</text>
   <text x="250" y="356" class="m">im.vector.modular.widgets</text>
 
-  <rect x="450" y="225" width="430" height="290" rx="10" fill="#ecfdf5" stroke="#059669" stroke-width="1.5"/>
+  <rect x="450" y="225" width="430" height="314" rx="10" fill="#ecfdf5" stroke="#059669" stroke-width="1.5"/>
   <text x="470" y="251" class="h2">iframe: compat wrapper</text>
   <rect x="768" y="237" width="100" height="22" rx="11" fill="#059669"/>
   <text x="818" y="252" class="badge" text-anchor="middle">MSC4412</text>
@@ -63,7 +64,7 @@
   <text x="470" y="312" class="b">• plays the legacy host for the startup handshake</text>
   <text x="470" y="331" class="b">• translates envelopes, legacy capabilities and action names</text>
 
-  <rect x="475" y="350" width="380" height="146" rx="10" fill="#fef3c7" stroke="#b45309" stroke-width="1.5"/>
+  <rect x="475" y="350" width="380" height="170" rx="10" fill="#fef3c7" stroke="#b45309" stroke-width="1.5"/>
   <text x="495" y="375" class="h2">inner iframe: legacy widget</text>
   <rect x="743" y="362" width="100" height="22" rx="11" fill="#b45309"/>
   <text x="793" y="377" class="badge" text-anchor="middle">legacy</text>
@@ -73,9 +74,10 @@
   <text x="540" y="443" class="m">{ api: fromWidget | toWidget,</text>
   <text x="540" y="459" class="m">  widgetId, requestId, action, data }</text>
   <text x="495" y="483" class="s">postMessage to its parent, which is now the wrapper</text>
+  <text x="495" y="505" class="s">its iframe: Element Web's sandbox + allow, constant</text>
 
   <!-- driver -->
-  <rect x="940" y="98" width="230" height="417" rx="10" fill="#dbeafe" stroke="#2563eb" stroke-width="1.5"/>
+  <rect x="940" y="98" width="230" height="441" rx="10" fill="#dbeafe" stroke="#2563eb" stroke-width="1.5"/>
   <text x="958" y="124" class="h2">Client</text>
   <text x="958" y="144" class="m">WidgetHostDriver</text>
   <text x="958" y="160" class="s">one per widget, MSC4412 only</text>
@@ -83,19 +85,21 @@
   <text x="958" y="198" class="bb">For a wrapped widget:</text>
   <text x="958" y="219" class="m">set_auto_approved([</text>
   <text x="958" y="235" class="m">widget:…get_matrix_context,</text>
-  <text x="958" y="251" class="m">widget:…get_client_context])</text>
-  <text x="958" y="273" class="s">a legacy client handed these</text>
-  <text x="958" y="289" class="s">facts over in the URL anyway,</text>
-  <text x="958" y="305" class="s">so the user is prompted once,</text>
-  <text x="958" y="321" class="s">for the widget's own caps</text>
-  <line x1="958" y1="340" x2="1152" y2="340" stroke="#93c5fd"/>
-  <text x="958" y="363" class="bb">The client has no</text>
-  <text x="958" y="383" class="b">• template engine</text>
-  <text x="958" y="403" class="b">• legacy protocol code</text>
-  <text x="958" y="423" class="b">• fromWidget / toWidget</text>
-  <text x="958" y="455" class="s">messages with api, not source,</text>
-  <text x="958" y="471" class="s">are rejected with</text>
-  <text x="958" y="487" class="m">DriverError::LegacyWidgetApi</text>
+  <text x="958" y="251" class="m">widget:…get_client_context,</text>
+  <text x="958" y="267" class="m">webview:… legacy iframe])</text>
+  <text x="958" y="289" class="s">a legacy client handed these</text>
+  <text x="958" y="305" class="s">facts over in the URL and gave</text>
+  <text x="958" y="321" class="s">every widget that iframe, so</text>
+  <text x="958" y="337" class="s">the user is prompted once,</text>
+  <text x="958" y="353" class="s">for the widget's own caps</text>
+  <line x1="958" y1="370" x2="1152" y2="370" stroke="#93c5fd"/>
+  <text x="958" y="393" class="bb">The client has no</text>
+  <text x="958" y="413" class="b">• template engine</text>
+  <text x="958" y="433" class="b">• legacy protocol code</text>
+  <text x="958" y="453" class="b">• fromWidget / toWidget</text>
+  <text x="958" y="485" class="s">messages with api, not source,</text>
+  <text x="958" y="501" class="s">are rejected with</text>
+  <text x="958" y="517" class="m">DriverError::LegacyWidgetApi</text>
 
   <!-- links to driver -->
   <line x1="852" y1="138" x2="937" y2="138" stroke="#374151" stroke-width="1.5" marker-end="url(#arr)" marker-start="url(#arr)"/>
@@ -104,65 +108,66 @@
   <text x="910" y="292" class="s" text-anchor="middle">source</text>
 
   <!-- wrapper URL -->
-  <text x="30" y="548" class="bb">URL the client embeds for a legacy event (content.url passed untemplated):</text>
-  <rect x="30" y="558" width="1140" height="30" rx="6" fill="#f9fafb" stroke="#d1d5db"/>
-  <text x="42" y="578" class="m">https://wrapper.example/?legacy_widget_url=&lt;urlencoded content.url&gt;&amp;legacy_widget_id=&lt;state_key&gt;&amp;legacy_wait_for_iframe_load=…&amp;legacy_widget_data=&lt;json&gt;</text>
+  <text x="30" y="592" class="bb">URL the client embeds for a legacy event (content.url passed untemplated):</text>
+  <rect x="30" y="602" width="1140" height="30" rx="6" fill="#f9fafb" stroke="#d1d5db"/>
+  <text x="42" y="622" class="m">https://wrapper.example/?legacy_widget_url=&lt;urlencoded content.url&gt;&amp;legacy_widget_id=&lt;state_key&gt;&amp;legacy_wait_for_iframe_load=…&amp;legacy_widget_data=&lt;json&gt;</text>
 
   <!-- steps -->
-  <text x="30" y="626" class="h2">What happens when the wrapper starts</text>
+  <text x="30" y="670" class="h2">What happens when the wrapper starts</text>
 
-  <rect x="30" y="640" width="270" height="236" rx="10" fill="#ffffff" stroke="#059669"/>
-  <circle cx="54" cy="664" r="13" fill="#059669"/><text x="54" y="669" class="num" text-anchor="middle">1</text>
-  <text x="76" y="669" class="bb">Bootstrap</text>
-  <text x="46" y="694" class="b">wrapper → host:</text>
-  <text x="46" y="712" class="m">request_capabilities [</text>
-  <text x="46" y="728" class="m">  widget:…get_matrix_context,</text>
-  <text x="46" y="744" class="m">  widget:…get_client_context ]</text>
-  <text x="46" y="766" class="b">auto-approved by the driver,</text>
-  <text x="46" y="784" class="b">host answers</text>
-  <text x="46" y="802" class="m">update_capabilities { allowed }</text>
-  <text x="46" y="824" class="s">both are MSC4412 core actions,</text>
-  <text x="46" y="840" class="s">sent as org.matrix.msc4412.…</text>
+  <rect x="30" y="684" width="270" height="236" rx="10" fill="#ffffff" stroke="#059669"/>
+  <circle cx="54" cy="708" r="13" fill="#059669"/><text x="54" y="713" class="num" text-anchor="middle">1</text>
+  <text x="76" y="713" class="bb">Bootstrap</text>
+  <text x="46" y="738" class="b">wrapper → host:</text>
+  <text x="46" y="756" class="m">request_capabilities [</text>
+  <text x="46" y="772" class="m">  widget:…get_matrix_context,</text>
+  <text x="46" y="788" class="m">  widget:…get_client_context,</text>
+  <text x="46" y="804" class="m">  webview:… (Element Web's 15) ]</text>
+  <text x="46" y="826" class="b">auto-approved by the driver,</text>
+  <text x="46" y="844" class="b">host answers</text>
+  <text x="46" y="862" class="m">update_capabilities { allowed }</text>
+  <text x="46" y="884" class="s">both are MSC4412 core actions,</text>
+  <text x="46" y="900" class="s">sent as org.matrix.msc4412.…</text>
 
-  <rect x="320" y="640" width="270" height="236" rx="10" fill="#ffffff" stroke="#059669"/>
-  <circle cx="344" cy="664" r="13" fill="#059669"/><text x="344" y="669" class="num" text-anchor="middle">2</text>
-  <text x="366" y="669" class="bb">Template + load</text>
-  <text x="336" y="694" class="b">asks get_matrix_context and</text>
-  <text x="336" y="712" class="b">get_client_context, renders</text>
-  <text x="336" y="732" class="m">$matrix_user_id  $matrix_room_id</text>
-  <text x="336" y="748" class="m">$matrix_display_name  …</text>
-  <text x="336" y="764" class="m">$org.matrix.msc2873.client_*</text>
-  <text x="336" y="786" class="b">adds widgetId, parentUrl,</text>
-  <text x="336" y="804" class="b">loads the inner iframe</text>
+  <rect x="320" y="684" width="270" height="236" rx="10" fill="#ffffff" stroke="#059669"/>
+  <circle cx="344" cy="708" r="13" fill="#059669"/><text x="344" y="713" class="num" text-anchor="middle">2</text>
+  <text x="366" y="713" class="bb">Template + load</text>
+  <text x="336" y="738" class="b">asks get_matrix_context and</text>
+  <text x="336" y="756" class="b">get_client_context, renders</text>
+  <text x="336" y="776" class="m">$matrix_user_id  $matrix_room_id</text>
+  <text x="336" y="792" class="m">$matrix_display_name  …</text>
+  <text x="336" y="808" class="m">$org.matrix.msc2873.client_*</text>
+  <text x="336" y="830" class="b">adds widgetId, parentUrl,</text>
+  <text x="336" y="848" class="b">loads the inner iframe</text>
 
-  <rect x="610" y="640" width="270" height="236" rx="10" fill="#ffffff" stroke="#059669"/>
-  <circle cx="634" cy="664" r="13" fill="#059669"/><text x="634" y="669" class="num" text-anchor="middle">3</text>
-  <text x="656" y="669" class="bb">Legacy handshake</text>
-  <text x="626" y="694" class="b">wrapper plays the legacy host:</text>
-  <text x="626" y="714" class="m">toWidget capabilities</text>
-  <text x="626" y="730" class="m">  → request_capabilities</text>
-  <text x="626" y="746" class="s">      legacy names expanded, plus the</text>
-  <text x="626" y="760" class="s">      implicit update_theme, …</text>
-  <text x="626" y="776" class="m">  ← update_capabilities</text>
-  <text x="626" y="792" class="s">      given to the widget as legacy</text>
-  <text x="626" y="806" class="s">      notify_capabilities; no timeline:&lt;room&gt;</text>
-  <text x="626" y="828" class="m">supported_api_versions, get_openid</text>
-  <text x="626" y="844" class="b">answered by the wrapper;</text>
-  <text x="626" y="862" class="m">notify_ready <tspan >sent once</tspan></text>
+  <rect x="610" y="684" width="270" height="236" rx="10" fill="#ffffff" stroke="#059669"/>
+  <circle cx="634" cy="708" r="13" fill="#059669"/><text x="634" y="713" class="num" text-anchor="middle">3</text>
+  <text x="656" y="713" class="bb">Legacy handshake</text>
+  <text x="626" y="738" class="b">wrapper plays the legacy host:</text>
+  <text x="626" y="758" class="m">toWidget capabilities</text>
+  <text x="626" y="774" class="m">  → request_capabilities</text>
+  <text x="626" y="790" class="s">      legacy names expanded, plus the</text>
+  <text x="626" y="804" class="s">      implicit update_theme, …</text>
+  <text x="626" y="820" class="m">  ← update_capabilities</text>
+  <text x="626" y="836" class="s">      given to the widget as legacy</text>
+  <text x="626" y="850" class="s">      notify_capabilities; no timeline:&lt;room&gt;</text>
+  <text x="626" y="872" class="m">supported_api_versions, get_openid</text>
+  <text x="626" y="888" class="b">answered by the wrapper;</text>
+  <text x="626" y="906" class="m">notify_ready <tspan >sent once</tspan></text>
 
-  <rect x="900" y="640" width="270" height="236" rx="10" fill="#ffffff" stroke="#059669"/>
-  <circle cx="924" cy="664" r="13" fill="#059669"/><text x="924" y="669" class="num" text-anchor="middle">4</text>
-  <text x="946" y="669" class="bb">Steady state</text>
-  <text x="916" y="694" class="b">envelope translation:</text>
-  <text x="916" y="712" class="m">api       → source</text>
-  <text x="916" y="727" class="m">requestId → request_id</text>
-  <text x="916" y="742" class="m">data      → request</text>
-  <text x="916" y="757" class="m">widgetId  → dropped, re-added</text>
-  <text x="916" y="772" class="m">legacy error + code: …unknown</text>
-  <text x="916" y="792" class="b">action names, legacy ↔ new:</text>
-  <text x="916" y="808" class="m">send_event ↔ …mscXXXX.send_event</text>
-  <text x="916" y="823" class="m">send_event ↔ …forward_event (host)</text>
-  <text x="916" y="838" class="m">theme_change ↔ …update_theme</text>
-  <text x="916" y="853" class="m">notify_capabilities ↔</text>
-  <text x="916" y="868" class="m">  …msc4412.update_capabilities</text>
+  <rect x="900" y="684" width="270" height="236" rx="10" fill="#ffffff" stroke="#059669"/>
+  <circle cx="924" cy="708" r="13" fill="#059669"/><text x="924" y="713" class="num" text-anchor="middle">4</text>
+  <text x="946" y="713" class="bb">Steady state</text>
+  <text x="916" y="738" class="b">envelope translation:</text>
+  <text x="916" y="756" class="m">api       → source</text>
+  <text x="916" y="771" class="m">requestId → request_id</text>
+  <text x="916" y="786" class="m">data      → request</text>
+  <text x="916" y="801" class="m">widgetId  → dropped, re-added</text>
+  <text x="916" y="816" class="m">legacy error + code: …unknown</text>
+  <text x="916" y="836" class="b">action names, legacy ↔ new:</text>
+  <text x="916" y="852" class="m">send_event ↔ …mscXXXX.send_event</text>
+  <text x="916" y="867" class="m">send_event ↔ …forward_event (host)</text>
+  <text x="916" y="882" class="m">theme_change ↔ …update_theme</text>
+  <text x="916" y="897" class="m">notify_capabilities ↔</text>
+  <text x="916" y="912" class="m">  …msc4412.update_capabilities</text>
 </svg>

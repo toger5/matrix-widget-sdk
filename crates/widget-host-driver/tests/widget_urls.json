@@ -1,5 +1,5 @@
 {
-  "description": "Widget URLs a host may load (`allowed`) or must refuse (`refused`), by `widget_url_problem` with `allow_http`; `compat_wrapper`: by `embed_url_problem` for a client whose compat wrapper is at `compat_wrapper.wrapper` (its own pages are refused, other pages of its origin are not). Read by the unit tests of src/widget_url.rs and src/widget_event.rs and by packages/widget-host/test/widgetStateEvent.test.ts, which also compares every entry of `allowed` and `refused` with the WHATWG URL parser of Node. Keys are labels.",
+  "description": "Widget URLs a host may load (`allowed`) or must refuse (`refused`), by `widget_url_problem` with `allow_http`; `compat_wrapper`: by `embed_url_problem` for a client whose compat wrapper is at `compat_wrapper.wrapper` (its own pages are refused, other pages of its origin are not). `client_origin`: by `embed_url_problem` for a client on the origin `client_origin.client` with its own widgets in `client_origin.own_widget_dirs` (`refused`: pages of its origin; `own_widgets`: pages in those directories, allowed; `other_origins`: allowed); the compat wrapper's tests take `refused` and `own_widgets` as legacy widgets on the wrapper's origin. Read by the unit tests of src/widget_url.rs and src/widget_event.rs, by packages/widget-host/test/widgetStateEvent.test.ts, which also compares every entry of `allowed` and `refused` with the WHATWG URL parser of Node, and by packages/widget-compat-wrapper/test/url.test.ts and test/wrapper.test.ts. Keys are labels.",
   "allowed": {
     "http on localhost": "http://localhost:5175/new/",
     "query and fragment": "https://example.org/widget?x=1#y",
@@ -85,6 +85,37 @@
       "another port": "http://localhost:5175/widget_compatibility_wrapper/",
       "another scheme": "https://localhost:5173/widget_compatibility_wrapper/",
       "another name of the same machine (another origin)": "http://127.0.0.1:5173/widget_compatibility_wrapper/"
+    }
+  },
+  "client_origin": {
+    "client": "http://localhost:5173",
+    "own_widget_dirs": ["http://localhost:5173/widgets/"],
+    "refused": {
+      "the client itself": "http://localhost:5173/",
+      "a page of the client with a query": "http://localhost:5173/?mode=memory",
+      "any other path (a dev server answers it with the client)": "http://localhost:5173/some/widget/",
+      "another file of the client": "http://localhost:5173/oidc-callback.html",
+      "upper case scheme and host": "HTTP://LOCALHOST:5173/app/",
+      "user and password (the origin stays)": "http://user:pass@localhost:5173/app/",
+      "the own widget directory without its trailing slash": "http://localhost:5173/widgets",
+      "the own widget directory in upper case (another page on a case-sensitive server)": "http://localhost:5173/WIDGETS/new/",
+      "out of the own widget directory by an encoded dot segment": "http://localhost:5173/widgets/..%2F",
+      "out of it by encoded slashes and dot segments": "http://localhost:5173/widgets/new/..%2F..%2Findex.html",
+      "out of it by encoded backslashes": "http://localhost:5173/widgets/new%5C..%5C..%5Cindex.html",
+      "an encoded slash in the directory's name": "http://localhost:5173/widgets%2Fnew/",
+      "a directory whose name starts with the own one": "http://localhost:5173/widgets-other/"
+    },
+    "own_widgets": {
+      "the new test widget": "http://localhost:5173/widgets/new/",
+      "the legacy test widget with a query": "http://localhost:5173/widgets/legacy/?widgetId=w",
+      "a file of the directory": "http://localhost:5173/widgets/new/index.html",
+      "dot segments that stay inside": "http://localhost:5173/widgets/x/../new/"
+    },
+    "other_origins": {
+      "another port": "http://localhost:5175/new/",
+      "another scheme": "https://localhost:5173/app/",
+      "another name of the same machine": "http://127.0.0.1:5173/app/",
+      "a sub-domain": "http://widgets.localhost:5173/new/"
     }
   }
 }

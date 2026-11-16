@@ -8,7 +8,8 @@ use crate::{PLACEHOLDER_NAMESPACE, STABLE_NAMESPACE};
 ///
 /// A capability embeds the wire name of its action (MSC4412 "Capability format"), so this is the
 /// namespace of the `#[serde(rename = ...)]` of that action in `actions/*/mod.rs`; the test
-/// `capabilities_embed_the_action_name` keeps the two in step.
+/// `capabilities_embed_the_action_name` keeps the two in step. The webview capabilities (`sandbox`,
+/// `allow`) are about no action: theirs is the namespace of their MSC draft.
 fn namespace_of(head: &str) -> &'static str {
     match head.split('.').next().unwrap_or(head) {
         "read_events" => "org.matrix.msc2876",
@@ -20,6 +21,8 @@ fn namespace_of(head: &str) -> &'static str {
         "get_rtc_livekit_token" | "delegate_rtc_livekit_delayed_leave" => "org.matrix.msc4533",
         "navigate" => "org.matrix.msc2931",
         "read_room_account_data" => "com.beeper",
+        // Not actions: the webview capabilities (`spec/patch/new/webview-capabilities.md`), no MSC yet.
+        WEBVIEW_SANDBOX | WEBVIEW_ALLOW => PLACEHOLDER_NAMESPACE,
         _ => PLACEHOLDER_NAMESPACE,
     }
 }
@@ -38,6 +41,15 @@ fn strip_namespace(full: &str) -> Option<&str> {
 // Sources: who sends the action the capability is about.
 const WIDGET: &str = "widget";
 const HOST: &str = "host";
+/// The source of the capabilities that are about the webview (iframe) the widget runs in, not
+/// about an action (`spec/patch/new/webview-capabilities.md`).
+const WEBVIEW: &str = "webview";
+
+// Heads of the webview capabilities: the attribute of the iframe they add a value to.
+const WEBVIEW_SANDBOX: &str = "sandbox";
+const WEBVIEW_ALLOW: &str = "allow";
+/// The longest value of a webview capability.
+const MAX_WEBVIEW_VALUE: usize = 64;
 
 // Heads (`action[.modifier]`) of the capabilities that carry an event type as data.
 const SEND_EVENT_TIMELINE: &str = "send_event.timeline";
@@ -107,6 +119,11 @@ const ROOM_MESSAGE: &str = "m.room.message";
 ///   `msgtype`; for state events `<type>#<state_key>` narrows to one state key.
 ///
 /// No capability names a room: a widget acts in the room it is embedded in.
+///
+/// The source `webview` is about no action but about the webview (iframe) the widget runs in: one
+/// token of its `sandbox` attribute or one feature of its `allow` attribute per capability
+/// (`webview:org.matrix.mscXXXX.allow:camera`, `spec/patch/new/webview-capabilities.md`). The value
+/// is one token of the web platform ([`is_webview_value`]); anything else is [`Capability::Other`].
 ///
 /// Parsing never fails. Unknown strings, including every legacy matrix-widget-api capability, are
 /// preserved verbatim in [`Capability::Other`] and grant nothing.
@@ -184,6 +201,15 @@ pub enum Capability {
     /// The host sends `update_visibility`.
     UpdateVisibility,
 
+    // ---- the webview the widget runs in (source `webview`) ------------------------------------
+    /// A token of the `sandbox` attribute of the widget's iframe (`allow-popups`, `allow-forms`, ...),
+    /// or what a native webview does instead. Always a [webview value](is_webview_value).
+    WebviewSandbox { token: String },
+    /// A feature of the `allow` attribute (Permissions Policy) of the widget's iframe (`camera`,
+    /// `clipboard-write`, ...), or what a native webview does instead. Always a
+    /// [webview value](is_webview_value).
+    WebviewAllow { feature: String },
+
     /// Any string that is not a capability of this scheme.
     Other { raw: String },
 }
@@ -259,6 +285,28 @@ impl Capability {
         Self::ForwardToDevice { event_type: event_type.into() }
     }
 
+    /// `webview:…sandbox:<token>`, or [`Capability::Other`] of that string when `token` is no
+    /// [webview value](is_webview_value).
+    pub fn webview_sandbox(token: impl Into<String>) -> Self {
+        let token = token.into();
+        if is_webview_value(&token) {
+            Self::WebviewSandbox { token }
+        } else {
+            Self::Other { raw: format!("{WEBVIEW}:{PLACEHOLDER_NAMESPACE}.{WEBVIEW_SANDBOX}:{token}") }
+        }
+    }
+
+    /// `webview:…allow:<feature>`, or [`Capability::Other`] of that string when `feature` is no
+    /// [webview value](is_webview_value).
+    pub fn webview_allow(feature: impl Into<String>) -> Self {
+        let feature = feature.into();
+        if is_webview_value(&feature) {
+            Self::WebviewAllow { feature }
+        } else {
+            Self::Other { raw: format!("{WEBVIEW}:{PLACEHOLDER_NAMESPACE}.{WEBVIEW_ALLOW}:{feature}") }
+        }
+    }
+
     /// Parse a capability string. Never fails: anything that is not a capability of this scheme
     /// becomes [`Capability::Other`].
     pub fn parse(raw: &str) -> Self {
@@ -318,6 +366,8 @@ impl Capability {
                 Self::UpdateState { event_type, state_key }
             }
             (HOST, FORWARD_TO_DEVICE) => Self::ForwardToDevice { event_type },
+            (WEBVIEW, WEBVIEW_SANDBOX) if is_webview_value(data) => Self::WebviewSandbox { token: data.to_owned() },
+            (WEBVIEW, WEBVIEW_ALLOW) if is_webview_value(data) => Self::WebviewAllow { feature: data.to_owned() },
             _ => return None,
         })
     }
@@ -341,6 +391,8 @@ impl Capability {
             }
             Self::UpdateState { event_type, state_key } => typed(HOST, UPDATE_STATE, event_type, state_key),
             Self::ForwardToDevice { event_type } => typed(HOST, FORWARD_TO_DEVICE, event_type, &None),
+            Self::WebviewSandbox { token } => Some((WEBVIEW, WEBVIEW_SANDBOX, Some(token.clone()))),
+            Self::WebviewAllow { feature } => Some((WEBVIEW, WEBVIEW_ALLOW, Some(feature.clone()))),
             Self::Other { .. } => None,
             unit => {
                 UNIT_CAPABILITIES.iter().find(|(_, _, c)| c == unit).map(|(source, head, _)| (*source, *head, None))
@@ -367,6 +419,12 @@ impl Capability {
     /// string can be granted, but it allows nothing.
     pub fn is_known(&self) -> bool {
         !matches!(self, Self::Other { .. })
+    }
+
+    /// Whether this is a capability of the webview the widget runs in (source `webview`) rather
+    /// than of an action. No action needs one; the host applies them to the widget's iframe.
+    pub fn is_webview(&self) -> bool {
+        matches!(self, Self::WebviewSandbox { .. } | Self::WebviewAllow { .. })
     }
 
     /// The unstable representation, e.g. `widget:org.matrix.mscXXXX.send_event.timeline:m.room.message`
@@ -438,6 +496,17 @@ impl Capability {
             _ => false,
         }
     }
+}
+
+/// Whether `value` can be the value of a webview capability: one token of the web platform
+/// (`allow-popups`, `camera`, `clipboard-write`), that is lower case ASCII letters, digits and `-`,
+/// starting with a letter, at most 64 characters. Nothing else may reach the attributes of an
+/// iframe: no space or `;` (a second token or feature), no `'` or `*` (an allowlist), no `=`, no
+/// upper case (the platform's tokens are lower case).
+pub fn is_webview_value(value: &str) -> bool {
+    value.len() <= MAX_WEBVIEW_VALUE
+        && value.starts_with(|c: char| c.is_ascii_lowercase())
+        && value.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
 }
 
 fn matches_timeline(cap_type: &str, cap_msgtype: &Option<String>, event_type: &str, msgtype: Option<&str>) -> bool {
@@ -637,6 +706,10 @@ mod tests {
             ("host:m.update_theme", Capability::UpdateTheme),
             ("host:m.update_language", Capability::UpdateLanguage),
             ("host:m.update_visibility", Capability::UpdateVisibility),
+            ("webview:m.sandbox:allow-popups", Capability::webview_sandbox("allow-popups")),
+            ("webview:m.sandbox:allow-same-origin", Capability::webview_sandbox("allow-same-origin")),
+            ("webview:m.allow:camera", Capability::webview_allow("camera")),
+            ("webview:m.allow:clipboard-write", Capability::webview_allow("clipboard-write")),
         ]
     }
 
@@ -675,6 +748,8 @@ mod tests {
                 Capability::forward_state_event("m.room.member", None::<&str>)
             }),
             ("host:org.matrix.mscXXXX.update_theme", Capability::UpdateTheme),
+            ("webview:org.matrix.mscXXXX.allow:camera", Capability::webview_allow("camera")),
+            ("webview:org.matrix.mscXXXX.sandbox:allow-forms", Capability::webview_sandbox("allow-forms")),
         ];
         for (raw, expected) in cases {
             assert_eq!(Capability::parse(raw), expected, "{raw}");
@@ -690,6 +765,10 @@ mod tests {
         use serde_json::json;
 
         for (stable, capability) in all() {
+            // About the webview, not an action: see `webview_capabilities_name_no_action`.
+            if capability.is_webview() {
+                continue;
+            }
             for raw in [stable.to_owned(), capability.to_unstable_string()] {
                 let (source, rest) = raw.split_once(':').unwrap();
                 let action = rest.split(':').next().unwrap();
@@ -714,6 +793,62 @@ mod tests {
         }
     }
 
+    /// The source `webview` is about the iframe, not about an action: `sandbox` and `allow` are no
+    /// action names, under either source and either namespace.
+    #[test]
+    fn webview_capabilities_name_no_action() {
+        use crate::{HostRequest, Source, WidgetRequest, WireMessage};
+        use serde_json::json;
+
+        for action in ["m.sandbox", "m.allow", "org.matrix.mscXXXX.sandbox", "org.matrix.mscXXXX.allow"] {
+            let widget = WireMessage::request(Source::Widget, action, "r", json!({}));
+            assert_eq!(WidgetRequest::from_wire(&widget), Ok(WidgetRequest::Unknown), "{action}");
+            let host = WireMessage::request(Source::Host, action, "r", json!({}));
+            assert_eq!(HostRequest::from_wire(&host), Ok(HostRequest::Unknown), "{action}");
+        }
+        let webview: Vec<_> = all().into_iter().filter(|(_, c)| c.is_webview()).collect();
+        assert_eq!(webview.len(), 4);
+        assert!(webview.iter().all(|(raw, _)| raw.starts_with("webview:")));
+        assert!(all().iter().filter(|(_, c)| !c.is_webview()).all(|(raw, _)| !raw.starts_with("webview:")));
+    }
+
+    #[test]
+    fn webview_values_are_single_web_tokens() {
+        let long = "a".repeat(64);
+        for value in ["camera", "allow-popups-to-escape-sandbox", "clipboard-read", "a", "x1-2", long.as_str()] {
+            assert!(is_webview_value(value), "{value}");
+            assert_eq!(Capability::parse(&format!("webview:m.allow:{value}")), Capability::webview_allow(value));
+            assert_eq!(Capability::parse(&format!("webview:m.sandbox:{value}")), Capability::webview_sandbox(value));
+        }
+        let too_long = "a".repeat(65);
+        for value in [
+            "",
+            "Camera",
+            "camera *",
+            "camera;usb",
+            "camera 'src'",
+            "1camera",
+            "-camera",
+            "camera\n",
+            "caméra",
+            "a_b",
+            too_long.as_str(),
+        ] {
+            assert!(!is_webview_value(value), "{value:?}");
+            // A constructor never makes a typed capability of an invalid value.
+            assert_eq!(Capability::webview_allow(value), other(&format!("webview:org.matrix.mscXXXX.allow:{value}")));
+            assert_eq!(
+                Capability::webview_sandbox(value),
+                other(&format!("webview:org.matrix.mscXXXX.sandbox:{value}"))
+            );
+        }
+        assert!(Capability::webview_allow("camera").is_webview());
+        assert!(Capability::webview_sandbox("allow-forms").is_known());
+        assert!(!Capability::webview_allow("camera *").is_webview());
+        assert!(!Capability::Navigate.is_webview());
+        assert_eq!(Capability::webview_allow("camera").to_string(), "webview:org.matrix.mscXXXX.allow:camera");
+    }
+
     #[test]
     fn every_unit_variant_is_in_the_table_once() {
         for (i, (source, head, capability)) in UNIT_CAPABILITIES.iter().enumerate() {
@@ -723,7 +858,7 @@ mod tests {
                 assert_ne!(head, other_head);
             }
         }
-        // 20 of the 39 strings in `all()` are unit capabilities; every one must be in the table.
+        // 20 of the 43 strings in `all()` are unit capabilities; every one must be in the table.
         let units = all().into_iter().filter(|(raw, _)| raw.matches(':').count() == 1).count();
         assert_eq!(units, UNIT_CAPABILITIES.len());
     }
@@ -768,6 +903,32 @@ mod tests {
             "m.widget.navigate",
             "m.widget.send_event:m.room.message",
             "widget:mnavigate",
+            // Webview capabilities: one web token per capability, of the source `webview` only.
+            "webview:m.allow:Camera",
+            "webview:m.allow:camera *",
+            "webview:m.allow:camera 'src'",
+            "webview:m.allow:camera;usb",
+            "webview:m.allow:camera; usb",
+            "webview:m.allow:camera\nusb",
+            "webview:m.sandbox:allow-popups allow-top-navigation",
+            "webview:m.sandbox:allow-popups\"",
+            "webview:m.allow:",
+            "webview:m.allow",
+            "webview:m.sandbox",
+            "webview:m.allow:-camera",
+            "webview:m.allow:camera:usb",
+            "webview:m.allow.camera",
+            "webview:m.allow.x:camera",
+            "webview:m.permissions:camera",
+            "webview:m.navigate",
+            "webview:m.send_event.timeline:m.room.message",
+            "webview:org.matrix.msc4411.allow:camera",
+            "webview:org.matrix.msc4412.sandbox:allow-popups",
+            "webview:org.matrix.mscXXXX.webview.allow:camera",
+            "widget:m.allow:camera",
+            "widget:org.matrix.mscXXXX.sandbox:allow-popups",
+            "host:m.allow:camera",
+            "Webview:m.allow:camera",
             // Legacy matrix-widget-api capabilities grant nothing here.
             "org.matrix.msc2762.send.event:m.room.message",
             "m.send.event:m.room.message",

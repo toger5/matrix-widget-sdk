@@ -9,7 +9,7 @@ import { describe, expect, it } from "vitest";
 
 import { widgetEventTypes } from "@matrix-widget-tools/widget-host-bindings";
 
-import { hostWidgetEvents, resolveWidget, widgetEventParser, widgetUrlProblem, wrapperUrl } from "../src/lib/widgetEvents";
+import { embedOptions, hostWidgetEvents, ownWidgetDirs, resolveWidget, widgetEventParser, widgetUrlProblem, wrapperUrl } from "../src/lib/widgetEvents";
 import { roomWidgets } from "../src/views/helpers";
 import { localWidgetKey, WIDGET_EVENT_TYPES, widgetKey, type StateEvent } from "../src/widgetStateEvent";
 import "./harness";
@@ -21,10 +21,12 @@ const legacyWidget = (url: string): StateEvent => ({ type: "im.vector.modular.wi
 /** The table the Rust tests use too: label → URL. */
 const TABLE = JSON.parse(readFileSync(new URL("../../../crates/widget-host-driver/tests/widget_urls.json", import.meta.url), "utf8")) as Record<"allowed" | "refused", Record<string, string>> & {
   compat_wrapper: { wrapper: string } & Record<"allowed" | "refused", Record<string, string>>;
+  client_origin: { client: string; own_widget_dirs: string[] } & Record<"refused" | "own_widgets" | "other_origins", Record<string, string>>;
 };
 const ALLOWED = Object.entries(TABLE.allowed);
 const REFUSED = Object.entries(TABLE.refused);
 const LOADS_THE_WRAPPER = "a widget cannot load this client's compat wrapper";
+const ON_THE_CLIENTS_ORIGIN = "a widget cannot be a page of this client's own origin";
 
 const NOT_ABSOLUTE = "the URL is not an absolute http: or https: URL";
 /** The rule of `widget_url_problem`, on Node's URL parser: absolute, http(s), and the same URL when resolved against pages of its scheme on two hosts. */
@@ -76,6 +78,40 @@ describe("the compat wrapper is no widget", () => {
     const own = wrapperUrl();
     expect(widgetUrlProblem(`${own}?legacy_widget_url=javascript:top.__pwned=1//&legacy_widget_id=evil`)).toBe(LOADS_THE_WRAPPER);
     expect(hostWidgetEvents.urlProblem(own)).toBe(LOADS_THE_WRAPPER);
+  });
+});
+
+describe("no widget on this host's origin but its own test widgets", () => {
+  const { client, own_widget_dirs: dirs } = TABLE.client_origin;
+  const options = { ...embedOptions(`${client}/widget_compatibility_wrapper/`, client), ownWidgetDirs: dirs };
+  const parser = widgetEventParser(options);
+
+  it.each(Object.entries(TABLE.client_origin.refused))("refuses %s, for both widget kinds", (_, url) => {
+    expect(widgetUrlProblem(url, options)).toBe(ON_THE_CLIENTS_ORIGIN);
+    expect(parser.urlProblem(url)).toBe(ON_THE_CLIENTS_ORIGIN);
+    expect(() => resolveWidget(newWidget(url), options)).toThrow(ON_THE_CLIENTS_ORIGIN);
+    expect(() => resolveWidget(legacyWidget(url), options)).toThrow(ON_THE_CLIENTS_ORIGIN);
+    expect(parser.resolve(newWidget(url))).toEqual({ name: "W", problem: ON_THE_CLIENTS_ORIGIN });
+  });
+
+  it.each(Object.entries({ ...TABLE.client_origin.own_widgets, ...TABLE.client_origin.other_origins }))("allows %s", (_, url) => {
+    expect(widgetUrlProblem(url, options)).toBeUndefined();
+    expect(resolveWidget(newWidget(url), options).url).toBe(new URL(url).href);
+  });
+
+  it("knows its origin only in a browser: outside one (these tests) the check is off", () => {
+    expect(embedOptions().clientOrigin).toBeUndefined();
+    expect(widgetUrlProblem(`${client}/some/widget/`)).toBeUndefined();
+    expect(widgetUrlProblem(`${client}/some/widget/`, embedOptions(wrapperUrl(), client))).toBe(ON_THE_CLIENTS_ORIGIN);
+  });
+
+  it("takes the test widgets' directory as its own, unless it holds the host itself", () => {
+    // The dev site: the host at <base>host/, the test widgets at <base>widgets/.
+    expect(ownWidgetDirs("https://dev.example/sdk/host/", "https://dev.example/sdk/widgets/")).toEqual(["https://dev.example/sdk/widgets/"]);
+    expect(ownWidgetDirs("http://localhost:5173/", "http://localhost:5175/")).toEqual(["http://localhost:5175/"]);
+    // A directory that holds the host would make the host itself a widget.
+    expect(ownWidgetDirs("https://dev.example/sdk/host/", "https://dev.example/sdk/")).toEqual([]);
+    expect(ownWidgetDirs("http://localhost:5173/", "http://localhost:5173/")).toEqual([]);
   });
 });
 

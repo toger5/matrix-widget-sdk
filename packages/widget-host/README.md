@@ -224,9 +224,34 @@ host's origin, unlike a wrapper deployed for a real client.
 
 ### Security notes
 
-Widget iframes get `allow-scripts allow-same-origin` (`WidgetIframes` in `src/app/AppRoot.tsx`),
-so a page of the host's own origin in one of them is not sandboxed from the host: it can reach
-`window.top`, the logins in `localStorage` and IndexedDB. Three layers keep a widget state event
+**Every widget iframe starts strict:** `sandbox="allow-scripts allow-same-origin"` and an empty
+`allow` (no camera, microphone, clipboard, popups, downloads, ...). More is a webview capability the
+widget requests (`webview:…sandbox:<token>`, `webview:…allow:<feature>`,
+[`spec/patch/new/webview-capabilities.md`](../../spec/patch/new/webview-capabilities.md)). The
+attributes are made by the driver (`webview_attributes`) from what the widget holds and set once
+per start (`WidgetInstanceViewModel.webview`, rendered by `WidgetIframes` in `src/app/AppRoot.tsx`):
+
+- The base tokens are granted without asking, `allow-top-navigation` never (not even "Approve" or
+  auto-approve). Everything else goes through the capability prompt (until the prompt knows them,
+  they are listed under "Unknown to this app").
+- A grant applies with a restart of the widget: the runtime (`src/app/runtime/widgetRuntime.ts`)
+  reports `webviewChanged` once the widget holds a webview capability its iframe lacks (after the
+  driver's `update_capabilities` went out); the controller keeps it for the widget's next starts
+  (`webviewKept`, forgotten when the widget stops) and starts it again with a new generation, whose
+  iframe has it. The widget's request for it is then granted at once, without a prompt or another
+  restart. A denial changes nothing; revoking an applied one (driver panel) restarts the widget
+  without it; "Add" of a webview capability in the driver panel restarts it with it. A widget that
+  restarts more than twice within 10 s for this fails instead (a guard; it should not happen).
+- Remembered webview capabilities (`rememberCapabilities`) are in the iframe from the first start.
+- A legacy widget's iframe (the compat wrapper) has Element Web's set from the start
+  (`LEGACY_WEBVIEW` in `src/widgetStateEvent.ts`): the wrapper requests it and gets it without a
+  prompt or a restart; the wrapper gives the legacy widget's own iframe the same set.
+- Without remembered capabilities (the DevBackend's default), a restart for a webview capability asks
+  again for the other capabilities of the widget, as every start does.
+
+`allow-scripts allow-same-origin` is only harmless for pages of another origin than the host's: a
+page of the host's own origin in such an iframe is not sandboxed from the host. It can reach
+`window.top`, the logins in `localStorage` and IndexedDB. Four layers keep a widget state event
 (anyone who may send state to a room can send one) from putting script there:
 
 1. **The URL check** (the driver's `embed`): only absolute `http:` / `https:` URLs that name their
@@ -235,16 +260,20 @@ so a page of the host's own origin in one of them is not sandboxed from the host
    `legacy_widget_url` of its own query, so an `m.widget` (or legacy widget) whose URL is a page of
    the wrapper's directory, `<host>/widget_compatibility_wrapper/…` in any spelling a server may
    read the same way, is listed disabled: "a widget cannot load this client's compat wrapper".
-   Only the wrapper's directory is refused, not the origin: on the [dev site](../../README.md#dev-site-github-pages)
-   the test widgets share the host's origin. With `?wrapper=` the rule protects that wrapper, not
-   the copy this host serves.
-3. **The wrapper's own check**: it loads only absolute `http:` / `https:` URLs, before and after
-   templating (its README), also when another client or another copy of the host embeds it.
+   With `?wrapper=` the rule protects that wrapper, not the copy this host serves.
+3. **No widget of the host's own origin**: every other page of `location.origin`, the host app
+   itself included (the dev server answers every unknown path with it), is listed disabled too: "a
+   widget cannot be a page of this client's own origin" (`embedOptions` in `src/lib/widgetEvents.ts`,
+   the driver's `EmbedOptions.client_origin`). The one exception is deliberate, for this developer
+   tool: the test widgets the host ships itself, when the build serves them from its origin
+   (`VITE_TEST_WIDGETS_URL` on the [dev site](../../README.md#dev-site-github-pages); `ownWidgetDirs`,
+   never a directory that holds the host). They run with `allow-same-origin` on the host's origin.
+4. **The wrapper's own check**: it loads only absolute `http:` / `https:` URLs, before and after
+   templating (its README), also when another client or another copy of the host embeds it; and a
+   legacy widget of its own origin without `allow-same-origin`.
 
-Other pages of the host's origin are not refused: the host app itself (the dev server answers
-every unknown path with it) runs only the host's own code, but in a widget iframe it shares the
-host's storage. A deployment for real accounts should serve the host on an origin of its own and
-the widgets (and the wrapper) elsewhere.
+A deployment for real accounts should serve the host on an origin of its own and the widgets (and
+the wrapper) elsewhere.
 
 `npm run build` writes a static site to `dist/` that can be served by any web server. Two
 build-time settings:
@@ -286,6 +315,7 @@ Open the host with the URL parameters above (or `?seed=<url of a seed json>`), t
 | `populate(seed)` | Resets the app to the DevBackend with exactly this content and screen (`HostSeed` in `src/app/controller.ts`, examples in `e2e/seeds/`); `open: [{ room, widgets, timeline, active, overview }]` are the room panels and their tabs, `localWidgets: { [room id]: [state event] }` the local widgets ("Add widget", only in this host) |
 | `messages(widgetId)` | Every envelope of a widget in both directions, as it crossed the wire |
 | `driverSnapshot(widgetId)` | The negotiated state of its driver |
+| `webview(widgetId)` | Its start (`generation`), its iframe's `sandbox` and `allow`, and the webview capabilities they were made from (`applied`) |
 | `store(roomId)` | Timeline, state, delayed events and sent to-device messages of a mocked room |
 | `state()` / `dispatch(intent)` | The view model / send an intent |
 

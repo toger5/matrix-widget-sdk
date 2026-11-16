@@ -29,6 +29,7 @@ api.onCapabilitiesChanged((allowed) => console.log(allowed));      // the full l
 await api.requestCapabilities([
   "widget:org.matrix.mscXXXX.send_event.timeline:m.room.message",
   "host:org.matrix.mscXXXX.forward_event.timeline:m.room.message",   // onEvent
+  "webview:org.matrix.mscXXXX.allow:camera",                         // the iframe may use the camera
 ]);
 await api.notifyReady();                                           // host shows the widget
 
@@ -42,6 +43,13 @@ const { access_token, matrix_server_name } = await api.requestOpenIdToken();
 
 To own the transport (e.g. in tests), use `new WidgetApi((json) => …)` and feed incoming
 messages to `api.handleMessageFromHost(data)`.
+
+Webview capabilities (`webview:…allow:<feature>`, `webview:…sandbox:<token>`) are the browser
+permissions of the widget's own iframe, which starts strict (scripts and its own origin, nothing
+else). They are requested like any other capability, but a host applies a grant by loading the
+widget again: request them before `notifyReady()`, and expect the page to start over once (the
+next start's request is granted at once). See
+[`spec/patch/new/webview-capabilities.md`](../../spec/patch/new/webview-capabilities.md).
 
 ### Logging
 

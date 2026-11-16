@@ -25,6 +25,8 @@ const namespace = (rest: string): string => NAMESPACES[/^[^.:]*/.exec(rest)![0]]
 
 const widget = (rest: string): string => `widget:${namespace(rest)}.${rest}`;
 const host = (rest: string): string => `host:${namespace(rest)}.${rest}`;
+/** A webview capability (`sandbox:<token>`, `allow:<feature>`): about the iframe, not an action; the namespace of its MSC draft. */
+const webview = (rest: string): string => `webview:org.matrix.mscXXXX.${rest}`;
 
 /** Messages and the room topic: send, read, and be told about new ones. */
 export const DEFAULT_CAPABILITIES = [
@@ -78,3 +80,10 @@ export const EXTRA_CAPABILITIES = [
   host("update_language"),
   host("update_visibility"),
 ].join(",");
+
+/**
+ * Browser permissions of the widget's iframe (webview capabilities): camera and microphone. Not part
+ * of the list above, so the widget runs in the host's strict default iframe until the "webview" buttons
+ * request them; the host restarts the widget to apply a grant.
+ */
+export const WEBVIEW_CAPABILITIES = [webview("allow:camera"), webview("allow:microphone")].join(",");

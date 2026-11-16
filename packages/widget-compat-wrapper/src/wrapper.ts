@@ -1,7 +1,29 @@
 /** Browser glue: read the configuration from the URL, create the inner iframe, route messages. */
 import { CompatBridge } from "./bridge";
+import { LEGACY_ALLOW, LEGACY_SANDBOX } from "./capabilities";
 import { type LogLevel, log, parseLogLevel, setLogLevel } from "./log";
 import { legacyUrlProblem } from "./url";
+
+/** The `sandbox` attribute of the inner iframe: the one of a legacy client (Element Web), constant. */
+export const INNER_SANDBOX = LEGACY_SANDBOX.join(" ");
+/** The `allow` attribute of the inner iframe: the one of a legacy client (Element Web, with `fullscreen`), constant. */
+export const INNER_ALLOW = LEGACY_ALLOW.join("; ");
+
+/**
+ * The inner iframe for the legacy widget at `url` (absolute http(s), checked), in a wrapper on
+ * `wrapperOrigin`: its `sandbox` and `allow` attributes and the target origin of the messages to it.
+ *
+ * Always the attributes of a legacy client ({@link INNER_SANDBOX}, {@link INNER_ALLOW}), except
+ * for a legacy widget on the wrapper's own origin: with `allow-same-origin` it would share the
+ * wrapper's origin, which is often the client's, and could reach the client's window and storage.
+ * It loads without `allow-same-origin`, so it gets an opaque origin, which `postMessage` can only
+ * address with `"*"` (only that one window gets the message, `contentWindow`).
+ */
+export function innerIframe(url: string, wrapperOrigin: string): { sandbox: string; allow: string; targetOrigin: string } {
+  const origin = new URL(url).origin;
+  if (origin !== wrapperOrigin) return { sandbox: INNER_SANDBOX, allow: INNER_ALLOW, targetOrigin: origin };
+  return { sandbox: LEGACY_SANDBOX.filter((token) => token !== "allow-same-origin").join(" "), allow: INNER_ALLOW, targetOrigin: "*" };
+}
 
 /** The wrapper's query parameters, parsed. The README describes each parameter. */
 export interface WrapperConfig {
@@ -58,7 +80,8 @@ export function startWrapper(config: WrapperConfig, container: HTMLElement, pare
   setLogLevel(config.logLevel);
   log.info(`wrapping legacy widget ${config.widgetId}`);
   let iframe: HTMLIFrameElement | undefined;
-  // The legacy widget's origin, known once its URL is. Messages to the widget are posted to it.
+  // The legacy widget's origin, known once its URL is (`*` for one of the wrapper's own origin, which
+  // loads with an opaque origin, see `innerIframe`). Messages to the widget are posted to it.
   let widgetOrigin = "*";
 
   const bridge = new CompatBridge({
@@ -71,10 +94,12 @@ export function startWrapper(config: WrapperConfig, container: HTMLElement, pare
     sendToWidget: (m) => iframe?.contentWindow?.postMessage(m, widgetOrigin),
     // `url` is absolute http(s), checked by the bridge (url.ts).
     loadWidget: (url) => {
-      widgetOrigin = new URL(url).origin;
-      log.info(`loading the legacy widget from ${widgetOrigin}`);
+      const inner = innerIframe(url, location.origin);
+      widgetOrigin = inner.targetOrigin;
+      log.info(`loading the legacy widget from ${new URL(url).origin}${widgetOrigin === "*" ? " (the wrapper's own origin: without allow-same-origin)" : ""}`);
       iframe = document.createElement("iframe");
-      iframe.allow = "camera; microphone; display-capture; autoplay; clipboard-write";
+      iframe.setAttribute("sandbox", inner.sandbox);
+      iframe.allow = inner.allow;
       iframe.title = config.widgetName;
       iframe.addEventListener("load", () => bridge.onIframeLoad());
       iframe.src = url;

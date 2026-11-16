@@ -18,6 +18,11 @@ export interface WidgetHostTestHook {
   /** Every envelope that crossed the wire of a widget, oldest first. */
   messages(widgetId: WidgetInstanceId): { direction: "fromWidget" | "toWidget"; message: unknown }[];
   driverSnapshot(widgetId: WidgetInstanceId): DriverSnapshot | undefined;
+  /**
+   * The start of a running widget (`generation`) and its iframe's attributes (`sandbox`, `allow`), with
+   * the webview capabilities they were made from (`applied`; the base `sandbox` tokens are not listed).
+   */
+  webview(widgetId: WidgetInstanceId): { generation?: number; sandbox?: string; allow?: string; applied: string[] } | undefined;
   devTools(widgetId: WidgetInstanceId): WidgetDevToolsData | undefined;
   /** What the DevBackend holds for a mocked room, as plain JSON. */
   store(roomId: RoomId): unknown;
@@ -37,6 +42,11 @@ export function installTestHook(controller: AppController): void {
     widgets: () => (controller.vm.screen.kind === "main" ? Object.keys(controller.vm.screen.main.widgets) : []),
     messages: (id) => controller.runtime(id)?.wireLog ?? [],
     driverSnapshot: (id) => controller.runtime(id)?.snapshot(),
+    webview: (id) => {
+      const widget = controller.vm.screen.kind === "main" ? controller.vm.screen.main.widgets[id] : undefined;
+      if (!widget) return undefined;
+      return { generation: widget.generation, ...widget.webview, applied: [...(controller.runtime(id)?.webview.applied ?? [])] };
+    },
     devTools: (id) => controller.runtime(id)?.devTools.get(),
     store: (roomId) => {
       const dev = controller.getDevBackend();

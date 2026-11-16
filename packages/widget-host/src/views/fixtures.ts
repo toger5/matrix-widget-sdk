@@ -260,6 +260,7 @@ export const DEV_TOOLS_DATA: WidgetDevToolsData = {
     autoApproved: [`widget:${X}get_client_context`],
     denied: [`widget:${X}send_to_device:org.example.ping`],
     singleUse: [`widget:${X}get_openid`],
+    webview: { applied: [], sandbox: "allow-scripts allow-same-origin", allow: "" },
   },
   console: [
     { level: "log", timestamp: 1_763_300_000_600, text: "widget api ready" },
