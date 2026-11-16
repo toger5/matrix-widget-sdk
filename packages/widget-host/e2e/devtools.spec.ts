@@ -145,7 +145,7 @@ test("messages panel: lists the actions, a row expands to its JSON, the filter f
   expect(await host.actions(NEW, "fromWidget")).toContainEqual(expect.stringMatching(/\.notify_ready$/));
 });
 
-test("stats panel: the tiles count actions and events", async ({ host }) => {
+test("stats panel: the tiles count actions and events; the totals of characters switch the bar graph", async ({ host }) => {
   await toggle(host, "Messages").click();
   await toggle(host, "Stats").click();
   const stats = host.page.getByTestId("devtools-stats");
@@ -166,8 +166,58 @@ test("stats panel: the tiles count actions and events", async ({ host }) => {
   await expect(tile("events sent from the widget")).toHaveText("1");
   await expect(tile("events shared with the widget")).toHaveText(String(shared + 1));
   await expect(tile("actions sent")).toHaveText(String(before.actionsFromWidget + before.actionsToWidget + 2));
-  await expect(stats.getByRole("figure")).toHaveAccessibleName(/^Characters sent over the widget API/);
+  const figure = stats.getByRole("figure");
+  await expect(figure).toHaveAccessibleName(/^Characters sent over the widget API per 5 seconds: both directions, the last /);
   await host.leaf("devtools/stats");
+
+  // The selector shows the characters sent since the widget started, per direction and both together.
+  const graph = stats.getByRole("radiogroup", { name: "Graph" });
+  const radio = (name: string) => graph.getByRole("radio", { name: new RegExp(`^${name} `) });
+  const grouped = (n: number) => n.toLocaleString("en-US");
+  await expect(async () => {
+    const { toWidget, fromWidget } = (await data()).charactersTotal;
+    expect(toWidget).toBeGreaterThan(0);
+    expect(fromWidget).toBeGreaterThan(0);
+    await expect(radio("total")).toHaveAccessibleName(`total ${grouped(toWidget + fromWidget)}`, { timeout: 0 });
+    await expect(radio("to widget")).toHaveAccessibleName(`to widget ${grouped(toWidget)}`, { timeout: 0 });
+    await expect(radio("from widget")).toHaveAccessibleName(`from widget ${grouped(fromWidget)}`, { timeout: 0 });
+  }).toPass();
+  await expect(radio("total")).toHaveAttribute("aria-checked", "true");
+  await expect(stats.locator(".bar.s0").first()).toBeAttached();
+
+  // The hidden table has a row per bar; the widget started less than the shown time ago, so its Total column adds
+  // up to the total since the widget started (no character is lost between the runtime's buckets and the bars).
+  const bars = stats.locator(".bar");
+  const table = figure.getByRole("table", { name: /^Characters sent over the widget API per 5 seconds/ });
+  const tableTotal = async () => (await table.locator("tbody tr td:nth-child(4)").allTextContents()).reduce((sum, t) => sum + Number(t), 0);
+  await expect(async () => {
+    const { toWidget, fromWidget } = (await data()).charactersTotal;
+    expect(await tableTotal()).toBe(toWidget + fromWidget);
+    expect(await table.locator("tbody tr").count()).toBe(await bars.count());
+  }).toPass();
+  const wide = await bars.count();
+
+  // Pressing a total shows its graph; the arrow keys move the selection.
+  await radio("to widget").click();
+  await expect(radio("to widget")).toHaveAttribute("aria-checked", "true");
+  await expect(radio("total")).toHaveAttribute("aria-checked", "false");
+  await expect(figure).toHaveAccessibleName(/: to the widget, the last /);
+  await expect(stats.locator(".bar.s1").first()).toBeAttached();
+  await expect(stats.locator(".bar.s0")).toHaveCount(0);
+  await host.page.keyboard.press("ArrowRight");
+  await expect(radio("from widget")).toHaveAttribute("aria-checked", "true");
+  await expect(radio("from widget")).toBeFocused();
+  await expect(figure).toHaveAccessibleName(/: from the widget, the last /);
+  await host.page.keyboard.press("ArrowLeft");
+  await expect(radio("to widget")).toBeFocused();
+
+  // Docked to the right the panel is narrow: the header wraps, the graph shows fewer buckets.
+  await dock(host, "right").click();
+  expect(await openPanels(host)).toEqual(["stats"]);
+  await expect(radio("to widget")).toHaveAttribute("aria-checked", "true");
+  await expect(async () => expect(await bars.count()).toBeLessThan(wide)).toPass();
+  await expect(table.locator("tbody tr")).toHaveCount(await bars.count());
+  await host.leaf("devtools/stats-direction");
 });
 
 test("driver panel: mock host actions reach the widget", async ({ host }) => {

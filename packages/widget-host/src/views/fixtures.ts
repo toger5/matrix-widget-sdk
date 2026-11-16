@@ -3,6 +3,7 @@
  * mockups (`design/src/lib.mjs`), so a story can be compared with its leaf in `design/index.html`.
  */
 import {
+  STATS_BUCKET_MS,
   widgetInstanceId,
   type AccountViewModel,
   type AppViewModel,
@@ -158,6 +159,16 @@ export function devMainVm(o: Partial<MainViewModel> = {}): MainViewModel {
 export const appVm = (main: MainViewModel = mainVm(), devTools = false): AppViewModel => ({ settings: { devTools, theme: "system" }, screen: { kind: "main", main } });
 
 const X = "org.matrix.mscXXXX.";
+/**
+ * The characters of the stats graph, as in the mockup (`statsPanel` in design/src/components.mjs): 60 buckets of
+ * which the newest is the current one when the stories load, so the graph (which ends now) shows them. Empty
+ * buckets are left out, as the runtime does.
+ */
+const NOW_BUCKET = Math.floor(Date.now() / STATS_BUCKET_MS) * STATS_BUCKET_MS;
+const statsTo = (i: number) => (i === 57 ? 3600 : i % 11 === 4 || i % 13 === 7 ? 0 : 140 + ((i * 397) % 1500));
+const statsFrom = (i: number) => (i % 11 === 4 ? 0 : 60 + ((i * 211) % 620));
+const CHARACTERS = Array.from({ length: 60 }, (_, i) => ({ timestamp: NOW_BUCKET - (59 - i) * STATS_BUCKET_MS, toWidget: statsTo(i), fromWidget: statsFrom(i) })).filter((b) => b.toWidget + b.fromWidget > 0);
+
 export const DEV_TOOLS_DATA: WidgetDevToolsData = {
   messages: [
     { id: "m5", direction: "toWidget", action: `${X}forward_event`, timestamp: 1_763_300_004_200, request: { event: { type: "m.room.message", content: { msgtype: "m.text", body: "hello" } } }, response: { state: "pending" } },
@@ -172,7 +183,8 @@ export const DEV_TOOLS_DATA: WidgetDevToolsData = {
     runningSince: 1_763_300_000_500,
     eventsSharedWithWidget: 128,
     eventsSentFromWidget: 9,
-    characters: Array.from({ length: 24 }, (_, i) => ({ timestamp: 1_763_300_000_000 + i * 5000, toWidget: 400 + ((i * 137) % 900), fromWidget: 150 + ((i * 71) % 500) })),
+    charactersTotal: { toWidget: 31_870, fromWidget: 16_343 },
+    characters: CHARACTERS,
   },
   capabilities: {
     approved: [`widget:${X}get_matrix_context`, `widget:${X}send_event.timeline:m.room.message`, `host:${X}forward_event.timeline:m.room.message`],

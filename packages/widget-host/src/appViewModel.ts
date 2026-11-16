@@ -507,7 +507,7 @@ export type AppIntent =
 export interface WidgetDevToolsData {
   /** Capped (500); the log offers "clear". leaf devtools/messages */
   messages: WidgetMessage[];
-  /** leaf devtools/stats */
+  /** leaves devtools/stats, devtools/stats-direction */
   stats: WidgetStats;
   /** leaf devtools/driver. From `DriverSnapshot`; "denied" needs the driver to report it. */
   capabilities: { approved: string[]; autoApproved: string[]; denied: string[] };
@@ -532,9 +532,19 @@ export interface WidgetStats {
   runningSince?: number;
   eventsSharedWithWidget: number;
   eventsSentFromWidget: number;
-  /** Characters sent over the widget API per time bucket, for the two-line graph. Not sampled while the panel is hidden. */
+  /** Characters (of the JSON envelopes) sent over the widget API since the widget started, per direction. The selector of the graph shows them and their sum. */
+  charactersTotal: { toWidget: number; fromWidget: number };
+  /**
+   * Characters per bucket of `STATS_BUCKET_MS` (`timestamp` is the bucket start), oldest first, the
+   * newest `MAX_STATS_BUCKETS`. Only buckets with traffic are listed; the graph shows the others as 0.
+   */
   characters: { timestamp: number; toWidget: number; fromWidget: number }[];
 }
+
+/** The time bucket of `WidgetStats.characters`: one bar of the stats graph. */
+export const STATS_BUCKET_MS = 5_000;
+/** Buckets kept per widget (5 minutes); the graph shows as many of the newest as fit. */
+export const MAX_STATS_BUCKETS = 60;
 
 /** The content of the DevBackend, read from its store. leaves devbackend/* */
 export interface MockedRoomData {

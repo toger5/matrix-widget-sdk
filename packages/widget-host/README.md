@@ -105,7 +105,8 @@ hands it to the driver of each widget of that room like any other `MatrixBackend
   Approving capabilities also pushes the current permitted state (`update_state`) at once.
 - **Dev tools of a widget** (the ⋯ button of its tab; enable dev tools in the settings), docked
   top, bottom, left or right: **Messages** (every envelope in both directions, expandable),
-  **Stats**, **Driver** (approved, auto-approved and denied capabilities, revoke, and buttons that
+  **Stats** (counters, and a bar graph of the characters sent per 5 s: both directions, to or from
+  the widget), **Driver** (approved, auto-approved and denied capabilities, revoke, and buttons that
   push `update_theme`, `update_language` and `update_visibility`) and **Console** (this host's and
   the driver's log about the widget). **Reload** starts the widget again like Retry: a new iframe
   and driver, the current URL of its state event, empty panels; capabilities are negotiated again.

@@ -5,6 +5,7 @@ import { useDispatch } from "../env";
 import { Avatar, Button, Icon } from "../ui/atoms";
 import { WidgetSlot } from "../ui/WidgetSlot";
 import { DevTools } from "./DevTools";
+import type { StatsSeries } from "./StatsPanel";
 import { capabilityLabel } from "./format";
 
 export interface WidgetViewProps {
@@ -19,6 +20,8 @@ export interface WidgetViewProps {
   standIn?: ReactNode;
   /** Story only: the message of the MessagesPanel that starts expanded. */
   initialExpandedMessage?: string;
+  /** Story only: the graph the StatsPanel shows first. */
+  initialStatsSeries?: StatsSeries;
 }
 
 /**
@@ -28,11 +31,11 @@ export interface WidgetViewProps {
  * The slot is always rendered (the iframe must never lose its place); a state that the user has
  * to see or answer is a layer that covers it.
  */
-export function WidgetView({ widget, devTools, compact = false, tab, standIn, initialExpandedMessage }: WidgetViewProps) {
+export function WidgetView({ widget, devTools, compact = false, tab, standIn, initialExpandedMessage, initialStatsSeries }: WidgetViewProps) {
   const dev = devTools?.open ? devTools : undefined;
   return (
     <div className={`wv dock-${dev?.dock ?? "none"}`} data-testid="widget-view" data-widget-id={widget.id}>
-      {dev && <DevTools widget={widget} layout={dev} initialExpandedMessage={initialExpandedMessage} />}
+      {dev && <DevTools widget={widget} layout={dev} initialExpandedMessage={initialExpandedMessage} initialStatsSeries={initialStatsSeries} />}
       <div className="wv-widget">
         <WidgetSlot widgetId={widget.id}>{standIn}</WidgetSlot>
         <WidgetState widget={widget} compact={compact} tab={tab} />

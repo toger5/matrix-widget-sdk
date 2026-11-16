@@ -4,7 +4,7 @@ import { DEV_TOOLS_DATA, devToolsLayout, widgetVm } from "../fixtures";
 import { FakeWidget, StoryEnv } from "../storyEnv";
 import { WidgetView } from "./WidgetView";
 
-/** The dev tools are part of the WidgetView (it puts them at the dock position), so the stories render the whole view. */
+/** The dev tools are part of the WidgetView (it puts them at the dock position), so the stories render the whole view. The stats panel has its own file. */
 const meta: Meta<typeof WidgetView> = {
   title: "Widget/DevTools",
   component: WidgetView,
@@ -43,9 +43,6 @@ export const TwoPanels: Story = {
 
 /** leaf devtools/messages */
 export const MessagesExpanded: Story = { args: { devTools: devToolsLayout({ size: { top: 420, side: 340 } }), initialExpandedMessage: "m4" } };
-
-/** leaf devtools/stats, but docked right (compare the dock with leaf devtools/side-panels) */
-export const DockedRightStats: Story = { args: { devTools: devToolsLayout({ dock: "right", panels: [{ panel: "stats", share: 1 }], size: { top: 250, side: 400 } }) } };
 
 /** leaves devtools/driver and devtools/console, as in leaf devtools/fourth-panel */
 export const DriverAndConsole: Story = {

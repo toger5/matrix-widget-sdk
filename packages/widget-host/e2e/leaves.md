@@ -68,7 +68,7 @@ Every leaf of `design/index.html` (`design/src/leaves.mjs`), with the test in wh
 | `devtools/bottom-panel` | `devtools.spec.ts` › the dev tools are resized with the separator: keyboard and drag |
 | `devtools/two-panels`, `devtools/three-panels`, `devtools/fourth-panel`, `devtools/side-panels` | `devtools.spec.ts` › panels open next to each other; the fourth closes the oldest; docked to a side they stack |
 | `devtools/messages` | `devtools.spec.ts` › messages panel |
-| `devtools/stats` | `devtools.spec.ts` › stats panel |
+| `devtools/stats`, `devtools/stats-direction` | `devtools.spec.ts` › stats panel |
 | `devtools/driver` | `devtools.spec.ts` › driver panel: revoke one capability and all (confirm modal), add a capability |
 | `devtools/console` | `devtools.spec.ts` › console panel |
 | `pip/idle-1`, `pip/hover` | `widgetMove.spec.ts` › always on screen |

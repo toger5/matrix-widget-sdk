@@ -142,13 +142,11 @@ A toolbar for a single widget, with information like the driver state (approved 
 
 ### WidgetDevToolStatsPanel
 
-A nice summary:
-
-- number of actions sent
-- run duration
-- number of events shared with the widget
-- number of events sent from the widget
-- characters sent over the widget API (a graph with two lines in different colors, one per direction)
+- Tiles: actions sent, run duration, events shared with the widget, events sent from the widget.
+- Characters sent over the widget API since the widget started: total, to widget and from widget. Pressing one of the three numbers shows its graph.
+- The graph has one bar per 5 s up to now, as many as fit (at most 5 minutes), in one color per graph.
+- A bar's value is written along it (rotated), above the bar where it fits, else inside it, else only in the hover tooltip, which shows both directions.
+- No text overlaps at any panel size; the chart header wraps in narrow panels.
 
 ### WidgetDevToolDriverPanel
 
@@ -315,7 +313,7 @@ The mockups needed to review the full design. Each leaf is one state to draw. Do
           - Two and three panels next to each other
           - Fourth panel opened: the oldest one closes
           - WidgetDevToolMessagesPanel: list, one message expanded
-          - WidgetDevToolStatsPanel
+          - WidgetDevToolStatsPanel: total graph / one direction in a narrow panel
           - WidgetDevToolDriverPanel
           - WidgetDevToolConsolePanel
     - Tab (3): RoomOverviewTab

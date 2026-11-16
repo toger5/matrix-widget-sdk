@@ -7,7 +7,7 @@
  */
 import { WidgetHostDriver, type DriverSnapshot, type MatrixBackend, type WidgetHostPlatform } from "@matrix-widget-tools/widget-host-bindings";
 
-import type { WidgetDevToolsData, WidgetInstanceId, WidgetMessage } from "../../appViewModel";
+import { MAX_STATS_BUCKETS, STATS_BUCKET_MS, type WidgetDevToolsData, type WidgetInstanceId, type WidgetMessage } from "../../appViewModel";
 import { loadCapabilities, saveCapabilities } from "../../lib/capabilityStore";
 import { onDriverLog } from "../../lib/hostLogging";
 import { LEGACY_AUTO_APPROVED, type ResolvedWidget } from "../../widgetStateEvent";
@@ -17,9 +17,6 @@ import { Store } from "../store";
 export const NOTIFY_READY_TIMEOUT_MS = 15_000;
 const MAX_MESSAGES = 500;
 const MAX_CONSOLE_LINES = 500;
-/** Characters sent over the widget API are summed per bucket for the stats graph. */
-const STATS_BUCKET_MS = 5_000;
-const MAX_STATS_BUCKETS = 60;
 
 /** What the controller wants to know about. Called asynchronously, never from inside a driver call. */
 export interface WidgetRuntimeEvents {
@@ -66,7 +63,7 @@ const isError = (response: unknown) => typeof response === "object" && response 
 
 const emptyData = (): WidgetDevToolsData => ({
   messages: [],
-  stats: { actionsFromWidget: 0, actionsToWidget: 0, eventsSharedWithWidget: 0, eventsSentFromWidget: 0, characters: [] },
+  stats: { actionsFromWidget: 0, actionsToWidget: 0, eventsSharedWithWidget: 0, eventsSentFromWidget: 0, charactersTotal: { toWidget: 0, fromWidget: 0 }, characters: [] },
   capabilities: { approved: [], autoApproved: [], denied: [] },
   console: [],
 });
@@ -285,6 +282,7 @@ export class WidgetRuntime {
     const last = stats.characters.at(-1);
     const point = last?.timestamp === bucket ? { ...last } : { timestamp: bucket, toWidget: 0, fromWidget: 0 };
     point[direction] += characters;
+    stats.charactersTotal = { ...stats.charactersTotal, [direction]: stats.charactersTotal[direction] + characters };
     stats.characters = [...(last?.timestamp === bucket ? stats.characters.slice(0, -1) : stats.characters), point].slice(-MAX_STATS_BUCKETS);
 
     let messages = this.data.messages;

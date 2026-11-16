@@ -7,7 +7,7 @@ import { ConsolePanel } from "./ConsolePanel";
 import { DEV_TOOL_PANELS, DevToolBar } from "./DevToolBar";
 import { DriverPanel } from "./DriverPanel";
 import { MessagesPanel } from "./MessagesPanel";
-import { StatsPanel } from "./StatsPanel";
+import { StatsPanel, type StatsSeries } from "./StatsPanel";
 
 /** The smallest panel area, and what "reset" (double click, Enter) goes back to. */
 const MIN_SIZE = 80;
@@ -128,6 +128,8 @@ export interface DevToolsProps {
   layout: WidgetDevToolsLayout;
   /** Story only: the message of the MessagesPanel that starts expanded. */
   initialExpandedMessage?: string;
+  /** Story only: the graph the StatsPanel shows first. */
+  initialStatsSeries?: StatsSeries;
 }
 
 /**
@@ -135,7 +137,7 @@ export interface DevToolsProps {
  * docked to a side) and the separator towards the widget. Rendered by `WidgetView` at the dock
  * position; the bar is at the outer edge. leaves devtools/*
  */
-export function DevTools({ widget, layout, initialExpandedMessage }: DevToolsProps) {
+export function DevTools({ widget, layout, initialExpandedMessage, initialStatsSeries }: DevToolsProps) {
   const dispatch = useDispatch();
   const data = useViewEnv().useDevToolsData(widget.id);
   const widgetId = widget.id;
@@ -168,7 +170,7 @@ export function DevTools({ widget, layout, initialExpandedMessage }: DevToolsPro
       case "messages":
         return <MessagesPanel widgetId={widgetId} messages={data.messages} initialExpanded={initialExpandedMessage} />;
       case "stats":
-        return <StatsPanel stats={data.stats} />;
+        return <StatsPanel stats={data.stats} initialSeries={initialStatsSeries} />;
       case "driver":
         return <DriverPanel widgetId={widgetId} capabilities={data.capabilities} />;
       case "console":

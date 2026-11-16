@@ -144,7 +144,8 @@ Login, sync, suspend/resume and the storage migration of both SDKs are only veri
 - `message-log-not-virtualized`: the message log is a plain list capped at 500; `message-log-cap-constant`: the cap is repeated in the view.
 - `approve-nothing`: "Approve 0 selected" is disabled; "Deny all" is the way to deny.
 - `covered-widget-not-inert`: the iframe under a prompt or error overlay stays focusable.
-- `chart-hover-only`: point values of the stats chart show on pointer hover; a visually hidden table is the alternative.
+- `chart-hover-only`: the value of a stats bar too small for its number shows on pointer hover only; a visually hidden table is the alternative.
+- Whether a bar's number fits is estimated at 6px per character (`src/views/widget/chart.ts`), not measured.
 - Message rows also show the response time; the driver panel groups capabilities in three lists instead of one.
 - `account-store-location`: the storage code shared by both SDK sessions lives under `matrix_session/js/`.
 - `restore()` of an unknown account rejects with a plain `Error`.

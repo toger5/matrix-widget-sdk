@@ -42,6 +42,7 @@
   --dt-bg: #0f0f11;
   --dt-bar: #1a1a1d;
   --dt-border: #34343a;
+  --s0: #9a9aa5; /* chart: both directions */
   --s1: #3987e6; /* chart: to widget */
   --s2: #d95f2e; /* chart: from widget */
 }
@@ -73,6 +74,7 @@
   --dt-bg: #f6f6f4;
   --dt-bar: #e9e9e5;
   --dt-border: #c9c9c3;
+  --s0: #66666e;
   --s1: #1f6fd0;
   --s2: #c2501e;
 }
@@ -529,30 +531,28 @@ button.tile { display: block; text-align: center; }
 .stat span { color: var(--text-muted); }
 .stat small { color: var(--text-faint); font-size: 10.5px; }
 .chart { min-width: 0; min-height: 0; display: flex; flex-direction: column; gap: 4px; padding: 7px 9px; border: 1px solid var(--dt-border); border-radius: var(--r-1); background: var(--surface); }
-.chart-h { display: flex; justify-content: space-between; gap: 8px; color: var(--text-muted); white-space: nowrap; }
+.chart-h { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 4px 8px; color: var(--text-muted); white-space: nowrap; }
 .chart-h i { font-style: normal; color: var(--text-faint); }
-.legend { display: inline-flex; align-items: center; gap: 5px; }
-.sw { width: 12px; height: 3px; border-radius: 1px; margin-left: 6px; display: inline-block; }
-.sw.s1 { background: var(--s1); }
-.sw.s2 { background: repeating-linear-gradient(90deg, var(--s2) 0 4px, transparent 4px 6px); }
+.chart-t { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.chart-sel { display: flex; flex-wrap: wrap; gap: 4px; margin-left: auto; }
+.chart-sel .chip { gap: 5px; height: 22px; }
+.chart-sel .chip b { color: var(--text); font-weight: 600; font-variant-numeric: tabular-nums; }
+.sw { flex: none; width: 8px; height: 8px; border-radius: 2px; display: inline-block; }
+.sw.s0, .bar.s0 { background: var(--s0); }
+.sw.s1, .bar.s1 { background: var(--s1); }
+.sw.s2, .bar.s2 { background: var(--s2); }
 .chart { margin: 0; }
-.plot { flex: 1; min-height: 96px; max-height: 190px; display: grid; grid-template: 1fr 16px / 30px 1fr 70px; font-size: 11px; color: var(--text-muted); }
-.plot-y, .plot-area, .plot-end { position: relative; }
-.plot-y span { position: absolute; right: 6px; transform: translateY(-50%); }
-.plot-end span { position: absolute; left: 6px; transform: translateY(-50%); color: var(--text); font-weight: 500; white-space: nowrap; }
+.plot { flex: 1; min-height: 72px; max-height: 190px; display: grid; grid-template: 1fr 16px / 30px 1fr; font-size: 11px; color: var(--text-muted); }
+.plot-y, .plot-area { position: relative; }
+.plot-y span { position: absolute; right: 6px; transform: translateY(50%); }
 .plot-x { grid-column: 2; display: flex; justify-content: space-between; align-items: end; }
-.plot-area svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
 .gridl { position: absolute; left: 0; right: 0; height: 1px; background: var(--dt-border); }
-.cross { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--text-muted); }
-.line { fill: none; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; vector-effect: non-scaling-stroke; }
-.line.s1 { stroke: var(--s1); }
-.line.s2 { stroke: var(--s2); stroke-dasharray: 5 3; }
-.pt { position: absolute; width: 9px; height: 9px; border-radius: 50%; transform: translate(-50%, -50%); box-shadow: 0 0 0 2px var(--surface); }
-.pt.s1 { background: var(--s1); }
-.pt.s2 { background: var(--s2); }
-.tip { position: absolute; top: 2px; margin-right: 10px; display: grid; gap: 1px; padding: 5px 8px; border-radius: var(--r-1); border: 1px solid var(--border-strong); background: var(--surface-2); white-space: nowrap; }
+.bar { position: absolute; bottom: 0; min-width: 1px; border-radius: 1px 1px 0 0; }
+.bar.on { box-shadow: 0 0 0 1.5px var(--text); }
+.bar-n { position: absolute; transform: translateX(-50%) rotate(180deg); writing-mode: vertical-rl; font-size: 10px; line-height: 12px; font-variant-numeric: tabular-nums; white-space: nowrap; color: var(--text-muted); pointer-events: none; }
+.bar-n.in { color: var(--on-primary); font-weight: 600; }
+.tip { position: absolute; top: 2px; display: grid; gap: 1px; padding: 5px 8px; border-radius: var(--r-1); border: 1px solid var(--border-strong); background: var(--surface-2); white-space: nowrap; }
 .tip b { display: flex; align-items: center; gap: 6px; color: var(--text); font-weight: 500; }
-.tip .pt { position: static; transform: none; width: 7px; height: 7px; box-shadow: none; }
 
 .driver { flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column; gap: 6px; padding: 8px; }
 .caps { display: grid; grid-template-columns: minmax(0, 1fr); border: 1px solid var(--dt-border); border-radius: var(--r-1); background: var(--surface); }
@@ -635,7 +635,6 @@ button.tile { display: block; text-align: center; }
   .ov-grid { grid-template-columns: 1fr; }
   .ov-members { grid-template-columns: 1fr; }
 }
-@container dtp (max-width: 560px) { .legend { display: none; } }
 @container dtp (max-width: 360px) { .stat-grid { grid-template-columns: 1fr 1fr; } }
 
 /* --- empty room panel: untitled, centered tiles of the recent widgets ------------------------- */
@@ -674,8 +673,6 @@ button.tile { display: block; text-align: center; }
 .check { width: 18px; height: 18px; flex: none; display: grid; place-items: center; border-radius: 5px; border: 1.5px solid var(--border-strong); }
 .check.on { background: var(--highlight); border-color: var(--highlight); color: var(--on-primary); }
 :root[data-theme="light"] .check.on { color: #fff; }
-
-@container dtp (max-width: 560px) { .tip { display: none; } }
 
 /* --- second design round ------------------------------------------------------------------- */
 /* DevBackend: the account icon is the DevBackend icon; leaving is a quiet text button */

@@ -452,27 +452,78 @@ function messagesPanel(expanded) {
   return `<div class="dt-tools"><span class="input search sm">${icon("search", 11)}<span class="ph">Filter by action</span></span><button class="chip sm on" aria-pressed="true">W→H from widget</button><button class="chip sm on" aria-pressed="true">H→W to widget</button><span class="sp"></span><span class="muted">42 of 500 max</span>${btn("Clear", { sm: true })}</div><div class="msgs">${rows}</div>`;
 }
 
-function statsPanel() {
-  const to = [120, 480, 300, 900, 650, 700, 1500, 800, 600, 950, 400, 700];
-  const from = [300, 200, 250, 400, 350, 900, 500, 450, 300, 380, 420, 310];
-  const X = (i) => (i * 100) / 11;
-  const Y = (v) => 100 - (v / 1600) * 100;
-  const path = (a) => a.map((v, i) => `${i ? "L" : "M"}${X(i).toFixed(2)} ${Y(v).toFixed(2)}`).join("");
-  const hi = 6;
-  const tile = (v, l, s = "") => `<div class="stat"><b>${v}</b><span>${l}</span>${s ? `<small>${s}</small>` : ""}</div>`;
-  const dot = (cls, i, v) => `<i class="pt ${cls}" style="left:${X(i)}%;top:${Y(v)}%"></i>`;
+// The stats graph. The app (src/views/widget/chart.ts) uses the same numbers: a bar slot of at least 14px, a
+// number of 10px text estimated at 6px per character, 3px padding, 12px line height. Bucket 57 is a spike whose
+// number goes inside the bar.
+const STATS_TO = Array.from({ length: 60 }, (_, i) => (i === 57 ? 3600 : i % 11 === 4 || i % 13 === 7 ? 0 : 140 + ((i * 397) % 1500)));
+const STATS_FROM = Array.from({ length: 60 }, (_, i) => (i % 11 === 4 ? 0 : 60 + ((i * 211) % 620)));
+// [key, color, label, total, spoken (in the name of the figure)]
+const SERIES = [
+  ["total", "s0", "total", "48,213", "both directions"],
+  ["toWidget", "s1", "to widget", "31,870", "to the widget"],
+  ["fromWidget", "s2", "from widget", "16,343", "from the widget"],
+];
+/** `970`, `4.4k`, `12k`, `1.2M`: the bar numbers and the axis. */
+const compact = (n) => {
+  if (Math.round(n) < 1000) return String(Math.round(n));
+  const [div, unit] = n < 999_500 ? [1000, "k"] : [1e6, "M"];
+  return `${+(n / div).toFixed(n / div < 9.95 ? 1 : 0)}${unit}`;
+};
+const grouped = (n) => n.toLocaleString("en-US");
+/** The y axis: the smallest "nice" step (1, 2, 2.5, 5 × 10ⁿ, whole numbers only) that reaches `max` in at most 4 steps, and fewer steps in a short plot (22px apart at least). */
+function yTicks(max, plotPx) {
+  const most = Math.max(1, Math.min(4, Math.floor(plotPx / 22)));
+  const m = Math.max(max, 1);
+  for (let pow = Math.max(1, 10 ** Math.floor(Math.log10(m / most))); ; pow *= 10)
+    for (const f of [1, 2, 2.5, 5]) if (Number.isInteger(f * pow) && Math.ceil(m / (f * pow)) <= most) return Array.from({ length: Math.ceil(m / (f * pow)) + 1 }, (_, i) => i * f * pow);
+}
+const ago = (s) => (s < 60 ? `${s} s` : `${Math.floor(s / 60)} m ${String(s % 60).padStart(2, "0")} s`);
+/** Where the number of a bar goes: above it, inside it, or nowhere (it does not fit). */
+function numberPlace(value, barPx, plotPx, slotPx) {
+  if (!value || slotPx < 12) return undefined;
+  const len = compact(value).length * 6 + 6;
+  if (plotPx - barPx >= len) return "above";
+  if (barPx >= len && slotPx - 2 >= 12) return "in";
+  return undefined;
+}
+
+/**
+ * o: { series: "total" | "toWidget" | "fromWidget", plot: [width, height] of the plot area in px (it decides how many
+ *   bars there are and which numbers fit), hover: index of the hovered bar from the right, null for none }
+ */
+function statsPanel({ series = "total", plot = [589, 152], hover = 9 } = {}) {
+  const [pw, ph] = plot;
+  const n = Math.max(1, Math.min(60, Math.floor(pw / 14)));
+  const to = STATS_TO.slice(-n);
+  const from = STATS_FROM.slice(-n);
+  const total = to.map((v, i) => v + from[i]);
+  const values = { total, toWidget: to, fromWidget: from }[series];
+  const [, cls, , , spoken] = SERIES.find(([k]) => k === series);
+  const ticks = yTicks(Math.max(...values), ph);
+  const top = ticks.at(-1) + 0.2 * ticks[1];
+  const slot = pw / n;
+  const W = 100 / n;
+  const H = (v) => (v / top) * 100;
+  const hi = hover == null ? undefined : n - 1 - hover;
+  const tile = (v, l, sub = "") => `<div class="stat"><b>${v}</b><span>${l}</span>${sub ? `<small>${sub}</small>` : ""}</div>`;
+  const bars = values
+    .map((v, i) => {
+      const place = numberPlace(v, (H(v) / 100) * ph, ph, slot);
+      const bar = `<i class="bar ${cls} ${i === hi ? "on" : ""}" style="left:${(i * W).toFixed(3)}%;width:calc(${W.toFixed(3)}% - 2px);height:${H(v).toFixed(2)}%"></i>`;
+      const pos = place === "above" ? `bottom:calc(${H(v).toFixed(2)}% + 3px)` : `top:calc(${(100 - H(v)).toFixed(2)}% + 3px)`;
+      return bar + (place ? `<span class="bar-n ${place === "in" ? "in" : ""}" style="left:calc(${((i + 0.5) * W).toFixed(3)}% - 1px);${pos}">${compact(v)}</span>` : "");
+    })
+    .join("");
+  const tip =
+    hi === undefined
+      ? ""
+      : `<div class="tip" style="right:calc(${(100 - hi * W).toFixed(3)}% + 4px)"><span>${hover * 5} s ago</span><b><i class="sw s1"></i>to widget ${grouped(to[hi])}</b><b><i class="sw s2"></i>from widget ${grouped(from[hi])}</b><b><i class="sw s0"></i>total ${grouped(total[hi])}</b></div>`;
   return `<div class="stats"><div class="stat-grid">${tile("42", "actions sent", "27 from widget · 15 to widget")}${tile("3 m 12 s", "run duration", "since notify_ready")}${tile("128", "events shared with the widget")}${tile("7", "events sent from the widget")}</div>
-    <figure class="chart" aria-label="Characters sent over the widget API per 5 seconds, one line per direction. Last value: 700 to the widget, 310 from the widget."><div class="chart-h"><span>Characters over the widget API <i>per 5 s</i></span><span class="legend"><i class="sw s1"></i>to widget<i class="sw s2"></i>from widget</span></div>
+    <figure class="chart" aria-label="Characters sent over the widget API per 5 seconds: ${spoken}, the last ${ago(n * 5)}. Now: ${grouped(values[n - 1])}."><div class="chart-h"><span class="chart-t">Characters over the widget API <i>per 5 s</i></span><span class="chart-sel" role="radiogroup" aria-label="Graph">${SERIES.map(([k, c, l, t]) => `<button class="chip sm ${k === series ? "on" : ""}" role="radio" aria-checked="${k === series}" tabindex="${k === series ? 0 : -1}"><i class="sw ${c}"></i>${l} <b>${t}</b></button>`).join("")}</span></div>
     <div class="plot">
-      <div class="plot-y">${[0, 500, 1000, 1500].map((t) => `<span style="top:${Y(t)}%">${t ? t / 1000 + "k" : 0}</span>`).join("")}</div>
-      <div class="plot-area">${[0, 500, 1000, 1500].map((t) => `<i class="gridl" style="top:${Y(t)}%"></i>`).join("")}
-        <i class="cross" style="left:${X(hi)}%"></i>
-        <svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"><path class="line s1" d="${path(to)}"/><path class="line s2" d="${path(from)}"/></svg>
-        ${dot("s1", hi, to[hi])}${dot("s2", hi, from[hi])}
-        <div class="tip" style="right:${100 - X(hi)}%"><span>28 s ago</span><b><i class="pt s1"></i>to widget 1,500</b><b><i class="pt s2"></i>from widget 500</b></div>
-      </div>
-      <div class="plot-end"><span style="top:${Y(to[11])}%">to widget</span><span style="top:${Y(from[11])}%">from widget</span></div>
-      <div class="plot-x"><span>-60 s</span><span>now</span></div>
+      <div class="plot-y">${ticks.map((t) => `<span style="bottom:${H(t).toFixed(2)}%">${compact(t)}</span>`).join("")}</div>
+      <div class="plot-area">${ticks.map((t) => `<i class="gridl" style="bottom:${H(t).toFixed(2)}%"></i>`).join("")}${bars}${tip}</div>
+      <div class="plot-x"><span>-${ago(n * 5)}</span><span>now</span></div>
     </div></figure></div>`;
 }
 
@@ -507,16 +558,17 @@ function consolePanel() {
   return `<div class="dt-tools"><span class="input search sm">${icon("search", 11)}<span class="ph">Filter</span></span><span class="chip sm on">log</span><span class="chip sm on">info</span><span class="chip sm on">warn</span><span class="chip sm on">error</span><span class="sp"></span><span class="muted">forwarded by the widget SDK</span>${btn("Clear", { sm: true })}</div><div class="console">${lines.map(([lvl, t, text]) => `<div class="cl ${lvl}"><span class="cl-l">${lvl}</span><span class="cl-t">${t}</span><span class="cl-m">${esc(text)}</span></div>`).join("")}</div>`;
 }
 
-function dtPanel(kind, { expanded = false } = {}) {
-  const body = { messages: () => messagesPanel(expanded), stats: statsPanel, driver: driverPanel, console: consolePanel }[kind]();
+function dtPanel(kind, { expanded = false, stats } = {}) {
+  const body = { messages: () => messagesPanel(expanded), stats: () => statsPanel(stats), driver: driverPanel, console: consolePanel }[kind]();
   return `<section class="dt-panel dtp-${kind}"><header class="dt-ph">${icon(DT[kind][0], 12)}<span>${DT[kind][1]}</span><span class="sp"></span>${ibtn("x", `Close ${DT[kind][1]}`, "xs")}</header><div class="dt-pb">${body}</div></section>`;
 }
 
 /**
- * dev: { dock: "top" | "bottom" | "left" | "right", panels: kind[] (at most 3, oldest first), expanded?: bool, size?: px }
+ * dev: { dock: "top" | "bottom" | "left" | "right", panels: kind[] (at most 3, oldest first), expanded?: bool, size?: px,
+ *   stats?: the options of statsPanel }
  * The bar is at the outer edge, the panels between it and the widget.
  */
-export function devToolBar({ dock = "top", panels = [], expanded = false, size } = {}) {
+export function devToolBar({ dock = "top", panels = [], expanded = false, size, stats } = {}) {
   if (panels.length > 3) throw new Error("at most three dev tool panels are open: opening a fourth closes the oldest");
   const open = new Set(panels);
   const vertical = dock === "left" || dock === "right";
@@ -526,7 +578,7 @@ export function devToolBar({ dock = "top", panels = [], expanded = false, size }
     .join("")}<span class="sp"></span><button class="dt-ib dt-reload" title="Reload the widget" aria-label="Reload the widget">${icon("refresh", 13)}</button><span class="dt-dock" role="radiogroup" aria-label="Dock position">${["left", "top", "bottom", "right"].map((d) => `<button class="dt-ib ${d === dock ? "on" : ""}" role="radio" title="Dock to the ${d}" aria-label="Dock to the ${d}" aria-checked="${d === dock}">${icon("dock" + cap(d), 13)}</button>`).join("")}</span><button class="dt-ib" title="Close the dev tools" aria-label="Close the dev tools">${icon("x", 13)}</button></div>`;
   const split = `<div class="dt-split" role="separator" aria-orientation="${vertical ? "horizontal" : "vertical"}" aria-label="Resize the dev tool panels" aria-valuenow="50" aria-valuemin="15" aria-valuemax="85" tabindex="0" title="Drag or use the arrow keys to resize · double click or Enter to reset"></div>`;
   const body = open.size
-    ? `<div class="dt-panels" style="${vertical ? "width" : "height"}:${size ?? (vertical ? 340 : 250)}px">${panels.map((p) => dtPanel(p, { expanded })).join(split)}</div><div class="dt-resize" role="separator" aria-orientation="${vertical ? "vertical" : "horizontal"}" aria-label="Resize the dev tools" aria-valuenow="40" aria-valuemin="15" aria-valuemax="85" tabindex="0" title="Drag or use the arrow keys to resize · double click or Enter to reset"><i></i></div>`
+    ? `<div class="dt-panels" style="${vertical ? "width" : "height"}:${size ?? (vertical ? 340 : 250)}px">${panels.map((p) => dtPanel(p, { expanded, stats })).join(split)}</div><div class="dt-resize" role="separator" aria-orientation="${vertical ? "vertical" : "horizontal"}" aria-label="Resize the dev tools" aria-valuenow="40" aria-valuemin="15" aria-valuemax="85" tabindex="0" title="Drag or use the arrow keys to resize · double click or Enter to reset"><i></i></div>`
     : "";
   return `<div class="dt dt-${dock}">${bar}${body}</div>`;
 }
