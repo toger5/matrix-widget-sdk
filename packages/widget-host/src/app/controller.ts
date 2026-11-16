@@ -44,11 +44,12 @@ import {
 } from "../appViewModel";
 import { EXAMPLE_LEGACY, EXAMPLE_NEW } from "../exampleWidgets";
 import { capabilityStoreKey, clearCapabilities, forgetCapabilities } from "../lib/capabilityStore";
+import { describesWidget, hostWidgetEvents, parseWidget, resolveWidget, widgetUrlProblem } from "../lib/widgetEvents";
 import { DevBackend } from "../matrix_session/memory/devBackend";
 import { validateWidgetEvent, type DevBackendSeed } from "../matrix_session/memory/seed";
 import { sessions, StoredLoginInvalidError, type LiveSession, type PendingLogin, type RoomBackend, type RoomSummary, type SessionProvider } from "../session";
-import { roomWidgets, wrapperUrl } from "../views/helpers";
-import { WIDGET_EVENT_TYPES, describesWidget, localWidgetKey, resolveWidget, widgetKey, widgetUrlProblem, type StateEvent } from "../widgetStateEvent";
+import { roomWidgets } from "../views/helpers";
+import { WIDGET_EVENT_TYPES, localWidgetKey, widgetKey, type StateEvent } from "../widgetStateEvent";
 import {
   activateTab,
   addPanel,
@@ -467,7 +468,7 @@ export class AppController {
   /** The widgets of a room of the active account: its own, then its local ones; none before the room is known (a Matrix account's list fills while it syncs). */
   private widgetsOf(roomId: RoomId, rooms = this.rooms()) {
     const room = rooms.find((r) => r.id === roomId);
-    return room ? roomWidgets(room, this.main?.data.localWidgets[roomId]) : [];
+    return room ? roomWidgets(hostWidgetEvents, room, this.main?.data.localWidgets[roomId]) : [];
   }
 
   /**
@@ -806,7 +807,7 @@ export class AppController {
     // the URL's variables, which can name another origin) and `waitForIframeLoad`.
     const embeds = (e: StateEvent) => {
       try {
-        return resolveWidget(e, wrapperUrl()).url;
+        return resolveWidget(e).url;
       } catch {
         return undefined;
       }
@@ -816,7 +817,7 @@ export class AppController {
     const id = widgetInstanceId(roomId, key);
     const running = this.main?.widgets[id];
     if (!running) return;
-    const resolved = resolveWidget(event, wrapperUrl());
+    const resolved = resolveWidget(event);
     if (urlChanged || resolved.url !== running.widget.url || resolved.usesWidgetApi !== running.widget.usesWidgetApi) return this.reloadWidget(id);
     // Only the name changed: the running widget keeps going.
     this.setWidget(id, (w) => ({ ...w, widget: resolved }));
@@ -1170,7 +1171,7 @@ export class AppController {
       if (!room) throw new Error(`seed.open: unknown room ${open.room}`);
       if (open.overview && open.active) throw new Error(`seed.open: room ${open.room} has both \`active\` and \`overview\`; the room name is a tab too`);
       const keyOf = (name: string) => {
-        const found = roomWidgets(room, localWidgets[room.id]).find((w) => w.key === name || w.event.state_key === name);
+        const found = roomWidgets(hostWidgetEvents, room, localWidgets[room.id]).find((w) => w.key === name || w.event.state_key === name);
         if (!found) throw new Error(`seed.open: room ${open.room} has no widget ${name}`);
         return found.key;
       };
@@ -1545,12 +1546,15 @@ function checkDelay(delayMs: number | undefined): void {
   if (delayMs !== undefined && !(Number.isFinite(delayMs) && delayMs >= 0)) throw new Error("The delay has to be a number of milliseconds, 0 or more");
 }
 
-/** Why a state event cannot be a widget of "Add widget", or `undefined`: a widget type with a URL the host embeds. */
+/** Why a state event cannot be a widget of "Add widget", or `undefined`: a widget (driver's parser) with a URL the host embeds. */
 function widgetEventProblem(event: StateEvent): string | undefined {
   if (!WIDGET_EVENT_TYPES.includes(event.type)) return `${event.type} is not a widget state event type`;
   if (!event.state_key) return "the widget ID (state key) is missing";
   if (typeof event.content.url !== "string") return "the content has no url";
-  return widgetUrlProblem(event.content.url);
+  const problem = widgetUrlProblem(event.content.url);
+  if (problem) return problem;
+  const parsed = parseWidget(event);
+  return "problem" in parsed ? parsed.problem : undefined;
 }
 
 /** `HostSeed.localWidgets`, checked like the widgets of the DevBackend's seed. */

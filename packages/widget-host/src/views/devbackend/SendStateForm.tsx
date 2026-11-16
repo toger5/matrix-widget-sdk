@@ -3,7 +3,7 @@ import { useState, type FormEvent } from "react";
 
 import type { MockedStateEvent, RoomId, RoomToolsViewModel } from "../../appViewModel";
 import type { StateEvent } from "../../widgetStateEvent";
-import { useDispatch } from "../env";
+import { useDispatch, useViewEnv } from "../env";
 import { ElementCallFields, NEW_ELEMENT_CALL, WidgetFields, buildElementCallEvent, buildWidgetEvent, freeWidgetId, newWidgetDraft } from "../forms/widgetForms";
 import { Field } from "../ui/atoms";
 import { FormChips, FormError, JsonArea, parseJsonObject, pretty } from "../ui/forms";
@@ -33,6 +33,7 @@ interface Props {
 
 export function SendStateForm({ roomId, form, state, userId }: Props) {
   const dispatch = useDispatch();
+  const { urlProblem } = useViewEnv().widgetEvents;
   const [widget, setWidget] = useState(() => newWidgetDraft(freeWidgetId(asStateEvents(state))));
   const [call, setCall] = useState(NEW_ELEMENT_CALL);
   const [raw, setRaw] = useState(() => ({ type: "m.room.topic", stateKey: "", content: pretty(state.find((e) => e.type === "m.room.topic" && e.stateKey === "")?.content ?? { topic: "" }) }));
@@ -43,9 +44,9 @@ export function SendStateForm({ roomId, form, state, userId }: Props) {
   const build = (): MockedStateEvent | string => {
     switch (form) {
       case "widget":
-        return asMocked(buildWidgetEvent(widget, { userId }));
+        return asMocked(buildWidgetEvent(widget, urlProblem, { userId }));
       case "elementCall":
-        return asMocked(buildElementCallEvent(call, userId));
+        return asMocked(buildElementCallEvent(call, urlProblem, userId));
       case "raw": {
         if (!raw.type.trim()) return "The event type is missing.";
         const content = parseJsonObject(raw.content);

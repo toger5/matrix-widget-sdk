@@ -46,7 +46,7 @@ function Group({ id, title, count, className = "", children, groupRef }: { id: s
 
 /** The numbers of widgets (with the local ones, `local`) and members of a room: icons, with the words for screen readers. */
 function RoomCounts({ room, local }: { room: RoomSummary; local: StateEvent[] }) {
-  const widgets = roomWidgets(room, local).length;
+  const widgets = roomWidgets(useViewEnv().widgetEvents, room, local).length;
   return (
     <>
       <Icon name="grid" size={12} />
@@ -86,7 +86,7 @@ function Tile({ label, avatar, name, sub, onClick, ...data }: { label: string; a
  */
 export function RoomPicker({ main, panelId }: RoomPickerProps) {
   const dispatch = useDispatch();
-  const { narrow } = useViewEnv();
+  const { narrow, widgetEvents } = useViewEnv();
   const ids = useId();
   const [filter, setFilter] = useState("");
   // Once the search field had the focus, the "All rooms" group is at least as high as the scroll
@@ -178,7 +178,7 @@ export function RoomPicker({ main, panelId }: RoomPickerProps) {
   const recentWidgets = main.data.recentWidgets
     .flatMap((recent) => {
       const room = roomOf(main, recent.roomId);
-      const widget = room && roomWidgets(room, localWidgetsOf(main, room.id)).find((w) => w.key === recent.widgetKey && !w.problem);
+      const widget = room && roomWidgets(widgetEvents, room, localWidgetsOf(main, room.id)).find((w) => w.key === recent.widgetKey && !w.problem);
       return room && widget ? [{ room, widget, open: widgetTab(main, widgetInstanceId(room.id, widget.key)) !== undefined }] : [];
     })
     .slice(0, RECENT_TILES);

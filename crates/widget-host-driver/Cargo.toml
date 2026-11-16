@@ -21,6 +21,7 @@ serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
 uuid.workspace = true
+url.workspace = true
 log.workspace = true
 uniffi = { workspace = true, optional = true }
 widget-logging = { workspace = true, optional = true }

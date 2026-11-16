@@ -115,6 +115,16 @@ as `originServerTs` are `bigint`, event `content` is a plain JS value, capabilit
 tells a capability of the widget API from a string the driver does not know (which it may grant,
 but which allows nothing), e.g. to set the latter apart in a permission prompt.
 
+Which state events are widgets, and what to load for one, is the driver's too (see its README):
+`parseWidgetStateEvent(eventType, stateKey, content)` returns a `WidgetDefinition` (`name`, `url`,
+`usesWidgetApi`, `legacy?`, …) and `embedWidget(widget, wrapperUrl, allowHttp)` a `WidgetEmbed`
+(`url`, `usesWidgetApi`); `widgetUrlProblem(url, allowHttp)` is the URL check alone and
+`widgetEventTypes()` the event types to read. Both functions throw a `WidgetEventError`
+(`NotAWidgetType`, `Removed`, `Refused`). Errors of the bindings carry their fields in `inner`
+(`e.inner.reason`), not the text of the Rust error. Strings coming back from the bindings lose a
+leading U+FEFF (they are decoded with a default `TextDecoder`), so the host passes the event's own
+`url` and state key to `embedWidget` rather than those of the returned definition.
+
 `onCapabilitiesRequested` gets the whole open question: a request that arrives before
 `approveCapabilities` joins it, and the callback is called again with all of it (without what the
 widget holds already or gets without asking). One `approveCapabilities` answers every request.

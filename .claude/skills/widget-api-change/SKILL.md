@@ -85,6 +85,7 @@ A rename also means renaming the file, the variant and the body types, so the co
 | What the driver subscribes to and forwards | `driver/subscriptions.rs` `subjects_for`, `to_device_types_for`, `forward_*` |
 | Public methods (pushes, approval, OpenID) | `driver/mod.rs`; these are exported over UniFFI, see section 6 |
 | Platform callbacks | `platform.rs` (`WidgetHostPlatform`) |
+| The widget state event (MSC4411, `uses_widget_api` of MSC4412): which events are widgets, the URL check, the compat wrapper's URL (its query parameters are the wrapper's README) | `widget_event.rs` (`WidgetDefinition::parse` / `embed`), `widget_url.rs` (`widget_url_problem`, table `tests/widget_urls.json`, which the host's `test/widgetStateEvent.test.ts` also compares with Node's URL parser); used by the host through `packages/widget-host/src/lib/widgetEvents.ts` |
 | Tests | unit tests in `access.rs` and `subscriptions.rs`; end to end in `driver/tests.rs` (helpers `setup`, `feed`, `grant`, `grant_and_drain`, `send`, `event`) |
 
 Error messages name the capability (`Missing capability: <string>`, code `…missing_capability`);
@@ -129,7 +130,9 @@ A changed `js_name` breaks `packages/test-widgets/new/main.ts`.
 - `packages/*/dist/`.
 
 `packages/widget-host/test/driver.test.ts` runs against the generated bindings, so it fails with
-stale ones. Rebuild before `npm test`.
+stale ones. Rebuild before `npm test`, and restart every running Vite server afterwards (it caches
+the compressed wasm). Timings, the UniFFI-on-the-web rules and the version pins: the
+`rust-host-crates` skill.
 
 ## 7. Compat wrapper (`packages/widget-compat-wrapper`)
 

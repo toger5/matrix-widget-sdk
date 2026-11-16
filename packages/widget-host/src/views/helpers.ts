@@ -1,12 +1,7 @@
 /** Derivations the views share. Pure functions of the view model; nothing here holds state. */
 import type { MainViewModel, RoomId, WidgetKey } from "../appViewModel";
 import type { RoomSummary } from "../session";
-import { describesWidget, localWidgetKey, resolveWidget, widgetKey, type ResolvedWidget, type StateEvent } from "../widgetStateEvent";
-
-/** Where legacy widgets are loaded through; the compat wrapper this host serves itself by default (`?wrapper=` overrides). */
-export const wrapperUrl = () =>
-  new URLSearchParams(globalThis.location?.search ?? "").get("wrapper") ??
-  new URL(`${import.meta.env.BASE_URL}widget_compatibility_wrapper/`, globalThis.location?.origin ?? "http://localhost").href;
+import { localWidgetKey, widgetKey, type ResolvedWidget, type StateEvent, type WidgetEventParser } from "../widgetStateEvent";
 
 /** A widget of a room as the RoomOverview lists it. `problem`: the state event cannot be embedded (the row is disabled). */
 export interface RoomWidget {
@@ -21,21 +16,19 @@ export interface RoomWidget {
 
 /**
  * The widgets a room offers: its widget state events, then its local widgets
- * (`AccountDataViewModel.localWidgets` of the room). Every event goes through `resolveWidget`, so
- * a stored local widget with a URL that cannot be embedded is listed disabled like a room widget.
+ * (`AccountDataViewModel.localWidgets` of the room), as the driver's parser reads them (`parser`:
+ * `ViewEnv.widgetEvents` in a view). Events that describe no widget (removed ones) are left out; a
+ * widget that must not be loaded (also a stored local one) is listed with its `problem`, disabled.
  */
-export function roomWidgets(room: Pick<RoomSummary, "widgetEvents"> | undefined, local: StateEvent[] = []): RoomWidget[] {
-  const listed = (event: StateEvent, isLocal: boolean): RoomWidget => {
+export function roomWidgets(parser: WidgetEventParser, room: Pick<RoomSummary, "widgetEvents"> | undefined, local: StateEvent[] = []): RoomWidget[] {
+  const listed = (event: StateEvent, isLocal: boolean): RoomWidget[] => {
+    const resolution = parser.resolve(event);
+    if (!resolution) return [];
     const key = isLocal ? localWidgetKey(event) : widgetKey(event);
-    const name = typeof event.content.name === "string" && event.content.name ? event.content.name : event.state_key;
-    const mark = isLocal ? { local: true as const } : {};
-    try {
-      return { key, name, event, widget: resolveWidget(event, wrapperUrl()), ...mark };
-    } catch (e) {
-      return { key, name, event, problem: e instanceof Error ? e.message : String(e), ...mark };
-    }
+    const { name, widget, problem } = resolution;
+    return [{ key, name, event, ...(widget ? { widget } : { problem }), ...(isLocal ? { local: true as const } : {}) }];
   };
-  return [...(room?.widgetEvents ?? []).filter(describesWidget).map((e) => listed(e, false)), ...local.filter(describesWidget).map((e) => listed(e, true))];
+  return [...(room?.widgetEvents ?? []).flatMap((e) => listed(e, false)), ...local.flatMap((e) => listed(e, true))];
 }
 
 /** The local widgets of a room of the active account. */

@@ -8,7 +8,7 @@ import { useEffect, useState, type FormEvent, type KeyboardEvent } from "react";
 
 import type { RoomId, WidgetWriteViewModel } from "../../appViewModel";
 import type { StateEvent } from "../../widgetStateEvent";
-import { useDispatch } from "../env";
+import { useDispatch, useViewEnv } from "../env";
 import {
   ElementCallFields,
   NEW_ELEMENT_CALL,
@@ -117,6 +117,8 @@ function TargetSeg({ target, onChange }: { target: AddWidgetTarget; onChange: (t
  */
 export function AddWidgetForm({ roomId, roomEvents, localEvents, edit, write, userId, initial, onClose }: AddWidgetFormProps) {
   const dispatch = useDispatch();
+  const { widgetEvents } = useViewEnv();
+  const { urlProblem } = widgetEvents;
   const [draft, setDraft] = useState<AddWidgetDraft>(() => ({
     form: "widget",
     target: "local",
@@ -136,14 +138,14 @@ export function AddWidgetForm({ roomId, roomEvents, localEvents, edit, write, us
   }, [sent, write, roomEvents, onClose]);
 
   const build = (): StateEvent | string => {
-    if (edit) return buildWidgetEvent(draft.widget, { base: edit.content });
+    if (edit) return buildWidgetEvent(draft.widget, urlProblem, { base: edit.content });
     switch (draft.form) {
       case "widget":
-        return buildWidgetEvent(draft.widget, { userId });
+        return buildWidgetEvent(draft.widget, urlProblem, { userId });
       case "elementCall":
-        return buildElementCallEvent(draft.call, userId);
+        return buildElementCallEvent(draft.call, urlProblem, userId);
       case "json":
-        return parseWidgetEvent(draft.json);
+        return parseWidgetEvent(draft.json, widgetEvents);
     }
   };
   const submit = (e: FormEvent) => {

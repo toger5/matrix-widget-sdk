@@ -33,7 +33,10 @@ transition code: a check on the widget state event.
 3. **New event** (`m.widget`): embed `content.url` directly.
 
 That URL construction is the only client code specific to the transition. Once legacy widgets are
-gone, delete it and the wrapper. The host keeps no template engine at all.
+gone, delete it and the wrapper. The host keeps no template engine at all. `widget-host-driver`
+has it (`WidgetDefinition::embed`, `embedWidget` in the TypeScript bindings), with the URL check
+of the widget and of the wrapper; it sets `legacy_widget_url`, `legacy_widget_id`,
+`legacy_wait_for_iframe_load` and `legacy_widget_data`.
 
 ## Query parameters
 

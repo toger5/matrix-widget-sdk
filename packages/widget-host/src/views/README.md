@@ -16,7 +16,7 @@ A view
 - sends intents with `useDispatch()` and reads the data that is not in the view model with the hooks of `useViewEnv()` (`src/views/env.tsx`): `useDevToolsData`, `useMockedRoomData`, `useRoomDetails`, `useRoomTimeline`, `useRoomState` (read again on `roomStateVersion` of the timeline), `avatar`, `narrow`;
 - keeps **view state** that nobody else needs in `useState` (a form draft, a hover, a filter text, an open menu, which log row is expanded);
 - never imports `src/app/**`, `src/session.ts` values (types are fine), a session implementation, or the bindings;
-- derives instead of storing: use the functions at the bottom of `appViewModel.ts` (`widgetTab`, `widgetSlot`, `pipWidgetIds`, `fullscreenWidget`, `activeWorkspace`, …) and `src/views/helpers.ts` (`roomWidgets`, `roomOf`, `readyRooms`).
+- derives instead of storing: use the functions at the bottom of `appViewModel.ts` (`widgetTab`, `widgetSlot`, `pipWidgetIds`, `fullscreenWidget`, `activeWorkspace`, …) and `src/views/helpers.ts` (`roomWidgets` with `useViewEnv().widgetEvents`, `roomOf`, `readyRooms`).
 
 ## Markup and styles
 

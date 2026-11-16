@@ -8,6 +8,7 @@ import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 
 import { createPortal } from "react-dom";
 
 import { widgetTab, type Loadable, type MockedRoomData, type WidgetDevToolsData, type WidgetInstanceViewModel } from "../appViewModel";
+import { hostWidgetEvents } from "../lib/widgetEvents";
 import type { RawEvent, RoomDetails, RoomTimeline } from "../session";
 import { AppShell } from "../views/app/AppShell";
 import { EMPTY_DEV_TOOLS_DATA, EMPTY_MOCKED_ROOM_DATA, ViewEnvContext, type RoomStateData, type RoomTimelineData, type ViewEnv } from "../views/env";
@@ -125,6 +126,7 @@ function viewEnv(controller: AppController, narrow: boolean): ViewEnv {
       return useMemo(() => ({ state, retry }), [state, retry]);
     },
     avatar: async (mxcUrl) => controller.activeSession()?.avatar(mxcUrl),
+    widgetEvents: hostWidgetEvents,
   };
 }
 

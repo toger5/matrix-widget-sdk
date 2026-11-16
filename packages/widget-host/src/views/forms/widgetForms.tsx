@@ -4,7 +4,7 @@
  * fields are controlled: the draft is the view state of the form that renders them.
  */
 import { EXAMPLE_LEGACY, EXAMPLE_NEW } from "../../exampleWidgets";
-import { WIDGET_EVENT_TYPES, widgetUrlProblem, type StateEvent } from "../../widgetStateEvent";
+import { WIDGET_EVENT_TYPES, type StateEvent, type WidgetEventParser } from "../../widgetStateEvent";
 import { Field, Toggle } from "../ui/atoms";
 import { parseJsonObject } from "../ui/forms";
 
@@ -21,8 +21,8 @@ export function freeWidgetId(events: Iterable<Pick<StateEvent, "type" | "state_k
   return `widget-${n}`;
 }
 
-/** The forms check the URL as the host does before it embeds a widget. */
-const isHttpUrl = (url: string) => !widgetUrlProblem(url);
+/** The URL check of the driver (`ViewEnv.widgetEvents.urlProblem`): the forms check a URL as the host does before it embeds a widget. */
+export type UrlProblem = WidgetEventParser["urlProblem"];
 
 // ---------------------------------------------------------------------------------------------
 // The widget form
@@ -52,11 +52,11 @@ export const widgetDraftOf = (event: StateEvent): WidgetDraft => ({
  * changes (editing keeps the fields the form does not show); without it a legacy widget gets the
  * fields of the legacy test widget and `userId` as its `creatorUserId`.
  */
-export function buildWidgetEvent(draft: WidgetDraft, { userId, base }: { userId?: string; base?: Record<string, unknown> } = {}): StateEvent | string {
+export function buildWidgetEvent(draft: WidgetDraft, urlProblem: UrlProblem, { userId, base }: { userId?: string; base?: Record<string, unknown> } = {}): StateEvent | string {
   const stateKey = draft.stateKey.trim();
   if (!stateKey) return "The widget ID is missing.";
   if (!draft.name.trim()) return "The name is missing.";
-  if (!isHttpUrl(draft.url.trim())) return "The URL must start with http:// or https://.";
+  if (urlProblem(draft.url.trim())) return "The URL must start with http:// or https://.";
   const common = { name: draft.name.trim(), url: draft.url.trim() };
   const legacy = draft.type === LEGACY_TYPE;
   const from = base ?? (legacy ? { ...EXAMPLE_LEGACY.content, ...(userId ? { creatorUserId: userId } : {}) } : {});
@@ -154,10 +154,10 @@ export function elementCallEvent({ url, intent, stateKey, userId }: { url: strin
 }
 
 /** The state event of an Element Call draft, or what is wrong with it. */
-export function buildElementCallEvent(draft: ElementCallDraft, userId?: string): StateEvent | string {
+export function buildElementCallEvent(draft: ElementCallDraft, urlProblem: UrlProblem, userId?: string): StateEvent | string {
   const stateKey = draft.stateKey.trim();
   if (!stateKey) return "The widget ID is missing.";
-  if (!isHttpUrl(draft.url.trim())) return "The Element Call URL must start with http:// or https://.";
+  if (urlProblem(draft.url.trim())) return "The Element Call URL must start with http:// or https://.";
   return elementCallEvent({ url: draft.url.trim(), intent: draft.intent, stateKey, userId });
 }
 
@@ -192,9 +192,10 @@ export function ElementCallFields({ draft, onChange }: { draft: ElementCallDraft
 /**
  * A whole widget state event, pasted (e.g. from Element's room state explorer): its `type`,
  * `state_key` and `content` are used, other fields are ignored. Refused: a type that is not a
- * widget type, and a URL the host would not embed.
+ * widget type, content that describes no widget (an `m.widget` without a name), and a URL the
+ * host would not embed. `widgetEvents`: `ViewEnv.widgetEvents`.
  */
-export function parseWidgetEvent(text: string): StateEvent | string {
+export function parseWidgetEvent(text: string, widgetEvents: WidgetEventParser): StateEvent | string {
   const parsed = parseJsonObject(text);
   if ("error" in parsed) return parsed.error;
   const { type, state_key: stateKey, content } = parsed.value;
@@ -203,7 +204,9 @@ export function parseWidgetEvent(text: string): StateEvent | string {
   if (typeof content !== "object" || content === null || Array.isArray(content)) return "The content must be an object.";
   const { url } = content as Record<string, unknown>;
   if (typeof url !== "string") return "The content has no url.";
-  const problem = widgetUrlProblem(url);
-  if (problem) return `The URL cannot be embedded: ${problem}.`;
-  return { type, state_key: stateKey, content: content as Record<string, unknown> };
+  const event = { type, state_key: stateKey, content: content as Record<string, unknown> };
+  const resolution = widgetEvents.resolve(event);
+  if (!resolution) return "The content describes no widget: an m.widget needs a name.";
+  if (resolution.problem) return `The URL cannot be embedded: ${resolution.problem}.`;
+  return event;
 }

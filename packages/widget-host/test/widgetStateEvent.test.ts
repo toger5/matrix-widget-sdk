@@ -1,72 +1,99 @@
-/** The URL check in front of every widget iframe: only absolute http: and https: URLs are embedded, for both widget kinds. */
+/**
+ * The host's glue to the driver's widget state event parser (`src/lib/widgetEvents.ts`) and the URL
+ * check in front of every widget iframe. The parser itself is tested in Rust
+ * (`crates/widget-host-driver/src/widget_{event,url}.rs`); here every URL of the shared table is
+ * also compared with the WHATWG URL parser of Node, which the Rust check follows.
+ */
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
+import { widgetEventTypes } from "@matrix-widget-tools/widget-host-bindings";
+
+import { resolveWidget, widgetEventParser, widgetUrlProblem } from "../src/lib/widgetEvents";
 import { roomWidgets } from "../src/views/helpers";
-import { localWidgetKey, resolveWidget, widgetKey, widgetUrlProblem, type StateEvent } from "../src/widgetStateEvent";
+import { localWidgetKey, WIDGET_EVENT_TYPES, widgetKey, type StateEvent } from "../src/widgetStateEvent";
+import "./harness";
 
 const WRAPPER = "http://localhost:5173/widget_compatibility_wrapper/";
 const newWidget = (url: string): StateEvent => ({ type: "m.widget", state_key: "w", content: { name: "W", url, uses_widget_api: true } });
 const legacyWidget = (url: string): StateEvent => ({ type: "im.vector.modular.widgets", state_key: "w", content: { type: "m.custom", name: "W", url } });
 
-const ALLOWED = [
-  "http://localhost:5175/new/",
-  "https://example.org/widget?x=1#y",
-  "HTTPS://Example.org/",
-  // Template variables after the scheme: the compat wrapper URI-encodes what it fills in.
-  "https://example.org/?room=$matrix_room_id&user=$matrix_user_id",
-  // Dropped by the URL parser, as by the iframe.
-  "  https://example.org/",
-];
+/** The table the Rust tests use too: label → URL. */
+const TABLE = JSON.parse(readFileSync(new URL("../../../crates/widget-host-driver/tests/widget_urls.json", import.meta.url), "utf8")) as Record<"allowed" | "refused", Record<string, string>>;
+const ALLOWED = Object.entries(TABLE.allowed);
+const REFUSED = Object.entries(TABLE.refused);
 
-const REFUSED: Record<string, string> = {
-  "javascript:": "javascript:top.__pwned=document.domain//",
-  "uppercase JAVASCRIPT:": "JAVASCRIPT:alert(1)",
-  "mixed case": "JaVaScRiPt:alert(1)",
-  "spaces and control characters before the scheme": " \t\n\u0000\u001fjavascript:alert(1)",
-  "tab and newline inside the scheme": "java\tscr\nipt:alert(1)",
-  "a non-breaking space before the scheme": "\u00a0javascript:alert(1)",
-  "data:": "data:text/html,<script>top.__pwned=1</script>",
-  "blob:": "blob:http://localhost:5173/0c1f8a52-5c3e-4b8e-9f0e-6f1d2a3b4c5d",
-  "file:": "file:///etc/passwd",
-  "about:": "about:srcdoc",
-  "relative path": "/widget/",
-  "protocol-relative": "//evil.example/",
-  "no scheme": "example.org/widget",
-  "starts with a template variable": "$matrix_widget_url",
-  "a template variable in the scheme": "http$x://example.org/",
-  empty: "",
-};
+const NOT_ABSOLUTE = "the URL is not an absolute http: or https: URL";
+/** The rule of `widget_url_problem`, on Node's URL parser: absolute, http(s), and the same URL when resolved against pages of its scheme on two hosts. */
+function reference(url: string): string | undefined {
+  if (!URL.canParse(url)) return NOT_ABSOLUTE;
+  const parsed = new URL(url);
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return `${parsed.protocol} URLs are not allowed, only http: and https:`;
+  const sameOn = (host: string) => new URL(url, `${parsed.protocol}//${host}/`).href === parsed.href;
+  return sameOn("a.invalid") && sameOn("b.invalid") ? undefined : NOT_ABSOLUTE;
+}
 
 describe("widgetUrlProblem", () => {
-  it.each(ALLOWED)("allows %j", (url) => {
+  it.each(ALLOWED)("allows %s", (_, url) => {
     expect(widgetUrlProblem(url)).toBeUndefined();
   });
 
-  it.each(Object.entries(REFUSED))("refuses %s", (_, url) => {
+  it.each(REFUSED)("refuses %s", (_, url) => {
     expect(widgetUrlProblem(url)).toEqual(expect.any(String));
+  });
+
+  it.each([...ALLOWED, ...REFUSED])("answers like the WHATWG URL parser of Node: %s", (_, url) => {
+    expect(widgetUrlProblem(url)).toBe(reference(url));
   });
 
   it("names the scheme, never the URL", () => {
     expect(widgetUrlProblem("JAVASCRIPT:alert(1)")).toBe("javascript: URLs are not allowed, only http: and https:");
-    expect(widgetUrlProblem("$matrix_widget_url")).toBe("the URL is not an absolute http: or https: URL");
+    expect(widgetUrlProblem("$matrix_widget_url")).toBe(NOT_ABSOLUTE);
   });
 });
 
 describe("resolveWidget", () => {
-  it.each(ALLOWED)("embeds %j directly or through the compat wrapper", (url) => {
-    expect(resolveWidget(newWidget(url), WRAPPER)).toMatchObject({ url, legacy: false });
-    const legacy = resolveWidget(legacyWidget(url), WRAPPER);
-    expect(legacy.legacy).toBe(true);
-    expect(new URL(legacy.url).searchParams.get("legacy_widget_url")).toBe(url);
+  it("embeds a new widget directly and a legacy widget through the compat wrapper, untemplated", () => {
+    expect(resolveWidget(newWidget("https://example.org/?x=$y"), WRAPPER)).toEqual({ url: "https://example.org/?x=$y", name: "W", legacy: false, usesWidgetApi: true });
+    const legacy = resolveWidget({ ...legacyWidget("https://example.org/?t=$title"), content: { url: "https://example.org/?t=$title", data: { title: "Notes & more" } } }, WRAPPER);
+    expect(legacy).toMatchObject({ name: "w", legacy: true, usesWidgetApi: true });
+    const query = new URL(legacy.url).searchParams;
+    expect(legacy.url.startsWith(`${WRAPPER}?`)).toBe(true);
+    expect([...query.keys()]).toEqual(["legacy_widget_url", "legacy_widget_id", "legacy_wait_for_iframe_load", "legacy_widget_data"]);
+    expect(query.get("legacy_widget_url")).toBe("https://example.org/?t=$title");
+    expect(JSON.parse(query.get("legacy_widget_data")!)).toEqual({ title: "Notes & more" });
   });
 
-  it.each(Object.entries(REFUSED))("refuses %s for both widget kinds", (_, url) => {
-    expect(() => resolveWidget(newWidget(url), WRAPPER)).toThrow(/http: and https:|http: or https:/);
-    expect(() => resolveWidget(legacyWidget(url), WRAPPER)).toThrow(/http: and https:|http: or https:/);
+  it.each(REFUSED)("refuses %s for both widget kinds", (_, url) => {
+    expect(() => resolveWidget(newWidget(url), WRAPPER)).toThrow(widgetUrlProblem(url));
+    expect(() => resolveWidget(legacyWidget(url), WRAPPER)).toThrow(widgetUrlProblem(url));
   });
 
-  it("refuses a compat wrapper URL that is not http(s) (`?wrapper=`)", () => {
+  it("refuses a compat wrapper URL that is not http(s) (`?wrapper=`), and an m.widget without a name (MSC4411: removed)", () => {
     expect(() => resolveWidget(legacyWidget("https://example.org/"), "javascript:top.__pwned=1//")).toThrow("compat wrapper: javascript: URLs are not allowed");
+    expect(() => resolveWidget({ type: "m.widget", state_key: "w", content: { url: "https://example.org/" } }, WRAPPER)).toThrow("the content has no name");
+  });
+
+  it("hands the event's own URL and state key to the driver (the bindings drop a leading U+FEFF of a string they return)", () => {
+    // Accepted after the round trip, refused as the event has it: the iframe would resolve it against the host page.
+    expect(() => resolveWidget(newWidget("﻿https://example.org/"), WRAPPER)).toThrow(NOT_ABSOLUTE);
+    const legacy = resolveWidget({ ...legacyWidget("https://example.org/"), state_key: "﻿w" }, WRAPPER);
+    expect(new URL(legacy.url).searchParams.get("legacy_widget_id")).toBe("﻿w");
+  });
+
+  it("puts the widget into the compat wrapper's query, replacing what a `?wrapper=` URL planted there", () => {
+    const planted = `${WRAPPER}?legacy_widget_url=javascript:top.__pwned=1//&legacy_widget_id=evil&log_level=debug`;
+    const query = new URL(resolveWidget(legacyWidget("https://example.org/"), planted).url).searchParams;
+    expect([...query]).toEqual([
+      ["log_level", "debug"],
+      ["legacy_widget_url", "https://example.org/"],
+      ["legacy_widget_id", "w"],
+      ["legacy_wait_for_iframe_load", "true"],
+    ]);
+  });
+
+  it("knows the event types of the driver", () => {
+    expect(WIDGET_EVENT_TYPES).toEqual(widgetEventTypes());
   });
 });
 
@@ -80,16 +107,19 @@ describe("localWidgetKey", () => {
 });
 
 describe("roomWidgets", () => {
+  const parser = widgetEventParser(WRAPPER);
+
   it("lists a refused widget with the problem (disabled in the room overview) and nothing to run", () => {
-    const [refused] = roomWidgets({ widgetEvents: [legacyWidget("javascript:top.__pwned=1//")] });
+    const [refused] = roomWidgets(parser, { widgetEvents: [legacyWidget("javascript:top.__pwned=1//")] });
     expect(refused).toMatchObject({ key: "im.vector.modular.widgets/w", name: "W", problem: "javascript: URLs are not allowed, only http: and https:" });
     expect(refused.widget).toBeUndefined();
   });
 
-  it("lists the local widgets after the room's, marked and keyed apart, each checked like a room widget", () => {
+  it("lists the local widgets after the room's, marked and keyed apart, each checked like a room widget; removed ones not at all", () => {
     const room = newWidget("https://room.example.org/");
+    const nameless = { type: "m.widget", state_key: "nameless", content: { url: "https://example.org/" } };
     const local = [newWidget("https://local.example.org/"), legacyWidget("javascript:top.__pwned=1//"), { type: "m.widget", state_key: "gone", content: {} }];
-    const widgets = roomWidgets({ widgetEvents: [room] }, local);
+    const widgets = roomWidgets(parser, { widgetEvents: [room, nameless] }, local);
     expect(widgets.map((w) => [w.key, w.local ?? false])).toEqual([
       ["m.widget/w", false],
       ["local:m.widget/w", true],
@@ -99,6 +129,6 @@ describe("roomWidgets", () => {
     expect(widgets[2]).toMatchObject({ problem: "javascript: URLs are not allowed, only http: and https:", local: true });
     expect(widgets[2].widget).toBeUndefined();
     // A room without its widgets loaded yet still lists the local ones.
-    expect(roomWidgets(undefined, [local[0]]).map((w) => w.key)).toEqual(["local:m.widget/w"]);
+    expect(roomWidgets(parser, undefined, [local[0]]).map((w) => w.key)).toEqual(["local:m.widget/w"]);
   });
 });

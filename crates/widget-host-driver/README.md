@@ -50,13 +50,45 @@ The driver subscribes to the backend itself once `host:…forward_event.*`, `hos
 client does not push events anywhere.
 
 * Legacy widgets (`im.vector.modular.widgets`): embed them through
-  `packages/widget-compat-wrapper` and call
+  `packages/widget-compat-wrapper` (`WidgetDefinition::embed` builds its URL, below) and call
   `driver.set_auto_approved(vec![Capability::GetMatrixContext, Capability::GetClientContext])`.
   The driver understands only the new capability and action names
   (`docs/spec-appendix/capability-naming-proposal.md`); the wrapper translates the legacy ones.
 * Client pushes: `update_theme`, `update_language`, `update_visibility`. Each is sent only if
   the widget holds its `host:…` capability.
-* `WidgetStateEventContent` parses the `m.widget` state event (MSC4411).
+
+## Which widgets a room has: the state event parser
+
+Before there is a driver, the client reads the widget state events of the room
+(`WIDGET_EVENT_TYPES`: MSC4411 `m.widget`, its unstable `org.matrix.msc4411.widget`, and the
+legacy `im.vector.modular.widgets`) and decides what to list and what to load. Both steps are here,
+so every client decides the same:
+
+```rust
+use widget_host_driver::WidgetDefinition;
+
+// 1. List: `Err(Removed)` for a removed widget (MSC4411: no string `url` or, for `m.widget`, `name`).
+let widget = WidgetDefinition::parse(&event_type, &state_key, &content)?;
+show_in_list(&widget.name, widget.avatar_url.as_deref(), &widget.url /* MSC4411: show it with the sender */);
+
+// 2. Open: the URL check, and for a legacy widget the compat wrapper's URL.
+match widget.embed(Some("https://wrapper.example/"), /* allow_http: */ false) {
+    Ok(embed) => load_webview(&embed.url, embed.uses_widget_api), // wait for notify_ready if uses_widget_api
+    Err(refused) => show_disabled(&refused.to_string()), // "javascript: URLs are not allowed, only https:"
+}
+```
+
+* `widget_url_problem(url, allow_http)` is the URL check: only absolute `https:` URLs (and `http:`
+  with `allow_http`, which MSC4411 allows in developer tools), parsed as a browser parses an
+  iframe's `src` (WHATWG, the `url` crate). A URL that an iframe resolves against the page that
+  embeds it (`https:example.org`, `http:/path`) is refused: it has to name its own host (`//` after
+  the scheme). The texts name the scheme, never the URL.
+* An MSC4411 widget loads its own `url`. A legacy widget loads the compat wrapper with
+  `legacy_widget_url` (untemplated), `legacy_widget_id`, `legacy_wait_for_iframe_load` and
+  `legacy_widget_data` in its query (see the wrapper's README; they replace any the wrapper URL
+  has), and always uses the widget API.
+* Foreign code calls `parse_widget_state_event`, `embed_widget`, `widget_url_problem` and
+  `widget_event_types` (TypeScript: `parseWidgetStateEvent`, `embedWidget`, …).
 
 ### More diagrams
 

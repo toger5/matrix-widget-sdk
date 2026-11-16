@@ -36,7 +36,8 @@ const DEFAULT_LAST_EVENTS = 50;
  */
 export function RoomOverview({ main, panelId, roomId, devTools, devBackend, timelineOpen = false, initialAddWidget }: RoomOverviewProps) {
   const dispatch = useDispatch();
-  const details = useViewEnv().useRoomDetails(roomId);
+  const { useRoomDetails, widgetEvents } = useViewEnv();
+  const details = useRoomDetails(roomId);
   const [lastEvents, setLastEvents] = useState(String(DEFAULT_LAST_EVENTS));
   /** The open "Add widget" form; `edit`: it edits this local widget. */
   const [adding, setAdding] = useState<{ edit?: StateEvent } | null>(initialAddWidget ? {} : null);
@@ -48,7 +49,7 @@ export function RoomOverview({ main, panelId, roomId, devTools, devBackend, time
   // The local widget being edited was removed (its remove button, another panel): its form closes, so "Save" cannot add it again.
   const editing = adding?.edit;
   if (editing && !local.some((e) => localWidgetKey(e) === localWidgetKey(editing))) setAdding(null);
-  const widgets = roomWidgets(room, local);
+  const widgets = roomWidgets(widgetEvents, room, local);
   const write = main.widgetWrite?.roomId === roomId ? main.widgetWrite : undefined;
   // A refusal belongs to the form that sent it: opening or closing a form forgets it.
   const openForm = (edit?: StateEvent) => {

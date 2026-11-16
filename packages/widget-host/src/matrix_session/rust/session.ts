@@ -26,7 +26,8 @@ import { needsVerification, onVerificationChanged, startEmojiVerification, verif
 import { AccountStore } from "../js/accountStore";
 import { RoomTimelines } from "../roomTimelines";
 import { AVATAR_SIZE, AvatarCache } from "../../lib/avatarCache";
-import { describesWidget, WIDGET_EVENT_TYPES, type StateEvent } from "../../widgetStateEvent";
+import { describesWidget } from "../../lib/widgetEvents";
+import { WIDGET_EVENT_TYPES, type StateEvent } from "../../widgetStateEvent";
 import {
   StoredLoginInvalidError,
   type AccountInfo,

@@ -24,8 +24,10 @@
 //! open question, so one answer decides all of them.
 //! [`WidgetHostDriver::revoke_capabilities`] takes capabilities away again.
 //!
-//! [`WidgetStateEventContent`] describes the `m.widget` state event (MSC4411) the client reads
-//! from room state to know which widgets to render.
+//! [`WidgetDefinition`] reads the widget state events of a room (MSC4411 `m.widget`, and the
+//! legacy `im.vector.modular.widgets`): [`WidgetDefinition::parse`] tells which events are widgets,
+//! [`WidgetDefinition::embed`] what a client loads for one, after the URL check
+//! ([`widget_url_problem`]); a legacy widget is loaded through the compat wrapper.
 //!
 //! With the `uniffi` feature this crate's `cdylib` carries the UniFFI scaffolding of this crate,
 //! `widget-matrix-backend` and `widget-actions`; it is what the Kotlin/Swift/Python bindings and
@@ -48,15 +50,18 @@ mod error;
 pub mod logging;
 mod platform;
 mod widget_event;
+mod widget_url;
 
 pub use driver::{DriverSnapshot, WidgetHostDriver};
 pub use error::{DriverError, PlatformError};
 pub use platform::WidgetHostPlatform;
 pub use widget_actions;
 pub use widget_event::{
-    WidgetStateEventContent, WIDGET_EVENT_TYPE, WIDGET_EVENT_TYPE_LEGACY, WIDGET_EVENT_TYPE_UNSTABLE,
+    embed_widget, parse_widget_state_event, widget_event_types, LegacyWidget, WidgetDefinition, WidgetEmbed,
+    WidgetEventError, WIDGET_EVENT_TYPE, WIDGET_EVENT_TYPES, WIDGET_EVENT_TYPE_LEGACY, WIDGET_EVENT_TYPE_UNSTABLE,
 };
 pub use widget_matrix_backend::{self, MatrixBackend};
+pub use widget_url::widget_url_problem;
 
 #[cfg(feature = "uniffi")]
 uniffi::setup_scaffolding!();

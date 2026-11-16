@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from
 
 import { activeWorkspace, type MainViewModel, type PanelId, type RoomId, type SettingsViewModel, type TabId, type TabViewModel } from "../../appViewModel";
 import type { RoomSummary } from "../../session";
-import { useDispatch } from "../env";
+import { useDispatch, useViewEnv } from "../env";
 import { localWidgetsOf, roomWidgets } from "../helpers";
 import { Avatar, Icon, initials } from "../ui/atoms";
 import { roomTabDomId, tabDomId, tabInfo, tabPanelDomId, type TabInfo } from "./tabInfo";
@@ -36,6 +36,7 @@ const FADE = 36;
  */
 export function TabBar({ main, settings, panelId, roomId, room, roomName, tabs, activeTabId, fullscreen = false }: TabBarProps) {
   const dispatch = useDispatch();
+  const { widgetEvents } = useViewEnv();
   const devTools = activeWorkspace(main)?.devTools ?? {};
   const tablistRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
@@ -154,7 +155,7 @@ export function TabBar({ main, settings, panelId, roomId, room, roomName, tabs, 
   const tabStop = roomSelected || fullscreen ? undefined : activeTabId;
   // Alt+W closes the shown tab while the panel has a tab, else the panel (`hasTab`).
   const altWClosesTab = tabs.length > 0;
-  const widgetCount = roomWidgets(room, localWidgetsOf(main, roomId)).length;
+  const widgetCount = roomWidgets(widgetEvents, room, localWidgetsOf(main, roomId)).length;
 
   return (
     <>
@@ -200,7 +201,7 @@ export function TabBar({ main, settings, panelId, roomId, room, roomName, tabs, 
           onScroll={measure}
         >
           {tabs.map((tab) => {
-            const info = tabInfo(main, room, tab, roomName);
+            const info = tabInfo(main, room, tab, roomName, widgetEvents);
             const active = tab.id === activeTabId;
             const widgetId = tab.kind === "widget" ? tab.widgetId : undefined;
             const devOpen = widgetId !== undefined && !!devTools[widgetId]?.open;
@@ -314,7 +315,7 @@ export function TabBar({ main, settings, panelId, roomId, room, roomName, tabs, 
       {overflow.overflowing && menuOpen && (
         <div ref={menuRef} className="dropdown tab-menu" role="menu" aria-label={`All tabs of ${roomName}`} onKeyDown={onMenuKeyDown}>
           {tabs.map((tab) => {
-            const info = tabInfo(main, room, tab, roomName);
+            const info = tabInfo(main, room, tab, roomName, widgetEvents);
             const active = tab.id === activeTabId;
             return (
               <button

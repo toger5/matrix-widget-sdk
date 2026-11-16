@@ -1,6 +1,7 @@
 /** What the tab bar, the "all tabs" menu and the tab panel need to know about a tab. Pure derivations. */
 import type { MainViewModel, PanelId, TabId, TabViewModel, WidgetKey } from "../../appViewModel";
 import type { RoomSummary } from "../../session";
+import type { WidgetEventParser } from "../../widgetStateEvent";
 import { localWidgetsOf, roomWidgets } from "../helpers";
 
 /** An id that is safe in `id` / `aria-controls` (those are space separated lists). */
@@ -24,13 +25,13 @@ export interface TabInfo {
   load?: "loading" | "ready" | "failed";
 }
 
-/** `roomName`: the name of the panel's room (the title of the timeline tab). */
-export function tabInfo(main: MainViewModel, room: RoomSummary | undefined, tab: TabViewModel, roomName: string): TabInfo {
+/** `roomName`: the name of the panel's room (the title of the timeline tab). `widgetEvents`: `ViewEnv.widgetEvents`. */
+export function tabInfo(main: MainViewModel, room: RoomSummary | undefined, tab: TabViewModel, roomName: string, widgetEvents: WidgetEventParser): TabInfo {
   if (tab.kind === "timeline") return { name: "Timeline", title: `Timeline of ${roomName}`, closeLabel: "Close the timeline", pinned: false };
   const widget = main.widgets[tab.widgetId];
   // A tab can outlive its widget for a moment (the layout is restored before the widgets start).
   const key = widget?.widgetKey ?? (room && tab.widgetId.startsWith(`${room.id}|`) ? tab.widgetId.slice(room.id.length + 1) : tab.widgetId);
-  const name = widget?.widget.name ?? roomWidgets(room, room && localWidgetsOf(main, room.id)).find((w) => w.key === key)?.name ?? "Widget";
+  const name = widget?.widget.name ?? roomWidgets(widgetEvents, room, room && localWidgetsOf(main, room.id)).find((w) => w.key === key)?.name ?? "Widget";
   const pinned = !!widget?.alwaysOnScreen;
   return { name, title: `${name}${pinned ? " · always on screen" : ""}`, closeLabel: `Close ${name}`, widgetKey: key, pinned, load: widget?.load.state };
 }

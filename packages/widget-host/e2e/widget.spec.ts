@@ -337,6 +337,20 @@ test("a widget URL that is not http(s) is refused, also by a link that opens it 
   await expect(fresh.page.locator("iframe")).toHaveCount(0);
   expect(await pwned()).toBeUndefined();
 
+  // An http(s) URL without `//` is relative in an iframe of a page with the same scheme: this one
+  // is the host's own compat wrapper (its origin) with a `javascript:` widget, even approved at once.
+  // Also when it names a host the URL check resolves against (`base.invalid`, `a.invalid`).
+  for (const host of ["", "base.invalid/../", "a.invalid/../"]) {
+    const disguised = `http:/${host}widget_compatibility_wrapper/?legacy_widget_url=javascript:top.__pwned=document.domain//&legacy_widget_id=evil`;
+    const wrapper = { type: "m.widget", state_key: "disguised", content: { name: "Disguised wrapper", url: disguised, uses_widget_api: true } };
+    await fresh.page.goto(`/?mode=memory&autoload=1&autoApprove=1&event=${encodeURIComponent(JSON.stringify(wrapper))}`);
+    const relative = fresh.button("Disguised wrapper cannot be opened: the URL is not an absolute http: or https: URL");
+    await expect(relative).toHaveAttribute("aria-disabled", "true");
+    expect((await fresh.main()).widgets).toEqual({});
+    await expect(fresh.page.locator("iframe")).toHaveCount(0);
+    expect(await pwned()).toBeUndefined();
+  }
+
   // A seed (`populate`, `?seed=`) that opens a new-type widget whose scheme hides behind a space and capitals.
   const evil = { type: "m.widget", state_key: "evil", content: { name: "Evil widget", url: " JAVASCRIPT:top.__pwned=1//", uses_widget_api: true } };
   await fresh.populate({ userId: "@alice:dev.local", rooms: [{ id: LAB, name: "Widget lab", widgets: [evil] }], sidePanel: null, open: [{ room: LAB, widgets: ["m.widget/evil"] }] });

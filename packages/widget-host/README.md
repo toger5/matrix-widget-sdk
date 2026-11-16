@@ -30,7 +30,7 @@ The app is built as MVVM from the design in [`appDesign.md`](appDesign.md) (mock
 - `src/matrix_session/rust/` is the same on matrix-rust-sdk (`../matrix-sdk-uniffi-js`, with native sliding sync). A build has one SDK or the other, see "Choosing the Matrix SDK" below. This implementation has not run against a homeserver yet. The SDK API it adds is in [`../matrix-sdk-uniffi-js/README.md`](../matrix-sdk-uniffi-js/README.md) ("API added to the SDK"), its open questions in [`implementation_findings.md`](implementation_findings.md) ("Matrix sessions").
 - `src/matrix_session/memory/devBackend.ts` is the DevBackend: the same `LiveSession` on the crate's `InMemoryBackend`, with several mocked rooms, an editing API for the Dev tools (the DevBackendView) and a JSON seed format (`seed.ts`).
 - `src/lib/` holds what is neither a view nor a session: the store of approved capabilities, the avatar cache, log formatting and the driver's log.
-- `src/widgetStateEvent.ts` decides how a widget state event is embedded (below).
+- `src/lib/widgetEvents.ts` reads widget state events with the driver's parser (`parseWidgetStateEvent`, `embedWidget` of the bindings): which events are widgets and what their iframe loads (below). Views get it as `ViewEnv.widgetEvents`; `src/widgetStateEvent.ts` keeps the host's types, keys and event types.
 
 ## Logged in
 
@@ -67,17 +67,21 @@ hands it to the driver of each widget of that room like any other `MatrixBackend
 - **Loads a widget from a widget state event** of a mocked room. The event decides how it is embedded:
   - `m.widget` / `org.matrix.msc4411.widget` → `content.url` is loaded directly; the iframe is
     hidden until `notify_ready` when `uses_widget_api` is `true`. If the widget does not send it
-    within 15 seconds, the loading state turns into an error.
+    within 15 seconds, the loading state turns into an error. An event whose content has no string
+    `name` or `url` is a removed widget (MSC4411) and is not listed.
   - `im.vector.modular.widgets` (legacy) → `content.url` is handed **untemplated** to the compat
     wrapper: `<wrapper url>?legacy_widget_url=...&legacy_widget_id=...&legacy_wait_for_iframe_load=...[&legacy_widget_data=...]`.
     The wrapper resolves `$matrix_user_id` & co. itself through the `get_matrix_context` /
     `get_client_context` actions; this host has no template engine.
   - A `content.url` (or `wrapper=` URL) that is not an absolute `http:` / `https:` URL is not
     embedded: the widget is listed disabled in the room overview, with the reason. A legacy URL is checked untemplated,
-    so one that starts with a `$variable` is refused.
+    so one that starts with a `$variable` is refused. So is a URL that an iframe would resolve against
+    the host page (`https:example.org`, `http:/path`: without `//` they are pages of the host's origin).
   Send the event as state in the Dev tools of the DevBackend and the widget appears in the room overview (the
   URL parameters below start with the two test widgets). This is the logic a real client
-  needs during the transition, in `src/widgetStateEvent.ts`, and the logged-in mode uses the same.
+  needs during the transition. It is the driver's (`WidgetDefinition::parse` / `embed` in
+  `crates/widget-host-driver/src/widget_event.rs`), so native clients get the same; the logged-in
+  mode uses it too.
 - **Drives the protocol**: every message from the widget iframe goes into the driver, every
   message from the driver goes to the iframe. Both directions are shown in the **Messages** panel of the widget's dev tools.
 - **Capability prompt**: when the widget requests capabilities you get a card with a summary in plain

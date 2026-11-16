@@ -1,4 +1,11 @@
-/** Decide how to embed a widget from its state event: directly (MSC4411), via the compat wrapper (legacy), or not at all (not an http(s) URL). */
+/**
+ * Widget state events as the host's types, keys and constants. Pure: views may import it.
+ *
+ * What an event means is decided by the driver's parser (`parse_widget_state_event` and
+ * `embed_widget` of `widget-host-driver`): which events describe a widget, the URL check, how a
+ * legacy widget is loaded through the compat wrapper. The model and the controller use it through
+ * `src/lib/widgetEvents.ts`; views get it as `ViewEnv.widgetEvents` (a `WidgetEventParser`).
+ */
 
 export interface StateEvent {
   type: string;
@@ -6,21 +13,33 @@ export interface StateEvent {
   content: Record<string, unknown>;
 }
 
+/** What the host puts into a widget's iframe: `embed_widget` of the driver, with the widget's name. */
 export interface ResolvedWidget {
   url: string;
   name: string;
+  /** Loaded through the compat wrapper (`im.vector.modular.widgets`). */
   legacy: boolean;
-  /** `uses_widget_api` (MSC4412): set up the widget API and hide the iframe until `notify_ready` arrives. */
+  /** `uses_widget_api` (MSC4412): set up the widget API and hide the iframe until `notify_ready` arrives. Always for a legacy widget. */
   usesWidgetApi: boolean;
 }
 
-const NEW_TYPES = ["m.widget", "org.matrix.msc4411.widget"];
-const LEGACY_TYPES = ["im.vector.modular.widgets"];
-/** Every state event type that describes a widget. */
-export const WIDGET_EVENT_TYPES = [...NEW_TYPES, ...LEGACY_TYPES];
+/** A state event that describes a widget: its name, and what to load (`widget`) or why it must not be loaded (`problem`). */
+export interface WidgetResolution {
+  name: string;
+  widget?: ResolvedWidget;
+  problem?: string;
+}
 
-/** Whether a widget state event describes a widget: removing a widget leaves an event without a `url` behind. */
-export const describesWidget = (event: StateEvent) => typeof event.content.url === "string";
+/** The driver's widget state event parser, as views get it (`ViewEnv.widgetEvents`). */
+export interface WidgetEventParser {
+  /** The widget a state event describes, or `undefined` when it describes none (another event type, a removed widget). */
+  resolve(event: StateEvent): WidgetResolution | undefined;
+  /** Why a URL cannot be loaded as a widget, or `undefined` when it can (the check in front of every widget iframe). */
+  urlProblem(url: string): string | undefined;
+}
+
+/** Every state event type that describes a widget, the MSC4411 ones first: `widgetEventTypes()` of the driver (a test compares them). */
+export const WIDGET_EVENT_TYPES = ["m.widget", "org.matrix.msc4411.widget", "im.vector.modular.widgets"];
 
 /** Identifies a widget within a room: two event types may use the same state key. */
 export const widgetKey = (event: Pick<StateEvent, "type" | "state_key">) => `${event.type}/${event.state_key}`;
@@ -34,53 +53,6 @@ export const LOCAL_WIDGET_PREFIX = "local:";
  * local widget never shares its key (its instance id, its remembered capabilities) with a room widget.
  */
 export const localWidgetKey = (event: Pick<StateEvent, "type" | "state_key">) => `${LOCAL_WIDGET_PREFIX}${widgetKey(event)}`;
-
-/**
- * Why a widget URL cannot be embedded, or `undefined` when it can: only absolute `http:` and
- * `https:` URLs. A `javascript:`, `data:`, `blob:`, `about:` or relative URL would run in, or
- * inherit, the origin of the page that loads it; for a legacy widget that is the compat wrapper,
- * which is served from the host's origin. Parsed as the browser parses an iframe's `src`: leading
- * spaces and control characters, tabs and newlines are dropped, the scheme is case-insensitive.
- * A legacy URL is checked as the template it is: one that starts with a `$variable` has no scheme
- * and is refused, since the variable could expand to one; after the scheme a variable cannot
- * change it (the wrapper URI-encodes what it fills in).
- */
-export function widgetUrlProblem(url: string): string | undefined {
-  if (!URL.canParse(url)) return "the URL is not an absolute http: or https: URL";
-  const { protocol } = new URL(url);
-  return protocol === "http:" || protocol === "https:" ? undefined : `${protocol} URLs are not allowed, only http: and https:`;
-}
-
-/**
- * The only transition-specific code a client needs, and the one place where a state event
- * becomes something the host puts into an iframe: it throws for a URL `widgetUrlProblem` refuses.
- * The host never templates URLs: a legacy widget's `content.url` is handed to the compat wrapper
- * as is, and the wrapper resolves `$matrix_user_id` & co. itself via the `get_matrix_context` /
- * `get_client_context` actions.
- */
-export function resolveWidget(event: StateEvent, wrapperUrl: string): ResolvedWidget {
-  const { content } = event;
-  if (typeof content.url !== "string") throw new Error("removed widget or missing `url`");
-  const problem = widgetUrlProblem(content.url);
-  if (problem) throw new Error(problem);
-  const name = typeof content.name === "string" ? content.name : event.state_key;
-
-  if (NEW_TYPES.includes(event.type)) {
-    return { url: content.url, name, legacy: false, usesWidgetApi: content.uses_widget_api === true };
-  }
-  if (!LEGACY_TYPES.includes(event.type)) throw new Error(`not a widget state event: ${event.type}`);
-  // `?wrapper=` can replace the wrapper by a link, so its URL is checked too.
-  const wrapperProblem = widgetUrlProblem(wrapperUrl);
-  if (wrapperProblem) throw new Error(`compat wrapper: ${wrapperProblem}`);
-
-  const query = new URLSearchParams({
-    legacy_widget_url: content.url,
-    legacy_widget_id: event.state_key,
-    legacy_wait_for_iframe_load: String(content.waitForIframeLoad !== false),
-  });
-  if (content.data && Object.keys(content.data).length > 0) query.set("legacy_widget_data", JSON.stringify(content.data));
-  return { url: `${wrapperUrl}?${query}`, name, legacy: true, usesWidgetApi: true };
-}
 
 /**
  * Capabilities granted to a legacy widget (behind the compat wrapper) without a prompt, because a

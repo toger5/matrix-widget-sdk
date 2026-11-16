@@ -35,9 +35,9 @@ All paths below are relative to `packages/widget-host/`.
 | layer | files | may import | must not import |
 |---|---|---|---|
 | view model | `src/appViewModel.ts` | types from `src/session.ts`, `src/widgetStateEvent.ts` | anything with runtime state |
-| view | `src/views/**` | `appViewModel`, `views/env` (`useDispatch`, `useViewEnv`), `views/ui`, `views/helpers`, `src/widgetStateEvent.ts` (pure), types from `src/session.ts` | `src/app/**`, `src/lib/**`, `src/matrix_session/**`, the bindings, an SDK |
+| view | `src/views/**` | `appViewModel`, `views/env` (`useDispatch`, `useViewEnv`), `views/ui`, `views/helpers`, `src/widgetStateEvent.ts` (pure: types, keys, event types), types from `src/session.ts` | `src/app/**`, `src/lib/**`, `src/matrix_session/**`, the bindings, an SDK |
 | controller | `src/app/controller.ts`; pure helpers `src/app/layout.ts`, `persistence.ts`, `store.ts` | everything below | views (except the pure `views/helpers`) |
-| model / runtime | `src/session.ts`, `src/app/runtime/` (`widgetRuntime.ts`, `deviceVerification.ts`), `src/matrix_session/**`, `src/lib/**`, `src/widgetStateEvent.ts` | bindings, `src/app/store.ts`, view model types; an SDK only inside `src/matrix_session/{js,rust}/` | views, the controller |
+| model / runtime | `src/session.ts`, `src/app/runtime/` (`widgetRuntime.ts`, `deviceVerification.ts`), `src/matrix_session/**`, `src/lib/**` (`widgetEvents.ts`: the driver's state event parser) | bindings, `src/app/store.ts`, view model types; an SDK only inside `src/matrix_session/{js,rust}/` | views, the controller |
 | composition root | `src/main.tsx` (shadow root, bindings init, controller, test hook), `src/app/AppRoot.tsx` (`ViewEnv` on the controller, widget iframes) | all | |
 | data (any layer imports it) | `src/exampleWidgets.ts` (state events of the test widgets; their URL comes from `VITE_TEST_WIDGETS_URL` at build time) | types only | anything else |
 
@@ -67,6 +67,10 @@ grep -rlE '(from |import\()"(matrix-js-sdk|matrix-sdk-uniffi-js)' src | grep -vE
   `DevBackend.subscribe` / `snapshot()`, `LiveSession.roomDetails` / `timeline` / `roomState`. Views read it with the hooks of
   `useViewEnv()`, implemented in `viewEnv()` of `src/app/AppRoot.tsx` and faked in
   `src/views/storyEnv.tsx`. A new hook needs both, plus its default in `src/views/env.tsx`.
+- What a view needs from the bindings reaches it as a value or a function, never as an import:
+  through the view model (`CapabilityPromptViewModel.unknown`, from `capabilityIsKnown`) or
+  through `ViewEnv` (`widgetEvents`, the driver's widget state event parser: pass it to
+  `roomWidgets`; the widget forms use its `urlProblem`). Stories get a fake (no wasm).
 - State only one view needs (a draft, a hover, an open menu) stays in `useState`.
 - `src/app/layout.ts` holds the pure transitions of panels, tabs and dev tools; they are unit
   tested in `test/layout.test.ts`.
@@ -96,9 +100,12 @@ grep -rlE '(from |import\()"(matrix-js-sdk|matrix-sdk-uniffi-js)' src | grep -vE
   driver) and starts a new generation.
 - A widget runs once per account (`WidgetInstanceId` = `<room id>|<widget key>`). Switching the
   account stops every widget; its workspace starts them again.
-- `src/widgetStateEvent.ts` decides which state events are widgets and how they are embedded
-  (directly, or through the compat wrapper for `im.vector.modular.widgets`), and which
-  capabilities legacy widgets get without asking (`LEGACY_AUTO_APPROVED`).
+- Which state events are widgets and how they are embedded (directly, or through the compat
+  wrapper for `im.vector.modular.widgets`) is the driver's parser (`parse_widget_state_event`,
+  `embed_widget`, `widget_url_problem` in `crates/widget-host-driver`), used through
+  `src/lib/widgetEvents.ts` (`describesWidget`, `resolveWidget`, `hostWidgetEvents`, `wrapperUrl`).
+  `src/widgetStateEvent.ts` keeps the host's types and keys (`widgetKey`, `localWidgetKey`), the
+  event types, and which capabilities legacy widgets get without asking (`LEGACY_AUTO_APPROVED`).
 
 ## The session seam
 
@@ -188,11 +195,12 @@ their tests) is the `matrix-session` skill (`.claude/skills/matrix-session/SKILL
   hook (per room, on demand) or `AccountDataViewModel` (filled by `watchRooms` in the controller).
 - **Something from the driver**: `widgetRuntime.ts` (driver methods, `DriverSnapshot`) →
   `WidgetRuntimeEvents` or the dev tools store → controller. New driver API is a Rust change:
-  `widget-api-change` skill.
+  `widget-api-change` skill; rebuilding the bindings (and restarting Vite after it): the
+  `rust-host-crates` skill.
 
 ## Run and look at it
 
-- Once: `npm run bindings` and `npm run wasm` from the root, and the rust SDK bindings
+- Once (and after every Rust change, then restart the dev server: it caches the wasm): `npm run bindings` and `npm run wasm` from the root, and the rust SDK bindings
   (`npm run bindings -w packages/matrix-sdk-uniffi-js`, slow); tsc and vitest need both bindings
   packages.
 - `npm run dev` from the root starts the host (5173) and the test widgets (5175).

@@ -14,6 +14,7 @@ import { createContext, useContext } from "react";
 
 import { loggableIntent, type AppIntent, type Loadable, type MockedRoomData, type RoomId, type WidgetDevToolsData, type WidgetInstanceId } from "../appViewModel";
 import type { RawEvent, RoomDetails, RoomTimeline } from "../session";
+import type { WidgetEventParser } from "../widgetStateEvent";
 
 export interface ViewEnv {
   /** Send an intent to the controller. Stable for the lifetime of the app. */
@@ -36,6 +37,11 @@ export interface ViewEnv {
   useRoomState: (roomId: RoomId, version: string | undefined) => RoomStateData;
   /** Resolve an `mxc://` avatar to a URL an `<img>` can show (`LiveSession.avatar`). */
   avatar: (mxcUrl: string) => Promise<string | undefined>;
+  /**
+   * The driver's widget state event parser (`src/lib/widgetEvents.ts`): which state events are
+   * widgets, what their iframe loads, the URL check of the widget forms. Pass it to `roomWidgets`.
+   */
+  widgetEvents: WidgetEventParser;
 }
 
 /** What `useRoomState` returns. */
@@ -74,6 +80,8 @@ export const DEFAULT_VIEW_ENV: ViewEnv = {
   useRoomTimeline: () => LOADING_TIMELINE,
   useRoomState: () => LOADING_STATE,
   avatar: async () => undefined,
+  // Without the app (no provider) nothing is a widget and no URL passes.
+  widgetEvents: { resolve: () => undefined, urlProblem: () => "no widget parser" },
 };
 
 export const ViewEnvContext = createContext<ViewEnv>(DEFAULT_VIEW_ENV);

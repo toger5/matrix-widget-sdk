@@ -61,7 +61,8 @@ envelope fields and `uses_widget_api` are not prefixed) → Dependencies (MSC441
 
 | MSC part | here |
 |---|---|
-| MSC4411 `m.widget` content and event types (`m.widget`, `org.matrix.msc4411.widget`, legacy `im.vector.modular.widgets`) | `crates/widget-host-driver/src/widget_event.rs` (`WidgetStateEventContent`); the browser host still decides with `packages/widget-host/src/widgetStateEvent.ts` |
+| MSC4411 `m.widget` content and event types (`m.widget`, `org.matrix.msc4411.widget`, legacy `im.vector.modular.widgets`): which events are widgets (removed ones have no string `name` / `url`), what a client loads (legacy: through the compat wrapper) | `crates/widget-host-driver/src/widget_event.rs` (`WidgetDefinition::parse` / `embed`; exported as `parse_widget_state_event`, `embed_widget`); the browser host calls it through `packages/widget-host/src/lib/widgetEvents.ts` |
+| MSC4411 "Clients MUST validate the url" | `crates/widget-host-driver/src/widget_url.rs` (`widget_url_problem`: absolute http(s), WHATWG, not relative to the embedding page; table `tests/widget_urls.json`) |
 | MSC4411 iframe `sandbox` / `allow` | `packages/widget-host/src/app/AppRoot.tsx` |
 | MSC4411 URL templates (removed; legacy widgets only) | `packages/widget-compat-wrapper/src/template.ts` |
 | MSC4412 envelope, namespaces (`MSC4412_NAMESPACE`, `PLACEHOLDER_NAMESPACE`, `STABLE_NAMESPACE`), errors (`WidgetError`), timeouts | `crates/widget-actions/src/wire.rs` |
@@ -69,7 +70,7 @@ envelope fields and `uses_widget_api` are not prefixed) → Dependencies (MSC441
 | MSC4412 capability format | `crates/widget-actions/src/capabilities.rs`; all actions and their capabilities in `docs/spec-appendix/capability-naming-proposal.md` |
 | MSC4412 core actions | `crates/widget-actions/src/actions/widget/{notify_ready,request_capabilities}.rs`, `crates/widget-actions/src/actions/host/update_capabilities.rs`; handshake and approval in `crates/widget-host-driver/src/driver/` and `platform.rs` |
 | MSC4412 transport | widget: `crates/widget-base-sdk/src/wasm.rs`; host: `packages/widget-host/src/app/runtime/widgetRuntime.ts` |
-| MSC4412 `uses_widget_api` | `widget_event.rs`, `widgetStateEvent.ts` |
+| MSC4412 `uses_widget_api` | `widget_event.rs` (`WidgetDefinition.uses_widget_api`, `WidgetEmbed.uses_widget_api`); the host's runtime: `packages/widget-host/src/app/runtime/widgetRuntime.ts` |
 | MSC4412 backwards compatibility | the driver rejects legacy messages (`DriverError::LegacyWidgetApi`, `crates/widget-host-driver/src/error.rs`); `packages/widget-compat-wrapper` runs legacy widgets |
 | Comparison with matrix-widget-api, decisions, raised conflicts | `docs/parity.md` §1, §2, §4 |
 

@@ -11,8 +11,9 @@
 import { InMemoryBackend, type InMemoryBackendLike, type MatrixEvent, type TurnServer } from "@matrix-widget-tools/widget-host-bindings";
 
 import type { MockedRoomData, MockedStateEvent, MockedTimelineEvent, ScheduledEvent, ToDeviceMessage } from "../../appViewModel";
+import { describesWidget } from "../../lib/widgetEvents";
 import type { AccountInfo, LiveSession, RawEvent, RoomBackend, RoomDetails, RoomExport, RoomMember, RoomSummary, RoomTimeline } from "../../session";
-import { WIDGET_EVENT_TYPES, describesWidget, type StateEvent } from "../../widgetStateEvent";
+import { WIDGET_EVENT_TYPES, type StateEvent } from "../../widgetStateEvent";
 import { base64ToBytes, bytesToBase64, validateSeed, type DevBackendSeed, type SeedMedia, type SeedRoom } from "./seed";
 
 export type { DevBackendSeed } from "./seed";

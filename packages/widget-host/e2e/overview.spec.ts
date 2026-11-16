@@ -235,7 +235,7 @@ test("Add widget, to the room: the state event is sent as you; replacing a widge
   expect((await host.main()).widgetWrite).toBeUndefined();
 
   // Only to a room whose widgets are known (else replacing one could not ask first).
-  await host.dispatch({ type: "room/addWidget", roomId: "!nope:dev.local", target: "room", event: { type: "m.widget", state_key: "x", content: { url: "http://localhost:5175/new/" } } });
+  await host.dispatch({ type: "room/addWidget", roomId: "!nope:dev.local", target: "room", event: { type: "m.widget", state_key: "x", content: { name: "X", url: "http://localhost:5175/new/" } } });
   await expect(host.toast).toContainText("!nope:dev.local is not a room of this account");
   expect((await host.main()).widgetWrite).toBeUndefined();
 });

@@ -19,8 +19,9 @@ import { FetchGate } from "./fetchGate";
 import { accountInfo, exportRoom, loadOlderEvents, onTimelineChanged, roomDetails, roomState, timelineEvents } from "./roomData";
 import { needsVerification, onVerificationChanged, RecoveryKeySlot, startEmojiVerification, verifyWithRecoveryKey } from "./verification";
 import { AVATAR_SIZE, AvatarCache } from "../../lib/avatarCache";
+import { describesWidget } from "../../lib/widgetEvents";
 import { RoomTimelines } from "../roomTimelines";
-import { describesWidget, WIDGET_EVENT_TYPES, type StateEvent } from "../../widgetStateEvent";
+import { WIDGET_EVENT_TYPES, type StateEvent } from "../../widgetStateEvent";
 import {
   StoredLoginInvalidError,
   type AccountInfo,

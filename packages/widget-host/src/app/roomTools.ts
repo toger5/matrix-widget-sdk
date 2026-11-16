@@ -4,7 +4,8 @@
  * `test/roomTools.test.ts`.
  */
 import { ROOM_CONFIGURATION_TYPES, type AccountId, type MockedStateEvent, type RoomId, type RoomToolsViewModel, type ScheduledEvent, type WidgetHostBehavior } from "../appViewModel";
-import { WIDGET_EVENT_TYPES, describesWidget, type StateEvent } from "../widgetStateEvent";
+import { describesWidget } from "../lib/widgetEvents";
+import { WIDGET_EVENT_TYPES, type StateEvent } from "../widgetStateEvent";
 
 /** How the host answers widgets in the DevBackend until the Client Backend Tool changes it. */
 export const DEFAULT_DEV_BEHAVIOR: WidgetHostBehavior = { autoApproveCapabilities: false, autoApproveOpenId: false, rememberCapabilities: false };

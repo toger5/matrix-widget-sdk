@@ -51,6 +51,18 @@ capabilities follow MSC4412 and
 `get_client_context`, use the placeholder `org.matrix.mscXXXX.`. They used to carry
 `org.matrix.msc4412.`, but MSC4412 now defines the three core actions only.
 
+### The widget state event
+
+matrix-widget-api's `WidgetParser.parseRoomWidget` treats `m.widget` and
+`im.vector.modular.widgets` alike and needs `type` and a creator; Element Web lists an
+`im.vector.modular.widgets` event whose content has a `type` and a `url`. Here
+`WidgetDefinition::parse` (`crates/widget-host-driver/src/widget_event.rs`) follows MSC4411 for
+`m.widget` / `org.matrix.msc4411.widget` (a string `name` and `url`, else a removed widget) and
+needs only a string `url` for the legacy event (`type` is optional, the name falls back to the
+state key). `WidgetDefinition::embed` checks the URL (absolute `http(s)`, parsed per WHATWG, not
+relative to the page that embeds it) and loads a legacy widget through the compat wrapper with
+its URL untemplated. One parser for every client: the browser host calls it through the bindings.
+
 ## 2. Action inventory
 
 Legend: ✅ implemented before the parity branch · 🔨 built on the parity branch (all of these are
