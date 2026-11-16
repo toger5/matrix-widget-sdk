@@ -121,6 +121,18 @@ What the room name shows: the room in a pretty layout that follows all best prac
 - Member list
 - Devtools (only if dev tools are enabled). For now just one button: copy to DevBackend.
 
+## Capability prompt
+
+A widget's request for capabilities covers its WidgetTab with a permission card until it is answered (in a PiP box: one line and "Open to answer").
+
+- Header: the widget icon, "<widget> asks for permissions" and one sentence of what it wants in plain words, the risky parts first and in bold.
+- The capabilities in sections, in this order: Read this room, Send as you, Change the room, Direct messages to devices, You and your account, Files, Calls, This app, Unknown to this app (with a note that the app does not act on them; approving them is not remembered).
+- A section header: a checkbox for all its rows (mixed if only some are checked), the title, "N of M" and a warning icon if a row is risky. A row: checkbox, label, the full capability string (wrapping) and a warning icon if it acts in your name, changes the room for everyone, is hidden from the room or proves your identity.
+- Everything is checked at first. Capabilities the widget holds already or gets without asking are not listed.
+- The header and the buttons ("Deny all", "Approve N selected") stay in place; only the sections scroll.
+- A request that arrives while the card is open joins it: its capabilities are added checked and marked "New"; the choices made so far stay.
+- "Approve" is blocked for 3 s after the card appeared or a request added to it (a status line counts down). "Deny all" is never blocked.
+
 ## WidgetDevToolBar
 
 A toolbar for a single widget, with information like the driver state (approved capabilities) and a log of the messages.
@@ -305,6 +317,7 @@ The mockups needed to review the full design. Each leaf is one state to draw. Do
     - WidgetTab
       - WidgetView
         - Loading / failed to load
+        - Capability prompt: summary and sections / a long list, scrolled / a second request joined, "Approve" blocked
         - Dev tools: no (full widget)
         - Dev tools: yes
           - Bar only, docked top / bottom / left / right

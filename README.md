@@ -207,7 +207,7 @@ use widget_host_driver::{WidgetHostDriver, WidgetHostPlatform};
 struct Platform { /* handle to the iframe */ }
 impl WidgetHostPlatform for Platform {
     fn send_to_widget(&self, json: String) { /* iframe.postMessage(JSON.parse(json), widgetOrigin) */ }
-    fn on_capabilities_requested(&self, requested: Vec<Capability>) { /* prompt user, then driver.approve_capabilities(..) */ }
+    fn on_capabilities_requested(&self, requested: Vec<Capability>) { /* prompt (the whole open question), then driver.approve_capabilities(..) */ }
     fn on_ready(&self) { /* hide the loading state */ }
     fn on_openid_requested(&self) { /* prompt user, then driver.resolve_openid(allowed).await */ }
     fn navigate(&self, uri: String) -> Result<(), PlatformError> { /* open the matrix.to link */ Ok(()) }

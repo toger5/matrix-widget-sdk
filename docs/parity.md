@@ -65,7 +65,7 @@ here" column, or `m`). Every wire name also has the stable alias `m.<name>`.
 |---|---|---|---|---|
 | `supported_api_versions` | – | – | ➖ dropped by MSC4412 (the compat wrapper answers it locally) | – |
 | `content_loaded` | `org.matrix.msc4412.notify_ready` | none (core action) | ✅ (🔨 renamed by MSC4412) | `platform.on_ready` |
-| `org.matrix.msc2974.request_capabilities` | `org.matrix.msc4412.request_capabilities` | none (core action) | ✅ | `platform.on_capabilities_requested` |
+| `org.matrix.msc2974.request_capabilities` | `org.matrix.msc4412.request_capabilities` | none (core action) | ✅ (🔨 a request before the answer joins the open question; one `update_capabilities` answers all, see `spec/patch/msc4412/merge-capability-requests.md`) | `platform.on_capabilities_requested` (the whole open question) |
 | `send_event` (MSC2762) | `org.matrix.mscXXXX.send_event` | `widget:…send_event.timeline:<type>[#msgtype]` / `widget:…send_event.state:<type>[#key]` | ✅ | `backend.send_room_event` / `send_state_event` |
 | `send_event` + `room_id` | – | none; only the widget's own room is accepted, see §4 | 🔨 | – |
 | `send_event` + `delay` (MSC4157) | – | + `widget:…send_event.delayed` | 🔨 response carries `delay_id` | `backend.send_delayed_event` |

@@ -2,12 +2,23 @@
 import type { Locator } from "@playwright/test";
 
 import type { HostSeed } from "../src/app/controller";
-import { expect, Host, LAB, LEGACY_WIDGET, NEW_WIDGET, test, widgetId } from "./host";
+import { capabilityBoxes, expect, Host, LAB, LEGACY_WIDGET, NEW_WIDGET, test, widgetId } from "./host";
 
 const NEW = widgetId(LAB, NEW_WIDGET);
 const LEGACY = widgetId(LAB, LEGACY_WIDGET);
 const SEND_MESSAGE = "widget:org.matrix.mscXXXX.send_event.timeline:m.room.message";
 const SEND_TOPIC = "widget:org.matrix.mscXXXX.send_event.state:m.room.topic";
+const SEND_DELAYED = "widget:org.matrix.mscXXXX.send_event.delayed";
+/** What leaf widgetview/prompt requests: four sections. */
+const SHORT = [
+  "widget:org.matrix.msc2876.read_events.timeline:m.room.message",
+  "host:org.matrix.mscXXXX.forward_event.timeline:m.room.message",
+  SEND_MESSAGE,
+  SEND_DELAYED,
+  "widget:org.matrix.mscXXXX.send_to_device:org.example.ping",
+  "widget:org.matrix.mscXXXX.get_matrix_context",
+];
+const escape = (text: string) => new RegExp(text.replaceAll(".", "\\."));
 
 /** A room with one widget at `url`: `?autostart=0` is a widget that says nothing until its buttons are pressed. */
 const oneWidget = (url: string, extra: Partial<HostSeed> = {}): HostSeed => ({
@@ -20,6 +31,8 @@ const oneWidget = (url: string, extra: Partial<HostSeed> = {}): HostSeed => ({
 
 /** A button of the test widget. Pressed with a DOM click: the widget may be covered by a prompt, or in a tab that is not shown. */
 const press = (host: Host, id: string, label: string) => host.frame(id).locator("button", { hasText: label }).first().dispatchEvent("click");
+/** What the test widget requests the next time request_capabilities is pressed. */
+const requestNext = (host: Host, id: string, capabilities: string[]) => host.frame(id).locator("#caps").evaluate((input: HTMLInputElement, value) => (input.value = value), capabilities.join(","));
 /** The log of the test widget, newest first: "<label> → <result>" or "<label> failed <error>". */
 const widgetLog = (host: Host, id: string): Locator => host.frame(id).locator("#log");
 const approved = (host: Host, id: string) => host.page.evaluate((i) => window.widgetHost!.driverSnapshot(i)?.approved ?? [], id);
@@ -85,10 +98,14 @@ test("capability prompt: deny all, then approve a subset; the widget's actions s
   await expect(prompt).toContainText("New test widget asks for permissions");
   // One checkbox per requested capability, all checked at first.
   const all = await host.frame(NEW).locator("#caps").evaluate((input: HTMLInputElement) => input.value.split(",").length);
-  await expect(prompt.getByRole("checkbox")).toHaveCount(all);
-  await expect(prompt.getByRole("checkbox", { checked: true })).toHaveCount(all);
-  await host.leaf("widgetview/prompt");
-
+  await expect(capabilityBoxes(prompt)).toHaveCount(all);
+  await expect(capabilityBoxes(prompt, true)).toHaveCount(all);
+  await expect(prompt).toHaveAccessibleDescription(
+    "New test widget wants to send messages as you, change the room for everyone, exchange hidden messages with devices, prove who you are to other servers, read this room, work with files, join calls and adapt to this app.",
+  );
+  // "Approve" is blocked for a moment after the prompt appeared; "Deny all" never is.
+  await expect(prompt.getByRole("button", { name: `Approve ${all} selected` })).toHaveAttribute("aria-disabled", "true");
+  await expect(prompt.getByRole("status")).toHaveText("You can approve in 3 s.");
   await prompt.getByRole("button", { name: "Deny all" }).click();
   await expect(prompt).toHaveCount(0);
   await host.ready(NEW);
@@ -99,7 +116,17 @@ test("capability prompt: deny all, then approve a subset; the widget's actions s
 
   // The widget asks again: everything but the room topic.
   await press(host, NEW, "request_capabilities");
-  await prompt.getByRole("checkbox", { name: new RegExp(SEND_TOPIC.replaceAll(".", "\\.")) }).click();
+  await host.passApproveDelay();
+  await expect(prompt.getByRole("status")).toHaveCount(0);
+  // The long list: only the sections scroll. One row of "This app" unchecked makes its section mixed.
+  const navigate = prompt.getByRole("checkbox", { name: /msc2931\.navigate/ });
+  await navigate.click();
+  await expect(prompt.getByRole("checkbox", { name: "All in This app" })).toHaveAttribute("aria-checked", "mixed");
+  await prompt.getByRole("button", { name: "Deny all" }).evaluate((deny) => deny.closest(".prompt-card")!.querySelector(".pc-body")!.scrollTo(0, 1e6));
+  await expect(prompt.getByRole("button", { name: "Deny all" })).toBeInViewport();
+  await host.leaf("widgetview/prompt-long");
+  await navigate.click();
+  await prompt.getByRole("checkbox", { name: escape(SEND_TOPIC) }).click();
   await prompt.getByRole("button", { name: `Approve ${all - 1} selected` }).click();
   await expect(prompt).toHaveCount(0);
   await expect.poll(() => approved(host, NEW)).toContain(SEND_MESSAGE);
@@ -112,23 +139,108 @@ test("capability prompt: deny all, then approve a subset; the widget's actions s
   await expect(widgetLog(host, NEW)).toContainText("send state m.room.topic failed");
 });
 
-test("approving nothing is not offered: the button is disabled without a checked capability", async ({ host }) => {
+test("capability prompt: a section's checkbox checks its rows; approving nothing is not offered", async ({ host }) => {
   await host.populate(oneWidget("http://localhost:5175/new/?autostart=0"));
-  await host.frame(NEW).locator("#caps").evaluate((input: HTMLInputElement, value) => (input.value = value), `${SEND_MESSAGE},${SEND_TOPIC}`);
+  await requestNext(host, NEW, SHORT);
   await press(host, NEW, "request_capabilities");
   const prompt = host.page.getByTestId("capability-prompt");
-  await expect(prompt.getByRole("checkbox")).toHaveCount(2);
-  for (const box of await prompt.getByRole("checkbox").all()) await box.click();
+  await expect(capabilityBoxes(prompt)).toHaveCount(6);
+  await expect(prompt.getByRole("group", { name: /^Read this room|^Send as you|^Direct messages to devices|^You and your account/ })).toHaveCount(4);
+  await expect(prompt).toHaveAccessibleDescription("New test widget wants to send messages as you, exchange hidden messages with devices, read this room and know who you are.");
+  await expect(prompt.getByRole("group", { name: "Send as you" })).toContainText("2 of 2");
+  await host.passApproveDelay();
+  await host.leaf("widgetview/prompt");
+
+  // A row unchecked: its section is mixed; the section's checkbox checks all of them again, then none.
+  const send = prompt.getByRole("checkbox", { name: "All in Send as you" });
+  await prompt.getByRole("checkbox", { name: escape(SEND_DELAYED) }).click();
+  await expect(send).toHaveAttribute("aria-checked", "mixed");
+  await expect(prompt.getByRole("group", { name: "Send as you" })).toContainText("1 of 2");
+  await send.click();
+  await expect(send).toBeChecked();
+  for (const box of await prompt.getByRole("checkbox", { name: /^All in / }).all()) await box.click();
+  await expect(capabilityBoxes(prompt, true)).toHaveCount(0);
   await expect(prompt.getByRole("button", { name: "Approve 0 selected" })).toBeDisabled();
-  await prompt.getByRole("checkbox").first().click();
+  await prompt.getByRole("checkbox", { name: escape(SEND_MESSAGE) }).click();
   await prompt.getByRole("button", { name: "Approve 1 selected" }).click();
   await expect.poll(() => approved(host, NEW)).toEqual([SEND_MESSAGE]);
+});
+
+test("a request while the prompt is open joins it: the choices stay, the new one is marked, Approve is blocked again, one answer for both", async ({ host }) => {
+  await host.populate(oneWidget("http://localhost:5175/new/?autostart=0"));
+  const prompt = host.page.getByTestId("capability-prompt");
+  const approve = prompt.getByRole("button", { name: /^Approve \d+ selected$/ });
+  const status = prompt.getByRole("status");
+  await requestNext(host, NEW, [SEND_MESSAGE, SEND_DELAYED]);
+  await press(host, NEW, "request_capabilities");
+  await expect(capabilityBoxes(prompt)).toHaveCount(2);
+  await expect(approve).toHaveAttribute("aria-disabled", "true");
+  await expect(status).toHaveText("You can approve in 3 s.");
+  await host.passApproveDelay();
+  await expect(status).toHaveCount(0);
+  await expect(approve).not.toHaveAttribute("aria-disabled");
+  await prompt.getByRole("checkbox", { name: escape(SEND_DELAYED) }).click();
+
+  // The widget asks again, for the topic and one it asked for already.
+  await requestNext(host, NEW, [SEND_TOPIC, SEND_MESSAGE]);
+  await press(host, NEW, "request_capabilities");
+  await expect(capabilityBoxes(prompt)).toHaveCount(3);
+  await expect(prompt).toHaveCount(1);
+  await expect(prompt.locator("label", { hasText: SEND_TOPIC })).toContainText("New");
+  await expect(prompt.locator("label", { hasText: SEND_MESSAGE })).not.toContainText("New");
+  await expect(prompt.getByRole("checkbox", { name: escape(SEND_TOPIC) })).toBeChecked();
+  await expect(prompt.getByRole("checkbox", { name: escape(SEND_DELAYED) })).not.toBeChecked();
+  await expect(approve).toHaveAttribute("aria-disabled", "true");
+  await expect(status).toHaveText("1 permission was added. You can approve in 3 s.");
+  await host.leaf("widgetview/prompt-merged");
+  // A press on the blocked button does nothing, and neither does the intent sent past the view.
+  await approve.click({ force: true });
+  await host.dispatch({ type: "widget/answerCapabilities", widgetId: NEW, approved: [SEND_MESSAGE, SEND_TOPIC] });
+  await expect(prompt).toBeVisible();
+  expect(await host.actions(NEW, "toWidget")).not.toContainEqual(expect.stringMatching(/\.update_capabilities$/));
+
+  await host.passApproveDelay();
+  await prompt.getByRole("button", { name: "Approve 2 selected" }).click();
+  await expect(prompt).toHaveCount(0);
+  await expect.poll(() => approved(host, NEW)).toEqual([SEND_MESSAGE, SEND_TOPIC]);
+  // Both requests were acked at once; one update_capabilities answered both.
+  const messages = await host.page.evaluate((i) => window.widgetHost!.messages(i), NEW);
+  const toWidget = messages.filter((m) => m.direction === "toWidget").map((m) => m.message as { action: string; request?: { allowed?: string[] }; response?: unknown });
+  expect(toWidget.filter((m) => m.action.endsWith(".request_capabilities") && m.response !== undefined)).toHaveLength(2);
+  expect(toWidget.filter((m) => m.action.endsWith(".update_capabilities")).map((m) => m.request?.allowed)).toEqual([[SEND_MESSAGE, SEND_TOPIC]]);
+});
+
+test("a capability revoked while the prompt is open: the card is still answered, the revoked one is not granted again", async ({ host }) => {
+  await host.populate(oneWidget("http://localhost:5175/new/?autostart=0"));
+  const prompt = host.page.getByTestId("capability-prompt");
+  await requestNext(host, NEW, [SEND_MESSAGE]);
+  await press(host, NEW, "request_capabilities");
+  await expect(capabilityBoxes(prompt)).toHaveCount(1);
+  await host.passApproveDelay();
+  await prompt.getByRole("button", { name: "Approve 1 selected" }).click();
+  await expect.poll(() => approved(host, NEW)).toEqual([SEND_MESSAGE]);
+
+  // The widget asks again, for what it holds and one more: the card asks about the new one only.
+  await requestNext(host, NEW, [SEND_MESSAGE, SEND_DELAYED]);
+  await press(host, NEW, "request_capabilities");
+  await expect(capabilityBoxes(prompt)).toHaveCount(1);
+  await expect(prompt.getByRole("checkbox", { name: escape(SEND_DELAYED) })).toBeChecked();
+  // The user takes the held one away (driver panel) while the card is open: the driver's open
+  // question now holds it again, but the widget did not ask for anything new.
+  await host.dispatch({ type: "devTools/revokeCapabilities", widgetId: NEW, capabilities: [SEND_MESSAGE], confirmed: true });
+  await expect.poll(() => approved(host, NEW)).toEqual([]);
+  await host.passApproveDelay();
+  await prompt.getByRole("button", { name: "Approve 1 selected" }).click();
+  await expect(prompt).toHaveCount(0);
+  await expect.poll(() => approved(host, NEW)).toEqual([SEND_DELAYED]);
 });
 
 test("remembered capabilities: a widget that is opened again is not asked a second time", async ({ host }) => {
   const seed: Partial<HostSeed> = { sidePanel: null, behavior: { rememberCapabilities: true }, open: [{ room: LAB, widgets: [NEW_WIDGET] }] };
   await host.populate("lab", seed);
   const prompt = host.page.getByTestId("capability-prompt");
+  await expect(prompt).toBeVisible();
+  await host.passApproveDelay();
   await prompt.getByRole("button", { name: /^Approve \d+ selected$/ }).click();
   await expect.poll(async () => (await approved(host, NEW)).length).toBeGreaterThan(0);
   const granted = await approved(host, NEW);
@@ -137,6 +249,26 @@ test("remembered capabilities: a widget that is opened again is not asked a seco
   await host.ready(NEW);
   await expect.poll(() => approved(host, NEW)).toEqual(granted);
   await expect(prompt).toHaveCount(0);
+
+  // A capability this app does not know is approved like any other (it allows nothing), but not remembered.
+  const unknown = "widget:org.example.custom.share_screen";
+  const stored = () => host.page.evaluate(() => Object.keys(localStorage).flatMap((key) => (key.startsWith("widget_host_capabilities_v1 ") ? (JSON.parse(localStorage.getItem(key)!) as string[]) : [])));
+  await requestNext(host, NEW, [unknown]);
+  await press(host, NEW, "request_capabilities");
+  await expect(prompt.getByRole("group", { name: "Unknown to this app" })).toBeVisible();
+  await host.passApproveDelay();
+  await prompt.getByRole("button", { name: "Approve 1 selected" }).click();
+  await expect.poll(() => approved(host, NEW)).toContain(unknown);
+  expect(await stored()).toEqual(expect.arrayContaining(granted));
+  expect(await stored()).not.toContain(unknown);
+  // Opened again, the widget is asked about it again.
+  await host.populate("lab", seed);
+  await host.ready(NEW);
+  await expect.poll(() => approved(host, NEW)).toEqual(granted);
+  await requestNext(host, NEW, [unknown]);
+  await press(host, NEW, "request_capabilities");
+  await expect(capabilityBoxes(prompt)).toHaveCount(1);
+  await expect(prompt.getByRole("group", { name: "Unknown to this app" })).toBeVisible();
 });
 
 test("OpenID prompt: block, allow, and auto-approve", async ({ host }) => {
@@ -167,9 +299,10 @@ test("the legacy widget runs through the compat wrapper: one prompt with the new
   const prompt = host.page.getByTestId("capability-prompt");
   await expect(prompt).toContainText("Legacy test widget asks for permissions");
   // The wrapper has translated the legacy capabilities; what a legacy client gave without asking is not in the list.
-  await expect(prompt.getByRole("checkbox", { name: new RegExp(SEND_MESSAGE.replaceAll(".", "\\.")) })).toBeVisible();
+  await expect(prompt.getByRole("checkbox", { name: escape(SEND_MESSAGE) })).toBeVisible();
   await expect(prompt.getByRole("checkbox", { name: /get_matrix_context/ })).toHaveCount(0);
-  const count = await prompt.getByRole("checkbox").count();
+  const count = await capabilityBoxes(prompt).count();
+  await host.passApproveDelay();
   await prompt.getByRole("button", { name: `Approve ${count} selected` }).click();
   await host.ready(LEGACY);
   expect(await approved(host, LEGACY)).toContain("widget:org.matrix.mscXXXX.get_matrix_context");

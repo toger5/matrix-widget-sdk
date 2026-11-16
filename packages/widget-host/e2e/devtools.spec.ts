@@ -2,7 +2,7 @@
 import type { Locator } from "@playwright/test";
 
 import type { WidgetDevToolsLayout } from "../src/appViewModel";
-import { expect, type Host, LAB, LEGACY_WIDGET, NEW_WIDGET, test, widgetId } from "./host";
+import { capabilityBoxes, expect, type Host, LAB, LEGACY_WIDGET, NEW_WIDGET, test, widgetId } from "./host";
 
 const NEW = widgetId(LAB, NEW_WIDGET);
 const SEND_MESSAGE = "widget:org.matrix.mscXXXX.send_event.timeline:m.room.message";
@@ -286,7 +286,7 @@ test("driver panel: revoke one capability and all (confirm modal), add a capabil
   await host.frame(NEW).locator("button", { hasText: "request_capabilities" }).dispatchEvent("click");
   const prompt = host.page.getByTestId("capability-prompt");
   // The prompt asks about the rest only; denying it still leaves the widget with the pre-approved capability.
-  await expect(prompt.getByRole("checkbox")).toHaveCount(all - 1);
+  await expect(capabilityBoxes(prompt)).toHaveCount(all - 1);
   await prompt.getByRole("button", { name: "Deny all" }).click();
   await expect.poll(() => approved(host)).toEqual([SEND_MESSAGE]);
   await expect(driver.getByRole("list", { name: "Denied capabilities" }).getByRole("listitem")).toHaveCount(all - 1);

@@ -33,6 +33,10 @@ pub struct DriverSnapshot {
     /// Capabilities currently granted to the widget.
     pub approved: Vec<Capability>,
     /// Capabilities the widget requested that wait for [`WidgetHostDriver::approve_capabilities`].
+    /// Without those in `approved` and `auto_approved`, this is the open question. It can hold
+    /// more than the platform was asked about: a pending capability that
+    /// [`WidgetHostDriver::revoke_capabilities`] or [`WidgetHostDriver::set_auto_approved`] took out
+    /// of those lists after the question was asked (it is granted only if the answer approves it).
     pub pending_requested: Vec<Capability>,
     /// Capabilities granted without asking the platform, see [`WidgetHostDriver::set_auto_approved`].
     pub auto_approved: Vec<Capability>,
@@ -56,6 +60,20 @@ struct State {
     openid_auto_approved: bool,
     /// Requests the driver sent to the widget that the widget has not acknowledged yet.
     awaiting_ack: HashMap<String, HostRequest>,
+}
+
+impl State {
+    /// The open question: the pending capabilities without those the widget holds already and
+    /// those granted without asking. What [`WidgetHostPlatform::on_capabilities_requested`] gets
+    /// when a request adds to it.
+    fn question(&self) -> Vec<Capability> {
+        self.pending_requested
+            .iter()
+            .flatten()
+            .filter(|c| !self.approved.contains(c) && !self.auto_approved.contains(c))
+            .cloned()
+            .collect()
+    }
 }
 
 /// Host side state machine for one widget instance. See the crate documentation.
@@ -117,9 +135,10 @@ impl WidgetHostDriver {
 
     /// Set the capabilities that are granted without asking the platform.
     ///
-    /// When a widget requests capabilities, these are granted at once, and only the rest reaches
-    /// [`WidgetHostPlatform::on_capabilities_requested`]. If nothing is left, the platform is not
-    /// called and `update_capabilities` goes out immediately.
+    /// When a widget requests capabilities, these are granted with the answer, and only the rest
+    /// reaches [`WidgetHostPlatform::on_capabilities_requested`]. If nothing is left and no
+    /// question is open, the platform is not called and `update_capabilities` goes out
+    /// immediately; while a question is open, they wait for its answer.
     ///
     /// Typical use: `widget:…get_matrix_context` and `widget:…get_client_context` for a legacy
     /// widget behind the compat wrapper, because a legacy client passed the same facts as URL
@@ -130,9 +149,11 @@ impl WidgetHostDriver {
     }
 
     /// Complete the capability negotiation started by
-    /// [`WidgetHostPlatform::on_capabilities_requested`].
+    /// [`WidgetHostPlatform::on_capabilities_requested`]: answers every request that arrived
+    /// since the last answer.
     ///
     /// * Only capabilities the widget requested are granted; the rest of `approved` is ignored.
+    ///   A requested capability that is not in `approved` (and not auto-approved) is denied.
     /// * Requested capabilities that are auto-approved are granted as well.
     /// * The widget gets `update_capabilities` with everything it holds now.
     /// * If new capabilities were granted, the driver subscribes to the backend again. The backend

@@ -14,10 +14,21 @@ pub trait WidgetHostPlatform: Send + Sync {
     /// Never use `*` as the target origin (MSC4412).
     fn send_to_widget(&self, json: String);
 
-    /// The widget asked for `requested`; the driver has already acknowledged the request.
+    /// The widget asked for capabilities that need a decision; the driver has already
+    /// acknowledged the request.
     ///
-    /// Ask the user (or a policy), then call [`WidgetHostDriver::approve_capabilities`] with the
-    /// approved subset. An empty list denies everything and still completes the negotiation.
+    /// `requested` is the whole open question: every capability the widget requested since the
+    /// last answer, without those it holds already and those granted without asking
+    /// ([`WidgetHostDriver::set_auto_approved`]). A request that arrives before the answer joins
+    /// the question; if it adds something to decide, this is called again with the whole
+    /// question, which replaces the earlier one (the merge proposed for MSC4412 in
+    /// `spec/patch/msc4412/merge-capability-requests.md`).
+    ///
+    /// Ask the user (or a policy), then call [`WidgetHostDriver::approve_capabilities`] once
+    /// with the approved subset: it answers every request so far. An empty list denies
+    /// everything and still completes the negotiation. A host that prompts should not accept an
+    /// approval for a few seconds after the question appeared or changed, so that the widget
+    /// cannot change what the user approves just before the click.
     /// Clients should remember what was approved, so that the user is not asked again every time
     /// the widget starts (pass it to [`WidgetHostDriver::set_auto_approved`]).
     ///

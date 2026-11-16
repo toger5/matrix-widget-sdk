@@ -164,30 +164,51 @@ impl WidgetHostDriver {
         })
     }
 
-    /// `request_capabilities`: acknowledge, grant the auto-approved capabilities and ask the
-    /// platform about the rest. When nothing is left to ask, the negotiation completes at once.
+    /// `request_capabilities`: acknowledge, then merge the request into the open question.
     ///
-    /// The ack grants nothing. A request that arrives while another one waits for the platform
-    /// adds to it: a widget can only ever ask for more.
+    /// * No question is open: if the widget holds or gets without asking everything it requests,
+    ///   the negotiation completes at once; otherwise the platform is asked about the rest.
+    /// * A question is open (the platform has not answered yet): the request joins it, and nothing
+    ///   completes before the platform answers, so one `update_capabilities` answers every
+    ///   request. If the request added something to decide, the platform is asked again, about
+    ///   the whole question.
+    ///
+    /// The ack grants nothing. A widget can only ever ask for more.
     fn request_capabilities(&self, msg: &WireMessage, requested: Vec<Capability>) {
-        let to_ask: Vec<Capability> = {
+        enum Next {
+            Complete,
+            Ask(Vec<Capability>),
+            Wait,
+        }
+        let next = {
             let mut state = self.lock();
-            let to_ask = requested.iter().filter(|c| !state.auto_approved.contains(c)).cloned().collect();
-            let mut pending = state.pending_requested.take().unwrap_or_default();
+            let open = state.pending_requested.is_some();
+            let before = state.question();
+            let pending = state.pending_requested.get_or_insert_with(Vec::new);
             for capability in requested {
                 if !pending.contains(&capability) {
                     pending.push(capability);
                 }
             }
-            state.pending_requested = Some(pending);
-            to_ask
+            let question = state.question();
+            log::info!(
+                "the widget requests capabilities, {} of them wait for the platform's decision{}",
+                question.len(),
+                if open { " (joined the open question)" } else { "" }
+            );
+            if !open && question.is_empty() {
+                Next::Complete
+            } else if question.iter().any(|c| !before.contains(c)) {
+                Next::Ask(question)
+            } else {
+                Next::Wait
+            }
         };
-        log::info!("the widget requests capabilities, {} of them need the platform's approval", to_ask.len());
         self.send(&msg.ack());
-        if to_ask.is_empty() {
-            self.approve_capabilities(Vec::new());
-        } else {
-            self.platform.on_capabilities_requested(to_ask);
+        match next {
+            Next::Complete => self.approve_capabilities(Vec::new()),
+            Next::Ask(question) => self.platform.on_capabilities_requested(question),
+            Next::Wait => {}
         }
     }
 

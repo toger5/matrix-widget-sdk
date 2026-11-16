@@ -18,9 +18,10 @@
 //!
 //! Capability approval is the one asynchronous, user-facing step: the driver acknowledges a
 //! `request_capabilities` immediately (as required by MSC4412), asks the platform via
-//! [`WidgetHostPlatform::on_capabilities_requested`], and sends `update_capabilities` (always the full list of what the widget
-//! holds) once the
-//! platform calls [`WidgetHostDriver::approve_capabilities`].
+//! [`WidgetHostPlatform::on_capabilities_requested`], and sends `update_capabilities` (always
+//! the full list of what the widget holds) once the platform calls
+//! [`WidgetHostDriver::approve_capabilities`]. Requests that arrive before that answer join the
+//! open question, so one answer decides all of them.
 //! [`WidgetHostDriver::revoke_capabilities`] takes capabilities away again.
 //!
 //! [`WidgetStateEventContent`] describes the `m.widget` state event (MSC4411) the client reads

@@ -91,8 +91,7 @@ The DevBackend runtime (`src/matrix_session/memory/devBackend.ts`):
 
 | Name | Where | Question | Options | Now |
 | --- | --- | --- | --- | --- |
-| `prompt-capability-text` | `src/views/widget/WidgetView.tsx` | How a capability is written in the permission card; the mockup shows a shortened one-line form | (a) shortened (b) full, truncated (c) full, wrapped | (c): the card gets taller and scrolls in a small panel |
-| `capability-labels-in-view` | `src/views/widget/format.ts` | Where the human labels of capabilities ("Read the messages of this room") come from | (a) the SDK (b) the view model (c) a table in the view | (c); an unknown capability has no label |
+| `capability-labels-in-view` | `src/views/widget/format.ts` | Where the human labels, sections and risk marks of capabilities ("Read the messages of this room") come from | (a) the SDK (b) the view model (c) a table in the view | (c), copied from `design/src/lib.mjs` (`test/capabilityFormat.test.ts` compares them). Whether a capability is known at all comes from the driver (`capabilityIsKnown`, `CapabilityPromptViewModel.unknown`) |
 | `message-log-order` | `src/views/widget/MessagesPanel.tsx` | The mockup lists messages oldest first, the view model says newest first | either | Newest first |
 | `revoke-auto-approved` | `src/views/widget/DriverPanel.tsx` | Can an auto-approved capability be revoked? It is approved again on the next request | hide the button / revoke and also forget it | It has a revoke button, and "Revoke all" includes it |
 | `two-prompts-order` | `WidgetView.tsx` | Capability and OpenID prompt pending together | (a) one after the other (b) stacked cards | (a), capabilities first |
@@ -142,6 +141,7 @@ Login, sync, suspend/resume, device verification and the storage migration of bo
 - All stored Matrix logins are restored at start, not only the active one.
 - `message-log-not-virtualized`: the message log is a plain list capped at 500; `message-log-cap-constant`: the cap is repeated in the view.
 - `approve-nothing`: "Approve 0 selected" is disabled; "Deny all" is the way to deny.
+- Capability prompt: in an area lower than 420px the overlay scrolls instead of the sections; the bar under the blocked "Approve" is a Web Animation (static with reduced motion); an approval that reaches the runtime after the driver asked about a capability the card did not show yet is refused (logged in the console panel); a capability that a revoke put back into the driver's open question does not count (the answer does not grant it).
 - `covered-widget-not-inert`: the iframe under a prompt or error overlay stays focusable.
 - `chart-hover-only`: the value of a stats bar too small for its number shows on pointer hover only; a visually hidden table is the alternative.
 - Whether a bar's number fits is estimated at 6px per character (`src/views/widget/chart.ts`), not measured.
@@ -173,4 +173,3 @@ Login, sync, suspend/resume, device verification and the storage migration of bo
 - The toast's 4 s auto-dismiss has no test (the tests do not sleep).
 - `HostSeed.notifyReadyTimeoutMs` shortens the 15 s `notify_ready` timeout, for the tests of the failed state only.
 - The PiP surround listens to native pointer events: the slotted widget iframes are outside the React tree, so React's hover events never fired over a widget.
-- The test widget requests 33 capabilities, so the permission card scrolls.

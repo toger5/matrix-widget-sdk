@@ -165,7 +165,7 @@ Ask for every change:
 |---|---|
 | Driver calls, platform callbacks (`WidgetHostPlatform`), the message pump, capability and OpenID answers | `packages/widget-host/src/app/runtime/widgetRuntime.ts` |
 | Host pushes the dev tools send by hand (`update_theme`, `update_language`, `update_visibility`) | intent `devTools/mockHostAction` in `packages/widget-host/src/appViewModel.ts`, `WidgetRuntime.mockHostAction`, buttons in `packages/widget-host/src/views/widget/DriverPanel.tsx` |
-| Readable label of a capability in the permission prompt | `capabilityLabel` in `packages/widget-host/src/views/widget/format.ts` (keyed by action name; an unknown action gets no label) |
+| Label, section and risk mark of a capability in the permission prompt | `LABELS`, `SECTIONS`, `RISKS` in `packages/widget-host/src/views/widget/format.ts` (keyed by action name without namespace), copied from `CAP_LABELS` & co. in `packages/widget-host/design/src/lib.mjs` (a design step); `test/capabilityFormat.test.ts` checks every capability of the test widget and compares both tables. What the driver does not know (`capabilityIsKnown`) goes to "Unknown to this app" |
 | Auto-approved capabilities of legacy widgets | `packages/widget-host/src/widgetStateEvent.ts` |
 | Controls of the in-memory store (the DevBackendView) | `packages/widget-host/src/matrix_session/memory/devBackend.ts` (editing API), `packages/widget-host/src/views/devbackend/` |
 | End to end through the JS bindings | `packages/widget-host/test/driver.test.ts` |

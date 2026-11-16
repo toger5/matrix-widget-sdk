@@ -1,10 +1,84 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
+import { useEffect, useRef, type ReactNode } from "react";
 
+import type { CapabilityPromptViewModel } from "../../appViewModel";
 import { widgetVm } from "../fixtures";
 import { FakeWidget } from "../storyEnv";
 import { WidgetView } from "./WidgetView";
 
 const X = "org.matrix.mscXXXX.";
+
+// What the leaves request (`CAP_REQUESTS` of design/src/lib.mjs).
+const SHORT = [
+  `widget:org.matrix.msc2876.read_events.timeline:m.room.message`,
+  `host:${X}forward_event.timeline:m.room.message`,
+  `widget:${X}send_event.timeline:m.room.message`,
+  `widget:${X}send_event.delayed`,
+  `widget:${X}send_to_device:org.example.ping`,
+  `widget:${X}get_matrix_context`,
+];
+/** A second request while the short one is open. */
+const MORE = [`widget:${X}send_event.state:m.room.topic`, `widget:${X}get_openid`];
+/** The MSC4412 test widget's capabilities (packages/test-widgets/new/capabilities.ts) plus one this app does not know. */
+const UNKNOWN = "widget:org.example.custom.share_screen";
+const LONG = [
+  `widget:${X}send_event.timeline:m.room.message`,
+  `widget:org.matrix.msc2876.read_events.timeline:m.room.message`,
+  `host:${X}forward_event.timeline:m.room.message`,
+  `widget:${X}send_event.state:m.room.topic`,
+  `widget:org.matrix.msc2876.read_events.state:m.room.topic`,
+  `host:${X}update_state:m.room.topic`,
+  `host:${X}forward_event.state:m.room.topic`,
+  `widget:${X}send_event.delayed`,
+  `widget:org.matrix.msc4157.update_delayed_event`,
+  `widget:${X}send_event.sticky`,
+  `widget:${X}send_event.timeline:m.rtc.member`,
+  `widget:${X}send_event.timeline:m.reaction`,
+  `widget:org.matrix.msc2876.read_events.timeline:m.reaction`,
+  `widget:org.matrix.msc3869.read_relations:m.reaction`,
+  `host:${X}forward_event.timeline:m.reaction`,
+  `widget:${X}send_to_device:org.example.ping`,
+  `host:${X}forward_to_device:org.example.ping`,
+  `host:${X}update_turn_servers`,
+  `widget:org.matrix.msc4515.get_rtc_transports`,
+  `widget:org.matrix.msc3973.search_user_directory`,
+  `widget:org.matrix.msc4039.get_media_config`,
+  `widget:org.matrix.msc4039.upload_file`,
+  `widget:org.matrix.msc4039.download_file`,
+  `widget:com.beeper.read_room_account_data:m.tag`,
+  `widget:org.matrix.msc4533.get_rtc_livekit_token`,
+  `widget:org.matrix.msc2931.navigate`,
+  `widget:${X}set_always_on_screen`,
+  `widget:${X}get_openid`,
+  `widget:${X}get_matrix_context`,
+  `widget:${X}get_client_context`,
+  `host:${X}update_theme`,
+  `host:${X}update_language`,
+  `host:${X}update_visibility`,
+  UNKNOWN,
+];
+
+/** A capability prompt; `blocked`: "Approve" stays blocked (the last request is "now" for as long as the story is shown). */
+const capabilities = (requested: string[], o: { added?: string[]; unknown?: string[]; blocked?: boolean } = {}): CapabilityPromptViewModel => ({
+  requested,
+  added: o.added ?? [],
+  unknown: o.unknown ?? [],
+  lastRequestAt: o.blocked ? Number.MAX_SAFE_INTEGER / 2 : 0,
+});
+
+/** Story only: shows the sections of the permission card scrolled to their end. */
+function ScrolledToEnd({ children }: { children: ReactNode }) {
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const body = ref.current?.querySelector(".pc-body");
+    if (body) body.scrollTop = body.scrollHeight;
+  });
+  return (
+    <div ref={ref} style={{ display: "contents" }}>
+      {children}
+    </div>
+  );
+}
 
 const meta: Meta<typeof WidgetView> = {
   title: "Widget/WidgetView",
@@ -31,18 +105,26 @@ export const Loading: Story = { args: { widget: widgetVm("design", "call", { loa
 /** leaf widgetview/failed */
 export const Failed: Story = { args: { widget: widgetVm("design", "call", { load: { state: "failed", error: "The widget did not answer within 15 seconds." } }) } };
 
-/** leaf widgetview/prompt */
+/** leaf widgetview/prompt (an OpenID request waits behind it) */
 export const CapabilityPrompt: Story = {
+  args: { widget: widgetVm("design", "call", { load: { state: "loading" }, prompts: { capabilities: capabilities(SHORT), openId: true } }) },
+};
+
+/** leaf widgetview/prompt-long: one row of "This app" unchecked, scrolled to the end */
+export const CapabilityPromptLong: Story = {
+  args: { widget: widgetVm("design", "call", { prompts: { capabilities: capabilities(LONG, { unknown: [UNKNOWN] }) } }), initialUnchecked: [`widget:org.matrix.msc2931.navigate`] },
+  render: (args) => (
+    <ScrolledToEnd>
+      <WidgetView {...args} />
+    </ScrolledToEnd>
+  ),
+};
+
+/** leaf widgetview/prompt-merged: a second request joined, one earlier row unchecked, "Approve" blocked */
+export const CapabilityPromptMerged: Story = {
   args: {
-    widget: widgetVm("design", "call", {
-      load: { state: "loading" },
-      prompts: {
-        capabilities: {
-          requested: [`widget:${X}get_matrix_context`, `widget:${X}read_events.timeline:m.room.message`, `widget:${X}send_event.timeline:m.room.message`, `widget:${X}send_event.delayed`, `widget:${X}send_to_device:org.example.ping`],
-        },
-        openId: true,
-      },
-    }),
+    widget: widgetVm("design", "call", { prompts: { capabilities: capabilities([...SHORT, ...MORE], { added: MORE, blocked: true }) } }),
+    initialUnchecked: [`widget:${X}send_event.delayed`],
   },
 };
 
@@ -52,7 +134,7 @@ export const OpenIdPromptAndCompact: Story = {
     <>
       <WidgetView {...args} widget={widgetVm("design", "call", { prompts: { openId: true } })} />
       <div style={{ width: 224, height: 140, flex: "none", display: "flex", alignSelf: "center", margin: 16 }}>
-        <WidgetView {...args} compact widget={widgetVm("design", "board", { prompts: { capabilities: { requested: [`widget:${X}get_matrix_context`] } } })} />
+        <WidgetView {...args} compact widget={widgetVm("design", "board", { prompts: { capabilities: capabilities([`widget:${X}get_matrix_context`]) } })} />
       </div>
     </>
   ),

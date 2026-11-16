@@ -22,5 +22,6 @@ test("the dev tools open with the messages panel", async ({ host }) => {
 - **The widget API** is asserted with `host.actions(widgetId, "fromWidget" | "toWidget")`, `host.store(roomId)` and `window.widgetHost` (`src/app/testHook.ts`), not by reading the message log's DOM. Inside a widget: `host.frame(widgetId).getByRole(…)`.
 - `host.dispatch(intent)` sends an intent directly, for a state no button reaches quickly. Prefer buttons.
 - `host.token(widgetId)` proves that a widget did not reload.
+- **Time.** The fixture installs Playwright's clock before the app loads; it runs like the real one. "Approve" of the capability prompt is blocked for 3 s after the card appeared or a request added to it: `host.passApproveDelay()` jumps over that. `capabilityBoxes(prompt)` are the prompt's capability checkboxes without the sections' "All in …".
 
 A file's tests run in order on one page; files run in parallel workers. A spec file must not depend on another file.

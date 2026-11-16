@@ -56,7 +56,7 @@ pub use actions::widget::update_delayed_event::{UpdateDelayedEventAction, Update
 pub use actions::widget::upload_file::{UploadFileRequest, UploadFileResponse};
 pub use actions::widget::{WidgetRequest, WidgetResponse};
 pub use actions::Action;
-pub use capabilities::{Capability, CapabilitySet};
+pub use capabilities::{capability_is_known, Capability, CapabilitySet};
 pub use error::ActionError;
 pub use file::Base64File;
 pub use json::JsonValue;

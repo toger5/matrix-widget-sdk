@@ -8,6 +8,7 @@
 import {
   activeAccount,
   activeWorkspace,
+  approveBlockedUntil,
   loggableIntent,
   widgetInstanceId,
   type AccountDataViewModel,
@@ -15,6 +16,7 @@ import {
   type AccountViewModel,
   type AppIntent,
   type AppViewModel,
+  type CapabilityPromptViewModel,
   type DevBackendViewModel,
   type Loadable,
   type LoginViewModel,
@@ -72,6 +74,17 @@ const TOAST_MS = 4000;
 const VERIFICATION_STOPPED = "The DevBackend was activated, which stops the verification.";
 
 const errorText = (e: unknown) => (e instanceof Error ? e.message : String(e));
+
+/**
+ * The capability prompt after the driver asked its whole open question (again): what was not in
+ * the open prompt is "New" (and stays so until the answer), and "Approve" is blocked from `now`.
+ */
+const joinCapabilityPrompt = (open: CapabilityPromptViewModel | undefined, question: { requested: string[]; unknown: string[] }, now: number): CapabilityPromptViewModel => ({
+  requested: question.requested,
+  unknown: question.unknown,
+  added: open ? question.requested.filter((c) => open.added.includes(c) || !open.requested.includes(c)) : [],
+  lastRequestAt: now,
+});
 
 const DEFAULT_DEV_BEHAVIOR: WidgetHostBehavior = { autoApproveCapabilities: false, autoApproveOpenId: false, rememberCapabilities: false };
 /** Matrix accounts: the user is asked, and the answer is remembered. */
@@ -515,7 +528,7 @@ export class AppController {
           events: {
             ready: () => this.setWidget(id, (w) => ({ ...w, load: { state: "ready" } })),
             failed: (error) => this.setWidget(id, (w) => (w.load.state === "ready" ? w : { ...w, load: { state: "failed", error } })),
-            capabilitiesRequested: (requested) => this.setWidget(id, (w) => ({ ...w, prompts: { ...w.prompts, capabilities: requested && { requested } } })),
+            capabilitiesRequested: (question) => this.setWidget(id, (w) => ({ ...w, prompts: { ...w.prompts, capabilities: question && joinCapabilityPrompt(w.prompts.capabilities, question, Date.now()) } })),
             openIdRequested: (pending) => this.setWidget(id, (w) => ({ ...w, prompts: { ...w.prompts, openId: pending ? true : undefined } })),
             alwaysOnScreen: (value) => this.setAlwaysOnScreen(id, value),
             activity: () => this.devBackend?.refresh(id),
@@ -1042,8 +1055,10 @@ export class AppController {
         return void this.startWidget(widget.roomId, widget.widgetKey);
       }
       case "widget/answerCapabilities": {
-        const requested = this.main?.widgets[intent.widgetId]?.prompts.capabilities?.requested;
-        return this.runtimes.get(intent.widgetId)?.answerCapabilities(intent.approved, requested);
+        const prompt = this.main?.widgets[intent.widgetId]?.prompts.capabilities;
+        // "Approve" is blocked for a moment after the card appeared or a request added to it; the view shows it, this enforces it. "Deny all" is never blocked.
+        if (prompt && intent.approved.length > 0 && Date.now() < approveBlockedUntil(prompt)) return;
+        return this.runtimes.get(intent.widgetId)?.answerCapabilities(intent.approved, prompt?.requested);
       }
       case "widget/answerOpenId":
         return this.runtimes.get(intent.widgetId)?.answerOpenId(intent.allow);

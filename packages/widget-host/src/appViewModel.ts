@@ -30,7 +30,8 @@
  *       │  ├─ pip                      PictureInPicturePanel: stacking, position, box size
  *       │  └─ devTools[widgetId]       dock and panels of each widget's WidgetDevToolBar
  *       ├─ data                        what the active account knows: rooms, recent widgets and rooms
- *       ├─ widgets[widgetId]           runtime state of every running widget (one iframe each)
+ *       ├─ widgets[widgetId]           runtime state of every running widget (one iframe each):
+ *       │                              load state, always on screen, the capability / OpenID prompts
  *       └─ modal, toasts
  * ```
  *
@@ -382,14 +383,51 @@ export interface WidgetInstanceViewModel {
    * shown in the PictureInPicturePanel, whenever its tab is not shown. leaf tabs/pinned
    */
   alwaysOnScreen: boolean;
-  /** Questions of the widget that wait for the user. Both can be pending at once. leaf widgetview/prompt */
-  prompts: { capabilities?: { requested: string[] }; openId?: true };
+  /** Questions of the widget that wait for the user. Both can be pending at once. leaves widgetview/prompt* */
+  prompts: { capabilities?: CapabilityPromptViewModel; openId?: true };
 }
+
+/**
+ * The open capability question of a widget: one card, however many requests it answers. The view
+ * sorts the capabilities into sections and writes the summary from them.
+ * leaves widgetview/prompt, widgetview/prompt-long, widgetview/prompt-merged
+ */
+export interface CapabilityPromptViewModel {
+  /**
+   * Every capability of the requests that wait for the answer, in the order they were requested,
+   * without those the widget holds already or gets without asking. A request that arrives while the
+   * card is open adds to it.
+   */
+  requested: string[];
+  /** Of `requested`, those that a later request added while the card was open: marked "New". */
+  added: string[];
+  /**
+   * Of `requested`, those that are no capability of the widget API (the driver tells; a known
+   * action name under a foreign namespace is one of them): they allow nothing. Listed under
+   * "Unknown to this app".
+   */
+  unknown: string[];
+  /**
+   * When the card appeared or a request last added to it (`Date.now()`; a request that adds nothing
+   * to decide does not count). "Approve" is blocked until `approveBlockedUntil`.
+   */
+  lastRequestAt: number;
+}
+
+/**
+ * "Approve" of the capability prompt is blocked this long after the card appeared or a request added
+ * to it, so a widget cannot change what the user approves just before the click, or make the card
+ * appear under the pointer. "Deny all" is never blocked.
+ */
+export const CAPABILITY_APPROVE_DELAY_MS = 3000;
 
 // ---------------------------------------------------------------------------------------------
 // Derived values: computed from the model, never stored in it.
 
 const mainOf = (vm: AppViewModel) => (vm.screen.kind === "main" ? vm.screen.main : undefined);
+
+/** Until when (ms since epoch) "Approve" of a capability prompt is blocked. leaf widgetview/prompt-merged */
+export const approveBlockedUntil = (prompt: CapabilityPromptViewModel): number => prompt.lastRequestAt + CAPABILITY_APPROVE_DELAY_MS;
 
 export const activeAccount = (m: MainViewModel) => m.accounts.find((a) => a.id === m.activeAccountId);
 export const activeWorkspace = (m: MainViewModel): WorkspaceLayout | undefined => m.workspaces[m.activeAccountId];
@@ -521,7 +559,7 @@ export type AppIntent =
   | { type: "tab/close"; panelId: PanelId; tabId: TabId } // Alt+W while a tab is shown; stops the widget, unless it is always on screen: then it keeps running in the PiP panel (assumption, see designFeedback.md). The last one returns the room view to its RoomOverview
   // widgets
   | { type: "widget/reload"; widgetId: WidgetInstanceId } // "Retry" of a failed widget and the reload button of its dev tool bar: stops it and starts it again (new iframe and driver, the current URL of its state event); its dev tools data starts empty
-  | { type: "widget/answerCapabilities"; widgetId: WidgetInstanceId; approved: string[] }
+  | { type: "widget/answerCapabilities"; widgetId: WidgetInstanceId; approved: string[] } // "Approve N selected" / "Deny all" (`approved: []`) of the capability prompt: answers every request it holds; an approval before `approveBlockedUntil` is ignored
   | { type: "widget/answerOpenId"; widgetId: WidgetInstanceId; allow: boolean }
   | { type: "widget/jumpToTab"; widgetId: WidgetInstanceId } // activates its tab, which takes it out of the PiP panel; opens the room panel again if it was closed
   | { type: "widget/close"; widgetId: WidgetInstanceId; confirmed?: boolean } // the close button in the PiP panel: stops (kills) the widget and closes its tab. The way to stop an always-on-screen widget. Asks first (confirm modal), because the widget still wants to stay on screen; the modal sends it again with `confirmed`

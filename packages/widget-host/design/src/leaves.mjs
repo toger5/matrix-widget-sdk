@@ -33,7 +33,7 @@ const designCall = (o = {}) =>
     devTools: o.devTools,
     overflow: o.overflow,
     tabs: o.tabs ?? [wt("call", { active: true, devOpen: !!o.dev, pinned: o.pinned }), wt("board")],
-    body: o.body ?? widgetView({ kind: "call", dev: o.dev, state: o.state }),
+    body: o.body ?? widgetView({ kind: "call", dev: o.dev, state: o.state, prompt: o.prompt }),
   });
 const platformPoll = (o = {}) =>
   roomPanel({ room: "platform", devTools: o.devTools, tabs: [wt("poll", { active: true })], body: widgetView({ kind: "poll" }) });
@@ -240,7 +240,27 @@ export const LEAVES = [
 
   { id: "widgetview/loading", section: "RoomsArea", group: "RoomView (1) › WidgetTab", title: "Loading", w: 700, h: 440, html: solo(designCall({ state: "loading" })) },
   { id: "widgetview/failed", section: "RoomsArea", group: "RoomView (1) › WidgetTab", title: "Failed to load", w: 700, h: 440, html: solo(designCall({ state: "failed" })) },
-  { id: "widgetview/prompt", section: "RoomsArea", group: "RoomView (1) › WidgetTab", title: "Capability prompt (extra: exists in the app today, not in the list)", w: 700, h: 560, html: solo(designCall({ state: "prompt" })) },
+  { id: "widgetview/prompt", section: "RoomsArea", group: "RoomView (1) › WidgetTab", title: "Capability prompt: summary and sections", w: 700, h: 640, note: "Everything is checked at first. The risky parts of the summary come first, in bold; a warning icon marks risky rows and their section.", html: solo(designCall({ state: "prompt" })) },
+  {
+    id: "widgetview/prompt-long",
+    section: "RoomsArea",
+    group: "RoomView (1) › WidgetTab",
+    title: "Capability prompt: a long list",
+    w: 700,
+    h: 560,
+    note: "The MSC4412 test widget's 33 capabilities plus one this app does not know, scrolled to the end of the list. Only the sections scroll; the header and the buttons stay, and the header of the section in view sticks to the top. One row of “This app” is unchecked, so its checkbox is mixed.",
+    html: solo(designCall({ state: "prompt", prompt: { list: "long", atEnd: true, unchecked: ["widget:org.matrix.msc2931.navigate"] } })),
+  },
+  {
+    id: "widgetview/prompt-merged",
+    section: "RoomsArea",
+    group: "RoomView (1) › WidgetTab",
+    title: "Capability prompt: a second request joined, “Approve” blocked",
+    w: 700,
+    h: 800,
+    note: "The widget asked again while the card was open: its two capabilities joined their sections, checked and marked “New”; the row the user had unchecked stays unchecked. “Approve” is blocked for 3 s after the card appeared or a request added to it; “Deny all” never is.",
+    html: solo(designCall({ state: "prompt", prompt: { merged: true, unchecked: ["widget:org.matrix.mscXXXX.send_event.delayed"] } })),
+  },
   { id: "widgetview/plain", section: "RoomsArea", group: "RoomView (1) › WidgetTab", title: "Dev tools: no (full widget)", w: 900, h: 560, html: solo(designCall()) },
   { id: "devtools/bar-top", section: "RoomsArea", group: "RoomView (1) › WidgetTab › Dev tools", title: "Bar only, docked top", w: 900, h: 560, html: devLeaf({ dock: "top" }) },
   { id: "devtools/bar-bottom", section: "RoomsArea", group: "RoomView (1) › WidgetTab › Dev tools", title: "Bar only, docked bottom", w: 900, h: 560, html: devLeaf({ dock: "bottom" }) },

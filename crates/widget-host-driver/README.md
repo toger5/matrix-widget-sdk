@@ -24,7 +24,7 @@ use widget_host_driver::widget_actions::Capability;
 struct Platform { /* handle to the iframe + UI */ }
 impl WidgetHostPlatform for Platform {
     fn send_to_widget(&self, json: String) { /* iframe.postMessage(json, widgetOrigin) */ }
-    fn on_capabilities_requested(&self, requested: Vec<Capability>) { /* prompt the user */ }
+    fn on_capabilities_requested(&self, requested: Vec<Capability>) { /* show (or update) the prompt */ }
     fn on_ready(&self) { /* hide the loading state */ }
     fn on_openid_requested(&self) { /* prompt, then driver.resolve_openid(allowed) */ }
     // navigate, set_always_on_screen, client_id / client_theme / client_language
@@ -40,6 +40,10 @@ driver.approve_capabilities(approved);
 // 3. whenever the user takes a permission away:
 driver.revoke_capabilities(revoked);
 ```
+
+`requested` is the whole open question: a request that arrives while the user decides joins it,
+and the callback is called again with all of it (minus what the widget holds or gets without
+asking). One `approve_capabilities` answers every request so far.
 
 The driver subscribes to the backend itself once `host:…forward_event.*`, `host:…update_state` or
 `host:…forward_to_device` capabilities are approved. The

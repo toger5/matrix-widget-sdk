@@ -363,6 +363,12 @@ impl Capability {
         }
     }
 
+    /// Whether this is a capability of the scheme, i.e. not [`Capability::Other`]. An unknown
+    /// string can be granted, but it allows nothing.
+    pub fn is_known(&self) -> bool {
+        !matches!(self, Self::Other { .. })
+    }
+
     /// The unstable representation, e.g. `widget:org.matrix.mscXXXX.send_event.timeline:m.room.message`
     /// or `widget:org.matrix.msc2931.navigate` (or the raw string for `Other`).
     pub fn to_unstable_string(&self) -> String {
@@ -479,6 +485,14 @@ uniffi::custom_type!(Capability, String, {
     try_lift: |raw| Ok(Capability::parse(&raw)),
     lower: |cap| cap.to_string(),
 });
+
+/// Whether `capability` is a capability of the scheme ([`Capability::is_known`]). For foreign
+/// code, where a capability is its string: a permission prompt can tell what this crate acts on
+/// from what it does not know (also a known action name under a foreign namespace).
+#[cfg_attr(feature = "uniffi", uniffi::export)]
+pub fn capability_is_known(capability: Capability) -> bool {
+    capability.is_known()
+}
 
 impl From<&str> for Capability {
     fn from(raw: &str) -> Self {
@@ -638,6 +652,9 @@ mod tests {
             assert_eq!(Capability::parse(&unstable), expected, "{unstable}");
             assert_eq!(expected.to_unstable_string(), unstable);
             assert_eq!(expected.to_string(), unstable, "Display emits the unstable namespace");
+            assert!(
+                capability_is_known(Capability::parse(stable)) && capability_is_known(Capability::parse(&unstable))
+            );
         }
     }
 
@@ -772,6 +789,7 @@ mod tests {
         for raw in cases {
             let parsed = Capability::parse(raw);
             assert_eq!(parsed, other(raw), "{raw}");
+            assert!(!capability_is_known(parsed.clone()), "{raw}");
             // Unknown strings survive unchanged in every spelling.
             assert_eq!(parsed.to_string(), raw);
             assert_eq!(parsed.to_stable_string(), raw);

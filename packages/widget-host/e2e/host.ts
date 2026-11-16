@@ -12,7 +12,7 @@ import { fileURLToPath } from "node:url";
 import { expect, test as base, type FrameLocator, type Locator, type Page } from "@playwright/test";
 
 import type { HostSeed } from "../src/app/controller";
-import type { AppIntent, AppViewModel, MainViewModel } from "../src/appViewModel";
+import { CAPABILITY_APPROVE_DELAY_MS, type AppIntent, type AppViewModel, type MainViewModel } from "../src/appViewModel";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const LEAVES_DIR = join(here, "../leaf-screenshots");
@@ -90,6 +90,15 @@ export class Host {
       });
   }
 
+  /**
+   * Let the time pass in which "Approve" of the capability prompt is blocked after the last
+   * request: the page's clock (installed by the fixture) jumps ahead. Call it once the prompt
+   * shows what is to be approved.
+   */
+  async passApproveDelay(): Promise<void> {
+    await this.page.clock.fastForward(CAPABILITY_APPROVE_DELAY_MS);
+  }
+
   /** This screen is the design leaf `id` (`design/leaves/<id>.html`): saves a screenshot next to the others for comparison. */
   async leaf(id: string): Promise<void> {
     const path = join(LEAVES_DIR, `${id}.png`);
@@ -136,6 +145,8 @@ export const test = base.extend<{ host: Host }, { hostPage: Page }>({
       const context = await browser.newContext({ viewport: { width: 1280, height: 800 }, permissions: ["clipboard-read", "clipboard-write"] });
       const page = await context.newPage();
       page.on("pageerror", (e) => console.error(`page error: ${e.message}`));
+      // A clock the tests can move (`passApproveDelay`). It runs on its own like the real one.
+      await page.clock.install();
       await page.goto("/?mode=memory");
       await page.waitForFunction(() => window.widgetHost?.state().screen.kind === "main");
       await use(page);
@@ -148,5 +159,8 @@ export const test = base.extend<{ host: Host }, { hostPage: Page }>({
     await use(new Host(hostPage));
   },
 });
+
+/** The checkboxes of the capabilities in a capability prompt, without those of the sections ("All in …"). */
+export const capabilityBoxes = (prompt: Locator, checked?: boolean): Locator => prompt.getByRole("checkbox", { name: /^(?!All in )/, checked });
 
 export { expect };

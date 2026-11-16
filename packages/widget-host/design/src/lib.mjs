@@ -124,6 +124,124 @@ export const SAS_EMOJI = [
   ["☂️", "Umbrella"],
 ];
 
+// ---------------------------------------------------------------------------------------------
+// Capability prompt: the sections, the labels and the risky capabilities (the copy the app's
+// `src/views/widget/format.ts` follows), and the capabilities the leaves show.
+
+/**
+ * The sections in their order: title, the phrase of the summary sentence, and the capabilities
+ * (`<source>:<action name>[.<modifier>]`, without namespace and data) that belong to them. A
+ * capability of none of them is "Unknown to this app".
+ */
+export const CAP_SECTIONS = [
+  ["read", "Read this room", "read this room", ["widget:read_events", "widget:read_relations", "host:forward_event", "host:update_state"]],
+  ["send", "Send as you", "send messages as you", ["widget:send_event.timeline", "widget:send_event.delayed", "widget:send_event.sticky", "widget:update_delayed_event"]],
+  ["state", "Change the room", "change the room for everyone", ["widget:send_event.state"]],
+  ["devices", "Direct messages to devices", "exchange hidden messages with devices", ["widget:send_to_device", "host:forward_to_device"]],
+  ["account", "You and your account", "know who you are", ["widget:get_matrix_context", "widget:get_openid", "widget:search_user_directory", "widget:read_room_account_data"]],
+  ["files", "Files", "work with files", ["widget:get_media_config", "widget:upload_file", "widget:download_file"]],
+  ["calls", "Calls", "join calls", ["widget:get_rtc_transports", "widget:get_rtc_livekit_token", "widget:delegate_rtc_livekit_delayed_leave", "host:update_turn_servers"]],
+  ["app", "This app", "adapt to this app", ["widget:get_client_context", "widget:navigate", "widget:set_always_on_screen", "host:update_theme", "host:update_language", "host:update_visibility"]],
+];
+/** The section of what the app does not know: listed last, with the raw string only. */
+export const CAP_UNKNOWN = ["other", "Unknown to this app", "ask for things this app does not know"];
+
+/** Risky capabilities: the warning icon's text. `get_openid` also changes its section's phrase. */
+export const CAP_RISKS = {
+  "widget:send_event.timeline": "Acts in your name",
+  "widget:send_event.state": "Changes the room for everyone",
+  "widget:send_to_device": "Hidden from the room",
+  "widget:get_openid": "Proves your identity to other servers",
+};
+export const OPENID_PHRASE = "prove who you are to other servers";
+
+const q = (type) => `“${type}”`;
+/** The label of each capability; `t` is the event type of its data. */
+export const CAP_LABELS = {
+  "widget:read_events.timeline": (t) => (t === "m.room.message" ? "Read the messages of this room" : `Read ${q(t)} events of this room`),
+  "widget:read_events.state": (t) => `Read the ${q(t)} state of this room`,
+  "widget:read_relations": (t) => `Read ${q(t)} events that refer to a message`,
+  "host:forward_event.timeline": (t) => (t === "m.room.message" ? "Receive new messages of this room" : `Receive new ${q(t)} events`),
+  "host:forward_event.state": (t) => `Receive changes of the ${q(t)} state`,
+  "host:forward_event.sticky": () => "Receive sticky events",
+  "host:update_state": (t) => `Be told the current ${q(t)} state`,
+  "widget:send_event.timeline": (t) => (t === "m.room.message" ? "Send messages to this room" : `Send ${q(t)} events to this room`),
+  "widget:send_event.state": (t) => `Change the ${q(t)} state of this room`,
+  "widget:send_event.delayed": () => "Send events with a delay",
+  "widget:send_event.sticky": () => "Send sticky events",
+  "widget:update_delayed_event": () => "Change or cancel delayed events",
+  "widget:send_to_device": (t) => `Send ${q(t)} messages to devices`,
+  "host:forward_to_device": (t) => `Receive ${q(t)} messages from devices`,
+  "widget:get_matrix_context": () => "Know who you are and which room this is",
+  "widget:get_openid": () => "Prove who you are to other servers (OpenID)",
+  "widget:search_user_directory": () => "Search the user directory",
+  "widget:read_room_account_data": (t) => `Read your ${q(t)} data of this room`,
+  "widget:get_media_config": () => "Know the upload limits",
+  "widget:upload_file": () => "Upload files",
+  "widget:download_file": () => "Download files",
+  "widget:get_rtc_transports": () => "Find the call servers",
+  "widget:get_rtc_livekit_token": () => "Join calls on LiveKit servers",
+  "widget:delegate_rtc_livekit_delayed_leave": () => "Leave calls for you when the connection drops",
+  "host:update_turn_servers": () => "Be told the TURN servers for calls",
+  "widget:get_client_context": () => "Know the theme and language of this app",
+  "widget:navigate": () => "Open links to rooms and users",
+  "widget:set_always_on_screen": () => "Stay on screen while you use other tabs",
+  "host:update_theme": () => "Be told when the theme changes",
+  "host:update_language": () => "Be told when the language changes",
+  "host:update_visibility": () => "Be told when it is shown or hidden",
+};
+
+const X = "org.matrix.mscXXXX";
+/** What the leaves request. `long` is the MSC4412 test widget's list (packages/test-widgets/new/capabilities.ts) plus one unknown capability. */
+export const CAP_REQUESTS = {
+  short: [
+    `widget:org.matrix.msc2876.read_events.timeline:m.room.message`,
+    `host:${X}.forward_event.timeline:m.room.message`,
+    `widget:${X}.send_event.timeline:m.room.message`,
+    `widget:${X}.send_event.delayed`,
+    `widget:${X}.send_to_device:org.example.ping`,
+    `widget:${X}.get_matrix_context`,
+  ],
+  /** A second request while the short one is open. */
+  more: [`widget:${X}.send_event.state:m.room.topic`, `widget:${X}.get_openid`],
+  long: [
+    `widget:${X}.send_event.timeline:m.room.message`,
+    `widget:org.matrix.msc2876.read_events.timeline:m.room.message`,
+    `host:${X}.forward_event.timeline:m.room.message`,
+    `widget:${X}.send_event.state:m.room.topic`,
+    `widget:org.matrix.msc2876.read_events.state:m.room.topic`,
+    `host:${X}.update_state:m.room.topic`,
+    `host:${X}.forward_event.state:m.room.topic`,
+    `widget:${X}.send_event.delayed`,
+    `widget:org.matrix.msc4157.update_delayed_event`,
+    `widget:${X}.send_event.sticky`,
+    `widget:${X}.send_event.timeline:m.rtc.member`,
+    `widget:${X}.send_event.timeline:m.reaction`,
+    `widget:org.matrix.msc2876.read_events.timeline:m.reaction`,
+    `widget:org.matrix.msc3869.read_relations:m.reaction`,
+    `host:${X}.forward_event.timeline:m.reaction`,
+    `widget:${X}.send_to_device:org.example.ping`,
+    `host:${X}.forward_to_device:org.example.ping`,
+    `host:${X}.update_turn_servers`,
+    `widget:org.matrix.msc4515.get_rtc_transports`,
+    `widget:org.matrix.msc3973.search_user_directory`,
+    `widget:org.matrix.msc4039.get_media_config`,
+    `widget:org.matrix.msc4039.upload_file`,
+    `widget:org.matrix.msc4039.download_file`,
+    `widget:com.beeper.read_room_account_data:m.tag`,
+    `widget:org.matrix.msc4533.get_rtc_livekit_token`,
+    `widget:org.matrix.msc2931.navigate`,
+    `widget:${X}.set_always_on_screen`,
+    `widget:${X}.get_openid`,
+    `widget:${X}.get_matrix_context`,
+    `widget:${X}.get_client_context`,
+    `host:${X}.update_theme`,
+    `host:${X}.update_language`,
+    `host:${X}.update_visibility`,
+    `widget:org.example.custom.share_screen`,
+  ],
+};
+
 export const MEMBERS = [
   ["Ada Okafor", "@ada:example.org", 265, "Admin"],
   ["Mira Köhler", "@mira:example.org", 215, "Moderator"],

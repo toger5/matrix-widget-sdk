@@ -2,7 +2,7 @@
 // (or a complete screen) is a composition of these, like the real app will be a composition of
 // React components driven by the AppViewModel (src/appViewModel.ts).
 
-import { ACCOUNTS, MEMBERS, ROOMS, SAS_EMOJI, WIDGETS, avatar, esc, icon, logo } from "./lib.mjs";
+import { ACCOUNTS, CAP_LABELS, CAP_REQUESTS, CAP_RISKS, CAP_SECTIONS, CAP_UNKNOWN, MEMBERS, OPENID_PHRASE, ROOMS, SAS_EMOJI, WIDGETS, avatar, esc, icon, logo } from "./lib.mjs";
 
 // ---------------------------------------------------------------------------------------------
 // Atoms
@@ -707,27 +707,80 @@ export function devToolBar({ dock = "top", panels = [], expanded = false, size, 
 }
 
 /**
- * o: { kind: widget key, state: "ready" | "loading" | "failed" | "prompt", dev?: see devToolBar, compact? }
+ * o: { kind: widget key, state: "ready" | "loading" | "failed" | "prompt", dev?: see devToolBar, compact?, prompt?: see capabilityPrompt }
  */
-export function widgetView({ kind = "call", state = "ready", dev = null, compact = false } = {}) {
+export function widgetView({ kind = "call", state = "ready", dev = null, compact = false, prompt = {} } = {}) {
   const name = WIDGETS[kind].name;
   let content;
   if (state === "loading") content = `<div class="wv-state"><span class="spinner" role="status" aria-label="Loading"></span><b>Loading ${name}…</b><span class="muted">Waiting for the widget to report that it is ready.</span></div>`;
   else if (state === "failed")
     content = `<div class="wv-state">${icon("alert", 30, "danger")}<b>${name} could not be loaded</b><span class="muted">The widget did not answer within 15 seconds.</span><code>https://${WIDGETS[kind].host}/room · no notify_ready</code><div class="inline-row">${btn("Retry", { ico: "refresh", kind: "primary" })}${btn("Close tab")}</div></div>`;
-  else if (state === "prompt") {
-    const perms = [
-      ["Know who you are and which room this is", "get_matrix_context", true],
-      ["Read the messages of this room", "read_events.timeline:m.room.message", true],
-      ["Send messages to this room", "send_event.timeline:m.room.message", true],
-      ["Send delayed events", "send_event.delayed", true],
-      ["Send to-device messages", "send_to_device:org.example.ping", false],
-    ];
-    content = `<div class="wv-state"><div class="prompt-card" role="group" aria-labelledby="perm-t">${wico(kind, 40)}<b id="perm-t">${name} asks for permissions</b><span class="muted">Choose what this widget may do in this room. Nothing is shared before you approve.</span><div class="perm-list">${perms
-      .map(([label, cap, on]) => `<label class="perm"><span class="check ${on ? "on" : ""}" role="checkbox" aria-checked="${on}" tabindex="0">${on ? icon("check", 12) : ""}</span><span><b>${label}</b><small class="mono">${cap}</small></span></label>`)
-      .join("")}</div><div class="inline-row">${btn("Deny all")}<span class="sp"></span>${btn("Approve 4 selected", { kind: "primary" })}</div></div></div>`;
-  } else content = widget(kind, { compact });
+  else if (state === "prompt") content = `<div class="wv-state wv-prompt">${capabilityPrompt({ kind, ...prompt })}</div>`;
+  else content = widget(kind, { compact });
   return `<div class="wv dock-${dev?.dock ?? "none"}">${dev ? devToolBar(dev) : ""}<div class="wv-widget">${content}</div></div>`;
+}
+
+/** `widget:org.matrix.msc2876.read_events.timeline:m.room.message` → { key: "widget:read_events.timeline", data: "m.room.message" }. */
+function capKind(capability) {
+  const m = /^(widget|host):([^:]+)(?::(.*))?$/.exec(capability);
+  if (!m) return { key: "", data: "" };
+  const parts = m[2].split(".");
+  const modifier = parts.length > 2 && ["timeline", "state", "delayed", "sticky"].includes(parts.at(-1)) ? parts.pop() : "";
+  const action = `${m[1]}:${parts.pop()}`;
+  const key = modifier ? `${action}.${modifier}` : action;
+  return { key, action, data: m[3] ?? "" };
+}
+
+const checkbox = (state, label) =>
+  `<button class="check ${state === true ? "on" : state === "mixed" ? "on mixed" : ""}" role="checkbox" aria-checked="${state}" aria-label="${esc(label)}">${state === true ? icon("check", 12) : state === "mixed" ? icon("minus", 12) : ""}</button>`;
+const risk = (text) => `<span class="pc-risk" role="img" aria-label="${text}" title="${text}">${icon("alert", 13)}</span>`;
+const sentence = (parts) => (parts.length < 2 ? parts.join("") : `${parts.slice(0, -1).join(", ")} and ${parts.at(-1)}`);
+
+/**
+ * The capability prompt (permission card): summary, sections, the approve delay.
+ * o: { kind: widget key, list: "short" | "long", merged: a second request joined the short list
+ *      (two "New" rows, "Approve" blocked), unchecked: capabilities the user unchecked,
+ *      atEnd: the sections are scrolled to their end }
+ */
+export function capabilityPrompt({ kind = "call", list = "short", merged = false, unchecked = [], atEnd = false } = {}) {
+  const name = WIDGETS[kind].name;
+  const requested = [...CAP_REQUESTS[list], ...(merged ? CAP_REQUESTS.more : [])];
+  const added = merged ? CAP_REQUESTS.more : [];
+  const sections = [...CAP_SECTIONS, [...CAP_UNKNOWN, []]]
+    .map(([id, title, phrase, members]) => {
+      const caps = requested.filter((c) => {
+        const { key, action } = capKind(c);
+        return id === "other" ? !CAP_LABELS[key] : members.includes(key) || members.includes(action);
+      });
+      const openId = caps.some((c) => capKind(c).key === "widget:get_openid");
+      return { id, title, caps, phrase: id === "other" ? `ask for ${caps.length === 1 ? "one thing" : `${caps.length} things`} this app does not know` : openId ? OPENID_PHRASE : phrase, risky: caps.some((c) => CAP_RISKS[capKind(c).key]) };
+    })
+    .filter((s) => s.caps.length);
+  const phrases = [...sections.filter((s) => s.risky).map((s) => `<b>${s.phrase}</b>`), ...sections.filter((s) => !s.risky).map((s) => s.phrase)];
+  const on = (c) => !unchecked.includes(c);
+  const selected = requested.filter(on).length;
+
+  const row = (c) => {
+    const { key, data } = capKind(c);
+    const label = CAP_LABELS[key]?.(data);
+    const isNew = added.includes(c);
+    const head = label ? `<span class="pc-l"><b>${esc(label)}</b>${CAP_RISKS[key] ? risk(CAP_RISKS[key]) : ""}${isNew ? '<em class="pill new">New</em>' : ""}</span>` : isNew ? '<span class="pc-l"><em class="pill new">New</em></span>' : "";
+    return `<label class="perm ${isNew ? "new" : ""}">${checkbox(on(c), label ? `${label} (${c})` : c)}<span>${head}<small class="mono">${esc(c)}</small></span></label>`;
+  };
+  const section = (s) => {
+    const n = s.caps.filter(on).length;
+    const all = n === s.caps.length ? true : n === 0 ? false : "mixed";
+    return `<div class="pc-sec" role="group" aria-labelledby="pc-${s.id}"><div class="pc-sh">${checkbox(all, `All in ${s.title}`)}<b id="pc-${s.id}">${s.title}</b>${s.risky ? risk("Has risky permissions") : ""}<small>${n} of ${s.caps.length}</small></div>${s.id === "other" ? '<p class="pc-note">This app does not act on these.</p>' : ""}${s.caps.map(row).join("")}</div>`;
+  };
+  const status = merged ? `<p class="pc-status" role="status" id="perm-wait">${icon("clock", 14)}<span>${added.length} permissions were added. You can approve in <b>3 s</b>.</span></p>` : "";
+  const approve = `<button class="btn primary pc-approve"${merged ? ' aria-disabled="true" aria-describedby="perm-wait" style="--wait:80%"' : ""}><span>Approve ${selected} selected</span></button>`;
+  return `<div class="prompt-card caps" role="group" aria-labelledby="perm-t" aria-describedby="perm-s">
+    <div class="pc-head">${wico(kind, 32)}<div><b id="perm-t">${name} asks for permissions</b><p class="pc-sum" id="perm-s">${name} wants to ${sentence(phrases)}.</p></div></div>
+    ${
+      // Mock only: a static page cannot be scrolled, so a reversed column starts at the end of the list.
+      atEnd ? `<div class="pc-body" style="display:flex;flex-direction:column-reverse"><div>${sections.map(section).join("")}</div></div>` : `<div class="pc-body">${sections.map(section).join("")}</div>`
+    }
+    <div class="pc-foot">${status}<div class="inline-row">${btn("Deny all")}<span class="sp"></span>${approve}</div></div></div>`;
 }
 
 // ---------------------------------------------------------------------------------------------

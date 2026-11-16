@@ -5,7 +5,7 @@
  * stops; a reload (`widget/reload`: "Retry", the reload button of the dev tool bar) disposes it and
  * creates a new one.
  */
-import { WidgetHostDriver, type DriverSnapshot, type MatrixBackend, type WidgetHostPlatform } from "@matrix-widget-tools/widget-host-bindings";
+import { capabilityIsKnown, WidgetHostDriver, type DriverSnapshot, type MatrixBackend, type WidgetHostPlatform } from "@matrix-widget-tools/widget-host-bindings";
 
 import { MAX_STATS_BUCKETS, STATS_BUCKET_MS, type WidgetDevToolsData, type WidgetInstanceId, type WidgetMessage } from "../../appViewModel";
 import { loadCapabilities, saveCapabilities } from "../../lib/capabilityStore";
@@ -22,8 +22,11 @@ const MAX_CONSOLE_LINES = 500;
 export interface WidgetRuntimeEvents {
   ready(): void;
   failed(error: string): void;
-  /** The widget asks for capabilities (`undefined`: the question was answered). */
-  capabilitiesRequested(requested: string[] | undefined): void;
+  /**
+   * The open capability question of the widget, whole: every request since the last answer joins
+   * it (`undefined`: it was answered). `unknown`: those of `requested` the driver does not know.
+   */
+  capabilitiesRequested(question: { requested: string[]; unknown: string[] } | undefined): void;
   openIdRequested(pending: boolean): void;
   alwaysOnScreen(value: boolean): void;
   /** A message was handled: the backend may have changed (the DevBackend has no change notification). */
@@ -83,6 +86,11 @@ export class WidgetRuntime {
   private flushQueued = false;
   private denied = new Set<string>();
   private autoApproved: string[] = [];
+  /**
+   * The open question as the driver last asked it (`onCapabilitiesRequested`), set at once, before
+   * the prompt can show it. Empty once it is answered.
+   */
+  private asked: string[] = [];
   private disposed = false;
 
   constructor(private readonly options: WidgetRuntimeOptions) {
@@ -99,12 +107,15 @@ export class WidgetRuntime {
         this.record("toWidget", message, json.length);
         this.iframe?.contentWindow?.postMessage(message, this.origin);
       },
-      onCapabilitiesRequested: (requested) =>
+      // The whole open question; again, whole, when a request adds to it before the answer.
+      onCapabilitiesRequested: (requested) => {
+        this.asked = requested;
         later(() => {
           if (options.autoApproveCapabilities()) this.answerCapabilities(requested, requested);
-          else events.capabilitiesRequested(requested);
+          else events.capabilitiesRequested({ requested, unknown: requested.filter((c) => !capabilityIsKnown(c)) });
           this.refreshCapabilities();
-        }),
+        });
+      },
       onReady: () => later(() => events.ready()),
       onOpenidRequested: () => later(() => events.openIdRequested(true)),
       navigate: (uri) => {
@@ -170,10 +181,23 @@ export class WidgetRuntime {
     return this.driver.snapshot();
   }
 
-  /** Answer the open capability request with the approved subset and remember what the widget holds after it. */
-  answerCapabilities(approved: string[], requested: string[] = approved): void {
+  /**
+   * Answer the open capability question with the approved subset and remember what the widget
+   * holds after it. `shown`: what the user was asked about. An approval is refused while the
+   * driver has asked about something that was not shown: a request that arrived just before the
+   * click, whose prompt update is still on its way. (Only what the driver asked counts: a
+   * capability that a revoke or a shorter auto-approved list put back into its question was never
+   * asked about, is not granted by this answer, and must not block it.)
+   */
+  answerCapabilities(approved: string[], shown: string[] = approved): void {
+    const unseen = this.asked.filter((c) => !shown.includes(c));
+    if (approved.length > 0 && unseen.length > 0) {
+      this.log("warn", `approval refused: the widget asked for ${unseen.length} more ${unseen.length === 1 ? "capability" : "capabilities"} that the prompt did not show yet`);
+      return;
+    }
+    this.asked = [];
     this.driver.approveCapabilities(approved);
-    for (const cap of requested) if (approved.includes(cap)) this.denied.delete(cap);
+    for (const cap of [...shown, ...unseen]) if (approved.includes(cap)) this.denied.delete(cap);
     else this.denied.add(cap);
     // Added to what is remembered: a widget that asks for less this time keeps its earlier grants.
     const remembered = this.options.capabilityKey ? loadCapabilities(this.options.capabilityKey) : [];

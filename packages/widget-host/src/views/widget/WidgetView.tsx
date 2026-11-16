@@ -1,12 +1,12 @@
-import { useId, useState, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, type CSSProperties, type ReactNode } from "react";
 
-import type { PanelId, TabId, WidgetDevToolsLayout, WidgetInstanceViewModel } from "../../appViewModel";
+import { approveBlockedUntil, CAPABILITY_APPROVE_DELAY_MS, type CapabilityPromptViewModel, type PanelId, type TabId, type WidgetDevToolsLayout, type WidgetInstanceViewModel } from "../../appViewModel";
 import { useDispatch } from "../env";
 import { Avatar, Button, Icon } from "../ui/atoms";
 import { WidgetSlot } from "../ui/WidgetSlot";
 import { DevTools } from "./DevTools";
 import type { StatsSeries } from "./StatsPanel";
-import { capabilityLabel } from "./format";
+import { capabilityLabel, capabilityRisk, capabilitySections, capabilitySummary, type CapabilitySection } from "./format";
 
 export interface WidgetViewProps {
   widget: WidgetInstanceViewModel;
@@ -22,6 +22,8 @@ export interface WidgetViewProps {
   initialExpandedMessage?: string;
   /** Story only: the graph the StatsPanel shows first. */
   initialStatsSeries?: StatsSeries;
+  /** Story only: the capabilities the permission card starts with unchecked. */
+  initialUnchecked?: string[];
 }
 
 /**
@@ -31,21 +33,21 @@ export interface WidgetViewProps {
  * The slot is always rendered (the iframe must never lose its place); a state that the user has
  * to see or answer is a layer that covers it.
  */
-export function WidgetView({ widget, devTools, compact = false, tab, standIn, initialExpandedMessage, initialStatsSeries }: WidgetViewProps) {
+export function WidgetView({ widget, devTools, compact = false, tab, standIn, initialExpandedMessage, initialStatsSeries, initialUnchecked }: WidgetViewProps) {
   const dev = devTools?.open ? devTools : undefined;
   return (
     <div className={`wv dock-${dev?.dock ?? "none"}`} data-testid="widget-view" data-widget-id={widget.id}>
       {dev && <DevTools widget={widget} layout={dev} initialExpandedMessage={initialExpandedMessage} initialStatsSeries={initialStatsSeries} />}
       <div className="wv-widget">
         <WidgetSlot widgetId={widget.id}>{standIn}</WidgetSlot>
-        <WidgetState widget={widget} compact={compact} tab={tab} />
+        <WidgetState widget={widget} compact={compact} tab={tab} initialUnchecked={initialUnchecked} />
       </div>
     </div>
   );
 }
 
 /** What covers the widget: failed, a prompt (capabilities first, then OpenID) or loading. Nothing while it simply runs. */
-function WidgetState({ widget, compact, tab }: Pick<WidgetViewProps, "widget" | "compact" | "tab">) {
+function WidgetState({ widget, compact, tab, initialUnchecked }: Pick<WidgetViewProps, "widget" | "compact" | "tab" | "initialUnchecked">) {
   const dispatch = useDispatch();
   const widgetId = widget.id;
   const { name, url } = widget.widget;
@@ -100,14 +102,16 @@ function WidgetState({ widget, compact, tab }: Pick<WidgetViewProps, "widget" | 
     // TODO-FINDING two-prompts-order - both prompts can be pending at once; the cards are shown one after the other (capabilities, then OpenID), not stacked
     return (
       <div className="wv-over" data-testid="widget-prompt">
-        <div className="wv-state">
-          {prompts.capabilities ? (
-            // A new request (other capabilities) starts with everything checked again.
-            <CapabilityPrompt key={prompts.capabilities.requested.join("\n")} widget={widget} requested={prompts.capabilities.requested} />
-          ) : (
+        {prompts.capabilities ? (
+          <div className="wv-state wv-prompt">
+            {/* Keyed by the widget: a request that joins the open card keeps what the user unchecked. */}
+            <CapabilityPrompt key={widgetId} widget={widget} prompt={prompts.capabilities} initialUnchecked={initialUnchecked} />
+          </div>
+        ) : (
+          <div className="wv-state">
             <OpenIdPrompt widget={widget} />
-          )}
-        </div>
+          </div>
+        )}
       </div>
     );
   }
@@ -126,54 +130,163 @@ function WidgetState({ widget, compact, tab }: Pick<WidgetViewProps, "widget" | 
   return null;
 }
 
-/** The permission card: a checklist of the requested capabilities, all checked at first. leaf widgetview/prompt */
-function CapabilityPrompt({ widget, requested }: { widget: WidgetInstanceViewModel; requested: string[] }) {
+/**
+ * The permission card: a summary, the capabilities in sections (all checked at first) and
+ * "Approve", which is blocked for a moment after the card appeared or a request added to it.
+ * Capabilities that a later request added are marked "New". leaves widgetview/prompt,
+ * widgetview/prompt-long, widgetview/prompt-merged
+ */
+function CapabilityPrompt({ widget, prompt, initialUnchecked = [] }: { widget: WidgetInstanceViewModel; prompt: CapabilityPromptViewModel; initialUnchecked?: string[] }) {
   const dispatch = useDispatch();
-  const titleId = useId();
-  const [selected, setSelected] = useState<ReadonlySet<string>>(() => new Set(requested));
-  const answer = (approved: string[]) => dispatch({ type: "widget/answerCapabilities", widgetId: widget.id, approved });
-  const toggle = (capability: string) => {
-    const next = new Set(selected);
-    if (!next.delete(capability)) next.add(capability);
-    setSelected(next);
-  };
-  const approved = requested.filter((c) => selected.has(c));
+  const id = useId();
+  const approveRef = useRef<HTMLButtonElement>(null);
+  const { requested, added, unknown } = prompt;
+  const name = widget.widget.name;
+  // What the user unchecked: whatever joins later arrives checked, and earlier choices stay.
+  const [unchecked, setUnchecked] = useState<ReadonlySet<string>>(() => new Set(initialUnchecked));
+  const on = (capability: string) => !unchecked.has(capability);
+  const check = (capabilities: string[], checked: boolean) =>
+    setUnchecked((old) => {
+      const next = new Set(old);
+      for (const capability of capabilities) if (checked) next.delete(capability);
+      else next.add(capability);
+      return next;
+    });
+  const approved = requested.filter(on);
+  const sections = capabilitySections(requested, unknown);
+  const answer = (capabilities: string[]) => dispatch({ type: "widget/answerCapabilities", widgetId: widget.id, approved: capabilities });
 
-  return (
-    <div className="prompt-card" role="group" aria-labelledby={titleId} data-testid="capability-prompt">
-      <Avatar name={widget.widget.name} id={widget.widgetKey} size={40} square />
-      <b id={titleId}>{widget.widget.name} asks for permissions</b>
-      <span className="muted">Choose what this widget may do in this room. Nothing is shared before you approve.</span>
-      <div className="perm-list">
-        {requested.map((capability) => {
-          const on = selected.has(capability);
-          const label = capabilityLabel(capability);
+  const until = approveBlockedUntil(prompt);
+  const left = useTimeLeft(until);
+  const blocked = left > 0;
+  // Stories set the block far into the future: the countdown never shows more than the delay.
+  const seconds = Math.min(CAPABILITY_APPROVE_DELAY_MS / 1000, Math.ceil(left / 1000));
+  const elapsed = Math.max(0, Math.min(1, 1 - left / CAPABILITY_APPROVE_DELAY_MS));
+  // The bar under the blocked button fills up until "Approve" can be pressed.
+  useEffect(() => {
+    const button = approveRef.current;
+    const ms = until - Date.now();
+    if (!button || ms <= 0 || typeof button.animate !== "function" || window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return;
+    const from = Math.max(0, 1 - ms / CAPABILITY_APPROVE_DELAY_MS) * 100;
+    const animation = button.animate([{ width: `${from}%` }, { width: "100%" }], { pseudoElement: "::after", duration: ms, easing: "linear", fill: "forwards" });
+    return () => animation.cancel();
+  }, [until]);
+
+  const section = (s: CapabilitySection) => {
+    const n = s.capabilities.filter(on).length;
+    const all = n === s.capabilities.length ? true : n === 0 ? false : "mixed";
+    return (
+      <div key={s.id} className="pc-sec" role="group" aria-labelledby={`${id}-${s.id}`}>
+        <div className="pc-sh">
+          <Check checked={all} label={`All in ${s.title}`} onToggle={() => check(s.capabilities, all !== true)} />
+          <b id={`${id}-${s.id}`}>{s.title}</b>
+          {s.risky && <Risk text="Has risky permissions" />}
+          <small>
+            {n} of {s.capabilities.length}
+          </small>
+        </div>
+        {s.id === "other" && <p className="pc-note">This app does not act on these.</p>}
+        {s.capabilities.map((capability) => {
+          // What the driver does not know gets no label, even if its name looks familiar.
+          const label = s.id === "other" ? undefined : capabilityLabel(capability);
+          const risk = s.id === "other" ? undefined : capabilityRisk(capability);
+          const isNew = added.includes(capability);
+          const pill = isNew && <em className="pill new">New</em>;
           return (
-            <label key={capability} className="perm">
-              <button type="button" className={`check ${on ? "on" : ""}`} role="checkbox" aria-checked={on} aria-label={label ? `${label} (${capability})` : capability} onClick={() => toggle(capability)}>
-                {on && <Icon name="check" size={12} />}
-              </button>
+            <label key={capability} className={`perm ${isNew ? "new" : ""}`}>
+              <Check checked={on(capability)} label={label ? `${label} (${capability})` : capability} onToggle={() => check([capability], !on(capability))} />
               <span>
-                {label && <b>{label}</b>}
-                {/* TODO-FINDING prompt-capability-text - the mockup shows the capability without side and namespace ("send_event.delayed") on one line; the view shows the full string and lets it wrap, so the card is taller than in leaf widgetview/prompt and scrolls in a small tab */}
-                <small className="mono" title={capability}>
-                  {capability}
-                </small>
+                {label ? (
+                  <span className="pc-l">
+                    <b>{label}</b>
+                    {risk && <Risk text={risk} />}
+                    {pill}
+                  </span>
+                ) : (
+                  isNew && <span className="pc-l">{pill}</span>
+                )}
+                <small className="mono">{capability}</small>
               </span>
             </label>
           );
         })}
       </div>
-      <div className="inline-row">
-        <Button onClick={() => answer([])}>Deny all</Button>
-        <span className="sp" />
-        {/* TODO-FINDING approve-nothing - with nothing checked "Approve 0 selected" would be the same as "Deny all"; the button is disabled then */}
-        <Button kind="primary" disabled={approved.length === 0} onClick={() => answer(approved)}>
-          Approve {approved.length} selected
-        </Button>
+    );
+  };
+
+  return (
+    <div className="prompt-card caps" role="group" aria-labelledby={`${id}-t`} aria-describedby={`${id}-s`} data-testid="capability-prompt">
+      <div className="pc-head">
+        <Avatar name={name} id={widget.widgetKey} size={32} square />
+        <div>
+          <b id={`${id}-t`}>{name} asks for permissions</b>
+          <p className="pc-sum" id={`${id}-s`}>
+            {capabilitySummary(name, sections).map((part, i) => (part.bold ? <b key={i}>{part.text}</b> : part.text))}
+          </p>
+        </div>
+      </div>
+      <div className="pc-body">{sections.map(section)}</div>
+      <div className="pc-foot">
+        {blocked && (
+          <p className="pc-status" role="status" id={`${id}-wait`}>
+            <Icon name="clock" size={14} />
+            <span>
+              {added.length > 0 && `${added.length} ${added.length === 1 ? "permission was" : "permissions were"} added. `}
+              You can approve in <b>{seconds} s</b>.
+            </span>
+          </p>
+        )}
+        <div className="inline-row">
+          <Button onClick={() => answer([])}>Deny all</Button>
+          <span className="sp" />
+          {/* TODO-FINDING approve-nothing - with nothing checked "Approve 0 selected" would be the same as "Deny all"; the button is disabled then */}
+          <button
+            ref={approveRef}
+            type="button"
+            className="btn primary pc-approve"
+            disabled={approved.length === 0}
+            aria-disabled={blocked || undefined}
+            aria-describedby={blocked ? `${id}-wait` : undefined}
+            style={blocked ? ({ "--wait": `${elapsed * 100}%` } as CSSProperties) : undefined}
+            onClick={() => !blocked && answer(approved)}
+          >
+            <span>Approve {approved.length} selected</span>
+          </button>
+        </div>
       </div>
     </div>
   );
+}
+
+/** A checkbox of the permission card: a button, so that it can be "mixed". */
+function Check({ checked, label, onToggle }: { checked: boolean | "mixed"; label: string; onToggle: () => void }) {
+  return (
+    <button type="button" className={`check ${checked === true ? "on" : checked === "mixed" ? "on mixed" : ""}`} role="checkbox" aria-checked={checked} aria-label={label} onClick={onToggle}>
+      {checked === true && <Icon name="check" size={12} />}
+      {checked === "mixed" && <Icon name="minus" size={12} />}
+    </button>
+  );
+}
+
+/** The warning icon of a risky capability or section. */
+function Risk({ text }: { text: string }) {
+  return (
+    <span className="pc-risk" role="img" aria-label={text} title={text}>
+      <Icon name="alert" size={13} />
+    </span>
+  );
+}
+
+/** Milliseconds until `until` (0 once it passed). Re-renders at every whole second left and when it passes. */
+function useTimeLeft(until: number): number {
+  const [, setTick] = useState(0);
+  const left = Math.max(0, until - Date.now());
+  useEffect(() => {
+    if (left <= 0) return;
+    const timer = setTimeout(() => setTick((n) => n + 1), left % 1000 || 1000);
+    return () => clearTimeout(timer);
+  });
+  return left;
 }
 
 /** The OpenID card. Not in the mockups: it reuses the permission card. */

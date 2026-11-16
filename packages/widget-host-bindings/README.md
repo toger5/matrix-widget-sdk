@@ -111,4 +111,10 @@ Notes on the generated types: records are camelCase (`eventType`, `stateKey`), `
 as `originServerTs` are `bigint`, event `content` is a plain JS value, capabilities are strings
 (`host:org.matrix.mscXXXX.forward_event.timeline:m.room.message`), and `StateKeySelector` is a tagged class
 (`new StateKeySelector.Any()` / `new StateKeySelector.Key({ key })`). `matrixEventFromJson` /
-`matrixEventToJson` convert between the record and client-server API JSON.
+`matrixEventToJson` convert between the record and client-server API JSON. `capabilityIsKnown`
+tells a capability of the widget API from a string the driver does not know (which it may grant,
+but which allows nothing), e.g. to set the latter apart in a permission prompt.
+
+`onCapabilitiesRequested` gets the whole open question: a request that arrives before
+`approveCapabilities` joins it, and the callback is called again with all of it (without what the
+widget holds already or gets without asking). One `approveCapabilities` answers every request.

@@ -75,8 +75,12 @@ hands it to the driver of each widget of that room like any other `MatrixBackend
   needs during the transition, in `src/widgetStateEvent.ts`, and the logged-in mode uses the same.
 - **Drives the protocol**: every message from the widget iframe goes into the driver, every
   message from the driver goes to the iframe. Both directions are shown in the **Messages** panel of the widget's dev tools.
-- **Capability prompt**: when the widget requests capabilities you get a checklist with
+- **Capability prompt**: when the widget requests capabilities you get a card with a summary in plain
+  words and the capabilities in sections (each with a checkbox for all of it), with
   **Approve N selected** and **Deny all**, or turn on **auto-approve capabilities** to grant everything.
+  A request that arrives while the card is open joins it (marked "New", your choices stay), and
+  one answer decides all of them. **Approve** is blocked for 3 s after the card appeared or a
+  request added to it; **Deny all** never is. What the driver does not know is listed under "Unknown to this app".
   For legacy widgets the host calls the driver's `setAutoApproved` with what a legacy client
   gave a widget without asking: the `get_matrix_context` and `get_client_context` capabilities the
   compat wrapper needs to template the URL (a legacy client handed the same facts over as URL

@@ -1203,19 +1203,100 @@ fn revoking_capabilities() {
     assert!(send(&driver, &platform, message()).error().is_none());
 }
 
+fn request_caps(driver: &WidgetHostDriver, capabilities: Vec<Capability>, id: &str) {
+    let request = RequestCapabilitiesRequest { capabilities };
+    block(feed(driver, WidgetRequest::RequestCapabilities { request }, id)).unwrap();
+}
+
+/// The `update_capabilities` among `sent`, as their `allowed` lists.
+fn updates(sent: &[WireMessage]) -> Vec<Vec<Capability>> {
+    sent.iter()
+        .filter_map(|msg| match HostRequest::from_wire(msg) {
+            Ok(HostRequest::UpdateCapabilities { request }) => Some(request.allowed),
+            _ => None,
+        })
+        .collect()
+}
+
 #[test]
 fn requests_while_one_is_pending_add_up() {
     let (driver, _, platform) = setup();
-    let request = |capability: Capability, id: &str| {
-        let request = RequestCapabilitiesRequest { capabilities: vec![capability] };
-        block(feed(&driver, WidgetRequest::RequestCapabilities { request }, id)).unwrap();
-    };
-    request(Capability::Navigate, "a");
-    request(Capability::UploadFile, "b");
+    let (a1, a2, b1) = (Capability::Navigate, Capability::UploadFile, Capability::DownloadFile);
+    request_caps(&driver, vec![a1.clone(), a2.clone()], "a");
+    // The second request joins the open question; the platform is asked about all of it (not
+    // only about the second request, which would drop the first one from the prompt).
+    request_caps(&driver, vec![b1.clone(), a1.clone()], "b");
+    assert_eq!(driver.snapshot().pending_requested, vec![a1.clone(), a2.clone(), b1.clone()]);
+    assert_eq!(
+        platform.requested.lock().unwrap().as_slice(),
+        &[vec![a1.clone(), a2.clone()], vec![a1.clone(), a2.clone(), b1.clone()]]
+    );
+    // A request that adds nothing to decide does not ask again.
+    request_caps(&driver, vec![a2.clone()], "c");
+    assert_eq!(platform.requested.lock().unwrap().len(), 2);
+    // Every request is acked at once, but nothing is answered before the platform decides.
+    let sent = platform.drain();
+    assert_eq!(sent.iter().map(|m| m.request_id.as_str()).collect::<Vec<_>>(), ["a", "b", "c"]);
+    assert!(updates(&sent).is_empty());
+
+    // One answer for all of them: A2 is denied.
+    driver.approve_capabilities(vec![a1.clone(), b1.clone()]);
+    assert_eq!(updates(&platform.drain()), [vec![a1, b1]]);
+    assert!(driver.snapshot().pending_requested.is_empty());
+}
+
+#[test]
+fn a_request_while_a_question_is_open_never_completes_it() {
+    let (driver, _, platform) = setup();
+    driver.set_auto_approved(vec![Capability::GetMatrixContext]);
+    request_caps(&driver, vec![Capability::Navigate], "a");
+    // Only auto-approved: without an open question this would complete at once. Here it waits
+    // for the answer to the open question, which would otherwise be closed unanswered.
+    request_caps(&driver, vec![Capability::GetMatrixContext], "b");
+    assert!(updates(&platform.drain()).is_empty());
+    assert_eq!(platform.requested.lock().unwrap().as_slice(), &[vec![Capability::Navigate]]);
+    assert_eq!(driver.snapshot().pending_requested, vec![Capability::Navigate, Capability::GetMatrixContext]);
+
+    driver.approve_capabilities(vec![Capability::Navigate]);
+    assert_eq!(updates(&platform.drain()), [vec![Capability::Navigate, Capability::GetMatrixContext]]);
+}
+
+#[test]
+fn held_capabilities_are_not_asked_again() {
+    let (driver, _, platform) = setup();
+    grant(&driver, &platform, vec![Capability::Navigate]);
+    platform.requested.lock().unwrap().clear();
+
+    // Asked only about what the widget does not hold yet; the answer keeps what it holds.
+    request_caps(&driver, vec![Capability::Navigate, Capability::UploadFile], "a");
+    assert_eq!(platform.requested.lock().unwrap().as_slice(), &[vec![Capability::UploadFile]]);
+    driver.approve_capabilities(vec![]);
+    assert_eq!(updates(&platform.drain()), [vec![Capability::Navigate]]);
+
+    // Nothing to decide: answered at once (after the ack), the platform is not asked.
+    request_caps(&driver, vec![Capability::Navigate], "b");
+    let sent = platform.drain();
+    assert_eq!(sent[0].request_id, "b");
+    assert_eq!(updates(&sent), [vec![Capability::Navigate]]);
+    assert_eq!(platform.requested.lock().unwrap().len(), 1);
+}
+
+#[test]
+fn a_capability_revoked_while_a_question_is_open_is_only_granted_if_the_answer_approves_it() {
+    let (driver, _, platform) = setup();
+    grant(&driver, &platform, vec![Capability::Navigate]);
+    platform.requested.lock().unwrap().clear();
+    request_caps(&driver, vec![Capability::Navigate, Capability::UploadFile], "a");
+    assert_eq!(platform.requested.lock().unwrap().as_slice(), &[vec![Capability::UploadFile]]);
+
+    // Revoked before the answer: the open question holds it again, but the platform was not asked
+    // about it, and an answer that approves only what was asked does not grant it.
+    driver.revoke_capabilities(vec![Capability::Navigate]);
     assert_eq!(driver.snapshot().pending_requested, vec![Capability::Navigate, Capability::UploadFile]);
+    assert_eq!(platform.requested.lock().unwrap().len(), 1);
     platform.drain();
-    driver.approve_capabilities(vec![Capability::Navigate, Capability::UploadFile]);
-    assert_eq!(platform.drain()[0].request_body()["allowed"].as_array().unwrap().len(), 2);
+    driver.approve_capabilities(vec![Capability::UploadFile]);
+    assert_eq!(updates(&platform.drain()), [vec![Capability::UploadFile]]);
 }
 
 #[test]

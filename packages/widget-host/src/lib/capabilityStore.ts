@@ -2,6 +2,8 @@
  * The capabilities the user has approved, kept per account, room and widget so a widget is not
  * asked about again every time it is opened. In `localStorage`: one entry per widget.
  */
+import { capabilityIsKnown } from "@matrix-widget-tools/widget-host-bindings";
+
 const PREFIX = "widget_host_capabilities_v1";
 
 /** `widget` is the widget's `widgetKey`. None of the ids contains a space. */
@@ -16,10 +18,15 @@ export function loadCapabilities(key: string): string[] {
   }
 }
 
-/** Replaces what is stored under `key`; an empty list removes the entry. */
+/**
+ * Replaces what is stored under `key`; an empty list removes the entry. What the driver does not
+ * know (`capabilityIsKnown`) is never stored, so it is asked about again next time: it allows
+ * nothing now, and a later version of the app that knows the name must not grant it unasked.
+ */
 export function saveCapabilities(key: string, capabilities: string[]): void {
-  if (capabilities.length === 0) localStorage.removeItem(key);
-  else localStorage.setItem(key, JSON.stringify(capabilities));
+  const known = capabilities.filter((capability) => capabilityIsKnown(capability));
+  if (known.length === 0) localStorage.removeItem(key);
+  else localStorage.setItem(key, JSON.stringify(known));
 }
 
 /** Forget what was approved for every widget of `userId`, e.g. when they log out. */
