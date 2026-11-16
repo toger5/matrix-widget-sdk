@@ -83,12 +83,28 @@ match widget.embed(Some("https://wrapper.example/"), /* allow_http: */ false) {
   iframe's `src` (WHATWG, the `url` crate). A URL that an iframe resolves against the page that
   embeds it (`https:example.org`, `http:/path`) is refused: it has to name its own host (`//` after
   the scheme). The texts name the scheme, never the URL.
-* An MSC4411 widget loads its own `url`. A legacy widget loads the compat wrapper with
+* `embed_url_problem(url, wrapper_url, allow_http)` is what `embed` checks for both kinds:
+  `widget_url_problem`, and **no page of the client's compat wrapper** ("a widget cannot load this
+  client's compat wrapper"). A client usually serves the wrapper from its own origin with
+  `allow-same-origin`, and the wrapper loads the `legacy_widget_url` of its own URL: an `m.widget`
+  whose URL is the wrapper would bring a page of the event sender's choosing onto the client's
+  origin (before the wrapper checked its inner URL, `javascript:` ran there). Refused are the pages
+  of the wrapper's directory (its path up to the last `/`, and that directory without the slash)
+  on the wrapper's origin, compared as a server may read the path: percent-decoded, dot segments
+  resolved, repeated slashes as one, case-insensitive. Other paths of that origin stay allowed,
+  since a deployment may serve its widgets there (the dev site does); a wrapper at the root of its
+  origin refuses the whole origin. Serve the wrapper from an origin of its own where you can.
+* An MSC4411 widget loads its `url` **as the check parsed and serialised it** (`WidgetEmbed.url`),
+  not the event's string: no other parser reads it differently, and a client that derives the
+  widget's `postMessage` target origin from `WidgetEmbed.url` gets the origin of the loaded page.
+  A legacy widget loads the compat wrapper with
   `legacy_widget_url` (untemplated), `legacy_widget_id`, `legacy_wait_for_iframe_load` and
   `legacy_widget_data` in its query (see the wrapper's README; they replace any the wrapper URL
-  has), and always uses the widget API.
-* Foreign code calls `parse_widget_state_event`, `embed_widget`, `widget_url_problem` and
-  `widget_event_types` (TypeScript: `parseWidgetStateEvent`, `embedWidget`, …).
+  has), and always uses the widget API. The wrapper checks the legacy URL again, before and after
+  templating.
+* Foreign code calls `parse_widget_state_event`, `embed_widget`, `widget_url_problem`,
+  `embed_url_problem` and `widget_event_types` (TypeScript: `parseWidgetStateEvent`, `embedWidget`,
+  `embedUrlProblem`, …).
 
 ### More diagrams
 

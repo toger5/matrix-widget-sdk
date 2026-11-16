@@ -76,7 +76,10 @@ hands it to the driver of each widget of that room like any other `MatrixBackend
   - A `content.url` (or `wrapper=` URL) that is not an absolute `http:` / `https:` URL is not
     embedded: the widget is listed disabled in the room overview, with the reason. A legacy URL is checked untemplated,
     so one that starts with a `$variable` is refused. So is a URL that an iframe would resolve against
-    the host page (`https:example.org`, `http:/path`: without `//` they are pages of the host's origin).
+    the host page (`https:example.org`, `http:/path`: without `//` they are pages of the host's origin),
+    and a page of this host's own compat wrapper (see [Security notes](#security-notes)).
+  - An `m.widget` loads its URL as the driver parsed and serialised it (`  HTTPS://Example.org/a b`
+    loads `https://example.org/a%20b`), and messages to it go to that URL's origin.
   Send the event as state in the Dev tools of the DevBackend and the widget appears in the room overview (the
   URL parameters below start with the two test widgets). This is the logic a real client
   needs during the transition. It is the driver's (`WidgetDefinition::parse` / `embed` in
@@ -209,6 +212,30 @@ The compat wrapper needs no server of its own: the host builds `../widget-compat
 into a second page, `/widget_compatibility_wrapper/` (`widget_compatibility_wrapper/index.html`),
 in the dev server and in `dist/` alike, and loads legacy widgets through it. That page has the
 host's origin, unlike a wrapper deployed for a real client.
+
+### Security notes
+
+Widget iframes get `allow-scripts allow-same-origin` (`WidgetIframes` in `src/app/AppRoot.tsx`),
+so a page of the host's own origin in one of them is not sandboxed from the host: it can reach
+`window.top`, the logins in `localStorage` and IndexedDB. Three layers keep a widget state event
+(anyone who may send state to a room can send one) from putting script there:
+
+1. **The URL check** (the driver's `embed`): only absolute `http:` / `https:` URLs that name their
+   own host, so no `javascript:`, `data:`, `blob:` or page-relative URL.
+2. **The compat wrapper is no widget**: its page runs on the host's origin and loads the
+   `legacy_widget_url` of its own query, so an `m.widget` (or legacy widget) whose URL is a page of
+   the wrapper's directory, `<host>/widget_compatibility_wrapper/…` in any spelling a server may
+   read the same way, is listed disabled: "a widget cannot load this client's compat wrapper".
+   Only the wrapper's directory is refused, not the origin: on the [dev site](../../README.md#dev-site-github-pages)
+   the test widgets share the host's origin. With `?wrapper=` the rule protects that wrapper, not
+   the copy this host serves.
+3. **The wrapper's own check**: it loads only absolute `http:` / `https:` URLs, before and after
+   templating (its README), also when another client or another copy of the host embeds it.
+
+Other pages of the host's origin are not refused: the host app itself (the dev server answers
+every unknown path with it) runs only the host's own code, but in a widget iframe it shares the
+host's storage. A deployment for real accounts should serve the host on an origin of its own and
+the widgets (and the wrapper) elsewhere.
 
 `npm run build` writes a static site to `dist/` that can be served by any web server. Two
 build-time settings:

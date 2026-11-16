@@ -361,6 +361,63 @@ test("a widget URL that is not http(s) is refused, also by a link that opens it 
   await context.close();
 });
 
+test("the host's own compat wrapper is no widget, also by its absolute URL: listed disabled with the reason, nothing runs", async ({ browser }) => {
+  const context = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+  const fresh = new Host(await context.newPage());
+  const pwned = () => fresh.page.evaluate(() => (window as Window & { __pwned?: unknown }).__pwned);
+  await fresh.page.goto("/?mode=memory");
+  const wrapper = new URL("widget_compatibility_wrapper/", fresh.page.url()).href;
+  const attack = "?legacy_widget_url=javascript:top.__pwned=document.domain//&legacy_widget_id=evil";
+  // The wrapper runs on the host's origin and loads its `legacy_widget_url`: as an m.widget it would be the host's origin
+  // with a `javascript:` widget, approved at once. Also spelled as a server reads it (case, percent-encoding).
+  for (const url of [`${wrapper}${attack}`, `${wrapper.toUpperCase()}${attack}`, `${wrapper.replace("compatibility_", "compatibility%5F")}${attack}`]) {
+    const event = { type: "m.widget", state_key: "absolute", content: { name: "Absolute wrapper", url, uses_widget_api: true } };
+    await fresh.page.goto(`/?mode=memory&autoload=1&autoApprove=1&event=${encodeURIComponent(JSON.stringify(event))}`);
+    const refused = fresh.button("Absolute wrapper cannot be opened: a widget cannot load this client's compat wrapper");
+    await expect(refused).toHaveAttribute("aria-disabled", "true");
+    expect((await fresh.main()).widgets).toEqual({});
+    await expect(fresh.page.locator("iframe")).toHaveCount(0);
+    expect(await pwned()).toBeUndefined();
+  }
+  await context.close();
+});
+
+test("the compat wrapper loads only http(s) URLs, before and after templating, also when its host answers", async ({ browser }) => {
+  const context = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+  const fresh = new Host(await context.newPage());
+  const pwned = () => fresh.page.evaluate(() => (window as Window & { __pwned?: unknown }).__pwned);
+
+  // A legacy widget whose URL the host accepts (`$server` is a host name to the URL parser) but whose templated URL is
+  // no URL (the `:` of the value is URI-encoded): the wrapper refuses to load it after templating. The widget never
+  // gets ready, so it stays hidden.
+  const legacy = { type: "im.vector.modular.widgets", state_key: "templated", content: { type: "m.custom", name: "Templated", url: "https://$server/legacy/", data: { server: "widgets.example:8443" } } };
+  await fresh.page.goto(`/?mode=memory&autoload=1&autoApprove=1&event=${encodeURIComponent(JSON.stringify(legacy))}`);
+  const wrapped = fresh.page.frameLocator("iframe[data-widget-id]");
+  await expect(wrapped.locator("#error")).toHaveText("Widget compat wrapper: refused to load the legacy widget: the URL is not an absolute http: or https: URL");
+  await expect(wrapped.locator("iframe")).toHaveCount(0);
+
+  // The wrapper loaded directly, on the host's origin, with a `javascript:` legacy widget, and a parent that answers
+  // its bootstrap as a host would: the wrapper refuses the URL before it talks to the parent.
+  await fresh.page.evaluate((src) => {
+    const frame = document.createElement("iframe");
+    frame.id = "direct";
+    window.addEventListener("message", (ev) => {
+      const m = ev.data as { source?: string; action?: string; request_id?: string; request?: { capabilities?: string[] }; response?: unknown };
+      if (ev.source !== frame.contentWindow || m.source !== "widget" || m.response !== undefined) return;
+      const asks = m.action?.endsWith(".request_capabilities");
+      frame.contentWindow!.postMessage({ ...m, response: asks ? {} : { error: { code: "org.matrix.msc4412.unknown_action", message: "no" } } }, "*");
+      if (asks) frame.contentWindow!.postMessage({ source: "host", request_id: "u1", action: "org.matrix.msc4412.update_capabilities", request: { allowed: m.request?.capabilities ?? [] } }, "*");
+    });
+    frame.src = src;
+    document.body.append(frame);
+  }, `/widget_compatibility_wrapper/?legacy_widget_url=${encodeURIComponent("javascript:top.__pwned=document.domain//")}&legacy_widget_id=evil`);
+  const direct = fresh.page.frameLocator("#direct");
+  await expect(direct.locator("#error")).toHaveText("Widget compat wrapper: refused `legacy_widget_url`: javascript: URLs are not allowed, only http: and https:");
+  await expect(direct.locator("iframe")).toHaveCount(0);
+  expect(await pwned()).toBeUndefined();
+  await context.close();
+});
+
 test("a widget sends m.room.message: it lands in the room, and the other widget of the room is told", async ({ host }) => {
   await host.populate("lab", { sidePanel: null, behavior: { autoApproveCapabilities: true }, open: [{ room: LAB, widgets: [NEW_WIDGET, LEGACY_WIDGET], active: NEW_WIDGET }] });
   await host.ready(NEW);

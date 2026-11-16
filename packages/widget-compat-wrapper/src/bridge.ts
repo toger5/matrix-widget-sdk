@@ -7,7 +7,8 @@
  * 1. **Bootstrap.** A legacy widget URL contains template variables (`$matrix_user_id`, ...).
  *    Before loading the widget, the bridge asks the host for the `get_matrix_context` and
  *    `get_client_context` capabilities, fetches both contexts and fills in the URL (template.ts).
- *    If the host refuses, the variables stay empty and the widget still loads.
+ *    If the host refuses, the variables stay empty and the widget still loads. A templated URL
+ *    that is not an absolute http(s) URL is never loaded (url.ts).
  * 2. **Startup handshake.** The two protocols start differently:
  *    - Legacy capabilities are requested by the host (`capabilities` to the widget). MSC4412
  *      capabilities are requested by the widget (`request_capabilities`). The bridge plays the
@@ -51,7 +52,8 @@ import {
   type NewMessage,
 } from "./envelope";
 import { DOWNLOAD_FILE_ACTION, downloadResponseToLegacy, UPLOAD_FILE_ACTION, uploadRequestToNew } from "./files";
-import { renderLegacyUrl, type ClientContext, type MatrixContext } from "./template";
+import type { ClientContext, MatrixContext } from "./template";
+import { templatedLegacyUrl } from "./url";
 import { log } from "./log";
 
 /** The context actions, in the unstable spelling the host emits (`docs/parity.md`). */
@@ -80,8 +82,10 @@ export interface BridgeOptions {
   sendToHost(message: NewMessage): void;
   /** Post a message to the legacy widget (the inner iframe). */
   sendToWidget(message: LegacyMessage): void;
-  /** Load the templated legacy widget URL into the inner iframe. Called exactly once. */
+  /** Load the templated legacy widget URL into the inner iframe: an absolute http(s) URL, checked (url.ts). Called at most once. */
   loadWidget(url: string): void;
+  /** The templated URL is refused (`reason`, from url.ts): there is no widget. Called instead of `loadWidget`. */
+  refuseWidget(reason: string): void;
   /** API versions announced to the widget. Default: matrix-widget-api's `CurrentApiVersions`. */
   supportedVersions?: string[];
   /** Generates the request ids of the bridge's own requests. Default: `crypto.randomUUID`. */
@@ -99,8 +103,8 @@ export class CompatBridge {
   private readonly fromHost = new Map<string, NewMessage>();
   /** The bridge's own requests to either side, by request id. */
   private readonly own = new Map<string, Responder>();
-  /** `bootstrap` until the inner iframe is loaded, then `running`. */
-  private phase: "bootstrap" | "running" = "bootstrap";
+  /** `bootstrap` until the inner iframe is loaded, then `running`; `refused` when its URL is. */
+  private phase: "bootstrap" | "running" | "refused" = "bootstrap";
   /** The host got `notify_ready`. Sent once, even if the inner iframe reloads. */
   private readySentToHost = false;
   /** The widget sent `content_loaded` since its iframe last loaded. A second one is an error. */
@@ -153,16 +157,16 @@ export class CompatBridge {
     let pending = 2;
     const done = () => {
       if (--pending > 0) return;
+      const input = { widgetId: this.o.widgetId, wrapperUrl: this.o.wrapperUrl, matrix, client, data: this.o.widgetData };
+      // Checked before and after templating: the templated URL is what the iframe loads (url.ts).
+      const templated = templatedLegacyUrl(this.o.legacyWidgetUrl, input);
+      if ("problem" in templated) {
+        this.phase = "refused";
+        log.error(`refused to load the legacy widget: ${templated.problem}`);
+        return this.o.refuseWidget(templated.problem);
+      }
       this.phase = "running";
-      this.o.loadWidget(
-        renderLegacyUrl(this.o.legacyWidgetUrl, {
-          widgetId: this.o.widgetId,
-          wrapperUrl: this.o.wrapperUrl,
-          matrix,
-          client,
-          data: this.o.widgetData,
-        }),
-      );
+      this.o.loadWidget(templated.url);
     };
     // An error reply (capability denied, action unknown to the host) leaves the variables empty.
     this.requestHost(MATRIX_CONTEXT_ACTION, {}, (r) => (isErrorBody(r) || Object.assign(matrix, r), done()));
@@ -236,6 +240,10 @@ export class CompatBridge {
   // ---- host -> widget ------------------------------------------------------------------------
 
   private onHostRequest(m: NewMessage): void {
+    if (this.phase === "refused") {
+      log.warn(`refused ${m.action} from the host: the legacy widget's URL was refused`);
+      return this.o.sendToHost(newResponse(m, newErrorBody(ERROR_INVALID_REQUEST, "The wrapped widget's URL was refused")));
+    }
     if (this.phase === "bootstrap") {
       // There is no widget yet. The only host request expected is the reply to `start()`.
       if (m.action !== UPDATE_CAPABILITIES_ACTION) {

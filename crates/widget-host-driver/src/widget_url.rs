@@ -1,7 +1,11 @@
 //! The URL check in front of every widget iframe (webview): which `url` of a widget state event a
-//! client may load at all.
+//! client may load at all, and that it is not the client's own compat wrapper.
 
+use percent_encoding::percent_decode_str;
 use url::Url;
+
+/// Why [`embed_url_problem`] refuses a page of the client's compat wrapper.
+const LOADS_THE_WRAPPER: &str = "a widget cannot load this client's compat wrapper";
 
 /// Why `url` cannot be loaded as a widget, or `None` when it can.
 ///
@@ -28,13 +32,39 @@ use url::Url;
 /// The text names the scheme, never the URL.
 #[cfg_attr(feature = "uniffi", uniffi::export)]
 pub fn widget_url_problem(url: &str, allow_http: bool) -> Option<String> {
+    checked_widget_url(url, allow_http).err()
+}
+
+/// Why a client whose compat wrapper is at `wrapper_url` must not load `url` as a widget (of either
+/// kind), or `None` when it can: [`widget_url_problem`], or `url` is a page of that compat wrapper.
+/// [`WidgetDefinition::embed`](crate::WidgetDefinition::embed) refuses the same URLs.
+///
+/// A client typically serves the compat wrapper from its own origin, and the wrapper loads whatever
+/// its `legacy_widget_url` parameter names into an iframe of its own. A widget whose URL is the
+/// wrapper (with a `legacy_widget_url` of the widget's choosing) would run on the client's origin.
+/// Only the wrapper's directory is refused, not its whole origin: a deployment may serve widgets
+/// from the same origin under other paths (this repository's dev site does). A page counts as the
+/// wrapper's when a web server could answer it with the wrapper: the same origin, and a path in the
+/// wrapper's directory (its path up to the last `/`) or that directory without its trailing slash,
+/// compared after percent-decoding, with dot segments resolved, repeated slashes as one and in
+/// lower case (Vite's dev server serves the wrapper for `/widget%5Fcompatibility%5Fwrapper/`,
+/// `/WIDGET_COMPATIBILITY_WRAPPER/`, `//widget_compatibility_wrapper/` and
+/// `/x/..%2Fwidget_compatibility_wrapper/`). A `wrapper_url` that is no widget URL itself
+/// ([`widget_url_problem`] with `http:`) cannot be loaded, so nothing is a page of it.
+#[cfg_attr(feature = "uniffi", uniffi::export)]
+pub fn embed_url_problem(url: &str, wrapper_url: Option<String>, allow_http: bool) -> Option<String> {
+    checked_embed_url(url, wrapper_url.as_deref(), allow_http).err()
+}
+
+/// [`widget_url_problem`], with the URL as the check parsed it.
+pub(crate) fn checked_widget_url(url: &str, allow_http: bool) -> Result<Url, String> {
     let allowed = if allow_http { "http: and https:" } else { "https:" };
-    let not_absolute = || Some(format!("the URL is not an absolute {} URL", allowed.replace(" and ", " or ")));
-    let Ok(parsed) = Url::parse(url) else { return not_absolute() };
+    let not_absolute = || format!("the URL is not an absolute {} URL", allowed.replace(" and ", " or "));
+    let Ok(parsed) = Url::parse(url) else { return Err(not_absolute()) };
     match parsed.scheme() {
         "https" => {}
         "http" if allow_http => {}
-        scheme => return Some(format!("{scheme}: URLs are not allowed, only {allowed}")),
+        scheme => return Err(format!("{scheme}: URLs are not allowed, only {allowed}")),
     }
     // Against pages of its own scheme: a URL relative there takes the page's host, so it cannot
     // equal itself on two pages with different hosts.
@@ -43,10 +73,59 @@ pub fn widget_url_problem(url: &str, allow_http: bool) -> Option<String> {
         Url::options().base_url(Some(&base)).parse(url).is_ok_and(|resolved| resolved == parsed)
     };
     if same_on("a.invalid") && same_on("b.invalid") {
-        None
+        Ok(parsed)
     } else {
-        not_absolute()
+        Err(not_absolute())
     }
+}
+
+/// [`embed_url_problem`], with the URL as the check parsed it.
+pub(crate) fn checked_embed_url(url: &str, wrapper_url: Option<&str>, allow_http: bool) -> Result<Url, String> {
+    let parsed = checked_widget_url(url, allow_http)?;
+    let wrapper = wrapper_url.and_then(|wrapper| checked_widget_url(wrapper, true).ok());
+    if wrapper.is_some_and(|wrapper| is_compat_wrapper_page(&parsed, &wrapper)) {
+        return Err(LOADS_THE_WRAPPER.to_owned());
+    }
+    Ok(parsed)
+}
+
+/// Whether a web server could answer `url` with a page of the compat wrapper at `wrapper` (see
+/// [`embed_url_problem`]).
+fn is_compat_wrapper_page(url: &Url, wrapper: &Url) -> bool {
+    if url.origin() != wrapper.origin() {
+        return false;
+    }
+    let wrapper_path = served_path(wrapper);
+    // The wrapper's directory without its trailing slash: empty for a wrapper at the root.
+    let directory = &wrapper_path[..wrapper_path.rfind('/').unwrap_or(0)];
+    let path = served_path(url);
+    path == directory || path.starts_with(&format!("{directory}/"))
+}
+
+/// The path of `url` as a web server may read it: percent-decoded, `\` as `/`, dot segments
+/// resolved, repeated slashes as one, in lower case (a case-insensitive file system); again until
+/// nothing changes, for a server that decodes twice.
+fn served_path(url: &Url) -> String {
+    let mut scratch = Url::parse("http://path.invalid/").expect("a valid URL");
+    let mut path = url.path().to_lowercase();
+    // Each round decodes one level of percent-encoding; servers decode once, some twice.
+    for _ in 0..4 {
+        let decoded = percent_decode_str(&path).decode_utf8_lossy().replace('\\', "/");
+        let mut single = String::with_capacity(decoded.len());
+        for c in decoded.chars() {
+            if c != '/' || !single.ends_with('/') {
+                single.push(c);
+            }
+        }
+        // Resolves the dot segments the decoding revealed (`/x/..%2Fy` is `/y` to a server).
+        scratch.set_path(&single);
+        let next = scratch.path().to_lowercase();
+        if next == path {
+            break;
+        }
+        path = next;
+    }
+    path
 }
 
 #[cfg(test)]
@@ -60,6 +139,15 @@ mod tests {
     /// The shared table of `tests/widget_urls.json`; the host's vitest reads it too.
     #[derive(Deserialize)]
     struct Table {
+        allowed: BTreeMap<String, String>,
+        refused: BTreeMap<String, String>,
+        compat_wrapper: WrapperTable,
+    }
+
+    /// Its `compat_wrapper` part: pages of the wrapper and other pages of its origin.
+    #[derive(Deserialize)]
+    struct WrapperTable {
+        wrapper: String,
         allowed: BTreeMap<String, String>,
         refused: BTreeMap<String, String>,
     }
@@ -109,6 +197,49 @@ mod tests {
         }
         // Backslashes count as slashes after a special scheme: absolute on every page.
         assert_eq!(widget_url_problem("HTTP:\\\\example.org\\a", true), None);
+    }
+
+    #[test]
+    fn the_compat_wrapper_is_no_widget() {
+        let WrapperTable { wrapper, allowed, refused } = table().compat_wrapper;
+        for (label, url) in refused {
+            assert_eq!(widget_url_problem(&url, true), None, "{label}: a widget URL on its own");
+            assert_eq!(
+                embed_url_problem(&url, Some(wrapper.clone()), true).as_deref(),
+                Some(LOADS_THE_WRAPPER),
+                "{label}"
+            );
+            // A client without a compat wrapper has none to protect.
+            assert_eq!(embed_url_problem(&url, None, true), None, "{label}");
+        }
+        for (label, url) in allowed {
+            assert_eq!(embed_url_problem(&url, Some(wrapper.clone()), true), None, "{label}: {url}");
+        }
+        // The URL check comes first; a wrapper URL that cannot be loaded protects nothing.
+        let problem = |url: &str, wrapper: &str| embed_url_problem(url, Some(wrapper.to_owned()), true);
+        assert_eq!(
+            problem("javascript:x", &wrapper).unwrap(),
+            "javascript: URLs are not allowed, only http: and https:"
+        );
+        assert_eq!(problem("http://localhost:5173/widget_compatibility_wrapper/", "javascript:x"), None);
+        assert_eq!(
+            problem("http://localhost:5173/widget_compatibility_wrapper/", "/widget_compatibility_wrapper/"),
+            None
+        );
+    }
+
+    #[test]
+    fn the_wrappers_directory_is_refused() {
+        let wrapper_page = |url: &str, wrapper: &str| embed_url_problem(url, Some(wrapper.to_owned()), true).is_some();
+        // A wrapper page that is a file: the other files of its directory may be the wrapper too.
+        assert!(wrapper_page("https://c.example/compat/other.html", "https://c.example/compat/wrapper.html"));
+        assert!(wrapper_page("https://c.example/compat", "https://c.example/compat/wrapper.html"));
+        assert!(!wrapper_page("https://c.example/widgets/", "https://c.example/compat/wrapper.html"));
+        // A wrapper at the root of its origin: every page of that origin (and only of that origin).
+        for url in ["https://compat.example/", "https://compat.example/any/widget", "https://compat.example"] {
+            assert!(wrapper_page(url, "https://compat.example/?log_level=debug"), "{url}");
+        }
+        assert!(!wrapper_page("https://widgets.example/", "https://compat.example/"));
     }
 
     #[test]

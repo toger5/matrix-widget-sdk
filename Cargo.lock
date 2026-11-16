@@ -1252,6 +1252,7 @@ dependencies = [
  "async-trait",
  "futures",
  "log",
+ "percent-encoding",
  "serde",
  "serde_json",
  "thiserror",

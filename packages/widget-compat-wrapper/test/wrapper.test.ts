@@ -47,6 +47,22 @@ describe("parseConfig", () => {
     debug.mockRestore();
   });
 
+  it("refuses a legacy_widget_url that is not an absolute http(s) URL", () => {
+    for (const [url, problem] of [
+      ["javascript:top.__pwned=document.domain//", "javascript: URLs are not allowed, only http: and https:"],
+      [" JAVASCRIPT:alert(1)", "javascript: URLs are not allowed, only http: and https:"],
+      ["data:text/html,<script>top.__pwned=1</script>", "data: URLs are not allowed, only http: and https:"],
+      ["/widget/?widgetId=w", "the URL is not an absolute http: or https: URL"],
+      ["http:/widget_compatibility_wrapper/?widgetId=w", "the URL is not an absolute http: or https: URL"],
+      ["$matrix_widget_url", "the URL is not an absolute http: or https: URL"],
+    ]) {
+      expect(() => parseConfig(new URLSearchParams({ legacy_widget_url: url, legacy_widget_id: "w" })), url).toThrow(`refused \`legacy_widget_url\`: ${problem}`);
+    }
+    for (const url of ["http://localhost:5175/legacy/", "https://widget.example/?u=$matrix_user_id"]) {
+      expect(parseConfig(new URLSearchParams({ legacy_widget_url: url, legacy_widget_id: "w" })).legacyWidgetUrl).toBe(url);
+    }
+  });
+
   it("fails without a widget id", () => {
     expect(() => parseConfig(new URLSearchParams({ legacy_widget_url: "https://widget.example/" }))).toThrow(/legacy_widget_id/);
   });

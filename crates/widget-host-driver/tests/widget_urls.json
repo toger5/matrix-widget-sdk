@@ -1,5 +1,5 @@
 {
-  "description": "Widget URLs a host may load (`allowed`) or must refuse (`refused`), by `widget_url_problem` with `allow_http`. Read by the unit tests of src/widget_url.rs and by packages/widget-host/test/widgetStateEvent.test.ts, which also compares every entry with the WHATWG URL parser of Node. Keys are labels.",
+  "description": "Widget URLs a host may load (`allowed`) or must refuse (`refused`), by `widget_url_problem` with `allow_http`; `compat_wrapper`: by `embed_url_problem` for a client whose compat wrapper is at `compat_wrapper.wrapper` (its own pages are refused, other pages of its origin are not). Read by the unit tests of src/widget_url.rs and src/widget_event.rs and by packages/widget-host/test/widgetStateEvent.test.ts, which also compares every entry of `allowed` and `refused` with the WHATWG URL parser of Node. Keys are labels.",
   "allowed": {
     "http on localhost": "http://localhost:5175/new/",
     "query and fragment": "https://example.org/widget?x=1#y",
@@ -56,5 +56,35 @@
     "one slash, naming a host the check might resolve against (still the host's own wrapper in an iframe)": "http:/base.invalid/../widget_compatibility_wrapper/?legacy_widget_url=javascript:top.__pwned=1//&legacy_widget_id=evil",
     "no slashes, naming the first host the check resolves against": "http:a.invalid/../widget_compatibility_wrapper/",
     "a backslash, naming the second host the check resolves against": "https:\\b.invalid/../widget/"
+  },
+  "compat_wrapper": {
+    "wrapper": "http://localhost:5173/widget_compatibility_wrapper/",
+    "refused": {
+      "the wrapper": "http://localhost:5173/widget_compatibility_wrapper/",
+      "the wrapper with a javascript: legacy widget (the attack)": "http://localhost:5173/widget_compatibility_wrapper/?legacy_widget_url=javascript:top.__pwned=document.domain//&legacy_widget_id=evil",
+      "its index.html": "http://localhost:5173/widget_compatibility_wrapper/index.html",
+      "another file of its directory": "http://localhost:5173/widget_compatibility_wrapper/main.ts",
+      "with a fragment": "http://localhost:5173/widget_compatibility_wrapper/#x",
+      "without the trailing slash (servers redirect to the directory or serve it)": "http://localhost:5173/widget_compatibility_wrapper",
+      "upper case (case-insensitive file systems)": "HTTP://LOCALHOST:5173/WIDGET_COMPATIBILITY_WRAPPER/",
+      "percent-encoded letters": "http://localhost:5173/widget%5Fcompatibility%5Fwrapper/",
+      "encoded twice": "http://localhost:5173/widget%255Fcompatibility%255Fwrapper/",
+      "an encoded slash": "http://localhost:5173/widget_compatibility_wrapper%2Findex.html",
+      "dot segments": "http://localhost:5173/x/./../widget_compatibility_wrapper/",
+      "encoded dot segments": "http://localhost:5173/x/%2e%2e/widget_compatibility_wrapper/",
+      "a dot segment behind an encoded slash (resolved by the server)": "http://localhost:5173/x/..%2Fwidget_compatibility_wrapper/",
+      "a dot segment behind encoded backslashes": "http://localhost:5173/x%5C..%5Cwidget_compatibility_wrapper/",
+      "a doubled slash": "http://localhost:5173//widget_compatibility_wrapper//",
+      "user and password (the origin stays)": "http://user:pass@localhost:5173/widget_compatibility_wrapper/",
+      "a tab in the path (dropped by the URL parser)": "http://localhost:5173/widget_compat\tibility_wrapper/"
+    },
+    "allowed": {
+      "another path of the same origin (the dev site serves its test widgets there)": "http://localhost:5173/widgets/new/",
+      "a directory whose name starts with the wrapper's": "http://localhost:5173/widget_compatibility_wrapper_docs/",
+      "the parent directory": "http://localhost:5173/",
+      "another port": "http://localhost:5175/widget_compatibility_wrapper/",
+      "another scheme": "https://localhost:5173/widget_compatibility_wrapper/",
+      "another name of the same machine (another origin)": "http://127.0.0.1:5173/widget_compatibility_wrapper/"
+    }
   }
 }

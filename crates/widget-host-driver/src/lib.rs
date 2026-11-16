@@ -27,7 +27,8 @@
 //! [`WidgetDefinition`] reads the widget state events of a room (MSC4411 `m.widget`, and the
 //! legacy `im.vector.modular.widgets`): [`WidgetDefinition::parse`] tells which events are widgets,
 //! [`WidgetDefinition::embed`] what a client loads for one, after the URL check
-//! ([`widget_url_problem`]); a legacy widget is loaded through the compat wrapper.
+//! ([`widget_url_problem`], and [`embed_url_problem`]: never the client's own compat wrapper); a
+//! legacy widget is loaded through the compat wrapper.
 //!
 //! With the `uniffi` feature this crate's `cdylib` carries the UniFFI scaffolding of this crate,
 //! `widget-matrix-backend` and `widget-actions`; it is what the Kotlin/Swift/Python bindings and
@@ -61,7 +62,7 @@ pub use widget_event::{
     WidgetEventError, WIDGET_EVENT_TYPE, WIDGET_EVENT_TYPES, WIDGET_EVENT_TYPE_LEGACY, WIDGET_EVENT_TYPE_UNSTABLE,
 };
 pub use widget_matrix_backend::{self, MatrixBackend};
-pub use widget_url::widget_url_problem;
+pub use widget_url::{embed_url_problem, widget_url_problem};
 
 #[cfg(feature = "uniffi")]
 uniffi::setup_scaffolding!();

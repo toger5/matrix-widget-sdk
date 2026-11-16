@@ -96,7 +96,9 @@ export class WidgetRuntime {
   constructor(private readonly options: WidgetRuntimeOptions) {
     const { widget, backend, events } = options;
     this.id = options.id;
-    this.origin = new URL(widget.url).origin;
+    // The origin of the page the iframe loads: `widget.url` is its `src` (`WidgetIframes`), the URL
+    // `embed_widget` checked and serialised, resolved here as the iframe resolves its `src`.
+    this.origin = new URL(widget.url, document.baseURI).origin;
 
     // The driver calls these synchronously from inside its own methods, so anything that calls
     // back into the driver, or changes the view model, is deferred.

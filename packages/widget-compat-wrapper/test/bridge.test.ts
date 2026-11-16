@@ -12,25 +12,28 @@ const UPDATE = "org.matrix.msc4412.update_capabilities";
 const MATRIX = { user_id: "@alice:example.org", device_id: "DEV", room_id: "!r:example.org", display_name: "Alice", avatar_url: "", matrix_base_url: "https://hs.example" };
 const CLIENT = { client_id: "test-client", client_theme: "dark" };
 
-function setup(waitForIframeLoad: boolean) {
+function setup(waitForIframeLoad: boolean, widget: { legacyWidgetUrl?: string; widgetData?: Record<string, unknown> } = {}) {
   const toHost: NewMessage[] = [];
   const toWidget: LegacyMessage[] = [];
   const loaded: string[] = [];
+  const refused: string[] = [];
   let n = 0;
   const bridge = new CompatBridge({
     widgetId: "w",
     waitForIframeLoad,
     legacyWidgetUrl: "https://widget.example/?u=$matrix_user_id&t=$title",
     widgetData: { title: "Notes" },
+    ...widget,
     wrapperUrl: "https://compat.example/",
     sendToHost: (m) => toHost.push(m),
     sendToWidget: (m) => toWidget.push(m),
     loadWidget: (url) => loaded.push(url),
+    refuseWidget: (reason) => refused.push(reason),
     supportedVersions: ["org.matrix.msc2871", "org.matrix.msc2974"],
     nextId: () => `own-${++n}`,
   });
   const take = <T>(arr: T[]) => arr.splice(0, arr.length);
-  return { bridge, toHost, toWidget, loaded, take };
+  return { bridge, toHost, toWidget, loaded, refused, take };
 }
 type S = ReturnType<typeof setup>;
 
@@ -43,6 +46,14 @@ const hostResponse = (request: NewMessage, response: unknown): NewMessage =>
 
 /** Drive the bootstrap: capability request, update, both contexts. Returns the loaded URL. */
 function boot(s: S, contexts: { matrix?: unknown; client?: unknown } = { matrix: MATRIX, client: CLIENT }): string {
+  answerBootstrap(s, contexts);
+  expect(s.loaded).toHaveLength(1);
+  expect(s.refused).toEqual([]);
+  return s.loaded[0];
+}
+
+/** The host's side of the bootstrap: the context capabilities are granted, the contexts answered. */
+function answerBootstrap(s: S, contexts: { matrix?: unknown; client?: unknown } = { matrix: MATRIX, client: CLIENT }): void {
   s.bridge.start();
   const [caps] = s.take(s.toHost);
   expect(caps).toMatchObject({ source: "widget", action: REQUEST, request: { capabilities: CONTEXT_CAPABILITIES } });
@@ -55,8 +66,6 @@ function boot(s: S, contexts: { matrix?: unknown; client?: unknown } = { matrix:
   expect(s.loaded).toEqual([]);
   s.bridge.onHostMessage(hostResponse(matrix, contexts.matrix ?? { error: { code: "org.matrix.msc4412.missing_capability", message: "denied" } }));
   s.bridge.onHostMessage(hostResponse(client, contexts.client ?? { error: { code: "org.matrix.msc4412.unknown_action", message: "denied" } }));
-  expect(s.loaded).toHaveLength(1);
-  return s.loaded[0];
 }
 
 describe("bootstrap", () => {
@@ -68,6 +77,34 @@ describe("bootstrap", () => {
   it("loads the widget with empty variables when the host denies or does not know the actions", () => {
     const url = new URL(boot(setup(true), {}));
     expect(url.searchParams.get("u")).toBe("");
+  });
+
+  it("never loads a templated URL that is not an absolute http(s) URL, and answers the host with an error from then on", () => {
+    // `parseConfig` refuses such a template already; the bridge checks what it would load.
+    for (const legacyWidgetUrl of ["javascript:top.__pwned=1//", "data:text/html,<script>top.__pwned=1</script>", "/widget/", "http:/widget_compatibility_wrapper/"]) {
+      const s = setup(true, { legacyWidgetUrl });
+      answerBootstrap(s);
+      expect(s.loaded).toEqual([]);
+      expect(s.refused).toHaveLength(1);
+      s.take(s.toHost);
+      s.bridge.onHostMessage(fromHost(UPDATE, "n2", { allowed: [] }));
+      expect(s.take(s.toHost)[0].response).toEqual({ error: { code: "org.matrix.msc4412.invalid_request", message: "The wrapped widget's URL was refused" } });
+      expect(s.toWidget).toEqual([]);
+    }
+  });
+
+  it("refuses a template that gives no URL once filled in, and loads what it checked", () => {
+    // A variable in the host: a value with a port is no host name once URI-encoded (`%3A`).
+    const bad = setup(true, { legacyWidgetUrl: "https://$server/widget", widgetData: { server: "widgets.example:8443" } });
+    answerBootstrap(bad);
+    expect(bad.refused).toEqual(["the URL is not an absolute http: or https: URL"]);
+    expect(bad.loaded).toEqual([]);
+    // A value cannot change the scheme: it is URI-encoded, so `javascript:` stays a path.
+    const encoded = setup(true, { legacyWidgetUrl: "https://widget.example/$page", widgetData: { page: "javascript:top.__pwned=1//" } });
+    const url = new URL(boot(encoded));
+    expect([url.protocol, url.host, url.pathname]).toEqual(["https:", "widget.example", "/javascript%3Atop.__pwned%3D1%2F%2F"]);
+    // A value may name the host (legacy clients allowed it); it stays an https URL.
+    expect(new URL(boot(setup(true, { legacyWidgetUrl: "https://$server/w", widgetData: { server: "widgets.example" } }))).host).toBe("widgets.example");
   });
 
   it("rejects other host requests until the widget is loaded", () => {

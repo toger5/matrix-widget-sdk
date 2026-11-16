@@ -34,7 +34,7 @@ export interface WidgetResolution {
 export interface WidgetEventParser {
   /** The widget a state event describes, or `undefined` when it describes none (another event type, a removed widget). */
   resolve(event: StateEvent): WidgetResolution | undefined;
-  /** Why a URL cannot be loaded as a widget, or `undefined` when it can (the check in front of every widget iframe). */
+  /** Why a URL cannot be loaded as a widget, or `undefined` when it can (the check in front of every widget iframe, including "not the compat wrapper"). */
   urlProblem(url: string): string | undefined;
 }
 

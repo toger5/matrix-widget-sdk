@@ -1,6 +1,7 @@
 /** Browser glue: read the configuration from the URL, create the inner iframe, route messages. */
 import { CompatBridge } from "./bridge";
 import { type LogLevel, log, parseLogLevel, setLogLevel } from "./log";
+import { legacyUrlProblem } from "./url";
 
 /** The wrapper's query parameters, parsed. The README describes each parameter. */
 export interface WrapperConfig {
@@ -17,10 +18,15 @@ export interface WrapperConfig {
   logLevel: LogLevel;
 }
 
-/** Read the configuration from the wrapper's query parameters. Throws when a required one is missing. */
+/**
+ * Read the configuration from the wrapper's query parameters. Throws when a required one is
+ * missing, and when `legacy_widget_url` is not an absolute http(s) URL (url.ts).
+ */
 export function parseConfig(params: URLSearchParams): WrapperConfig {
   const legacyWidgetUrl = params.get("legacy_widget_url");
   if (!legacyWidgetUrl) throw new Error("missing `legacy_widget_url` query parameter");
+  const problem = legacyUrlProblem(legacyWidgetUrl);
+  if (problem) throw new Error(`refused \`legacy_widget_url\`: ${problem}`);
   const widgetId = params.get("legacy_widget_id") ?? new URL(legacyWidgetUrl).searchParams.get("widgetId");
   if (!widgetId) throw new Error("missing `legacy_widget_id` (and no `widgetId` in the legacy url)");
   const data = params.get("legacy_widget_data");
@@ -35,16 +41,23 @@ export function parseConfig(params: URLSearchParams): WrapperConfig {
   };
 }
 
+/** Show why the wrapper does not run, in place of the legacy widget (the host shows it once the widget is visible). */
+export function showError(message: string, container: HTMLElement = document.body): void {
+  const error = document.createElement("div");
+  error.id = "error";
+  error.textContent = `Widget compat wrapper: ${message}`;
+  container.append(error);
+}
+
 /**
- * Create the inner iframe in `container`, connect it and `parent` through a {@link CompatBridge}
- * and start the bootstrap. The iframe is added once the bridge knows the templated URL.
+ * Connect the legacy widget and `parent` through a {@link CompatBridge} and start the bootstrap.
+ * The inner iframe is created in `container` once the bridge knows the templated URL, and never
+ * when that URL is refused.
  */
 export function startWrapper(config: WrapperConfig, container: HTMLElement, parent: Window = window.parent): CompatBridge {
   setLogLevel(config.logLevel);
   log.info(`wrapping legacy widget ${config.widgetId}`);
-  const iframe = document.createElement("iframe");
-  iframe.allow = "camera; microphone; display-capture; autoplay; clipboard-write";
-  iframe.title = config.widgetName;
+  let iframe: HTMLIFrameElement | undefined;
   // The legacy widget's origin, known once its URL is. Messages to the widget are posted to it.
   let widgetOrigin = "*";
 
@@ -55,19 +68,24 @@ export function startWrapper(config: WrapperConfig, container: HTMLElement, pare
     widgetData: config.widgetData,
     wrapperUrl: location.origin + location.pathname,
     sendToHost: (m) => parent.postMessage(m, config.clientOrigin),
-    sendToWidget: (m) => iframe.contentWindow?.postMessage(m, widgetOrigin),
+    sendToWidget: (m) => iframe?.contentWindow?.postMessage(m, widgetOrigin),
+    // `url` is absolute http(s), checked by the bridge (url.ts).
     loadWidget: (url) => {
       widgetOrigin = new URL(url).origin;
       log.info(`loading the legacy widget from ${widgetOrigin}`);
+      iframe = document.createElement("iframe");
+      iframe.allow = "camera; microphone; display-capture; autoplay; clipboard-write";
+      iframe.title = config.widgetName;
+      iframe.addEventListener("load", () => bridge.onIframeLoad());
       iframe.src = url;
       container.append(iframe);
     },
+    refuseWidget: (reason) => showError(`refused to load the legacy widget: ${reason}`, container),
   });
 
-  iframe.addEventListener("load", () => bridge.onIframeLoad());
   window.addEventListener("message", (ev) => {
     if (ev.source === parent) bridge.onHostMessage(ev.data);
-    else if (ev.source === iframe.contentWindow) bridge.onWidgetMessage(ev.data);
+    else if (iframe && ev.source === iframe.contentWindow) bridge.onWidgetMessage(ev.data);
   });
   bridge.start();
   return bridge;

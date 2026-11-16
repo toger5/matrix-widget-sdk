@@ -2,16 +2,18 @@
  * The widget state events of a room, read by the driver's parser (`widget-host-driver`,
  * `parse_widget_state_event` and `embed_widget`): which events describe a widget, and what the
  * host puts into its iframe. The host never templates URLs: a legacy widget's `content.url` goes to
- * the compat wrapper as it is, and the wrapper fills in `$matrix_user_id` & co. itself.
+ * the compat wrapper as it is, and the wrapper fills in `$matrix_user_id` & co. itself. The URL
+ * check is the driver's too (`embed_url_problem`): absolute http(s), and never a page of the compat
+ * wrapper, which this host serves from its own origin.
  *
  * The model and the controller import this module; views get `hostWidgetEvents` as
  * `ViewEnv.widgetEvents` (they must not import the bindings).
  */
 import {
+  embedUrlProblem,
   embedWidget,
   parseWidgetStateEvent,
   WidgetEventError,
-  widgetUrlProblem as driverUrlProblem,
   type WidgetDefinition,
 } from "@matrix-widget-tools/widget-host-bindings";
 
@@ -47,8 +49,13 @@ export function parseWidget(event: StateEvent): { widget: WidgetDefinition } | {
 /** Whether a widget state event describes a widget: removing a widget leaves an event without a `url` (or, MSC4411, a `name`) behind. */
 export const describesWidget = (event: StateEvent) => "widget" in parseWidget(event);
 
-/** Why a URL cannot be loaded as a widget, or `undefined` when it can: only absolute http: and https: URLs. */
-export const widgetUrlProblem = (url: string): string | undefined => driverUrlProblem(url, ALLOW_HTTP);
+// TODO-FINDING widget-same-origin - only the compat wrapper's directory of the host's origin is refused (the dev site serves its test widgets from the host's origin); other pages of that origin, the host app itself included, load with `allow-same-origin`.
+/**
+ * Why a URL cannot be loaded as a widget, or `undefined` when it can: only absolute http: and https:
+ * URLs, and no page of the compat wrapper at `wrapper` (`embed_url_problem` of the driver, the
+ * check `embed_widget` makes).
+ */
+export const widgetUrlProblem = (url: string, wrapper = wrapperUrl()): string | undefined => embedUrlProblem(url, wrapper, ALLOW_HTTP);
 
 /**
  * `embed_widget` of the definition `parseWidget` returned for `event`. The URL and the widget id go
@@ -94,7 +101,7 @@ export function widgetEventParser(wrapper: string): WidgetEventParser {
       if (!known.has(event)) known.set(event, resolve(event) ?? null);
       return known.get(event) ?? undefined;
     },
-    urlProblem: widgetUrlProblem,
+    urlProblem: (url) => widgetUrlProblem(url, wrapper),
   };
 }
 

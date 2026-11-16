@@ -11,14 +11,13 @@
 //! 1. [`WidgetDefinition::parse`]: a state event becomes the widget it describes, or the reason it
 //!    describes none (another event type, a removed widget).
 //! 2. [`WidgetDefinition::embed`]: the widget becomes the URL of its iframe (webview), or the reason
-//!    it must not be loaded ([`widget_url_problem`]). A legacy widget is loaded through the compat
+//!    it must not be loaded ([`embed_url_problem`](crate::embed_url_problem)). A legacy widget is loaded through the compat
 //!    wrapper, with its URL template and data as query parameters of the wrapper's URL.
 
 use serde_json::Value;
-use url::Url;
 use widget_actions::JsonValue;
 
-use crate::widget_url::widget_url_problem;
+use crate::widget_url::{checked_embed_url, checked_widget_url};
 
 /// Stable event type of the widget state event (MSC4411).
 pub const WIDGET_EVENT_TYPE: &str = "m.widget";
@@ -76,8 +75,9 @@ pub struct LegacyWidget {
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct WidgetEmbed {
-    /// The URL to load: the widget's own, or for a legacy widget the compat wrapper with the
-    /// widget in its query.
+    /// The URL to load: the widget's own as the URL check parsed and serialised it (so the iframe
+    /// loads exactly what was checked), or for a legacy widget the compat wrapper with the widget
+    /// in its query. Always an absolute `http:` or `https:` URL.
     pub url: String,
     /// Set up the widget API and wait for `notify_ready` before showing the widget.
     pub uses_widget_api: bool,
@@ -136,10 +136,13 @@ impl WidgetDefinition {
         })
     }
 
-    /// What the iframe (webview) of this widget loads, after the URL check
-    /// ([`widget_url_problem`]).
+    /// What the iframe (webview) of this widget loads, after the URL check ([`embed_url_problem`](crate::embed_url_problem):
+    /// [`widget_url_problem`](crate::widget_url_problem), and no page of the compat wrapper at
+    /// `wrapper_url`, for widgets of both kinds).
     ///
-    /// An MSC4411 widget loads its own URL. A legacy widget loads the compat wrapper at
+    /// An MSC4411 widget loads its own URL, serialised as the check parsed it (`  HTTPS://Bücher.example/a b`
+    /// loads `https://xn--bcher-kva.example/a%20b`): no other URL parser gets to read the event's
+    /// string differently. A legacy widget loads the compat wrapper at
     /// `wrapper_url` (checked like a widget URL, so `None` refuses every legacy widget) with
     /// `legacy_widget_url` (the untemplated URL), `legacy_widget_id`, `legacy_wait_for_iframe_load`
     /// and, with data, `legacy_widget_data` (JSON) added to its query; they replace any the wrapper
@@ -149,17 +152,13 @@ impl WidgetDefinition {
     /// `http:` URLs (MSC4411: in developer tools).
     pub fn embed(&self, wrapper_url: Option<&str>, allow_http: bool) -> Result<WidgetEmbed, WidgetEventError> {
         let refused = |reason: String| WidgetEventError::Refused { reason };
-        if let Some(problem) = widget_url_problem(&self.url, allow_http) {
-            return Err(refused(problem));
-        }
+        let checked = checked_embed_url(&self.url, wrapper_url, allow_http).map_err(refused)?;
         let Some(legacy) = &self.legacy else {
-            return Ok(WidgetEmbed { url: self.url.clone(), uses_widget_api: self.uses_widget_api });
+            return Ok(WidgetEmbed { url: checked.into(), uses_widget_api: self.uses_widget_api });
         };
         let wrapper_url = wrapper_url.ok_or_else(|| refused("a legacy widget needs the compat wrapper".to_owned()))?;
-        if let Some(problem) = widget_url_problem(wrapper_url, allow_http) {
-            return Err(refused(format!("compat wrapper: {problem}")));
-        }
-        let mut url = Url::parse(wrapper_url).map_err(|e| refused(format!("compat wrapper: {e}")))?;
+        let mut url = checked_widget_url(wrapper_url, allow_http)
+            .map_err(|problem| refused(format!("compat wrapper: {problem}")))?;
         if url.query_pairs().any(|(key, _)| WRAPPER_PARAMETERS.contains(&key.as_ref())) {
             let kept: Vec<(String, String)> = url
                 .query_pairs()
@@ -213,8 +212,10 @@ mod tests {
     use std::collections::BTreeMap;
 
     use serde_json::json;
+    use url::Url;
 
     use super::*;
+    use crate::widget_url_problem;
 
     const WRAPPER: &str = "http://localhost:5173/widget_compatibility_wrapper/";
 
@@ -326,13 +327,42 @@ mod tests {
     }
 
     #[test]
-    fn an_msc4411_widget_loads_its_own_url() {
+    fn an_msc4411_widget_loads_its_url_as_checked() {
         for url in table("allowed").into_values() {
-            let embed = new_widget(&url).embed(None, true).unwrap();
-            assert_eq!(embed, WidgetEmbed { url: url.clone(), uses_widget_api: true });
+            let embed = new_widget(&url).embed(Some(WRAPPER), true).unwrap();
+            assert_eq!(embed, WidgetEmbed { url: Url::parse(&url).unwrap().into(), uses_widget_api: true });
+        }
+        // Serialised: what the iframe loads is what the check parsed, not the event's string.
+        for (url, loaded) in [
+            ("  HTTPS://Example.org/", "https://example.org/"),
+            ("ht\ttp://example.org/a b", "http://example.org/a%20b"),
+            ("https://bücher.example/", "https://xn--bcher-kva.example/"),
+            ("HTTP:\\\\example.org\\a", "http://example.org/a"),
+            ("https://example.org/?room=$matrix_room_id", "https://example.org/?room=$matrix_room_id"),
+        ] {
+            assert_eq!(new_widget(url).embed(None, true).unwrap().url, loaded, "{url:?}");
         }
         let plain = parse("m.widget", json!({ "name": "n", "url": "https://x/" })).unwrap();
         assert!(!plain.embed(None, true).unwrap().uses_widget_api);
+    }
+
+    #[test]
+    fn the_compat_wrapper_is_no_widget_of_either_kind() {
+        let wrapper: Value = serde_json::from_str(include_str!("../tests/widget_urls.json")).unwrap();
+        let wrapper = &wrapper["compat_wrapper"];
+        let refused: BTreeMap<String, String> = serde_json::from_value(wrapper["refused"].clone()).unwrap();
+        let wrapper = wrapper["wrapper"].as_str().unwrap();
+        let expected =
+            Err(WidgetEventError::Refused { reason: "a widget cannot load this client's compat wrapper".to_owned() });
+        for (label, url) in refused {
+            assert_eq!(new_widget(&url).embed(Some(wrapper), true), expected, "{label}");
+            assert_eq!(legacy_widget(&url).embed(Some(wrapper), true), expected, "{label}");
+        }
+        // The attack: an MSC4411 widget that is this host's compat wrapper with a `javascript:` widget.
+        let attack = "http://localhost:5173/widget_compatibility_wrapper/?legacy_widget_url=javascript:top.__pwned=1//";
+        assert_eq!(new_widget(attack).embed(Some(WRAPPER), true), expected);
+        // Other pages of the wrapper's origin are widgets as before.
+        assert!(new_widget("http://localhost:5173/widgets/new/").embed(Some(WRAPPER), true).is_ok());
     }
 
     #[test]

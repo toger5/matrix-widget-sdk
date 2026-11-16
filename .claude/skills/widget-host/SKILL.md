@@ -102,7 +102,8 @@ grep -rlE '(from |import\()"(matrix-js-sdk|matrix-sdk-uniffi-js)' src | grep -vE
   account stops every widget; its workspace starts them again.
 - Which state events are widgets and how they are embedded (directly, or through the compat
   wrapper for `im.vector.modular.widgets`) is the driver's parser (`parse_widget_state_event`,
-  `embed_widget`, `widget_url_problem` in `crates/widget-host-driver`), used through
+  `embed_widget`, `widget_url_problem`, `embed_url_problem` in `crates/widget-host-driver`; the
+  last refuses the host's own compat wrapper as a widget), used through
   `src/lib/widgetEvents.ts` (`describesWidget`, `resolveWidget`, `hostWidgetEvents`, `wrapperUrl`).
   `src/widgetStateEvent.ts` keeps the host's types and keys (`widgetKey`, `localWidgetKey`), the
   event types, and which capabilities legacy widgets get without asking (`LEGACY_AUTO_APPROVED`).

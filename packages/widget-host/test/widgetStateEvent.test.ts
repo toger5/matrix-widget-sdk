@@ -9,7 +9,7 @@ import { describe, expect, it } from "vitest";
 
 import { widgetEventTypes } from "@matrix-widget-tools/widget-host-bindings";
 
-import { resolveWidget, widgetEventParser, widgetUrlProblem } from "../src/lib/widgetEvents";
+import { hostWidgetEvents, resolveWidget, widgetEventParser, widgetUrlProblem, wrapperUrl } from "../src/lib/widgetEvents";
 import { roomWidgets } from "../src/views/helpers";
 import { localWidgetKey, WIDGET_EVENT_TYPES, widgetKey, type StateEvent } from "../src/widgetStateEvent";
 import "./harness";
@@ -19,9 +19,12 @@ const newWidget = (url: string): StateEvent => ({ type: "m.widget", state_key: "
 const legacyWidget = (url: string): StateEvent => ({ type: "im.vector.modular.widgets", state_key: "w", content: { type: "m.custom", name: "W", url } });
 
 /** The table the Rust tests use too: label → URL. */
-const TABLE = JSON.parse(readFileSync(new URL("../../../crates/widget-host-driver/tests/widget_urls.json", import.meta.url), "utf8")) as Record<"allowed" | "refused", Record<string, string>>;
+const TABLE = JSON.parse(readFileSync(new URL("../../../crates/widget-host-driver/tests/widget_urls.json", import.meta.url), "utf8")) as Record<"allowed" | "refused", Record<string, string>> & {
+  compat_wrapper: { wrapper: string } & Record<"allowed" | "refused", Record<string, string>>;
+};
 const ALLOWED = Object.entries(TABLE.allowed);
 const REFUSED = Object.entries(TABLE.refused);
+const LOADS_THE_WRAPPER = "a widget cannot load this client's compat wrapper";
 
 const NOT_ABSOLUTE = "the URL is not an absolute http: or https: URL";
 /** The rule of `widget_url_problem`, on Node's URL parser: absolute, http(s), and the same URL when resolved against pages of its scheme on two hosts. */
@@ -52,7 +55,35 @@ describe("widgetUrlProblem", () => {
   });
 });
 
+describe("the compat wrapper is no widget", () => {
+  const { wrapper } = TABLE.compat_wrapper;
+  const parser = widgetEventParser(wrapper);
+
+  it.each(Object.entries(TABLE.compat_wrapper.refused))("refuses %s, for both widget kinds", (_, url) => {
+    expect(widgetUrlProblem(url, wrapper)).toBe(LOADS_THE_WRAPPER);
+    expect(parser.urlProblem(url)).toBe(LOADS_THE_WRAPPER);
+    expect(() => resolveWidget(newWidget(url), wrapper)).toThrow(LOADS_THE_WRAPPER);
+    expect(() => resolveWidget(legacyWidget(url), wrapper)).toThrow(LOADS_THE_WRAPPER);
+    expect(parser.resolve(newWidget(url))).toEqual({ name: "W", problem: LOADS_THE_WRAPPER });
+  });
+
+  it.each(Object.entries(TABLE.compat_wrapper.allowed))("allows %s", (_, url) => {
+    expect(widgetUrlProblem(url, wrapper)).toBeUndefined();
+    expect(resolveWidget(newWidget(url), wrapper).url).toBe(new URL(url).href);
+  });
+
+  it("is the compat wrapper of this host by default", () => {
+    const own = wrapperUrl();
+    expect(widgetUrlProblem(`${own}?legacy_widget_url=javascript:top.__pwned=1//&legacy_widget_id=evil`)).toBe(LOADS_THE_WRAPPER);
+    expect(hostWidgetEvents.urlProblem(own)).toBe(LOADS_THE_WRAPPER);
+  });
+});
+
 describe("resolveWidget", () => {
+  it.each(ALLOWED)("loads a new widget's URL as the driver checked it, which is how Node serialises it: %s", (_, url) => {
+    expect(resolveWidget(newWidget(url), WRAPPER).url).toBe(new URL(url).href);
+  });
+
   it("embeds a new widget directly and a legacy widget through the compat wrapper, untemplated", () => {
     expect(resolveWidget(newWidget("https://example.org/?x=$y"), WRAPPER)).toEqual({ url: "https://example.org/?x=$y", name: "W", legacy: false, usesWidgetApi: true });
     const legacy = resolveWidget({ ...legacyWidget("https://example.org/?t=$title"), content: { url: "https://example.org/?t=$title", data: { title: "Notes & more" } } }, WRAPPER);

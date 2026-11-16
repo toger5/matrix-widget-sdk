@@ -30,19 +30,23 @@ transition code: a check on the widget state event.
    knows nothing about template variables. The wrapper resolves them (it asks the host for
    `get_matrix_context` and `get_client_context`), appends the `widgetId` / `parentUrl` query parameters
    legacy clients used to add, and loads the result in its inner iframe.
-3. **New event** (`m.widget`): embed `content.url` directly.
+3. **New event** (`m.widget`): embed `content.url` directly, unless it is a page of the client's
+   own compat wrapper: that runs on the client's origin and loads the `legacy_widget_url` the
+   event put into its query, unchecked by the client
+   ([Which URLs the wrapper loads](#which-urls-the-wrapper-loads)).
 
 That URL construction is the only client code specific to the transition. Once legacy widgets are
 gone, delete it and the wrapper. The host keeps no template engine at all. `widget-host-driver`
 has it (`WidgetDefinition::embed`, `embedWidget` in the TypeScript bindings), with the URL check
-of the widget and of the wrapper; it sets `legacy_widget_url`, `legacy_widget_id`,
+of the widget and of the wrapper, and refuses a widget of either kind whose URL is a page of the
+wrapper; it sets `legacy_widget_url`, `legacy_widget_id`,
 `legacy_wait_for_iframe_load` and `legacy_widget_data`.
 
 ## Query parameters
 
 | parameter | required | from the legacy state event | meaning |
 |---|---|---|---|
-| `legacy_widget_url` | yes | `content.url`, **untemplated** | Template variables are resolved by the wrapper. `widgetId` is added if missing and `parentUrl` is always set to the wrapper's own URL, because the widget's parent is now the wrapper. |
+| `legacy_widget_url` | yes | `content.url`, **untemplated** | Template variables are resolved by the wrapper. `widgetId` is added if missing and `parentUrl` is always set to the wrapper's own URL, because the widget's parent is now the wrapper. Only an absolute `http:` / `https:` URL is loaded, see [below](#which-urls-the-wrapper-loads). |
 | `legacy_widget_id` | no | `state_key` | `widgetId` put on every legacy message and value of `$matrix_widget_id`. Default: the `widgetId` query parameter of `legacy_widget_url`. One of the two must exist. |
 | `legacy_widget_name` | no | `content.name` | Accessible name (`title`) of the inner iframe. Default: the widget id. |
 | `legacy_wait_for_iframe_load` | no | `content.waitForIframeLoad` (default `true`) | Decides when the legacy capability round starts, see below. |
@@ -76,6 +80,35 @@ is no widget yet.
 This means a host prompts twice for a wrapped widget: once for the wrapper's context
 capabilities, once for the capabilities the legacy widget itself asks for. A host may of course
 grant the context capabilities without prompting.
+
+### Which URLs the wrapper loads
+
+The wrapper is often served from its client's own origin (this repository's test host does that),
+the client gives its iframe `allow-same-origin`, and the inner iframe has no sandbox. A
+`javascript:` URL in the inner iframe would run on the client's origin, and `data:`, `blob:`,
+`about:` pages or a URL resolved against the wrapper page (`/x`, `http:/x`) would be pages of that
+origin. So the wrapper loads only an **absolute `http:` or `https:` URL that names its own host**:
+the rule of `widget_url_problem` in `widget-host-driver` (`src/url.ts`; its tests run the driver's
+URL table, `crates/widget-host-driver/tests/widget_urls.json`). It checks:
+
+1. the template in `legacy_widget_url`, when it reads its configuration: a refused one stops the
+   wrapper before it talks to the host (a template that starts with a `$variable` has no scheme
+   and is refused);
+2. the template again and the templated URL, before the inner iframe is created: that is what
+   the iframe loads, and it gets the URL as the URL parser serialised it. A value cannot change
+   the scheme (it is URI-encoded), but it can make the URL invalid (`https://$server/` with
+   `server` = `widgets.example:8443`).
+
+A refused URL creates no inner iframe. The wrapper logs the reason (`console.error`, also at
+`log_level=warn`), shows it in its page ("Widget compat wrapper: refused …", the same place as the
+errors of a missing parameter), never sends `notify_ready` (so the host's widget stays in its
+loading state until the host gives up) and answers every later host request with
+`invalid_request`. The texts name the scheme, never the URL.
+
+A client should still check the URL first (the driver's `WidgetDefinition::embed` does, before
+templating) and should not load its own compat wrapper as a widget (`embed` refuses that too):
+the wrapper's check protects clients that do not, and copies of the wrapper the client does not
+know about.
 
 ### Envelope translation (both directions, stateless)
 
@@ -263,13 +296,13 @@ Always:
 
 ```sh
 npm install              # from the repository root (npm workspaces)
-npm test                 # vitest: envelope translation, handshake state machine, config parsing
+npm test                 # vitest: envelope translation, handshake state machine, config parsing, URL check
 npm run dev              # http://localhost:5174/ (standalone; the test host serves its own copy and does not need this)
 npm run build            # static output in dist/, serve it under its own origin
 ```
 
 Source layout: `src/envelope.ts` (translation tables), `src/template.ts` (legacy URL
-templating), `src/files.ts` (Blob ↔ base64), `src/bridge.ts` (bootstrap and handshake state machine, transport free),
+templating), `src/url.ts` (which legacy URLs are loaded), `src/files.ts` (Blob ↔ base64), `src/bridge.ts` (bootstrap and handshake state machine, transport free),
 `src/wrapper.ts` (URL config, iframe, `postMessage` routing), `src/main.ts`.
 
 For an end-to-end run use the test host in `../widget-host` with the legacy test widget from
