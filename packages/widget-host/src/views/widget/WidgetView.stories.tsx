@@ -60,6 +60,19 @@ const LONG = [
   UNKNOWN,
 ];
 
+/** A call widget (the call example of the webview capabilities' MSC draft): read the call members, join calls, and browser permissions. */
+const CALL_WEBVIEW = [
+  `widget:org.matrix.msc2876.read_events.timeline:m.rtc.member`,
+  `host:${X}forward_event.timeline:m.rtc.member`,
+  `widget:org.matrix.msc4515.get_rtc_transports`,
+  `widget:org.matrix.msc4533.get_rtc_livekit_token`,
+  `webview:${X}allow:camera`,
+  `webview:${X}allow:microphone`,
+  `webview:${X}allow:display-capture`,
+  `webview:${X}allow:autoplay`,
+  `webview:${X}allow:fullscreen`,
+];
+
 /** A capability prompt; `blocked`: "Approve" stays blocked (the last request is "now" for as long as the story is shown). */
 const capabilities = (requested: string[], o: { added?: string[]; unknown?: string[]; blocked?: boolean } = {}): CapabilityPromptViewModel => ({
   requested,
@@ -164,6 +177,19 @@ export const CapabilityPromptOpenId: Story = {
       <WidgetView key={JSON.stringify([args.initialAlways, args.initialUnchecked])} {...args} />
     </InDesignPanel>
   ),
+};
+
+/**
+ * Capability prompt: a call widget asking for browser permissions. Element Call asks to read the
+ * call members, to join calls and for the camera, the microphone, the screen, autoplay and
+ * fullscreen (the webview capabilities of the call example of the MSC draft). They are the section
+ * "Browser permissions", between "Calls" and "This app"; its note says that approving them restarts
+ * the widget and that the browser may still ask. The camera, the microphone and the screen are
+ * risky, so the summary starts with "use your camera, microphone or screen", in bold.
+ */
+export const CapabilityPromptWebview: Story = {
+  parameters: { size: [700, 800] },
+  args: { widget: widgetVm("design", "call", { prompts: { capabilities: capabilities(CALL_WEBVIEW) } }) },
 };
 
 /** The capability prompt in a PiP box (224×140): one line and "Open to answer" (not designed: finding `compact-failed-state`). */

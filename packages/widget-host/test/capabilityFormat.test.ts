@@ -9,8 +9,9 @@ import { describe, expect, it } from "vitest";
 
 import initWasm from "../../widget-host-bindings/src/generated/wasm-bindgen/index.js";
 import * as widgetActions from "../../widget-host-bindings/src/generated/widget_actions";
-import { DEFAULT_CAPABILITIES, DELAYED_CAPABILITIES, EXTRA_CAPABILITIES, RELATION_CAPABILITIES, TO_DEVICE_CAPABILITIES } from "../../test-widgets/new/capabilities";
-import { capabilityLabel, capabilityRisk, capabilitySection, capabilitySections, capabilitySummary } from "../src/views/widget/format";
+import { DEFAULT_CAPABILITIES, DELAYED_CAPABILITIES, EXTRA_CAPABILITIES, RELATION_CAPABILITIES, TO_DEVICE_CAPABILITIES, WEBVIEW_CAPABILITIES } from "../../test-widgets/new/capabilities";
+import { LEGACY_WEBVIEW } from "../src/widgetStateEvent";
+import { capabilityLabel, capabilityRisk, capabilitySection, capabilitySections, capabilitySummary, iframeTokens, splitCapability } from "../src/views/widget/format";
 
 const require = createRequire(import.meta.url);
 await initWasm({ module_or_path: readFileSync(require.resolve("../../widget-host-bindings/src/generated/wasm-bindgen/index_bg.wasm")) });
@@ -20,6 +21,8 @@ const { capabilityIsKnown } = widgetActions;
 const X = "org.matrix.mscXXXX.";
 /** Everything the MSC4412 test widget requests: one capability per action it has a button for. */
 const TEST_WIDGET = [DEFAULT_CAPABILITIES, DELAYED_CAPABILITIES, RELATION_CAPABILITIES, TO_DEVICE_CAPABILITIES, EXTRA_CAPABILITIES].join(",").split(",");
+/** The webview capabilities the test widget requests with its "webview" button. */
+const TEST_WIDGET_WEBVIEW = WEBVIEW_CAPABILITIES.split(",");
 /** The actions the test widget has no button for. */
 const OTHERS = ["widget:org.matrix.msc4533.delegate_rtc_livekit_delayed_leave", `host:${X}forward_event.sticky`];
 
@@ -65,7 +68,7 @@ describe("capability prompt copy", () => {
   });
 
   it("has its sections in a fixed order, the risky ones marked", () => {
-    const all = capabilitySections([...TEST_WIDGET, ...OTHERS, "garbage"], ["garbage"]);
+    const all = capabilitySections([...TEST_WIDGET, ...OTHERS, ...TEST_WIDGET_WEBVIEW, "garbage"], ["garbage"]);
     expect(all.map((s) => [s.id, s.title])).toEqual([
       ["read", "Read this room"],
       ["send", "Send as you"],
@@ -74,10 +77,11 @@ describe("capability prompt copy", () => {
       ["account", "You and your account"],
       ["files", "Files"],
       ["calls", "Calls"],
+      ["browser", "Browser permissions"],
       ["app", "This app"],
       ["other", "Unknown to this app"],
     ]);
-    expect(all.filter((s) => s.risky).map((s) => s.id)).toEqual(["send", "state", "devices", "account"]);
+    expect(all.filter((s) => s.risky).map((s) => s.id)).toEqual(["send", "state", "devices", "account", "browser"]);
     // the phrase of "You and your account" when it holds `get_openid`
     expect(all.find((s) => s.id === "account")?.phrase).toBe("prove who you are to other servers");
     expect(capabilitySections([`widget:${X}get_matrix_context`])[0].phrase).toBe("know who you are");
@@ -108,5 +112,94 @@ describe("capability prompt copy", () => {
     expect(capabilityLabel("widget:com.beeper.read_room_account_data:m.tag")).toBe("Read your “m.tag” data of this room");
     expect(capabilityLabel(`widget:${X}share_screen`)).toBeUndefined();
     expect(capabilityRisk(`widget:${X}get_openid`)).toBe("Proves your identity to other servers");
+  });
+});
+
+describe("browser permissions (webview capabilities)", () => {
+  const W = `webview:${X}`;
+  const call = [
+    "widget:org.matrix.msc2876.read_events.timeline:m.rtc.member",
+    "widget:org.matrix.msc4533.get_rtc_livekit_token",
+    `${W}allow:camera`,
+    `${W}allow:microphone`,
+    `${W}allow:display-capture`,
+    `${W}allow:autoplay`,
+    `${W}allow:fullscreen`,
+  ];
+
+  it("knows, labels and sorts the webview capabilities of the test widget and of a legacy widget", () => {
+    for (const capability of [...TEST_WIDGET_WEBVIEW, ...LEGACY_WEBVIEW]) {
+      expect(capabilityIsKnown(capability), capability).toBe(true);
+      expect(capabilitySection(capability), capability).toBe("browser");
+      expect(capabilityLabel(capability), capability).not.toMatch(/“/);
+    }
+    expect(capabilityLabel("webview:m.allow:camera")).toBe("Use your camera");
+    expect(capabilityLabel(`${W}sandbox:allow-popups`)).toBe("Open links and windows");
+    expect(splitCapability(`${W}allow:camera`)).toEqual({ side: "webview", name: `${X}allow:camera` });
+  });
+
+  it("quotes a feature or a token it has no words for", () => {
+    expect(capabilityIsKnown(`${W}allow:payment`)).toBe(true);
+    expect(capabilityLabel(`${W}allow:payment`)).toBe("Use “payment” of your browser");
+    expect(capabilityLabel(`${W}sandbox:allow-storage-access-by-user-activation`)).toBe("Sandbox: “allow-storage-access-by-user-activation”");
+    expect(capabilitySection(`${W}allow:payment`)).toBe("browser");
+    expect(capabilityRisk(`${W}allow:payment`)).toBeUndefined();
+  });
+
+  it("puts what the driver refuses as a webview capability under “Unknown to this app”", () => {
+    for (const capability of [`${W}allow:Camera`, `${W}allow:camera *`, `${W}allow:camera;usb`, `${W}frame:camera`]) {
+      expect(capabilityIsKnown(capability), capability).toBe(false);
+      expect(capabilitySection(capability, false), capability).toBe("other");
+    }
+  });
+
+  it("marks the risky ones", () => {
+    const risks = Object.fromEntries(
+      ["allow:camera", "allow:microphone", "allow:display-capture", "allow:clipboard-read", "allow:geolocation", "allow:usb", "allow:bluetooth", "sandbox:allow-modals", "sandbox:allow-popups-to-escape-sandbox"].map((c) => [c, capabilityRisk(W + c)]),
+    );
+    expect(risks).toEqual({
+      "allow:camera": "Can see you",
+      "allow:microphone": "Can hear you",
+      "allow:display-capture": "Can see your screen",
+      "allow:clipboard-read": "Can read what you copied",
+      "allow:geolocation": "Knows your location",
+      "allow:usb": "Talks to your devices",
+      "allow:bluetooth": "Talks to your devices",
+      "sandbox:allow-modals": "Can block this app with dialogs",
+      "sandbox:allow-popups-to-escape-sandbox": "Its windows are not sandboxed",
+    });
+    for (const c of ["allow:autoplay", "allow:fullscreen", "allow:clipboard-write", "allow:encrypted-media", "sandbox:allow-popups", "sandbox:allow-forms", "sandbox:allow-downloads", "sandbox:allow-presentation"]) {
+      expect(capabilityRisk(W + c), c).toBeUndefined();
+    }
+  });
+
+  it("says “use your camera, microphone or screen” when one of them is asked for, else “use features of your browser”", () => {
+    expect(sentence(capabilitySummary("Element Call", capabilitySections(call)))).toBe("Element Call wants to **use your camera, microphone or screen**, read this room and join calls.");
+    expect(sentence(capabilitySummary("Board", capabilitySections([`${W}sandbox:allow-popups`, `${W}allow:fullscreen`])))).toBe("Board wants to use features of your browser.");
+    expect(sentence(capabilitySummary("Board", capabilitySections([`${W}sandbox:allow-modals`])))).toBe("Board wants to **use features of your browser**.");
+    expect(sentence(capabilitySummary("Talk", capabilitySections([`${W}allow:microphone`])))).toBe("Talk wants to **use your camera, microphone or screen**.");
+  });
+
+  it("notes that approving restarts the widget, and that the browser may still ask for the camera or the microphone", () => {
+    const note = (requested: string[]) => capabilitySections(requested).find((s) => s.id === "browser")?.note;
+    expect(note(call)).toBe("Approving these restarts the widget. Your browser may still ask before it uses the camera or microphone.");
+    expect(note([`${W}allow:display-capture`, `${W}sandbox:allow-popups`])).toBe("Approving these restarts the widget.");
+    expect(capabilitySections(["garbage"], ["garbage"])[0].note).toBe("This app does not act on these.");
+    expect(capabilitySections([`widget:${X}get_matrix_context`])[0].note).toBeUndefined();
+  });
+
+  it("splits the iframe's attributes into tokens, each with the webview capability it comes from", () => {
+    expect(
+      iframeTokens({ sandbox: "allow-scripts allow-same-origin allow-popups", allow: "camera 'src'; microphone 'src'", applied: [`${W}allow:camera`, `${W}allow:microphone`, `${W}sandbox:allow-popups`] }),
+    ).toEqual({
+      sandbox: [{ token: "allow-scripts" }, { token: "allow-same-origin" }, { token: "allow-popups", capability: `${W}sandbox:allow-popups` }],
+      allow: [
+        { token: "camera", capability: `${W}allow:camera` },
+        { token: "microphone", capability: `${W}allow:microphone` },
+      ],
+    });
+    // The strict default; a legacy widget's set names the base tokens too, which every iframe has anyway.
+    expect(iframeTokens({ sandbox: "allow-scripts allow-same-origin", allow: "", applied: [] })).toEqual({ sandbox: [{ token: "allow-scripts" }, { token: "allow-same-origin" }], allow: [] });
+    expect(iframeTokens({ sandbox: "allow-scripts allow-same-origin", allow: "", applied: [`${W}sandbox:allow-scripts`] }).sandbox[0]).toEqual({ token: "allow-scripts" });
   });
 });

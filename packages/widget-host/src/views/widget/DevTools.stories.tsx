@@ -1,9 +1,27 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
+import { within } from "storybook/test";
 
-import type { DevToolPanel, WidgetDevToolsLayout } from "../../appViewModel";
-import { devToolsLayout, widgetVm } from "../fixtures";
+import type { DevToolPanel, WidgetDevToolsData, WidgetDevToolsLayout } from "../../appViewModel";
+import { DEV_TOOLS_DATA, devToolsLayout, widgetVm } from "../fixtures";
 import { InDesignPanel } from "../rooms/storyFrame";
+import { fillIn, StoryEnv } from "../storyEnv";
 import { WidgetView } from "./WidgetView";
+
+const X = "org.matrix.mscXXXX.";
+const CAMERA = `webview:${X}allow:camera`;
+const MICROPHONE = `webview:${X}allow:microphone`;
+const POPUPS = `webview:${X}sandbox:allow-popups`;
+/** The call widget after a restart for the camera, the microphone and popups: it holds them, and gets them without asking (its iframe has them). Sorted, as the runtime lists them. */
+const WEBVIEW_DATA: WidgetDevToolsData = {
+  ...DEV_TOOLS_DATA,
+  capabilities: {
+    approved: [`host:${X}forward_event.timeline:m.room.message`, CAMERA, MICROPHONE, POPUPS, `widget:${X}get_matrix_context`, `widget:${X}get_openid`, `widget:${X}send_event.timeline:m.room.message`],
+    autoApproved: [CAMERA, MICROPHONE, POPUPS, `widget:${X}get_client_context`],
+    denied: [`widget:${X}send_to_device:org.example.ping`],
+    singleUse: [`widget:${X}get_openid`],
+    webview: { applied: [CAMERA, MICROPHONE, POPUPS], sandbox: "allow-scripts allow-same-origin allow-popups", allow: "camera 'src'; microphone 'src'" },
+  },
+};
 
 /**
  * The WidgetDevToolBar of a widget with its panels. The dev tools are part of the WidgetView (it
@@ -66,8 +84,35 @@ export const DockedBottom: Story = { args: { devTools: layout("bottom", ["messag
 /** WidgetDevToolMessagesPanel: the list, one message expanded. */
 export const MessagesExpanded: Story = { args: { devTools: layout("top", ["messages"], 420), initialExpandedMessage: "m4" }, parameters: { size: [1000, 720] } };
 
-/** WidgetDevToolDriverPanel: the capabilities (approved, auto-approved, denied; the one-use one marked "once") and the mocked driver actions. */
-export const Driver: Story = { args: { devTools: layout("top", ["driver"], 356) }, parameters: { size: [1000, 720] } };
+/**
+ * WidgetDevToolDriverPanel: the capabilities (approved, auto-approved, denied; the one-use one
+ * marked "once"), "Webview of this load" and the mocked driver actions. This widget holds no webview
+ * capability, so its iframe has the `sandbox` tokens of every widget (muted) and nothing in `allow`.
+ */
+export const Driver: Story = { args: { devTools: layout("top", ["driver"], 420) }, parameters: { size: [1000, 720] } };
+
+/**
+ * WidgetDevToolDriverPanel with webview capabilities. The call widget holds the camera, the
+ * microphone and popups (approved, and auto-approved since its iframe has them); its webview
+ * capabilities are marked "webview" in the lists. "Webview of this load" shows the `sandbox`
+ * tokens and the `allow` features this start's iframe was built with, those of every widget's
+ * iframe muted. A webview capability is typed into the field: "Add" reads "Add and restart", as
+ * adding it restarts the widget; the revoke buttons of the webview rows say so too.
+ */
+export const DriverWebview: Story = {
+  args: { devTools: layout("right", ["driver"], 440) },
+  parameters: { size: [1000, 760] },
+  render: (args) => (
+    <StoryEnv env={{ useDevToolsData: () => WEBVIEW_DATA }}>
+      <InDesignPanel widget={args.widget} devTools={args.devTools}>
+        <WidgetView {...args} />
+      </InDesignPanel>
+    </StoryEnv>
+  ),
+  play: async ({ canvasElement }) => {
+    fillIn(await within(canvasElement).findByRole("textbox", { name: "Add capability" }), `webview:${X}allow:fullscreen`);
+  },
+};
 
 /** WidgetDevToolConsolePanel: the log about the widget. */
 export const Console: Story = { args: { devTools: layout("top", ["console"]) } };

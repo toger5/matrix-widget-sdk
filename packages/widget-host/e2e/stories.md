@@ -139,6 +139,7 @@ The Dev tools of a Matrix account (`sidepanel-roomtoolsview--*`) are **not reach
 | `widget-widgetview--capability-prompt-long` | `widget.spec.ts` › capability prompt: deny all, then approve a subset; the widget's actions succeed or fail accordingly (the test widget's 33 capabilities; it asks for none this app does not know) |
 | `widget-widgetview--capability-prompt-merged` | `widget.spec.ts` › a request while the prompt is open joins it: the choices stay, the new one is marked, Approve is blocked again, one answer for both (the story's progress bar is drawn full, the screenshot ends animations) |
 | `widget-widgetview--capability-prompt-open-id` | `widget.spec.ts` › OpenID is a one-use capability: every token is a grant of its own, asked in the capability prompt (the prompt of the second token, "Once" by default; "Always" and the disabled choice: › OpenID "Always": every next token without the card) |
+| `widget-widgetview--capability-prompt-webview` | `webview.spec.ts` › an approved webview capability restarts the widget with it; asking again needs no prompt and no restart (the test widget asks for the camera and the microphone only) |
 | `widget-widgetview--compact-prompt` | **catalogue**: the prompt of a widget in a PiP box |
 | `widget-devtools--bar-top` | `devtools.spec.ts` › the ⋯ button of the tab opens the bar with the messages panel; the bar docks top, bottom, left and right |
 | `widget-devtools--bar-bottom` | `devtools.spec.ts` › the ⋯ button of the tab opens the bar with the messages panel; the bar docks top, bottom, left and right |
@@ -152,6 +153,7 @@ The Dev tools of a Matrix account (`sidepanel-roomtoolsview--*`) are **not reach
 | `widget-devtools--docked-bottom` | `devtools.spec.ts` › the dev tools are resized with the separator: keyboard and drag |
 | `widget-devtools--messages-expanded` | `devtools.spec.ts` › messages panel: lists the actions, a row expands to its JSON, the filter filters, Clear empties |
 | `widget-devtools--driver` | `devtools.spec.ts` › driver panel: revoke one capability and all (confirm modal), add a capability (the OpenID grant of the start is marked "once"; "Always" under auto-approved: `widget.spec.ts` › OpenID "Always": every next token without the card) |
+| `widget-devtools--driver-webview` | `webview.spec.ts` › the driver panel shows the webview of this load; adding a webview capability restarts the widget with it |
 | `widget-devtools--console` | `devtools.spec.ts` › console panel: lists what the host logs about the widget; filter and Clear |
 | `widget-devtools-stats--total` | `devtools.spec.ts` › stats panel: the tiles count actions and events; the totals of characters switch the bar graph |
 | `widget-devtools-stats--to-widget-docked-right` | `devtools.spec.ts` › stats panel: the tiles count actions and events; the totals of characters switch the bar graph |

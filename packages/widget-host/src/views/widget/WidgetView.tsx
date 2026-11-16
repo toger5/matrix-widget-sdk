@@ -128,7 +128,7 @@ function WidgetState({ widget, compact, tab, initialUnchecked, initialAlways }: 
  * The permission card: a summary, the capabilities in sections (all checked at first) and
  * "Approve", which is blocked for a moment after the card appeared or a request added to it.
  * Capabilities that a later request added are marked "New"; one the host grants for one use has
- * "Once" / "Always". Stories `widget-widgetview--capability-prompt*`.
+ * "Once" / "Always". Webview capabilities are "Browser permissions". Stories `widget-widgetview--capability-prompt*`.
  */
 function CapabilityPrompt({ widget, prompt, initialUnchecked = [], initialAlways = [] }: { widget: WidgetInstanceViewModel; prompt: CapabilityPromptViewModel; initialUnchecked?: string[]; initialAlways?: string[] }) {
   const dispatch = useDispatch();
@@ -189,7 +189,7 @@ function CapabilityPrompt({ widget, prompt, initialUnchecked = [], initialAlways
             {n} of {s.capabilities.length}
           </small>
         </div>
-        {s.id === "other" && <p className="pc-note">This app does not act on these.</p>}
+        {s.note && <p className="pc-note">{s.note}</p>}
         {s.capabilities.map((capability) => {
           // What the driver does not know gets no label, even if its name looks familiar.
           const label = s.id === "other" ? undefined : capabilityLabel(capability);

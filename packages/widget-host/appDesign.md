@@ -136,9 +136,9 @@ The events of the room, for debugging. No composer.
 
 A widget's request for capabilities covers its WidgetTab with a permission card until it is answered (in a PiP box: one line and "Open to answer").
 
-- Header: the widget icon, "<widget> asks for permissions" and one sentence of what it wants in plain words, the risky parts first and in bold.
-- The capabilities in sections, in this order: Read this room, Send as you, Change the room, Direct messages to devices, You and your account, Files, Calls, This app, Unknown to this app (with a note that the app does not act on them; approving them is not remembered).
-- A section header: a checkbox for all its rows (mixed if only some are checked), the title, "N of M" and a warning icon if a row is risky. A row: checkbox, label, the full capability string (wrapping) and a warning icon if it acts in your name, changes the room for everyone, is hidden from the room or proves your identity.
+- Header: the widget icon, "<widget> asks for permissions" and one sentence of what it wants in plain words, the risky parts first and in bold. Browser permissions are "use your camera, microphone or screen" when one of those is asked for, else "use features of your browser".
+- The capabilities in sections, in this order: Read this room, Send as you, Change the room, Direct messages to devices, You and your account, Files, Calls, Browser permissions (the widget's iframe; with the note "Approving these restarts the widget. Your browser may still ask before it uses the camera or microphone.", the second sentence only when one of the two is asked for), This app, Unknown to this app (with a note that the app does not act on them; approving them is not remembered).
+- A section header: a checkbox for all its rows (mixed if only some are checked), the title, "N of M" and a warning icon if a row is risky. A row: checkbox, label, the full capability string (wrapping) and a warning icon if it acts in your name, changes the room for everyone, is hidden from the room, proves your identity, or is a risky browser permission: camera, microphone, screen, reading the clipboard, location, hardware devices, dialogs (`allow-modals`), windows without the widget's limits (`allow-popups-to-escape-sandbox`).
 - Everything is checked at first. Capabilities the widget holds already or gets without asking are not listed.
 - A capability the host grants for one use (an OpenID token: the widget asks again for the next one) has "Once" (default) / "Always" in its row, disabled while the row is unchecked; choosing never toggles the row. "Always" grants it whenever the widget asks, without the card: remembered when remembering is on, else while the widget runs.
 - The header and the buttons ("Deny all", "Approve N selected") stay in place; only the sections scroll, and the title of the section in view sticks.
@@ -174,9 +174,8 @@ A toolbar for a single widget, with information like the driver state (approved 
 
 ### WidgetDevToolDriverPanel
 
-An overview of the driver side:
-
 - approved capabilities (with a way to revoke them and to add more); a one-use one is marked "once", one chosen "Always" is auto-approved
+- "Webview of this load": the `sandbox` tokens and `allow` features of the widget's iframe as chips, those of every widget muted. Adding or revoking a webview capability restarts the widget: "Add" reads "Add and restart", the revoke button says so.
 - buttons to mock a driver action: update theme, update language, ... (just add a couple for now, with a TODO)
 
 ### WidgetDevToolConsolePanel
@@ -335,7 +334,7 @@ Every state of the UI. Each is one story in Storybook, a sketch story (`Sketch/â
     - WidgetTab
       - WidgetView
         - Loading / failed to load
-        - Capability prompt: summary and sections / a long list, scrolled / a second request joined, "Approve" blocked / one OpenID capability, "Once", "Approve" blocked
+        - Capability prompt: summary and sections / a long list, scrolled / a second request joined, "Approve" blocked / one OpenID capability, "Once", "Approve" blocked / a call widget asking for browser permissions
         - Dev tools: no (full widget)
         - Dev tools: yes
           - Bar only, docked top / bottom / left / right
@@ -344,7 +343,7 @@ Every state of the UI. Each is one story in Storybook, a sketch story (`Sketch/â
           - Fourth panel opened: the oldest one closes
           - WidgetDevToolMessagesPanel: list, one message expanded
           - WidgetDevToolStatsPanel: total graph / one direction in a narrow panel
-          - WidgetDevToolDriverPanel
+          - WidgetDevToolDriverPanel / with webview capabilities ("Webview of this load", "Add and restart")
           - WidgetDevToolConsolePanel
   - RoomView (2)
     - A different room next to RoomView (1)
@@ -362,7 +361,9 @@ Notes for the implementation. They add to the design above, they do not change i
 **Widgets are iframes**
 
 - Moving an iframe in the DOM reloads it. To move a widget between a tab and the PictureInPicturePanel without a reload, every iframe stays where it is in one persistent layer and is displayed through a shadow DOM slot where the view shows the widget.
-- Only absolute `http:` / `https:` widget URLs are embedded, for both widget kinds (a legacy URL is checked as its template, so one starting with `$variable` is refused); any other widget is listed disabled, with the reason. The "Add widget" forms refuse such a URL; a stored local widget is checked again.
+- Only absolute `http:` / `https:` widget URLs are embedded, for both widget kinds (a legacy URL is checked as its template, so one starting with `$variable` is refused); any other widget is listed disabled, with the reason, and so is a page of this app's own origin (the sandbox does not separate it from the app), except the test widgets the app ships itself. The "Add widget" forms refuse such a URL; a stored local widget is checked again.
+- A widget's iframe starts strict: `sandbox="allow-scripts allow-same-origin"`, nothing in `allow`. More comes only from the webview capabilities the widget asks for (Browser permissions); `allow-top-navigation` is never asked for nor granted. A legacy widget gets a legacy client's iframe (Element Web's, plus `fullscreen`) without asking.
+- Granting or revoking a webview capability restarts the widget with the new iframe. Restarted a third time within 10 s for this, it fails: "The widget was restarted 2 times within 10 seconds to change the permissions of its iframe, and is stopped." ("Retry" starts it with what was granted).
 - A local widget's key is `local:` plus its type and state key, so it never shares remembered capabilities with a room widget of the same ID; they are forgotten when its URL (of a legacy widget also its `data`, the values of the URL's variables) changes or it is removed. Local widgets are persisted with the account's layout and deleted on logout (the DevBackend's are kept in memory).
 - The host cannot read the console of a cross-origin iframe. The WidgetDevToolConsolePanel needs the widget side (SDK or compat wrapper) to forward its logs.
 

@@ -1,8 +1,9 @@
 /**
  * Webview capabilities: the iframe of a widget starts strict, a granted `webview:` capability applies
  * with a restart of the widget (a new generation), a legacy widget gets a legacy client's iframe, and
- * no widget runs on the host's own origin. Until the prompt knows them (group 20b), webview
- * capabilities are listed under "Unknown to this app"; the tests find them by their string.
+ * no widget runs on the host's own origin. The prompt lists them under "Browser permissions"; the
+ * driver panel shows the iframe's attributes ("Webview of this load").
+ * stories `widget-widgetview--capability-prompt-webview`, `widget-devtools--driver-webview`
  */
 import type { Locator } from "@playwright/test";
 
@@ -17,7 +18,6 @@ const TOP_NAVIGATION = "webview:org.matrix.mscXXXX.sandbox:allow-top-navigation"
 const STRICT_SANDBOX = "allow-scripts allow-same-origin";
 /** A widget that says nothing until its buttons are pressed. */
 const QUIET = "http://localhost:5175/new/?autostart=0";
-const escape = (text: string) => new RegExp(text.replaceAll(".", "\\."));
 
 /** A room with one widget at `url`, open in a tab. */
 const oneWidget = (url: string, extra: Partial<HostSeed> = {}): HostSeed => ({
@@ -37,6 +37,7 @@ const webview = (host: Host, id: string) => host.page.evaluate((i) => window.wid
 const generation = async (host: Host, id: string) => (await webview(host, id))?.generation;
 const approved = (host: Host, id: string) => host.page.evaluate((i) => window.widgetHost!.driverSnapshot(i)?.approved ?? [], id);
 const prompt = (host: Host) => host.page.getByTestId("capability-prompt");
+const browserPermissions = (host: Host) => prompt(host).getByRole("group", { name: "Browser permissions" });
 
 /** Start the quiet widget and make it ready. */
 async function readyQuietWidget(host: Host, extra: Partial<HostSeed> = {}): Promise<void> {
@@ -45,12 +46,19 @@ async function readyQuietWidget(host: Host, extra: Partial<HostSeed> = {}): Prom
   await host.ready(NEW);
 }
 
-/** Ask for camera and microphone and approve both: the widget starts again. Returns the generation before. */
-async function grantCameraAndMicrophone(host: Host): Promise<number> {
-  const before = (await generation(host, NEW))!;
+/** Ask for camera and microphone: the prompt lists both under "Browser permissions", checked. */
+async function askCameraAndMicrophone(host: Host): Promise<void> {
   await press(host, NEW, "webview: request camera + microphone");
   await expect(capabilityBoxes(prompt(host))).toHaveCount(2);
-  await expect(prompt(host).getByRole("checkbox", { name: escape(CAMERA) })).toBeVisible();
+  await expect(browserPermissions(host).getByRole("checkbox", { name: `Use your camera (${CAMERA})` })).toBeChecked();
+  await expect(browserPermissions(host).getByRole("checkbox", { name: `Use your microphone (${MICROPHONE})` })).toBeChecked();
+}
+
+/** Ask for camera and microphone and approve both: the widget starts again. Returns the generation before. */
+async function grantCameraAndMicrophone(host: Host, mark?: (host: Host) => Promise<void>): Promise<number> {
+  const before = (await generation(host, NEW))!;
+  await askCameraAndMicrophone(host);
+  await mark?.(host);
   await host.passApproveDelay();
   await prompt(host).getByRole("button", { name: "Approve 2 selected" }).click();
   await expect.poll(() => generation(host, NEW)).toBe(before + 1);
@@ -75,7 +83,16 @@ test("a widget's iframe starts strict: scripts and its own origin, no browser fe
 
 test("an approved webview capability restarts the widget with it; asking again needs no prompt and no restart", async ({ host }) => {
   await readyQuietWidget(host);
-  const before = await grantCameraAndMicrophone(host);
+  const before = await grantCameraAndMicrophone(host, async () => {
+    // Risky, so first and bold in the summary; the note says what approving does.
+    await expect(prompt(host).locator(".pc-sum b")).toHaveText("use your camera, microphone or screen");
+    await expect(prompt(host)).toContainText("New test widget wants to use your camera, microphone or screen.");
+    await expect(browserPermissions(host)).toContainText("Approving these restarts the widget. Your browser may still ask before it uses the camera or microphone.");
+    await expect(browserPermissions(host).getByRole("img", { name: "Can see you" })).toBeVisible();
+    await expect(browserPermissions(host).getByRole("img", { name: "Can hear you" })).toBeVisible();
+    await expect(prompt(host).getByRole("group", { name: "Unknown to this app" })).toHaveCount(0);
+    await host.story("widget-widgetview--capability-prompt-webview");
+  });
   await expect(host.iframe(NEW)).toHaveAttribute("allow", "camera 'src'; microphone 'src'");
   await expect(host.iframe(NEW)).toHaveAttribute("sandbox", STRICT_SANDBOX);
   expect((await webview(host, NEW))?.applied).toEqual([CAMERA, MICROPHONE]);
@@ -96,8 +113,7 @@ test("an approved webview capability restarts the widget with it; asking again n
 test("a denied webview capability changes nothing: no restart", async ({ host }) => {
   await readyQuietWidget(host);
   const before = await generation(host, NEW);
-  await press(host, NEW, "webview: request camera + microphone");
-  await expect(capabilityBoxes(prompt(host))).toHaveCount(2);
+  await askCameraAndMicrophone(host);
   await prompt(host).getByRole("button", { name: "Deny all" }).click();
   await expect(prompt(host)).toHaveCount(0);
   await expect.poll(() => host.actions(NEW, "toWidget")).toContainEqual(expect.stringMatching(/\.update_capabilities$/));
@@ -169,7 +185,7 @@ test("allow-top-navigation is never in the prompt and never granted", async ({ h
   await requestNext(host, NEW, [CAMERA, TOP_NAVIGATION]);
   await press(host, NEW, "request_capabilities");
   await expect(capabilityBoxes(prompt(host))).toHaveCount(1);
-  await expect(prompt(host).getByRole("checkbox", { name: escape(CAMERA) })).toBeVisible();
+  await expect(browserPermissions(host).getByRole("checkbox", { name: `Use your camera (${CAMERA})` })).toBeVisible();
   await expect(prompt(host)).not.toContainText("top-navigation");
   await host.passApproveDelay();
   await prompt(host).getByRole("button", { name: "Approve 1 selected" }).click();
@@ -193,4 +209,45 @@ test("a widget restarted a third time within 10 s for its webview capabilities i
   await expect(host.iframe(NEW)).toHaveCount(0);
   await failed.getByRole("button", { name: "Retry" }).click();
   await expect(host.iframe(NEW)).toHaveAttribute("allow", "camera 'src'; microphone 'src'");
+});
+
+test("the driver panel shows the webview of this load; adding a webview capability restarts the widget with it", async ({ host }) => {
+  await readyQuietWidget(host);
+  await host.button("Dev tools of New test widget").click();
+  const bar = host.page.getByRole("toolbar", { name: "Widget dev tools" });
+  await bar.getByRole("button", { name: /^Messages/ }).click();
+  await bar.getByRole("button", { name: /^Driver/ }).click();
+  await bar.getByRole("radio", { name: "Dock to the right" }).click();
+  const driver = host.page.getByTestId("devtools-driver");
+  const load = driver.getByRole("group", { name: "Webview of this load" });
+  // The strict default: the sandbox tokens of every widget, nothing allowed.
+  await expect(load.getByRole("list", { name: "sandbox" }).getByRole("listitem")).toHaveText(["allow-scripts", "allow-same-origin"]);
+  await expect(load.getByRole("list", { name: "allow" })).toHaveCount(0);
+  await expect(load).toContainText("nothing");
+
+  // "Add" of a webview capability says that it restarts the widget, and does.
+  const before = (await generation(host, NEW))!;
+  const field = driver.getByRole("textbox", { name: "Add capability" });
+  await field.fill(CAMERA);
+  await driver.getByRole("button", { name: "Add and restart" }).click();
+  await expect.poll(() => generation(host, NEW)).toBe(before + 1);
+  await expect(host.iframe(NEW)).toHaveAttribute("allow", "camera 'src'");
+  await expect(load.getByRole("list", { name: "allow" }).getByRole("listitem")).toHaveText(["camera"]);
+  await expect(load.getByRole("listitem").filter({ hasText: /^camera$/ })).toHaveAttribute("title", CAMERA);
+
+  // The new start asks for it and gets it at once: a "webview" row, whose revoke button says that the widget restarts.
+  await press(host, NEW, "notify_ready");
+  await host.ready(NEW);
+  await requestNext(host, NEW, [CAMERA]);
+  await press(host, NEW, "request_capabilities");
+  const row = driver.getByRole("list", { name: "Approved capabilities", exact: true }).locator(`[data-capability="${CAMERA}"]`);
+  await expect(row).toContainText("webview");
+  await expect(row.getByRole("button", { name: "Revoke this capability and restart the widget" })).toBeVisible();
+  await expect(prompt(host)).toHaveCount(0);
+  await field.fill(MICROPHONE);
+  await expect(driver.getByRole("button", { name: "Add and restart" })).toBeEnabled();
+  await host.story("widget-devtools--driver-webview");
+  // Another capability is added without a restart.
+  await field.fill("widget:org.matrix.mscXXXX.get_matrix_context");
+  await expect(driver.getByRole("button", { name: "Add", exact: true })).toBeEnabled();
 });

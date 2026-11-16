@@ -776,7 +776,7 @@ export interface WidgetDevToolsData {
    * story `widget-devtools--driver`. From `DriverSnapshot`; "denied" needs the driver to report it. `singleUse`:
    * what the driver grants for one use (`DriverSnapshot.singleUse`); an approved one is marked "once". `webview`:
    * the webview capabilities this start's iframe was built from (`applied`; the base tokens are not listed) and
-   * its attributes (not shown yet).
+   * its attributes, "Webview of this load". story `widget-devtools--driver-webview`
    */
   capabilities: { approved: string[]; autoApproved: string[]; denied: string[]; singleUse: string[]; webview: { applied: string[] } & WebviewAttributes };
   /** The widget's own console, forwarded by the widget SDK / compat wrapper. story `widget-devtools--console` */

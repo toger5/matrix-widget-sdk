@@ -93,6 +93,7 @@ hands it to the driver of each widget of that room like any other `MatrixBackend
   A request that arrives while the card is open joins it (marked "New", your choices stay), and
   one answer decides all of them. **Approve** is blocked for 3 s after the card appeared or a
   request added to it; **Deny all** never is. What the driver does not know is listed under "Unknown to this app".
+  Webview capabilities (camera, microphone, popups, ...) are "Browser permissions": approving them restarts the widget.
   For legacy widgets the host calls the driver's `setAutoApproved` with what a legacy client
   gave a widget without asking: the `get_matrix_context` and `get_client_context` capabilities the
   compat wrapper needs to template the URL (a legacy client handed the same facts over as URL
@@ -232,15 +233,15 @@ attributes are made by the driver (`webview_attributes`) from what the widget ho
 per start (`WidgetInstanceViewModel.webview`, rendered by `WidgetIframes` in `src/app/AppRoot.tsx`):
 
 - The base tokens are granted without asking, `allow-top-navigation` never (not even "Approve" or
-  auto-approve). Everything else goes through the capability prompt (until the prompt knows them,
-  they are listed under "Unknown to this app").
+  auto-approve). Everything else goes through the capability prompt, under "Browser permissions".
 - A grant applies with a restart of the widget: the runtime (`src/app/runtime/widgetRuntime.ts`)
   reports `webviewChanged` once the widget holds a webview capability its iframe lacks (after the
   driver's `update_capabilities` went out); the controller keeps it for the widget's next starts
   (`webviewKept`, forgotten when the widget stops) and starts it again with a new generation, whose
   iframe has it. The widget's request for it is then granted at once, without a prompt or another
   restart. A denial changes nothing; revoking an applied one (driver panel) restarts the widget
-  without it; "Add" of a webview capability in the driver panel restarts it with it. A widget that
+  without it; "Add" of a webview capability in the driver panel ("Add and restart") restarts it with it.
+  The driver panel shows the attributes of the iframe under "Webview of this load". A widget that
   restarts more than twice within 10 s for this fails instead (a guard; it should not happen).
 - Remembered webview capabilities (`rememberCapabilities`) are in the iframe from the first start.
 - A legacy widget's iframe (the compat wrapper) has Element Web's set from the start

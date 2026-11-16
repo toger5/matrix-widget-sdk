@@ -23,11 +23,11 @@ export function splitNamespace(name: string): [prefix: string, rest: string] {
   return m ? [m[1], m[2]] : ["", name];
 }
 
-/** `widget:org.matrix.mscXXXX.send_event.timeline:m.room.message` → side `widget`, name `org.matrix…`. */
+/** `widget:org.matrix.mscXXXX.send_event.timeline:m.room.message` → side `widget`, name `org.matrix…`; the sides are `widget`, `host` and `webview`. */
 export function splitCapability(capability: string): { side: string; name: string } {
   const i = capability.indexOf(":");
   const side = i > 0 ? capability.slice(0, i) : "";
-  return side === "widget" || side === "host" ? { side, name: capability.slice(i + 1) } : { side: "", name: capability };
+  return side === "widget" || side === "host" || side === "webview" ? { side, name: capability.slice(i + 1) } : { side: "", name: capability };
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -35,9 +35,12 @@ export function splitCapability(capability: string): { side: string; name: strin
 // the only source of the copy (`test/capabilityFormat.test.ts` checks it against the test widget).
 // TODO-FINDING capability-labels-in-view - the human labels are a table in the view, keyed by the action name without namespace; whether a capability is known at all comes from the driver (`CapabilityPromptViewModel.unknown`). The SDK (or the view model) could provide the labels; they change with the capability naming proposal
 
-export type CapabilitySectionId = "read" | "send" | "state" | "devices" | "account" | "files" | "calls" | "app" | "other";
+export type CapabilitySectionId = "read" | "send" | "state" | "devices" | "account" | "files" | "calls" | "browser" | "app" | "other";
 
-/** A section of the prompt: title, the phrase of the summary sentence, the capabilities (`<source>:<action name>[.<modifier>]`) that belong to it. */
+/**
+ * A section of the prompt: title, the phrase of the summary sentence, the capabilities that belong
+ * to it (`<source>:<action name>[.<modifier>]`; a webview capability: `webview:allow`, `webview:sandbox`).
+ */
 interface SectionDef {
   id: CapabilitySectionId;
   title: string;
@@ -54,6 +57,7 @@ const SECTIONS: SectionDef[] = [
   { id: "account", title: "You and your account", phrase: "know who you are", members: ["widget:get_matrix_context", "widget:get_openid", "widget:search_user_directory", "widget:read_room_account_data"] },
   { id: "files", title: "Files", phrase: "work with files", members: ["widget:get_media_config", "widget:upload_file", "widget:download_file"] },
   { id: "calls", title: "Calls", phrase: "join calls", members: ["widget:get_rtc_transports", "widget:get_rtc_livekit_token", "widget:delegate_rtc_livekit_delayed_leave", "host:update_turn_servers"] },
+  { id: "browser", title: "Browser permissions", phrase: "use features of your browser", members: ["webview:allow", "webview:sandbox"] },
   { id: "app", title: "This app", phrase: "adapt to this app", members: ["widget:get_client_context", "widget:navigate", "widget:set_always_on_screen", "host:update_theme", "host:update_language", "host:update_visibility"] },
   { id: "other", title: "Unknown to this app", phrase: "ask for things this app does not know", members: [] },
 ];
@@ -67,6 +71,54 @@ const RISKS: Record<string, string> = {
 };
 /** The phrase of "You and your account" when it holds `get_openid`. */
 const OPENID_PHRASE = "prove who you are to other servers";
+/** The phrase of "Browser permissions" when it holds one of `MEDIA`. */
+const MEDIA_PHRASE = "use your camera, microphone or screen";
+const MEDIA = ["camera", "microphone", "display-capture"];
+
+/** The notes under a section's header. "Browser permissions" adds the second sentence when it holds the camera or the microphone. */
+const OTHER_NOTE = "This app does not act on these.";
+const BROWSER_NOTE = "Approving these restarts the widget.";
+const BROWSER_MEDIA_NOTE = " Your browser may still ask before it uses the camera or microphone.";
+
+/** The risk of the hardware features. */
+const DEVICES = "Talks to your devices";
+/**
+ * Browser permissions: the label and the risk of each feature of `allow` (`webview:<namespace>.allow:<feature>`)
+ * and each token of `sandbox` (`webview:<namespace>.sandbox:<token>`). Another one gets a label that quotes it.
+ * The base tokens (`allow-scripts`, `allow-same-origin`) are granted without the card; `allow-top-navigation`
+ * is never asked for.
+ */
+const ALLOW: Record<string, { label: string; risk?: string }> = {
+  camera: { label: "Use your camera", risk: "Can see you" },
+  microphone: { label: "Use your microphone", risk: "Can hear you" },
+  "display-capture": { label: "Share your screen", risk: "Can see your screen" },
+  autoplay: { label: "Play sound and video on its own" },
+  fullscreen: { label: "Go full screen" },
+  "clipboard-write": { label: "Copy to your clipboard" },
+  "clipboard-read": { label: "Read your clipboard", risk: "Can read what you copied" },
+  "encrypted-media": { label: "Play protected media (DRM)" },
+  "picture-in-picture": { label: "Play video in a floating window" },
+  "screen-wake-lock": { label: "Keep the screen on" },
+  "web-share": { label: "Share through your device" },
+  geolocation: { label: "Know where you are", risk: "Knows your location" },
+  usb: { label: "Use USB devices", risk: DEVICES },
+  serial: { label: "Use serial devices", risk: DEVICES },
+  hid: { label: "Use input devices (HID)", risk: DEVICES },
+  bluetooth: { label: "Use Bluetooth devices", risk: DEVICES },
+  midi: { label: "Use MIDI devices", risk: DEVICES },
+};
+const SANDBOX: Record<string, { label: string; risk?: string }> = {
+  "allow-scripts": { label: "Run scripts" },
+  "allow-same-origin": { label: "Keep its own storage and cookies" },
+  "allow-popups": { label: "Open links and windows" },
+  "allow-popups-to-escape-sandbox": { label: "Open windows without the widget's limits", risk: "Its windows are not sandboxed" },
+  "allow-forms": { label: "Submit forms" },
+  "allow-downloads": { label: "Save files to your device" },
+  "allow-modals": { label: "Show dialogs (alert, confirm, prompt)", risk: "Can block this app with dialogs" },
+  "allow-presentation": { label: "Present on other screens" },
+  "allow-pointer-lock": { label: "Lock the mouse pointer" },
+  "allow-orientation-lock": { label: "Lock the screen orientation" },
+};
 
 const q = (type: string) => `“${type}”`;
 /** The label of each capability; `t` is its data (the event type). */
@@ -102,14 +154,19 @@ const LABELS: Record<string, (t: string) => string> = {
   "host:update_theme": () => "Be told when the theme changes",
   "host:update_language": () => "Be told when the language changes",
   "host:update_visibility": () => "Be told when it is shown or hidden",
+  "webview:allow": (t) => ALLOW[t]?.label ?? `Use ${q(t)} of your browser`,
+  "webview:sandbox": (t) => SANDBOX[t]?.label ?? `Sandbox: ${q(t)}`,
 };
 
 /**
  * `widget:org.matrix.msc2876.read_events.timeline:m.room.message` → key
- * `widget:read_events.timeline`, data `m.room.message`. The namespace is not checked (the driver
- * decides what is known); `undefined` if the action is none of the table.
+ * `widget:read_events.timeline`, data `m.room.message`; `webview:org.matrix.mscXXXX.allow:camera` → key
+ * `webview:allow`, data `camera`. The namespace is not checked (the driver decides what is known);
+ * `undefined` if the action is none of the table.
  */
 function capabilityKind(capability: string): { key: string; data: string } | undefined {
+  const webview = /^webview:[^:]+\.(allow|sandbox):(.+)$/.exec(capability);
+  if (webview) return { key: `webview:${webview[1]}`, data: webview[2] };
   const m = /^(widget|host):([^:]+)(?::(.*))?$/.exec(capability);
   if (!m) return undefined;
   const [, source, action, data = ""] = m;
@@ -132,6 +189,8 @@ export function capabilityLabel(capability: string): string | undefined {
 /** Why a capability is risky (the text of its warning icon), or `undefined`. */
 export function capabilityRisk(capability: string): string | undefined {
   const kind = capabilityKind(capability);
+  if (kind?.key === "webview:allow") return ALLOW[kind.data]?.risk;
+  if (kind?.key === "webview:sandbox") return SANDBOX[kind.data]?.risk;
   return kind && RISKS[kind.key];
 }
 
@@ -148,6 +207,8 @@ export interface CapabilitySection {
   title: string;
   /** Its part of the summary sentence. */
   phrase: string;
+  /** The note under its header, if any. */
+  note?: string;
   /** Its capabilities, in the order they were requested. */
   capabilities: string[];
   /** One of them is risky: the phrase comes first and in bold, the header has a warning icon. */
@@ -160,12 +221,21 @@ export function capabilitySections(requested: readonly string[], unknown: readon
     const capabilities = requested.filter((c) => capabilitySection(c, !unknown.includes(c)) === id);
     if (capabilities.length === 0) return [];
     const n = capabilities.length;
-    const openId = capabilities.some((c) => capabilityKind(c)?.key === "widget:get_openid");
+    const kinds = capabilities.map(capabilityKind);
+    const openId = kinds.some((k) => k?.key === "widget:get_openid");
+    const allows = kinds.flatMap((k) => (k?.key === "webview:allow" ? [k.data] : []));
+    const media = allows.some((feature) => MEDIA.includes(feature));
     return [
       {
         id,
         title,
-        phrase: id === "other" ? `ask for ${n === 1 ? "one thing" : `${n} things`} this app does not know` : openId ? OPENID_PHRASE : phrase,
+        phrase: id === "other" ? `ask for ${n === 1 ? "one thing" : `${n} things`} this app does not know` : openId ? OPENID_PHRASE : media ? MEDIA_PHRASE : phrase,
+        note:
+          id === "other"
+            ? OTHER_NOTE
+            : id === "browser"
+              ? BROWSER_NOTE + (allows.includes("camera") || allows.includes("microphone") ? BROWSER_MEDIA_NOTE : "")
+              : undefined,
         capabilities,
         risky: id !== "other" && capabilities.some((c) => capabilityRisk(c) !== undefined),
       },
@@ -187,3 +257,36 @@ export function capabilitySummary(name: string, sections: readonly CapabilitySec
   parts.push({ text: "." });
   return parts;
 }
+
+// ---------------------------------------------------------------------------------------------
+// "Webview of this load" in the driver panel: the iframe's attributes as tokens.
+
+/** The `sandbox` tokens every widget's iframe has (the strict default; the driver grants them without asking). */
+const EVERY_IFRAME = ["allow-scripts", "allow-same-origin"];
+
+/** A token of an iframe attribute; `capability`: the webview capability it comes from, none for those every iframe has. */
+export interface IframeToken {
+  token: string;
+  capability?: string;
+}
+
+/**
+ * The tokens of a widget iframe's `sandbox` (`"allow-scripts allow-same-origin allow-popups"`) and
+ * `allow` (`"camera 'src'; microphone 'src'"`), each with the webview capability of `applied` it comes from.
+ */
+export function iframeTokens(webview: { sandbox: string; allow: string; applied: readonly string[] }): { sandbox: IframeToken[]; allow: IframeToken[] } {
+  const from = (kind: "sandbox" | "allow", token: string) =>
+    kind === "sandbox" && EVERY_IFRAME.includes(token) ? undefined : webview.applied.find((c) => capabilityKind(c)?.key === `webview:${kind}` && capabilityKind(c)?.data === token);
+  const sandbox = webview.sandbox.split(" ").filter(Boolean);
+  const allow = webview.allow
+    .split(";")
+    .map((directive) => directive.trim().split(" ")[0])
+    .filter(Boolean);
+  return {
+    sandbox: sandbox.map((token) => ({ token, capability: from("sandbox", token) })),
+    allow: allow.map((token) => ({ token, capability: from("allow", token) })),
+  };
+}
+
+/** Whether a capability is a webview capability (by its source; the driver decides whether it knows it): granting or revoking it restarts the widget. */
+export const isWebviewCapability = (capability: string): boolean => capability.startsWith("webview:");

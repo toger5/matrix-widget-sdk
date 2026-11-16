@@ -3,7 +3,7 @@ import { useState, type FormEvent, type ReactNode } from "react";
 import type { WidgetDevToolsData, WidgetInstanceId } from "../../appViewModel";
 import { useDispatch } from "../env";
 import { Button, IconButton } from "../ui/atoms";
-import { splitCapability } from "./format";
+import { iframeTokens, isWebviewCapability, splitCapability, type IframeToken } from "./format";
 
 export interface DriverPanelProps {
   widgetId: WidgetInstanceId;
@@ -27,7 +27,7 @@ function Cap({ capability, denied, children }: { capability: string; denied?: bo
   const { side, name } = splitCapability(capability);
   return (
     <div className={`cap ${denied ? "denied" : ""}`} role="listitem" data-capability={capability}>
-      <span className={`cap-side ${side === "host" ? "host" : ""}`}>{side || "?"}</span>
+      <span className={`cap-side ${side === "host" || side === "webview" ? side : ""}`}>{side || "?"}</span>
       <span className="cap-n" title={capability}>
         {name}
       </span>
@@ -36,7 +36,50 @@ function Cap({ capability, denied, children }: { capability: string; denied?: bo
   );
 }
 
-/** WidgetDevToolDriverPanel: the capabilities the driver holds, and buttons that mock a host action. story `widget-devtools--driver` */
+/** A token of the iframe's attributes: muted if every widget's iframe has it, else titled with the webview capability it comes from. */
+function Token({ token, capability }: IframeToken) {
+  return (
+    <li className={`wvl-t ${capability ? "" : "base"}`} title={capability ?? "Every widget's iframe has this"}>
+      {token}
+    </li>
+  );
+}
+
+/** "Webview of this load": the `sandbox` and `allow` the iframe of this start was built with. A change needs a new start. */
+function WebviewOfThisLoad({ webview }: { webview: WidgetDevToolsData["capabilities"]["webview"] }) {
+  const tokens = iframeTokens(webview);
+  const row = (name: "sandbox" | "allow") => (
+    <div className="cap">
+      <span className="wvl-k">{name}</span>
+      {tokens[name].length === 0 ? (
+        <span className="wvl-none">nothing</span>
+      ) : (
+        <ul className="wvl-v" aria-label={name}>
+          {tokens[name].map((t) => (
+            <Token key={t.token} {...t} />
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+  return (
+    <>
+      <div className="dt-sub">
+        <span>Webview of this load</span>
+      </div>
+      <div className="caps wvl" role="group" aria-label="Webview of this load">
+        {row("sandbox")}
+        {row("allow")}
+      </div>
+    </>
+  );
+}
+
+/**
+ * WidgetDevToolDriverPanel: the capabilities the driver holds, the iframe's webview of this start,
+ * and buttons that mock a host action. Granting ("Add") or revoking a webview capability restarts
+ * the widget. stories `widget-devtools--driver`, `widget-devtools--driver-webview`
+ */
 export function DriverPanel({ widgetId, capabilities }: DriverPanelProps) {
   const dispatch = useDispatch();
   const { approved, autoApproved, denied, singleUse } = capabilities;
@@ -45,6 +88,8 @@ export function DriverPanel({ widgetId, capabilities }: DriverPanelProps) {
   const [language, setLanguage] = useState("de");
   const [visibility, setVisibility] = useState<"visible" | "hidden">("visible");
 
+  // A webview capability changes the iframe: adding it restarts the widget.
+  const restarts = isWebviewCapability(draft.trim());
   const add = (e: FormEvent) => {
     e.preventDefault();
     const capability = draft.trim();
@@ -53,7 +98,7 @@ export function DriverPanel({ widgetId, capabilities }: DriverPanelProps) {
     setDraft("");
   };
   const revoke = (capability: string) => (
-    <IconButton icon="x" title="Revoke this capability" className="xs" onClick={() => dispatch({ type: "devTools/revokeCapabilities", widgetId, capabilities: [capability] })} />
+    <IconButton icon="x" title={isWebviewCapability(capability) ? "Revoke this capability and restart the widget" : "Revoke this capability"} className="xs" onClick={() => dispatch({ type: "devTools/revokeCapabilities", widgetId, capabilities: [capability] })} />
   );
 
   return (
@@ -122,9 +167,10 @@ export function DriverPanel({ widgetId, capabilities }: DriverPanelProps) {
           <input className="dt-in" placeholder="widget:org.matrix.mscXXXX.…" aria-label="Add capability" spellCheck={false} value={draft} onChange={(e) => setDraft(e.target.value)} />
         </label>
         <Button sm icon="plus" type="submit" disabled={!draft.trim()}>
-          Add
+          {restarts ? "Add and restart" : "Add"}
         </Button>
       </form>
+      <WebviewOfThisLoad webview={capabilities.webview} />
 
       <div className="dt-sub">
         <span>Mock a host action</span>

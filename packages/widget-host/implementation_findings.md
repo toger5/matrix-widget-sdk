@@ -93,7 +93,7 @@ The DevBackend runtime (`src/matrix_session/memory/devBackend.ts`):
 
 | Name | Where | Question | Options | Now |
 | --- | --- | --- | --- | --- |
-| `capability-labels-in-view` | `src/views/widget/format.ts` | Where the human labels, sections and risk marks of capabilities ("Read the messages of this room") come from | (a) the SDK (b) the view model (c) a table in the view | (c), the only copy (`test/capabilityFormat.test.ts` checks it against the test widget). Whether a capability is known at all comes from the driver (`capabilityIsKnown`, `CapabilityPromptViewModel.unknown`) |
+| `capability-labels-in-view` | `src/views/widget/format.ts` | Where the human labels, sections and risk marks of capabilities ("Read the messages of this room") come from | (a) the SDK (b) the view model (c) a table in the view | (c), the only copy, webview capabilities by their feature or token (`test/capabilityFormat.test.ts` checks it against the test widget). Whether a capability is known at all comes from the driver (`capabilityIsKnown`, `CapabilityPromptViewModel.unknown`) |
 | `message-log-order` | `src/views/widget/MessagesPanel.tsx` | The design listed messages oldest first, the view model says newest first | either | Newest first |
 | `revoke-auto-approved` | `src/views/widget/DriverPanel.tsx` | Can an auto-approved capability be revoked? It is approved again on the next request | hide the button / revoke and also forget it | It has a revoke button, and "Revoke all" includes it |
 | `compact-failed-state` | `WidgetView.tsx` | A failed widget and a prompt inside a 224×140 PiP box are not drawn (designFeedback.md, "Gaps") | design them | One line plus "Retry" / "Open to answer" |
