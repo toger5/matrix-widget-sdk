@@ -1,4 +1,4 @@
-/* Widget dev tools, app-only (layer views, after the design files): docking limits, real inputs, scrolling lists, empty states. The design rules are design/css/devtools.css. */
+/* Widget dev tools, app-only (layer views, after the design files): docking limits, real inputs, scrolling lists, empty states. The design rules are src/styles/devtools.css. */
 
 /* the status dot of the bar */
 .dot.wait { background: var(--warning); }
@@ -8,7 +8,7 @@
 .wv.dock-left .dt, .wv.dock-right .dt { max-width: calc(100% - 48px); }
 .wv .dt-panels { flex: 0 1 auto; }
 .dt-split, .dt-resize { touch-action: none; }
-/* real text fields inside the mockup's `.input` box */
+/* real text fields inside the design's `.input` box */
 .dt-in { all: unset; flex: 1; min-width: 0; width: 100%; font: inherit; color: inherit; }
 .dt-in::placeholder { color: var(--text-faint); }
 .dt-in:focus-visible { outline: none; }

@@ -1,8 +1,10 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
+import { within } from "storybook/test";
 
 import type { MainViewModel } from "../../appViewModel";
 import type { RoomSummary } from "../../session";
 import { ROOMS, WIDGET_EVENTS, mainVm, pickerPanel, roomPanel, widgetTab, workspace } from "../fixtures";
+import { fillIn } from "../storyEnv";
 import { RoomPicker } from "./RoomPicker";
 import { SoloPanel } from "./storyFrame";
 
@@ -17,7 +19,7 @@ type Story = StoryObj<typeof RoomPicker>;
 
 const story = (main: MainViewModel): Story => ({ render: () => <SoloPanel main={main} panel={pickerPanel()} /> });
 
-/** The rooms of the mockup's list (`PICKER_ROOMS`): the fixture rooms plus some only the list shows. */
+/** The rooms of the designed list (`PICKER_ROOMS`): the fixture rooms plus some only the list shows. */
 const extra = (id: string, name: string, memberCount: number, widgets: (keyof typeof WIDGET_EVENTS)[]): RoomSummary => ({ id: `!${id}:example.org`, name, memberCount, widgetEvents: widgets.map((w) => WIDGET_EVENTS[w]) });
 const LIST: RoomSummary[] = [
   extra("bOoKcLuBxY", "Book club", 9, []),
@@ -39,11 +41,9 @@ const ready = (o: Partial<MainViewModel["data"]> = {}) =>
   });
 
 /** Recent widgets (one open in a tab), recent rooms, all rooms. Element Call has a tab in another room panel: it is marked "open", and pressing it jumps to that tab. */
-// leaf panel/recents
 export const Recents = story(ready());
 
 /** No recents yet: all rooms only. */
-// leaf panel/no-recents
 export const NoRecents = story(ready({ recentWidgets: [], recentRooms: [] }));
 
 /**
@@ -51,26 +51,20 @@ export const NoRecents = story(ready({ recentWidgets: [], recentRooms: [] }));
  * the top when it got the focus; the recent groups are above it, out of view. The first match
  * (highlighted) is what Enter opens; Escape clears the search.
  */
-// leaf panel/search
 export const Search: Story = {
   ...story(ready()),
-  play: async ({ canvasElement }) => {
-    const input = canvasElement.querySelector<HTMLInputElement>('input[type="search"]');
-    if (!input) return;
+  play: ({ canvasElement }) => {
+    const input = within(canvasElement).getByRole("searchbox");
     input.focus();
-    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(input, "pla");
-    input.dispatchEvent(new Event("input", { bubbles: true }));
+    fillIn(input, "pla");
   },
 };
 
 /** No rooms: no search field. */
-// leaf panel/no-rooms
 export const NoRooms = story(ready({ rooms: { status: "ready", value: [] }, recentWidgets: [], recentRooms: [] }));
 
 /** Loading (every list has a loading state). */
-// leaf panel/loading
 export const Loading = story(ready({ rooms: { status: "loading" } }));
 
 /** Error (every list has an error state): the reason and "Try again". */
-// leaf panel/error
 export const LoadError = story(ready({ rooms: { status: "error", error: "The homeserver did not answer (example.org, timeout after 30 s)." }, recentWidgets: [], recentRooms: [] }));

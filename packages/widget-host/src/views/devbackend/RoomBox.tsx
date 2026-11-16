@@ -1,5 +1,5 @@
 /**
- * The room box of the Dev tools (mockup functions `devBackendView` and `roomToolsView`): the room
+ * The room box of the Dev tools: the room
  * dropdown in the header and the State and Timeline sections of the shown room. Shared by the
  * DevBackendView (`mode` "devBackend": mocked rooms, any sender, "Add room", "Room actions") and the
  * Dev tools of a Matrix account (`mode` "account": the rooms of the room panels, sent as the
@@ -25,7 +25,7 @@ export interface RoomBoxProps {
   mode: RoomBoxMode;
   /** The rooms of the dropdown, in its order. */
   rooms: RoomToolsRoom[];
-  /** The shown room, one of `rooms`; none: the empty state (leaves devbackend/none, roomtools/none). */
+  /** The shown room, one of `rooms`; none: the empty state (stories `sidepanel-devbackendview--no-rooms`, `sidepanel-roomtoolsview--no-room-open`). */
   roomId?: RoomId;
   roomTools: RoomToolsViewModel;
   /** The DevBackend's user (the default sender) or the account (the only sender). */
@@ -46,7 +46,7 @@ export function RoomBox({ mode, rooms, roomId, roomTools, userId, scheduled }: R
     <section className="sidebox devb" data-testid={mode === "devBackend" ? "devbackend-view" : "room-tools-view"} data-room-id={room?.id}>
       <header className="side-head">
         <RoomHeader mode={mode} rooms={rooms} room={room} />
-        {/* TODO-FINDING devbackend-header-buttons - the mockup's header is only the room dropdown. "Close panel" (as in the other SidePanel views) and, in the DevBackend, the "Room actions" menu (clear room, remove room) were added next to it; neither is drawn. */}
+        {/* TODO-FINDING devbackend-header-buttons - the designed header is only the room dropdown. "Close panel" (as in the other SidePanel views) and, in the DevBackend, the "Room actions" menu (clear room, remove room) were added next to it; neither is drawn. */}
         <IconButton icon="x" title="Close panel" onClick={() => dispatch({ type: "sidePanel/close" })} />
       </header>
       <div className="side-body">
@@ -82,7 +82,12 @@ export function RoomBox({ mode, rooms, roomId, roomTools, userId, scheduled }: R
   );
 }
 
-/** The State and Timeline sections of one room, read through the hooks of the `ViewEnv`. leaves devbackend/state*, devbackend/timeline*, roomtools/state, roomtools/timeline, roomtools/loading-failed */
+/**
+ * The State and Timeline sections of one room, read through the hooks of the `ViewEnv`. Stories
+ * `sidepanel-devbackendview--state`, `sidepanel-devbackendview-state--*`,
+ * `sidepanel-devbackendview--timeline*`, `sidepanel-roomtoolsview--state`, `--timeline`,
+ * `--loading-failed`.
+ */
 function RoomSections({ mode, roomId, roomTools, userId, scheduled }: { mode: RoomBoxMode; roomId: RoomId; roomTools: RoomToolsViewModel; userId?: string; scheduled: ScheduledEvent[] }) {
   const dispatch = useDispatch();
   const env = useViewEnv();
@@ -160,7 +165,7 @@ function Failed({ title, error, retry }: { title: string; error: string; retry: 
   );
 }
 
-/** The room name + id with the room dropdown (mockup functions `roomMenu`, `openRoomsMenu`) and, in the DevBackend, the menu with the actions on the room. leaves devbackend/dropdown, roomtools/dropdown */
+/** The room name + id with the room dropdown and, in the DevBackend, the menu with the actions on the room. stories `sidepanel-devbackendview--room-dropdown`, `sidepanel-roomtoolsview--room-dropdown` */
 function RoomHeader({ mode, rooms, room }: { mode: RoomBoxMode; rooms: RoomToolsRoom[]; room?: RoomToolsRoom }) {
   const dispatch = useDispatch();
   const picker = usePopup();

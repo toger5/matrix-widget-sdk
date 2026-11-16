@@ -27,14 +27,14 @@ export interface MessagesPanelProps {
   initialExpanded?: string;
 }
 
-/** WidgetDevToolMessagesPanel: the log of the widget API, newest first; a row expands to its request and response. leaf devtools/messages */
+/** WidgetDevToolMessagesPanel: the log of the widget API, newest first; a row expands to its request and response. story `widget-devtools--messages-expanded` */
 export function MessagesPanel({ widgetId, messages, initialExpanded }: MessagesPanelProps) {
   const dispatch = useDispatch();
   const [filter, setFilter] = useState("");
   const [directions, setDirections] = useState({ fromWidget: true, toWidget: true });
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(() => new Set(initialExpanded ? [initialExpanded] : []));
 
-  // TODO-FINDING message-log-order - the mockup lists the oldest message first, the task says newest first, and `WidgetDevToolsData.messages` does not say how it is ordered. The view sorts by timestamp, newest first
+  // TODO-FINDING message-log-order - the design listed the oldest message first, the task says newest first, and `WidgetDevToolsData.messages` does not say how it is ordered. The view sorts by timestamp, newest first
   const rows = useMemo(() => {
     const needle = filter.trim().toLowerCase();
     return messages.filter((m) => directions[m.direction] && (!needle || m.action.toLowerCase().includes(needle))).sort((a, b) => b.timestamp - a.timestamp);

@@ -1,6 +1,6 @@
 /**
- * The stylesheets. `design/css/*.css` are the design rules, used by the mockups (`design/mock.css`) and the app
- * (`src/styles/app.css`) alike; `src/views/**\/*.css` are the app-only rules. Both lists must stay in step.
+ * The stylesheets. `src/styles/<area>.css` are the design rules, `src/views/**\/*.css` the app-only rules;
+ * `src/styles/app.css` lists both in cascade layers, `.storybook/preview.css` adds the story-only `.storybook/mockup.css`.
  */
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
@@ -9,10 +9,9 @@ import { describe, expect, it } from "vitest";
 
 const pkg = join(dirname(fileURLToPath(import.meta.url)), "..");
 const read = (path: string) => readFileSync(join(pkg, path), "utf8");
-const FONTS = /^https:\/\/fonts\.googleapis\.com\//;
 
 interface Import {
-  /** Package-relative path, or the URL. */
+  /** Package-relative path. */
   file: string;
   layer?: string;
 }
@@ -20,10 +19,7 @@ interface Import {
 /** The `@import`s of a manifest, in order. */
 function imports(manifest: string): Import[] {
   const found = [...read(manifest).matchAll(/@import\s+(?:url\()?"([^"]+)"\)?\s*(?:layer\(([\w.-]+)\))?\s*;/g)];
-  return found.map(([, target, layer]) => ({
-    file: /^https?:/.test(target) ? target : relative(pkg, resolve(pkg, dirname(manifest), target)),
-    layer,
-  }));
+  return found.map(([, target, layer]) => ({ file: relative(pkg, resolve(pkg, dirname(manifest), target)), layer }));
 }
 
 /** The files below `dir` whose name matches `pattern`, package-relative. */
@@ -36,37 +32,32 @@ function files(dir: string, pattern = /\.css$/): string[] {
 }
 const cssFiles = (dir: string) => files(dir);
 
-const layerStatement = (manifest: string) => read(manifest).match(/^@layer [^;{]+;/m)?.[0];
 const withoutComments = (css: string) => css.replace(/\/\*[\s\S]*?\*\//g, "");
-const mock = imports("design/mock.css");
-const app = imports("src/styles/app.css");
+const MANIFEST = "src/styles/app.css";
+const app = imports(MANIFEST);
+/** The design rules: every stylesheet of src/styles apart from the manifest. */
+const designFiles = cssFiles("src/styles").filter((f) => f !== MANIFEST);
+const isDesign = (file: string) => file.startsWith("src/styles/");
 
 describe("stylesheets", () => {
-  it("both manifests declare the same layers", () => {
-    expect(layerStatement("design/mock.css")).toBe("@layer tokens, base, atoms, views;");
-    expect(layerStatement("src/styles/app.css")).toBe(layerStatement("design/mock.css"));
+  it("the manifest declares the layers", () => {
+    expect(read(MANIFEST).match(/^@layer [^;{]+;/m)?.[0]).toBe("@layer tokens, base, atoms, views;");
   });
 
-  it("the app imports the design files of the mockups in the same order and layers", () => {
-    const designOfMock = mock.filter((i) => !FONTS.test(i.file) && i.file !== "design/css/mockup.css");
-    expect(app.filter((i) => i.file.startsWith("design/"))).toEqual(designOfMock);
-  });
-
-  it("every file is imported once, with a layer", () => {
-    // every CSS file of design/ and src/ apart from the manifests: one that is not listed would style nothing
-    const designFiles = cssFiles("design").filter((f) => f !== "design/mock.css");
-    const srcFiles = cssFiles("src").filter((f) => f !== "src/styles/app.css");
-    expect(mock.filter((i) => !FONTS.test(i.file)).map((i) => i.file).sort()).toEqual(designFiles.sort());
-    expect(app.filter((i) => i.file.startsWith("src/")).map((i) => i.file).sort()).toEqual(srcFiles.sort());
-    expect(app.every((i) => i.file.startsWith("design/css/") || i.file.startsWith("src/views/"))).toBe(true);
-    for (const i of [...mock.filter((i) => !FONTS.test(i.file)), ...app]) expect(i.layer, i.file).toBeDefined();
-    // the app-only files come after the design files of their layer
-    const lastDesign = (layer: string) => app.findLastIndex((i) => i.layer === layer && i.file.startsWith("design/"));
-    app.forEach((i, n) => i.file.startsWith("src/") && expect(n, i.file).toBeGreaterThan(lastDesign(i.layer!)));
+  it("every file is imported once, with a layer; the app-only files after the design files of their layer", () => {
+    // every CSS file of src/ apart from the manifest: one that is not listed would style nothing
+    expect(app.map((i) => i.file).sort()).toEqual(cssFiles("src").filter((f) => f !== MANIFEST).sort());
+    expect(app.every((i) => isDesign(i.file) || i.file.startsWith("src/views/"))).toBe(true);
+    for (const i of app) expect(i.layer, i.file).toBeDefined();
+    // the design files in their layers: tokens, base, atoms, then the areas
+    for (const name of ["tokens", "base", "atoms"]) expect(app.find((i) => i.file === `src/styles/${name}.css`)?.layer).toBe(name);
+    expect(app.filter((i) => isDesign(i.file) && !["tokens", "base", "atoms"].includes(i.layer!)).every((i) => i.layer === "views")).toBe(true);
+    const lastDesign = (layer: string) => app.findLastIndex((i) => i.layer === layer && isDesign(i.file));
+    app.forEach((i, n) => !isDesign(i.file) && expect(n, i.file).toBeGreaterThan(lastDesign(i.layer!)));
   });
 
   it("the manifests hold no rules: an unlayered rule would win over every layer", () => {
-    for (const manifest of ["design/mock.css", "src/styles/app.css", ".storybook/preview.css"]) {
+    for (const manifest of [MANIFEST, ".storybook/preview.css"]) {
       const rest = withoutComments(read(manifest))
         .replace(/^@layer [^;{]+;/m, "")
         .replace(/@import\s+(?:url\()?"[^"]*"\)?[^;]*;/g, "");
@@ -91,15 +82,15 @@ describe("stylesheets", () => {
     }
   });
 
-  it("Storybook loads the app's stylesheet and the mockup-only rules", () => {
+  it("Storybook loads the app's stylesheet and the story-only rules", () => {
     expect(imports(".storybook/preview.css")).toEqual([
-      { file: "src/styles/app.css", layer: undefined },
-      { file: "design/css/mockup.css", layer: "views" },
+      { file: MANIFEST, layer: undefined },
+      { file: ".storybook/mockup.css", layer: "views" },
     ]);
   });
 
   it("only the manifests import, and theme selectors also match inside the shadow root", () => {
-    for (const file of [...cssFiles("design/css"), ...cssFiles("src/views")]) {
+    for (const file of [...designFiles, ...cssFiles("src/views"), ".storybook/mockup.css"]) {
       const css = withoutComments(read(file));
       expect(css, file).not.toMatch(/@import/);
       expect(css, file).not.toMatch(/:root\[data-theme/); // `:root` is not in the shadow tree: `[data-theme=…]`

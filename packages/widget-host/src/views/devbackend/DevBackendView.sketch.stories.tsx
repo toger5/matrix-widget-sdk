@@ -12,7 +12,7 @@ export default meta;
  * Redraw of the send form of `sidepanel-devbackendview--timeline`: the "Sender" of a predefined form
  * is a select of the room's members, with their avatars. Not built: it is a text field with the
  * members as suggestions (implementation_findings.md, Trivial: "The sender of the send forms
- * (DevBackend) is a text input with suggestions; the mockup has a select with an avatar").
+ * (DevBackend) is a text input with suggestions; the design has a select with an avatar").
  */
 export const Timeline: StoryObj = {
   parameters: { size: [348, 250] },

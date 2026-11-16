@@ -1,4 +1,4 @@
-/** "Send state" of the State section: predefined forms (`../forms/widgetForms`) and raw JSON (mockup functions `sendStateForm`, `formChips`). leaves devbackend/state, devbackend/state-element-call, devbackend/state-raw, roomtools/state */
+/** "Send state" of the State section: predefined forms (`../forms/widgetForms`) and raw JSON. stories `sidepanel-devbackendview--state`, `sidepanel-devbackendview-state--*`, `sidepanel-roomtoolsview--state` */
 import { useState, type FormEvent } from "react";
 
 import type { MockedStateEvent, RoomId, RoomToolsViewModel } from "../../appViewModel";

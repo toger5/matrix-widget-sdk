@@ -10,7 +10,7 @@ export interface DriverPanelProps {
   capabilities: WidgetDevToolsData["capabilities"];
 }
 
-/** A two-option segmented control (radio group) in the look of the mockup's `.seg`. */
+/** A two-option segmented control (radio group) in the look of the design's `.seg`. */
 function Seg<T extends string>({ label, options, value, onChange }: { label: string; options: readonly T[]; value: T; onChange: (value: T) => void }) {
   return (
     <span className="seg sm" role="radiogroup" aria-label={label}>
@@ -36,7 +36,7 @@ function Cap({ capability, denied, children }: { capability: string; denied?: bo
   );
 }
 
-/** WidgetDevToolDriverPanel: the capabilities the driver holds, and buttons that mock a host action. leaf devtools/driver */
+/** WidgetDevToolDriverPanel: the capabilities the driver holds, and buttons that mock a host action. story `widget-devtools--driver` */
 export function DriverPanel({ widgetId, capabilities }: DriverPanelProps) {
   const dispatch = useDispatch();
   const { approved, autoApproved, denied, singleUse } = capabilities;

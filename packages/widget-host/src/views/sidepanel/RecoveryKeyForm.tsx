@@ -31,7 +31,7 @@ export function VerifyError({ text, detail, id }: { text: string; detail?: strin
  * Verifying with the recovery key, inside the box of `DeviceVerification`. The key is a secret: it
  * stays in this form's own state (a refused key stays in the field) and leaves it only with
  * `verification/submitRecoveryKey`; the field is not autocompleted or spell checked.
- * leaves sidepanel/verify-recovery-key, verify-recovery-checking, verify-recovery-wrong
+ * stories `sidepanel-recoverykeyform--*`
  */
 export function RecoveryKeyForm({ accountId, checking, error, initialRecoveryKey = "" }: RecoveryKeyFormProps) {
   const dispatch = useDispatch();

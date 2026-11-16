@@ -31,7 +31,7 @@ function MenuRow({ icon, label, end, className = "", onClick }: { icon: IconName
 
 /** The state of an account that is not simply usable: a small marker in the lists. */
 function StatusMark({ account }: { account: AccountViewModel }) {
-  // TODO-FINDING account-status-markers - the mockups show no account states in the switch list / account list. Rendered as small pills ("paused", "Restoring…", "restore failed") after the name.
+  // TODO-FINDING account-status-markers - the design shows no account states in the switch list / account list. Rendered as small pills ("paused", "Restoring…", "restore failed") after the name.
   if (account.status === "suspended") return <span className="pill acc-mark">paused</span>;
   if (account.status === "restoring") return <span className="pill acc-mark">Restoring…</span>;
   if (account.status === "restoreFailed")
@@ -75,7 +75,7 @@ function SwitchRow({ account }: { account: AccountViewModel }) {
   );
 }
 
-/** The DevBackend in the switch list of a Matrix account, while it is enabled: switching to it activates it (confirmed if room panels are open). leaf sidepanel/account-several */
+/** The DevBackend in the switch list of a Matrix account, while it is enabled: switching to it activates it (confirmed if room panels are open). story `sidepanel-accountview--several-accounts` */
 function DevSwitchRow({ account }: { account: AccountViewModel }) {
   const dispatch = useDispatch();
   return (
@@ -91,7 +91,7 @@ function DevSwitchRow({ account }: { account: AccountViewModel }) {
   );
 }
 
-/** The DevBackend is the active account: its card and the full list of Matrix accounts. leaf sidepanel/account-dev */
+/** The DevBackend is the active account: its card and the full list of Matrix accounts. story `sidepanel-accountview--dev-backend-mode` */
 function DevAccountBody({ account, others }: { account: AccountViewModel; others: AccountViewModel[] }) {
   const dispatch = useDispatch();
   return (
@@ -104,7 +104,7 @@ function DevAccountBody({ account, others }: { account: AccountViewModel; others
           <span className="pill dev">in-memory · no Matrix requests</span>
         </div>
       </div>
-      {/* TODO-FINDING devbackend-account-actions - the mockup offers no "Copy Matrix URI" and no "Log out" for the DevBackend account (there is nothing to log out of); none are rendered. */}
+      {/* TODO-FINDING devbackend-account-actions - the design offers no "Copy Matrix URI" and no "Log out" for the DevBackend account (there is nothing to log out of); none are rendered. */}
       {/* TODO-FINDING devbackend-no-matrix-account - after "skip login" there is no Matrix account to switch to; the hint then says "Add a Matrix account to leave it". */}
       <p className="hint">
         {others.length
@@ -221,7 +221,7 @@ function MatrixAccountBody({ account, others, dev, initialRecoveryKey }: { accou
   );
 }
 
-/** leaves sidepanel/account-one, account-several, account-dev; with the "Verify this device" box sidepanel/verify-*. */
+/** stories `sidepanel-accountview--one-account`, `sidepanel-accountview--several-accounts`, `sidepanel-accountview--dev-backend-mode`; with the "Verify this device" box `sidepanel-deviceverification--*`. */
 export function AccountView({ accounts, activeAccountId, initialRecoveryKey }: AccountViewProps) {
   const active = accounts.find((a) => a.id === activeAccountId);
   const others = accounts.filter((a) => a.id !== activeAccountId && a.kind === "matrix");

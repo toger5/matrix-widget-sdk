@@ -30,7 +30,7 @@ const FADE = 36;
 /**
  * The tab bar of a room panel, rendered into its header: the room name (the first tab, it shows the
  * RoomOverview), the tabs of widgets and the timeline, the + button and, when the tabs do not fit,
- * the "all tabs" button with its menu. leaves roomview/header, tabs/*. ARIA tabs pattern: the tab is
+ * the "all tabs" button with its menu. stories `rooms-roomview--overview`, `rooms-tabbar--*`. ARIA tabs pattern: the tab is
  * a button, its ⋯ (dev tools, widget tabs only) and × buttons are siblings; the tablist wrapper is
  * `display: contents`, so only the tabs after the room name (`.tabs`) scroll.
  */
@@ -45,7 +45,7 @@ export function TabBar({ main, settings, panelId, roomId, room, roomName, tabs, 
   const [overflow, setOverflow] = useState({ overflowing: false, scrolled: false, atEnd: false });
   const [menuOpen, setMenuOpen] = useState(false);
 
-  // TODO-FINDING tab-overflow-threshold - tabs first shrink to their minimum width (88px, label with an ellipsis); only when they still do not fit, the bar switches to "overflowing" (full-width tabs that scroll, fade, "all tabs" button). The mockups do not say when the switch happens.
+  // TODO-FINDING tab-overflow-threshold - tabs first shrink to their minimum width (88px, label with an ellipsis); only when they still do not fit, the bar switches to "overflowing" (full-width tabs that scroll, fade, "all tabs" button). The design does not say when the switch happens.
   const measure = () => {
     const el = listRef.current;
     if (!el) return;
@@ -258,9 +258,9 @@ export function TabBar({ main, settings, panelId, roomId, room, roomName, tabs, 
                   )}
                 </button>
                 {/* ⋯ and × are shown on the active tab; on the others they appear on hover and keyboard focus (CSS). */}
-                {/* TODO-FINDING inactive-tab-buttons-overlay - on an inactive tab the buttons lie over the end of the label (no layout shift on hover). An inactive tab with open dev tools keeps its ⋯ visible and reserves 22px for the ×, so it is wider than in leaf tabs/overview-active. */}
+                {/* TODO-FINDING inactive-tab-buttons-overlay - on an inactive tab the buttons lie over the end of the label (no layout shift on hover). An inactive tab with open dev tools keeps its ⋯ visible and reserves 22px for the ×, so it is wider than in story `rooms-tabbar--overview-active`. */}
                 {/* TODO-FINDING tab-reorder-not-implemented - `tab/move` exists, but dragging a tab is not drawn and not built. */}
-                {/* TODO-FINDING widget-avatar-initials - the mockups label widget avatars with two letters ("WB"); `initials("Whiteboard")` gives "W", and the hue comes from the widget key, not from the mockup. Widgets have no avatar URL in the view model. */}
+                {/* TODO-FINDING widget-avatar-initials - the design labels widget avatars with two letters ("WB"); `initials("Whiteboard")` gives "W", and the hue comes from the widget key, not from the design. Widgets have no avatar URL in the view model. */}
                 {settings.devTools && widgetId !== undefined && (
                   <button
                     type="button"
@@ -297,7 +297,7 @@ export function TabBar({ main, settings, panelId, roomId, room, roomName, tabs, 
           ref={allRef}
           type="button"
           className={`ibtn tab-all ${menuOpen ? "on" : ""}`}
-          // TODO-FINDING all-tabs-button-name - the accessible name is the mockup's "All N tabs" (it changes with the number of tabs; N counts the tabs after the room name, which never scrolls away); tests should match /^All \d+ tabs$/.
+          // TODO-FINDING all-tabs-button-name - the accessible name is the designed "All N tabs" (it changes with the number of tabs; N counts the tabs after the room name, which never scrolls away); tests should match /^All \d+ tabs$/.
           title={`All ${tabs.length} tabs`}
           aria-label={`All ${tabs.length} tabs`}
           aria-haspopup="menu"

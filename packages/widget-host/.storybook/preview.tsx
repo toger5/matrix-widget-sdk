@@ -7,8 +7,8 @@ import { StoryEnv, storySize } from "../src/views/storyEnv";
 /**
  * Stories render outside the app's shadow root: a `WidgetSlot` shows the fake widget of
  * `ViewEnv.widgetStandIn`, and the stylesheet is a plain document stylesheet (`preview.css`: the
- * app's, plus the mockups' stages and fake widgets). The theme is the toolbar's "Theme" switch (a
- * story pins one with `globals: { theme: "light" }`).
+ * app's, plus the stages and fake widgets of `mockup.css`). The theme is the toolbar's "Theme"
+ * switch (a story pins one with `globals: { theme: "light" }`).
  *
  * `parameters.size: [width, height]` is the size the story is drawn for (default 1280 × 800, a
  * full screen): written to `<html data-story-size="WxH">`, where `e2e/tools/shot.mjs` reads it as

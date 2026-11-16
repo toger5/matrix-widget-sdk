@@ -1,4 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
+import { within } from "storybook/test";
 
 import type { MainViewModel, RoomPanelViewModel, WidgetInstanceViewModel } from "../../appViewModel";
 import { Screen } from "../app/storyScreen";
@@ -19,7 +20,6 @@ const vm = (panel: RoomPanelViewModel, widgets: WidgetInstanceViewModel[], devTo
 
 const plain = roomPanel("design", [widgetTab("design", "call"), widgetTab("design", "board")]);
 /** WidgetTab active, the other WidgetTab and the room name inactive. */
-// leaf tabs/widget-active
 export const WidgetActive: Story = { render: () => <HeadOnly main={vm(plain, [widgetVm("design", "call"), widgetVm("design", "board")])} panel={plain} />, parameters: { size: [860, 72] } };
 
 const overview = roomPanel("design", [widgetTab("design", "call"), widgetTab("design", "board")], null);
@@ -28,7 +28,6 @@ const overview = roomPanel("design", [widgetTab("design", "call"), widgetTab("de
  * The room name looks like the active tab; the body is the RoomOverview. The + button selects the
  * room name too.
  */
-// leaf tabs/overview-active
 export const OverviewActive: Story = {
   parameters: { size: [860, 72] },
   render: () => <HeadOnly main={vm(overview, [widgetVm("design", "call"), widgetVm("design", "board")], [widgetVm("design", "board").id])} panel={overview} settings={DEV_SETTINGS} />,
@@ -40,7 +39,6 @@ const pinned = roomPanel("design", [widgetTab("design", "call"), widgetTab("desi
  * tab. The whiteboard is pinned and not active: it is shown in the PictureInPicturePanel until its
  * tab is pressed.
  */
-// leaf tabs/pinned
 export const Pinned: Story = {
   parameters: { size: [960, 72] },
   render: () => (
@@ -57,7 +55,6 @@ const timeline = roomPanel("design", [widgetTab("design", "call"), widgetTab("de
  * message icon, "Timeline" and ×, but no ⋯ and no pin. A room view has at most one; it goes at the
  * end when it is opened. Alt+W closes it like a widget tab.
  */
-// leaf tabs/timeline-active
 export const TimelineActive: Story = {
   parameters: { size: [860, 72] },
   render: () => <HeadOnly main={vm(timeline, [widgetVm("design", "call"), widgetVm("design", "board")])} panel={timeline} settings={DEV_SETTINGS} />,
@@ -70,7 +67,6 @@ const many = roomPanel("design", MANY.map((w) => widgetTab("design", w)), widget
  * the menu of all tabs (open here). Element Call is always on screen and not the active tab, so it
  * is in the floating panel.
  */
-// leaf tabs/overflow
 export const Overflow: Story = {
   parameters: { size: [860, 360] },
   // The whole app (LeftBar collapsed), so the PiP panel shows the call.
@@ -84,8 +80,8 @@ export const Overflow: Story = {
       theme={globals.theme}
     />
   ),
-  play: async ({ canvasElement }) => {
-    await new Promise((resolve) => setTimeout(resolve, 100));
-    canvasElement.querySelector<HTMLButtonElement>(".tab-all")?.click();
-  },
+  // The button appears once the bar measured that the tabs do not fit: at the story's width (`shot.mjs`), not in a
+  // wider Storybook canvas, where every tab fits and there is nothing to open.
+  play: async ({ canvasElement }) =>
+    (await within(canvasElement).findByRole("button", { name: /^All \d+ tabs$/ }).catch(() => undefined))?.click(),
 };

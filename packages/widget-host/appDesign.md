@@ -265,7 +265,7 @@ A simple fullscreen login. It allows skipping the login, which immediately ends 
 
 # Required visualisations
 
-The mockups needed to review the full design. Each leaf is one state to draw. Do all of them in one theme, plus one overall screen in the other theme.
+Every state of the UI. Each is one story in Storybook, a sketch story (`Sketch/…`) while it is not built. All in one theme, plus the complete screen in the other theme.
 
 - App
   - Login page (with the skip login option)

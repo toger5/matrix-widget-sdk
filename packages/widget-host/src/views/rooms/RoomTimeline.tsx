@@ -20,7 +20,7 @@ const ANCHORS = 8;
 
 /**
  * What the Timeline tab shows: the events of the room, oldest at the top, newest at the bottom
- * (mockup function `timelineBody`). leaves timeline/*. It starts scrolled to the bottom and stays
+ * (stories `rooms-roomtimeline--*`). It starts scrolled to the bottom and stays
  * there while new events arrive; scrolled up, the events in view stay where they are. A heading
  * per day; pressing a line shows the event's JSON. The events come from
  * `useViewEnv().useRoomTimeline(roomId)`; nothing of them is in the view model.

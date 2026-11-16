@@ -1,6 +1,6 @@
 /**
  * The widget forms that describe a widget state event: "Send state" of the DevBackendView and
- * "Add widget" of the RoomOverview (mockup functions `widgetFields`, `elementCallFields`). The
+ * "Add widget" of the RoomOverview. The
  * fields are controlled: the draft is the view state of the form that renders them.
  */
 import { EXAMPLE_LEGACY, EXAMPLE_NEW } from "../../exampleWidgets";

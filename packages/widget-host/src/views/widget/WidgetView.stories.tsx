@@ -8,7 +8,7 @@ import { WidgetView } from "./WidgetView";
 
 const X = "org.matrix.mscXXXX.";
 
-// What the prompts request (`CAP_REQUESTS` of the mockups).
+// What the prompts request.
 const SHORT = [
   `widget:org.matrix.msc2876.read_events.timeline:m.room.message`,
   `host:${X}forward_event.timeline:m.room.message`,
@@ -99,22 +99,18 @@ export default meta;
 type Story = StoryObj<typeof WidgetView>;
 
 /** Dev tools: no (full widget). The widget fills its tab body, without padding. */
-// leaf widgetview/plain
 export const Ready: Story = { args: { widget: widgetVm("design", "call") }, parameters: { size: [900, 560] } };
 
 /** Loading: until the widget reports that it is ready (`notify_ready`). */
-// leaf widgetview/loading
 export const Loading: Story = { args: { widget: widgetVm("design", "call", { load: { state: "loading" } }) }, parameters: { size: [700, 440] } };
 
 /** Failed to load: the error, "Retry" and "Close tab". */
-// leaf widgetview/failed
 export const Failed: Story = {
   args: { widget: widgetVm("design", "call", { load: { state: "failed", error: "The widget did not answer within 15 seconds." } }) },
   parameters: { size: [700, 440] },
 };
 
 /** Capability prompt: summary and sections. Everything is checked at first. The risky parts of the summary come first, in bold; a warning icon marks risky rows and their section. */
-// leaf widgetview/prompt
 export const CapabilityPrompt: Story = {
   args: { widget: widgetVm("design", "call", { prompts: { capabilities: capabilities(SHORT) } }) },
   parameters: { size: [700, 640] },
@@ -126,7 +122,6 @@ export const CapabilityPrompt: Story = {
  * stay, and the header of the section in view sticks to the top. One row of "This app" is
  * unchecked, so its checkbox is mixed.
  */
-// leaf widgetview/prompt-long
 export const CapabilityPromptLong: Story = {
   parameters: { size: [700, 560] },
   args: { widget: widgetVm("design", "call", { prompts: { capabilities: capabilities(LONG, { unknown: [UNKNOWN] }) } }), initialUnchecked: [`widget:org.matrix.msc2931.navigate`] },
@@ -145,7 +140,6 @@ export const CapabilityPromptLong: Story = {
  * user had unchecked stays unchecked. "Approve" is blocked for 3 s after the card appeared or a
  * request added to it; "Deny all" never is.
  */
-// leaf widgetview/prompt-merged
 export const CapabilityPromptMerged: Story = {
   parameters: { size: [700, 840] },
   args: {
@@ -161,7 +155,6 @@ export const CapabilityPromptMerged: Story = {
  * runs). The choice is disabled while its row is unchecked. Variants through the args:
  * `initialAlways: [OPENID]` (set to "Always"), `initialUnchecked: [OPENID]` (the choice disabled).
  */
-// leaf widgetview/prompt-openid
 export const CapabilityPromptOpenId: Story = {
   parameters: { size: [700, 440] },
   args: { widget: widgetVm("design", "call", { prompts: { capabilities: capabilities([OPENID], { blocked: true }) } }), initialAlways: [], initialUnchecked: [] },
@@ -173,7 +166,7 @@ export const CapabilityPromptOpenId: Story = {
   ),
 };
 
-/** The capability prompt in a PiP box (224×140): one line and "Open to answer" (the mockups do not draw it: finding `compact-failed-state`). */
+/** The capability prompt in a PiP box (224×140): one line and "Open to answer" (not designed: finding `compact-failed-state`). */
 export const CompactPrompt: Story = {
   parameters: { size: [256, 172] },
   render: (args) => (

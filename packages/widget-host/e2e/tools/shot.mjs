@@ -1,88 +1,114 @@
-// Screenshots for comparing a view with its mockup.
-//   node e2e/tools/shot.mjs leaf  <leaf id, e.g. leftbar/expanded>  <out.png> [light]
+// Screenshots of stories (the visual specification) and of the app.
 //   node e2e/tools/shot.mjs story <story id, e.g. app-leftbar--expanded> <out.png> [width] [height] [light]
 //   node e2e/tools/shot.mjs url   <url> <out.png> [width] [height]
 //   node e2e/tools/shot.mjs all   <out dir> [light]
-// A leaf is rendered at its own size (design/leaves/<id>.html). Stories need `npm run storybook` (port 6006); a
-// story is rendered at its own size (`parameters.size`, which the preview writes to `<html data-story-size>`;
-// 1280x800 by default) unless a width and height are given.
+// Stories need Storybook (`npm run storybook`, port 6006). A story is rendered at its own size (`parameters.size`,
+// which the preview writes to `<html data-story-size>`; 1280x800 by default) unless a width and height are given,
+// and shot once Storybook reports it rendered (the `storyRendered` event of the preview: after the `play` function),
+// or after 5 s. The theme is dark, with `light` light (a story with a fixed theme keeps it). The script prints page
+// and console errors; a story that does not exist, throws or whose `play` function throws is reported at once and
+// makes the exit code 1 (the screenshot is still written).
 //
 // `all` is the regression check of a change that should not change any pixel (a CSS refactor): it writes every
-// leaf (`<dir>/<theme>/leaves/<id>.png`, at its own size) and every story (`<dir>/<theme>/stories/<id>.png`, at
-// its own size; skipped when Storybook does not run), each with `.styles.txt`, a hash of the computed style of
-// every element, which also shows changes that draw nothing (cursor, pointer-events). Animations are off (reduced
-// motion). The theme is dark, with `light` light (leaves with a fixed theme are left out; a story with a fixed theme
-// keeps it). Run it before and after the change into two directories and compare them with
-// `diff -rq <before> <after>`.
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+// story (`<dir>/<theme>/stories/<id>.png`) with `.styles.txt`, a hash of the computed style of every element, which
+// also shows changes that draw nothing (cursor, pointer-events). Animations are off (reduced motion). Run it before
+// and after the change into two directories and compare them with `diff -rq <before> <after>`.
+import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { chromium } from "@playwright/test";
 
-const root = join(dirname(fileURLToPath(import.meta.url)), "../..");
+const STORYBOOK = "http://localhost:6006";
+const RENDER_TIMEOUT_MS = 5000;
+
 const [kind, id, out, ...rest] = process.argv.slice(2);
 if (kind === "all") {
   if (!id) throw new Error("usage: shot.mjs all <out dir> [light]");
   await all(id, out === "light" || rest.includes("light"));
-  process.exit(0);
+  process.exit(); // with process.exitCode: 1 if a story failed
 }
-if (!kind || !id || !out) throw new Error("usage: shot.mjs leaf|story|url <id> <out.png> [width] [height] [light] | all <out dir> [light]");
+if (!["story", "url"].includes(kind) || !id || !out) throw new Error("usage: shot.mjs story|url <id> <out.png> [width] [height] [light] | all <out dir> [light]");
 const light = rest.includes("light");
 const [w, h] = rest.filter((a) => a !== "light").map(Number);
 
-let url = id;
 let size = { width: w || 1280, height: h || 800 };
-if (kind === "leaf") {
-  const { LEAVES } = await import(pathToFileURL(join(root, "design/src/leaves.mjs")).href);
-  const leaf = LEAVES.find((l) => l.id === id);
-  if (!leaf) throw new Error(`unknown leaf ${id}; known: ${LEAVES.map((l) => l.id).join(" ")}`);
-  size = { width: leaf.w, height: leaf.h };
-  url = `${pathToFileURL(join(root, "design/leaves", `${id}.html`)).href}${light ? "#theme=light" : ""}`;
-  void readFileSync(join(root, "design/leaves", `${id}.html`));
-} else if (kind === "story") {
-  url = storyUrl(id, light);
-}
-
 const browser = await chromium.launch();
 const page = await browser.newPage({ viewport: size });
+await page.addInitScript(listenForRender);
 page.on("pageerror", (e) => console.error("page error:", e.message));
 page.on("console", (m) => m.type() === "error" && console.error("console error:", m.text()));
 if (kind === "story") {
-  const own = await openStory(page, url, { resize: !(w && h) });
+  const own = await openStory(page, storyUrl(id, light), { resize: !(w && h) });
   if (!(w && h) && own) size = own;
+  await settle(page);
 } else {
-  await page.goto(url, { waitUntil: "load" });
+  await page.goto(id, { waitUntil: "load" });
+  await page.waitForTimeout(400);
 }
-await page.waitForTimeout(400);
 await page.screenshot({ path: out });
 await browser.close();
 console.log(`${out} ${size.width}x${size.height}`);
 
 function storyUrl(storyId, lightTheme) {
-  return `http://localhost:6006/iframe.html?id=${storyId}&viewMode=story&globals=theme:${lightTheme ? "light" : "dark"}`;
+  return `${STORYBOOK}/iframe.html?id=${storyId}&viewMode=story&globals=theme:${lightTheme ? "light" : "dark"}`;
 }
 
 /**
- * Opens a story and returns its size (`<html data-story-size>`, written by the preview). If the viewport has
- * another size, the story is opened again at its own size, so it lays out (and measures) at that size from the
- * start.
+ * Before any script of the page: catch the preview's channel as Storybook creates it and note the `storyRendered`
+ * event (emitted once the story rendered and its `play` function ended) in `window.__shotRendered`, and the events
+ * that end a story without it (no such story, an exception in the story or its `play` function) in
+ * `window.__shotFailed`.
+ */
+function listenForRender() {
+  let channel;
+  Object.defineProperty(globalThis, "__STORYBOOK_ADDONS_CHANNEL__", {
+    configurable: true,
+    get: () => channel,
+    set(value) {
+      channel = value;
+      value?.on?.("storyRendered", (storyId) => (globalThis.__shotRendered = storyId));
+      for (const event of ["storyMissing", "storyErrored", "storyThrewException", "playFunctionThrewException"]) {
+        value?.on?.(event, (detail) => (globalThis.__shotFailed ??= `${event}${detail?.message || detail?.title ? `: ${detail.message ?? detail.title}` : ""}`));
+      }
+    },
+  });
+}
+
+/**
+ * Opens a story and waits until it rendered (the page needs `listenForRender` as init script); returns its size (`<html data-story-size>`, written by the preview). If
+ * the viewport has another size, the story is opened again at its own size, so it lays out (and measures) at that
+ * size from the start.
  */
 async function openStory(page, url, { resize = true } = {}) {
+  /** Loads the story; returns what went wrong, if anything. */
   const load = async () => {
     await page.goto(url, { waitUntil: "load" });
-    await page.waitForSelector("#storybook-root > *", { timeout: 15000 }).catch(() => console.error(`${url}: the story rendered nothing`));
+    await page.waitForFunction(() => globalThis.__shotRendered || globalThis.__shotFailed, null, { timeout: RENDER_TIMEOUT_MS }).catch(() => {});
+    const failed = await page.evaluate(() => globalThis.__shotFailed ?? (globalThis.__shotRendered ? undefined : "no storyRendered"));
+    if (failed === "no storyRendered") return `no storyRendered within ${RENDER_TIMEOUT_MS / 1000} s`;
+    if (failed) return failed;
+    if (!(await page.$("#storybook-root > *"))) return "the story rendered nothing";
   };
-  await load();
+  let problem = await load();
   const attr = await page.evaluate(() => document.documentElement.dataset.storySize);
   const [width, height] = (attr ?? "").split("x").map(Number);
-  if (!width || !height) return undefined;
   const viewport = page.viewportSize();
-  if (resize && (viewport?.width !== width || viewport?.height !== height)) {
-    await page.setViewportSize({ width, height });
-    await load();
+  const own = width && height ? { width, height } : undefined;
+  if (own && resize && (viewport?.width !== width || viewport?.height !== height)) {
+    await page.setViewportSize(own);
+    problem = await load();
   }
-  return { width, height };
+  if (problem) {
+    console.error(`${url}: ${problem}`);
+    process.exitCode = 1;
+  }
+  return own;
+}
+
+/** After the render: the fonts, and two frames for what the play function's last changes lay out. */
+async function settle(page) {
+  await page.evaluate(() => document.fonts.ready);
+  await page.evaluate(() => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done))));
 }
 
 /** One line per element (and per drawn ::before / ::after): its path and a hash of its computed style. */
@@ -115,38 +141,26 @@ function styleFingerprint() {
 }
 
 async function all(dir, lightTheme) {
-  const { LEAVES } = await import(pathToFileURL(join(root, "design/src/leaves.mjs")).href);
-  dir = join(dir, lightTheme ? "light" : "dark"); // both themes can go into the same directory
-  const shots = LEAVES.filter((l) => !(lightTheme && l.theme)).map((l) => ({
-    file: join(dir, "leaves", l.id),
-    url: `${pathToFileURL(join(root, "design/leaves", `${l.id}.html`)).href}#theme=${l.theme ?? (lightTheme ? "light" : "dark")}`,
-    size: { width: l.w, height: l.h },
-  }));
-  let stories = [];
+  let stories;
   try {
-    const index = await (await fetch("http://localhost:6006/index.json")).json();
+    const index = await (await fetch(`${STORYBOOK}/index.json`)).json();
     stories = Object.values(index.entries).filter((e) => e.type === "story").map((e) => e.id);
   } catch {
-    console.error("Storybook does not run on port 6006: only the leaves");
+    throw new Error(`Storybook does not run on ${STORYBOOK}: npm run storybook -w @matrix-widget-tools/widget-host`);
   }
-  for (const s of stories) shots.push({ file: join(dir, "stories", s), url: storyUrl(s, lightTheme), story: true });
-
+  dir = join(dir, lightTheme ? "light" : "dark"); // both themes can go into the same directory
   const browser = await chromium.launch();
   const page = await browser.newPage({ reducedMotion: "reduce" });
+  await page.addInitScript(listenForRender);
   page.on("pageerror", (e) => console.error("page error:", e.message));
-  for (const shot of shots) {
-    if (shot.story) {
-      await openStory(page, shot.url);
-    } else {
-      await page.setViewportSize(shot.size);
-      await page.goto(shot.url, { waitUntil: "load" });
-    }
-    await page.evaluate(() => document.fonts.ready);
-    await page.waitForTimeout(shot.story ? 300 : 50);
-    mkdirSync(dirname(shot.file), { recursive: true });
-    await page.screenshot({ path: `${shot.file}.png`, animations: "disabled" });
-    writeFileSync(`${shot.file}.styles.txt`, await page.evaluate(styleFingerprint));
+  for (const story of stories) {
+    const file = join(dir, "stories", story);
+    await openStory(page, storyUrl(story, lightTheme));
+    await settle(page);
+    mkdirSync(dirname(file), { recursive: true });
+    await page.screenshot({ path: `${file}.png`, animations: "disabled" });
+    writeFileSync(`${file}.styles.txt`, await page.evaluate(styleFingerprint));
   }
   await browser.close();
-  console.log(`${dir}: ${shots.length - stories.length} leaves, ${stories.length} stories (${lightTheme ? "light" : "dark"})`);
+  console.log(`${dir}: ${stories.length} stories (${lightTheme ? "light" : "dark"})`);
 }

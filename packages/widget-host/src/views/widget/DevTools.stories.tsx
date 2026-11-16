@@ -34,53 +34,40 @@ const layout = (dock: WidgetDevToolsLayout["dock"], panels: DevToolPanel[], size
   });
 
 /** Bar only, docked top (the default). */
-// leaf devtools/bar-top
 export const BarTop: Story = { args: { devTools: layout("top", []) }, parameters: { size: [900, 560] } };
 
 /** Bar only, docked bottom. */
-// leaf devtools/bar-bottom
 export const BarBottom: Story = { args: { devTools: layout("bottom", []) }, parameters: { size: [900, 560] } };
 
 /** Bar only, docked left. The vertical bar needs about 600px for its labels; a shorter one shows icons only (see `SidePanels`). */
-// leaf devtools/bar-left
 export const BarLeft: Story = { args: { devTools: layout("left", []) }, parameters: { size: [900, 680] } };
 
 /** Bar only, docked right. */
-// leaf devtools/bar-right
 export const BarRight: Story = { args: { devTools: layout("right", []) }, parameters: { size: [900, 680] } };
 
 /** One panel open (full width): the messages. */
-// leaf devtools/one-panel
 export const OnePanel: Story = { args: { devTools: layout("top", ["messages"]) } };
 
 /** Two panels next to each other. */
-// leaf devtools/two-panels
 export const TwoPanels: Story = { args: { devTools: layout("top", ["messages", "stats"]) } };
 
 /** Three panels next to each other: the maximum. */
-// leaf devtools/three-panels
 export const ThreePanels: Story = { args: { devTools: layout("top", ["messages", "stats", "driver"], 290) }, parameters: { size: [1280, 680] } };
 
 /** Fourth panel opened: the oldest one closes. Messages, Stats and Driver were open; pressing Console closed Messages, the oldest. Three panels are the maximum. */
-// leaf devtools/fourth-panel
 export const FourthPanel: Story = { args: { devTools: layout("top", ["stats", "driver", "console"], 290) }, parameters: { size: [1280, 680] } };
 
 /** Docked right with two panels: they stack. At this height the vertical bar shows icons only. */
-// leaf devtools/side-panels
 export const SidePanels: Story = { args: { devTools: layout("right", ["messages", "driver"], 400) } };
 
 /** Docked bottom with one panel: the bar stays at the edge, the panels sit between the widget and the bar, the separator above them (as when docked right). */
-// leaf devtools/bottom-panel
 export const DockedBottom: Story = { args: { devTools: layout("bottom", ["messages"]) } };
 
 /** WidgetDevToolMessagesPanel: the list, one message expanded. */
-// leaf devtools/messages
 export const MessagesExpanded: Story = { args: { devTools: layout("top", ["messages"], 420), initialExpandedMessage: "m4" }, parameters: { size: [1000, 720] } };
 
 /** WidgetDevToolDriverPanel: the capabilities (approved, auto-approved, denied; the one-use one marked "once") and the mocked driver actions. */
-// leaf devtools/driver
 export const Driver: Story = { args: { devTools: layout("top", ["driver"], 356) }, parameters: { size: [1000, 720] } };
 
 /** WidgetDevToolConsolePanel: the log about the widget. */
-// leaf devtools/console
 export const Console: Story = { args: { devTools: layout("top", ["console"]) } };

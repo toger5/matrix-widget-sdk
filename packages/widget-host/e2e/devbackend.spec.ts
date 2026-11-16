@@ -10,14 +10,14 @@ test("no rooms yet: the RoomsArea is empty, a new room panel has no room to offe
   await expect(view.getByText("No mocked rooms yet")).toBeVisible();
   await expect(host.panels).toHaveCount(0);
   await expect(host.page.getByText("No room panel open")).toBeVisible();
-  await host.leaf("devbackend/none");
-  await host.leaf("app/devbackend-empty");
+  await host.story("sidepanel-devbackendview--no-rooms");
+  await host.story("app-appshell--dev-backend-empty");
 
   await host.leftBar.getByRole("button", { name: /New room panel/ }).click();
   const picker = host.panels.getByTestId("room-picker");
   await expect(picker.getByText("This account has not joined a room yet.")).toBeVisible();
   await expect(picker.getByRole("searchbox")).toHaveCount(0);
-  await host.leaf("panel/no-rooms");
+  await host.story("rooms-roompicker--no-rooms");
 
   await view.getByRole("button", { name: "Create a room" }).click();
   await expect(view).toHaveAttribute("data-room-id", /^!room1:/);
@@ -35,7 +35,7 @@ test("room dropdown: select a room, add a room and open it in a new room panel",
   const rooms = host.page.getByRole("listbox", { name: "Mocked rooms" });
   await expect(rooms.getByRole("option")).toHaveText([/Widget lab/, /Standup/]);
   await expect(rooms.getByRole("option", { name: /Widget lab/ })).toHaveAttribute("aria-selected", "true");
-  await host.leaf("devbackend/dropdown");
+  await host.story("sidepanel-devbackendview--room-dropdown");
 
   await rooms.getByRole("option", { name: /Standup/ }).click();
   await expect(view).toHaveAttribute("data-room-id", STANDUP);
@@ -97,7 +97,7 @@ test("widget host behavior: the same for every room; without auto-approve the wi
   const autoApprove = client.getByRole("switch", { name: "Auto-approve capabilities" });
   await expect(autoApprove).toBeChecked();
   await expect(side.getByRole("separator", { name: "Resize the client backend box" })).toBeVisible();
-  await host.leaf("devbackend/behavior");
+  await host.story("sidepanel-devbackendview-tools--behavior");
 
   // The tool belongs to the account: another room shows the same behavior.
   await view.getByRole("button", { name: /^Widget lab !lab/ }).click();
@@ -150,7 +150,7 @@ test("to-device: a message sent from the view reaches the widget, one sent by th
   const view = host.page.getByTestId("devbackend-client");
   await view.getByRole("button", { name: "Widget host behavior" }).click();
   await view.getByRole("button", { name: /^To-device messages/ }).click();
-  // Higher, as in the leaf: by keyboard (End is the largest share).
+  // Higher, as in the story: by keyboard (End is the largest share).
   const separator = host.page.getByRole("separator", { name: "Resize the client backend box" });
   await separator.press("End");
   await expect(separator).toHaveAttribute("aria-valuenow", "80");
@@ -173,7 +173,7 @@ test("to-device: a message sent from the view reaches the widget, one sent by th
   await expect(messages).toHaveCount(2);
   await expect(messages.filter({ hasText: "from widget" })).toContainText("@bob:example.org");
   expect((await host.store(LAB)).toDeviceSent).toHaveLength(1);
-  await host.leaf("devbackend/todevice");
+  await host.story("sidepanel-devbackendview-tools--to-device");
 
   await form.getByLabel("To-device content (JSON)").fill("{ nope");
   await form.getByRole("button", { name: "Send" }).click();
@@ -189,7 +189,7 @@ test("media tool: open (closing the client tool), upload a file, copy its MXC UR
   await view.getByRole("button", { name: /^Timeline \d/ }).click();
   await expect(side.getByRole("button", { name: "Client Backend Tool" })).toBeVisible();
   await expect(side.getByRole("button", { name: /Media Backend Tool/ })).toContainText("3 files");
-  await host.leaf("devbackend/tools-collapsed");
+  await host.story("sidepanel-devbackendview--tools-collapsed");
 
   // Only one tool box is open at a time.
   await side.getByRole("button", { name: "Client Backend Tool" }).click();
@@ -205,7 +205,7 @@ test("media tool: open (closing the client tool), upload a file, copy its MXC UR
   await expect(files).toHaveText([/landscape\.png/, /tiles\.png/, /notes\.txt/]);
   expect((await host.main()).roomTools?.tools.open).toBe("media");
   await expect.poll(() => files.first().locator("img").evaluate((img: HTMLImageElement) => img.complete && img.naturalWidth > 0)).toBe(true);
-  await host.leaf("devbackend/media-open");
+  await host.story("sidepanel-devbackendview-tools--media");
 
   // Dragging the handle up makes the box larger; a double click resets it.
   const at = (await separator.boundingBox())!;

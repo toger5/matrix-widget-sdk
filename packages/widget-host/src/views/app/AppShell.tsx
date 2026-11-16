@@ -74,9 +74,9 @@ export function AppShell({ vm, storyTheme }: AppShellProps) {
   );
 }
 
-/** Wraps the key names of a toast in `<kbd>`, as the mockup draws them. */
+/** Wraps the key names of a toast in `<kbd>`, as the design draws them. */
 function toastText(text: string): ReactNode {
-  // TODO-FINDING toast-text-markup - `ToastViewModel.text` is a plain string, the mockup's toast has `<kbd>Esc</kbd>`. For now the words Esc, Alt, Shift and Ctrl are drawn as keys.
+  // TODO-FINDING toast-text-markup - `ToastViewModel.text` is a plain string, the designed toast has `<kbd>Esc</kbd>`. For now the words Esc, Alt, Shift and Ctrl are drawn as keys.
   return text.split(/\b(Esc|Alt|Shift|Ctrl)\b/).map((part, i) => (i % 2 ? <kbd key={i}>{part}</kbd> : <Fragment key={i}>{part}</Fragment>));
 }
 
@@ -194,7 +194,7 @@ function MainScreen({ vm, main }: { vm: AppViewModel; main: MainViewModel }) {
           </button>
         )}
         {fence && collapsed && (
-          // TODO-FINDING floating-dev-badge-covers-header - as in leaf app/devbackend-collapsed the badge floats at the top centre, over the room panel headers (in fullscreen: over the tab bar that appears on hover). It lets presses through (`pointer-events: none`), but still hides what is below it.
+          // TODO-FINDING floating-dev-badge-covers-header - as in story `app-appshell--dev-backend-collapsed` the badge floats at the top centre, over the room panel headers (in fullscreen: over the tab bar that appears on hover). It lets presses through (`pointer-events: none`), but still hides what is below it.
           <span className="dev-badge">
             <Icon name="cone" size={12} />
             DevBackend
@@ -206,7 +206,7 @@ function MainScreen({ vm, main }: { vm: AppViewModel; main: MainViewModel }) {
           {main.toasts.map((toast) => (
             <div key={toast.id} className="toast" data-testid="toast">
               {toastText(toast.text)}
-              {/* TODO-FINDING toast-dismiss-button - the mockup's toast has no dismiss button and does not say when a toast goes away (timeout?). */}
+              {/* TODO-FINDING toast-dismiss-button - the designed toast has no dismiss button and does not say when a toast goes away (timeout?). */}
               <IconButton icon="x" title="Dismiss" className="xs" onClick={() => dispatch({ type: "toast/dismiss", id: toast.id })} />
             </div>
           ))}
@@ -214,7 +214,7 @@ function MainScreen({ vm, main }: { vm: AppViewModel; main: MainViewModel }) {
         {main.modal && <Modal modal={main.modal} />}
       </div>
       {main.addAccount && (
-        // TODO-FINDING add-account-overlay - "Add account" is not drawn in the mockups: the login page covers the whole app for now (the mockup's "Add account" row has the external-link icon, which suggests another flow).
+        // TODO-FINDING add-account-overlay - "Add account" is not designed: the login page covers the whole app for now (the designed "Add account" row has the external-link icon, which suggests another flow).
         <div className="login-overlay" data-testid="add-account">
           <LoginView login={main.addAccount} adding />
         </div>

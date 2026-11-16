@@ -48,11 +48,11 @@ test("send state and the state explorer: the sent event is listed by type and ke
   await view.getByRole("button", { name: "State key @bob:dev.local of m.room.member" }).click();
   await expect(view.locator("pre.code")).toContainText('"displayname": "Bob"');
   await expect(form.getByLabel("Widget ID")).toHaveValue("widget-2");
-  await host.leaf("devbackend/state");
+  await host.story("sidepanel-devbackendview--state");
 
   await stateForm(host, "Raw JSON");
   await expect(form.getByLabel("State content (JSON)")).toHaveValue(/Both test widgets/);
-  await host.leaf("devbackend/state-raw");
+  await host.story("sidepanel-devbackendview-state--raw-json");
   await form.getByLabel("Type").fill("org.example.setting");
   await form.getByLabel("State key").fill("colour");
   await form.getByLabel("State content (JSON)").fill("{ broken");
@@ -82,7 +82,7 @@ test("edit state: saving the editor sends a new state event", async ({ host }) =
   const editor = view.getByLabel("Content of m.room.topic (empty state key) (JSON)");
   await expect(editor).toHaveValue(/Both test widgets/);
   await view.locator(".editor").getByRole("button", { name: "Save" }).scrollIntoViewIfNeeded();
-  await host.leaf("devbackend/state-edit");
+  await host.story("sidepanel-devbackendview-state--edit");
 
   await editor.fill("[1]");
   await view.locator(".editor").getByRole("button", { name: "Save" }).click();
@@ -142,11 +142,11 @@ test("the widget form adds a test widget that opens, and a legacy one; a widget 
 test("the Element Call form writes the call widget as Element Web describes it, and the compat wrapper fills in its URL", async ({ host }) => {
   const view = host.page.getByTestId("devbackend-view");
   const form = view.getByRole("form", { name: "Send state" });
-  // Only the State section open, as the leaf draws it.
+  // Only the State section open, as the story draws it.
   await view.getByRole("button", { name: /^Timeline \d/ }).click();
   await stateForm(host, "Element Call");
   await expect(form.getByLabel("Element Call URL")).toHaveValue("https://call.element.io/room");
-  await host.leaf("devbackend/state-element-call");
+  await host.story("sidepanel-devbackendview-state--element-call");
 
   await form.getByLabel("Element Call URL").fill("javascript:alert(1)");
   await form.getByRole("button", { name: "Send" }).click();

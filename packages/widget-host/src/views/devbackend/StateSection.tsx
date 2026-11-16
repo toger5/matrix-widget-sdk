@@ -1,4 +1,4 @@
-/** The "State" section of the room box (mockup functions `stateSection`, `stateTree`). leaves devbackend/state, devbackend/state-element-call, devbackend/state-raw, devbackend/state-edit, roomtools/state */
+/** The "State" section of the room box. stories `sidepanel-devbackendview--state`, `sidepanel-devbackendview-state--*`, `sidepanel-roomtoolsview--state` */
 import { useMemo, useState, type FormEvent } from "react";
 
 import type { MockedStateEvent, RoomId, RoomToolsViewModel } from "../../appViewModel";

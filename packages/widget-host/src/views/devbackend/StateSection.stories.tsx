@@ -27,15 +27,12 @@ const showBob = async ({ canvasElement }: { canvasElement: HTMLElement }) => {
 };
 
 /** State: send state with the Element Call form (a legacy `m.call` widget, as Element Web describes its call). */
-// leaf devbackend/state-element-call
 export const ElementCall: Story = { args: { roomTools: roomTools({ stateForm: "elementCall" }) }, parameters: { size: [348, 1120] }, play: showBob };
 
 /** State: send (delayed) state as raw JSON: type, state key, content. */
-// leaf devbackend/state-raw
 export const RawJson: Story = { args: { roomTools: roomTools({ stateForm: "raw" }) }, parameters: { size: [348, 1090] }, play: showBob };
 
 /** State: edit state. The editor of one state event (Bob's membership, changed to "leave"); saving sends a new state event. */
-// leaf devbackend/state-edit
 export const Edit: Story = {
   args: { roomTools: roomTools() },
   parameters: { size: [348, 1240] },

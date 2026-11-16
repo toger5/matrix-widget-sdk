@@ -1,6 +1,6 @@
 /**
  * The pure parts of the stats graph (WidgetDevToolStatsPanel): buckets, axis and where a bar's number
- * goes. The mockup (`statsPanel` in design/src/components.mjs) uses the same numbers.
+ * goes.
  */
 import { MAX_STATS_BUCKETS, STATS_BUCKET_MS, type WidgetStats } from "../../appViewModel";
 

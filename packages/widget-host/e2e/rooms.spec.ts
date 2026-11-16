@@ -18,7 +18,7 @@ test("a new panel shows the picker: no recents, all rooms with search, then the 
   await expect(picker.getByRole("heading")).toHaveText(["All rooms 2"]);
   const rows = picker.locator("button.row");
   await expect(rows).toHaveCount(2);
-  await host.leaf("panel/no-recents");
+  await host.story("rooms-roompicker--no-recents");
 
   const search = picker.getByRole("searchbox", { name: "Search rooms" });
   await search.fill("nothing");
@@ -45,7 +45,7 @@ test("a new panel shows the picker: no recents, all rooms with search, then the 
   await expect(roomTab.getByTitle("2 members")).toHaveText("2");
   await expect(roomTab).toHaveAttribute("aria-selected", "true");
   await expect(host.page.getByRole("tab")).toHaveCount(1);
-  await host.leaf("roomview/header");
+  await host.story("rooms-roomview--overview");
   const overview = host.page.getByTestId("room-overview");
   await expect(overview.getByRole("heading", { name: "Standup", level: 1 })).toBeVisible();
 
@@ -70,7 +70,7 @@ test("Alt+N opens a panel with the recent widgets and rooms: the search scrolls 
   const roomTiles = picker.getByRole("region", { name: "Recent rooms" }).getByRole("button");
   await expect(roomTiles).toHaveCount(1);
   await expect(roomTiles).toHaveAccessibleName("Open Standup");
-  await host.leaf("panel/recents");
+  await host.story("rooms-roompicker--recents");
 
   // The search field scrolls to the top when it gets the focus: the tiles go out of view (they stay), the matches show right under it.
   const search = picker.getByRole("searchbox", { name: "Search rooms" });
@@ -81,7 +81,7 @@ test("Alt+N opens a panel with the recent widgets and rooms: the search scrolls 
   await search.fill("stand");
   await expect(picker.locator("button.row")).toHaveCount(1);
   await expect(search).toBeInViewport();
-  await host.leaf("panel/search");
+  await host.story("rooms-roompicker--search");
   await search.press("Escape");
 
   await jump.click();
@@ -119,7 +119,7 @@ test("two panels with different rooms: the separator resizes them, double click 
   await expect(host.panels.nth(1)).toHaveAccessibleName("Room panel: Standup");
   await host.ready(NEW);
   await host.ready(NOTES);
-  await host.leaf("roomview2/different");
+  await host.story("app-appshell--different-rooms");
 
   const [left, right] = [host.panels.nth(0), host.panels.nth(1)];
   const before = { left: await width(left), right: await width(right) };
@@ -142,7 +142,7 @@ test("two panels with different rooms: the separator resizes them, double click 
   await host.page.keyboard.press("Alt+KeyN");
   await expect(host.panels).toHaveCount(3);
   await expect(host.panels.nth(2)).toHaveAccessibleName("Room panel: choose a room");
-  await host.leaf("roomsarea/several");
+  await host.story("app-appshell--several-panels");
 
   await host.panels.nth(2).getByRole("button", { name: "Close panel" }).click();
   await right.getByRole("button", { name: "Close panel" }).click();
@@ -156,7 +156,7 @@ test("Alt+Shift+N opens the same room in a second panel, where the running widge
   await expect(host.panels).toHaveCount(1);
   await expect(host.tab(/Legacy test widget/)).toHaveAttribute("aria-selected", "true");
   await host.ready(widgetId(LAB, LEGACY_WIDGET));
-  await host.leaf("roomsarea/one");
+  await host.story("app-appshell--one-panel");
 
   await host.page.keyboard.press("Alt+Shift+KeyN");
   await expect(host.panels).toHaveCount(2);
@@ -188,12 +188,12 @@ test("fullscreen: LeftBar collapsed and one shown widget tab hide the tab and th
   await expect(host.page.getByTitle("Widget lab · open the room overview")).toBeVisible();
   await expect(host.tab(/New test widget/)).toBeHidden();
   await expect(host.button("Open a widget")).toBeHidden();
-  await host.leaf("app/fullscreen");
+  await host.story("app-appshell--fullscreen");
 
   await host.page.getByTitle("Widget lab · open the room overview").hover();
   await expect(host.tab(/New test widget/)).toBeVisible();
   await expect(host.button("Open a widget")).toBeVisible();
-  await host.leaf("app/fullscreen-hover");
+  await host.story("app-appshell--fullscreen-header-focused");
 
   // Keyboard focus inside the header shows them as well. The room name is the tab stop while the widget tab is hidden.
   await host.page.mouse.move(640, 500);

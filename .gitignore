@@ -17,6 +17,6 @@ packages/matrix-sdk-uniffi-js/rust_modules/
 storybook-static/
 test-results/
 playwright-report/
-leaf-screenshots/
+story-screenshots/
 
 session_archive/

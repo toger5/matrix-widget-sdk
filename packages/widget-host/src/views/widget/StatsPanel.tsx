@@ -41,7 +41,7 @@ function RunDuration({ since }: { since: number }) {
   return <>{duration(now - since)}</>;
 }
 
-/** WidgetDevToolStatsPanel: counters and the characters sent over the widget API. leaves devtools/stats, devtools/stats-direction */
+/** WidgetDevToolStatsPanel: counters and the characters sent over the widget API. stories `widget-devtools-stats--total`, `widget-devtools-stats--to-widget-docked-right` */
 export function StatsPanel({ stats, initialSeries }: StatsPanelProps) {
   return (
     <div className="stats" data-testid="devtools-stats">

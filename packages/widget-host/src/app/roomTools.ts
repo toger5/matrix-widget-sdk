@@ -38,7 +38,7 @@ const CONFIGURATION: Record<string, { title: string; changes: string; note?: str
  * Whether a state event the Dev tools send to a real room asks first, and with which title and
  * text: a type of `ROOM_CONFIGURATION_TYPES`, another user's `m.room.member`, and a widget event
  * that replaces a widget of the room (`widgetEvents` unknown: it may). `undefined`: sent at once.
- * leaf roomtools/confirm
+ * story `app-appshell--room-tools-confirm`
  */
 export function roomChangeConfirmation(event: MockedStateEvent, room: { userId: string; name: string; widgetEvents?: StateEvent[] }): { title: string; body: string } | undefined {
   const sentAs = `This ${event.type} event is sent to the room as ${room.userId} and`;

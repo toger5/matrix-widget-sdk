@@ -45,7 +45,7 @@ test("message form: the event is added to the timeline and forwarded to the widg
   expect(await last(host)).toMatchObject({ eventType: "m.room.message", sender: "@bob:dev.local", content: { msgtype: "m.text", body: "Hello from the DevBackendView" } });
   await expect.poll(() => forwards(host)).toBe(forwarded + 1);
   await expect(host.frame(NEW).locator("#log")).toContainText("Hello from the DevBackendView");
-  await host.leaf("devbackend/timeline");
+  await host.story("sidepanel-devbackendview--timeline");
 
   await events.first().getByRole("button").click();
   await expect(events.first().locator("pre.code")).toContainText("origin_server_ts");
@@ -109,7 +109,7 @@ test("raw JSON form: invalid JSON shows an error and sends nothing, a valid even
 
   await view.getByRole("tablist", { name: "Event form" }).getByRole("tab", { name: "Raw JSON" }).click();
   await expect(editor).toHaveValue(/"m.room.message"/);
-  await host.leaf("devbackend/timeline-raw");
+  await host.story("sidepanel-devbackendview--timeline-raw-json");
 
   await editor.fill('{ "type": "m.room.message", ');
   await form.getByRole("button", { name: "Send" }).click();
@@ -144,7 +144,7 @@ test("delayed event: it is listed under “Scheduled”; “Cancel” drops it a
   await expect(scheduled.first()).toContainText(/in \d+\.\d s/);
   expect((await host.store(LAB)).delayed).toHaveLength(2);
   expect((await host.store(LAB)).timeline).toHaveLength(count);
-  await host.leaf("devbackend/timeline-delayed");
+  await host.story("sidepanel-devbackendview--timeline-delayed");
 
   await scheduled.last().getByRole("button", { name: "Cancel" }).click();
   await expect(scheduled).toHaveCount(1);

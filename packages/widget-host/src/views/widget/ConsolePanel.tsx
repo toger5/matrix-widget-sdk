@@ -13,7 +13,7 @@ export interface ConsolePanelProps {
   lines: Line[];
 }
 
-/** WidgetDevToolConsolePanel: the widget's own console, as forwarded by the widget SDK / compat wrapper. leaf devtools/console */
+/** WidgetDevToolConsolePanel: the widget's own console, as forwarded by the widget SDK / compat wrapper. story `widget-devtools--console` */
 export function ConsolePanel({ widgetId, lines }: ConsolePanelProps) {
   const dispatch = useDispatch();
   const [filter, setFilter] = useState("");

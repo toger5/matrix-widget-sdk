@@ -1,4 +1,4 @@
-/* Side panel, app-only (layer views, after the design files): resizing, scrolling, the account list's states, the recovery key form. The design rules are design/css/sidepanel.css. */
+/* Side panel, app-only (layer views, after the design files): resizing, scrolling, the account list's states, the recovery key form. The design rules are src/styles/sidepanel.css. */
 
 .sidecol { position: relative; }
 .app.narrow .sidecol { max-width: calc(100% - 68px); }

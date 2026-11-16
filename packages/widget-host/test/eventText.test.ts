@@ -9,7 +9,7 @@ const ev = (type: string, content: Record<string, unknown>, more: Partial<RawEve
 const state = (type: string, stateKey: string, content: Record<string, unknown>, more: Partial<RawEvent> = {}) => ev(type, content, { state_key: stateKey, ...more });
 
 describe("describeEvent", () => {
-  it("says what the events of the timeline/events leaf say", () => {
+  it("says what the events of story rooms-roomtimeline--events say", () => {
     expect(ROOM_TIMELINE.events.map((event) => describeEvent(event))).toEqual([
       { text: "joined the room", icon: "users", state: true },
       { text: "changed the topic to “Weekly critique of everything visual. Bring screenshots, leave opinions at the door.”", icon: "edit", state: true },

@@ -1,7 +1,7 @@
 /**
- * The atoms every view is built from. They produce the markup of the mockups
- * (`design/src/components.mjs`: `icon`, `logo`, `avatar`, `ibtn`, `btn`, `toggle`, `field`, `json`)
- * and are styled by the same rules: `design/css/atoms.css` (and the app-only `atoms.css` next to this file).
+ * The atoms every view (and every sketch story) is built from, styled by the design rules
+ * `src/styles/atoms.css` (and the app-only `atoms.css` next to this file). Story `ui-atoms--atoms`
+ * shows them all.
  */
 import { useEffect, useState, type ButtonHTMLAttributes, type CSSProperties, type ReactNode } from "react";
 

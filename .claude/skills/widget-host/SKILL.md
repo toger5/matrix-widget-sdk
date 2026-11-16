@@ -21,10 +21,10 @@ All paths below are relative to `packages/widget-host/`.
 | doc | for | status |
 |---|---|---|
 | `README.md` | features, URL parameters, running, choosing the SDK, the test hook | current |
-| `src/views/README.md` | rules for views: props, markup from the mockups, CSS, accessibility, stories, `e2e/tools/shot.mjs` | current |
-| `e2e/README.md`, `e2e/leaves.md` | the Playwright harness; which test reaches which design leaf | current |
+| `src/views/README.md` | rules for views: props, markup, CSS, accessibility, stories, `e2e/tools/shot.mjs` | current |
+| `e2e/README.md`, `e2e/stories.md` | the Playwright harness; which test reaches which story | current |
 | `appDesign.md` | what the UI is: the design | current, the specification |
-| `design/index.html` (built from `design/src/`) | the mockups, one leaf per state | current, the specification of the markup |
+| the stories (`src/views/**/*.stories.tsx`, `npm run storybook`) | every state of the UI, one story each; `Sketch/…` stories are designed but not built (`.claude/skills/sketch-stories/SKILL.md`) | current, the visual specification |
 | header comment of `src/appViewModel.ts` | the view model tree and the rules it encodes | current |
 | `implementation_findings.md` | open decisions, each marked in the code with `// TODO-FINDING <name>` | current, kept up to date |
 | `implementationPlan.md` | plan of the first implementation; section 2 (iframe slots, measured per browser) still holds; section 1 names files that do not exist | historical |
@@ -87,11 +87,11 @@ grep -rlE '(from |import\()"(matrix-js-sdk|matrix-sdk-uniffi-js)' src | grep -vE
 - The UI lives in a shadow root: `document.querySelector` and `document.activeElement` do not see
   it, theme selectors are `[data-theme=…]` on the app root, styles are adopted from
   `src/styles/app.css?inline`, fonts are self-hosted. `app.css` only lists files in cascade layers
-  (`tokens, base, atoms, views`): the design rules `design/css/*.css` (the same files as the
-  mockups' `design/mock.css`), then the app-only `src/views/<area>/*.css`. Vite inlines the
-  imports; an adopted sheet would ignore `@import`. Stories render without the shadow root, where
-  a `<slot>` shows its children (`FakeWidget`); they load `.storybook/preview.css` (`app.css` plus
-  the mockups' `design/css/mockup.css`).
+  (`tokens, base, atoms, views`): the design rules `src/styles/<area>.css`, then the app-only
+  `src/views/<area>/*.css`. Vite inlines the imports; an adopted sheet would ignore `@import`.
+  Stories render without the shadow root, where a `<slot>` shows its children (the `FakeWidget`
+  of `ViewEnv.widgetStandIn`); they load `.storybook/preview.css` (`app.css` plus the story-only
+  `.storybook/mockup.css`).
 - Key presses and clicks inside an iframe never reach the host. `AppRoot` focuses the widget's
   panel when the window loses focus to an iframe.
 - The iframe `sandbox` and `allow` attributes are set in one place, `WidgetIframes`. Widening them
@@ -167,8 +167,9 @@ their tests) is the `matrix-session` skill (`.claude/skills/matrix-session/SKILL
   modal confirms it) → a case in `handle()` (tsc finds the missing one) → a pure transition in
   `layout.ts` plus a case in `test/layout.test.ts` if it moves panels, tabs or dev tools → the view
   dispatches it.
-- **A view**: the `widget-host-ui` process; a folder per area in `src/views/`, a `…Props`
-  interface, stories, fixtures in `src/views/fixtures.ts`, app-only CSS in the area's
+- **A view**: the `widget-host-ui` process (a sketch story first: the `sketch-stories` skill); a
+  folder per area in `src/views/`, a `…Props` interface, a story per state, fixtures in
+  `src/views/fixtures.ts`, app-only CSS in the area's
   `src/views/<area>/<file>.css` (a new file is listed in `src/styles/app.css`).
 - **A setting**: `SettingsViewModel` → `loadPersisted` in `src/app/persistence.ts` (it parses the
   settings field by field: an unlisted field is lost on reload) → `src/views/sidepanel/SettingsView.tsx`
@@ -212,9 +213,9 @@ their tests) is the `matrix-session` skill (`.claude/skills/matrix-session/SKILL
 - `npm run dev` from the root starts the host (5173) and the test widgets (5175).
   `http://localhost:5173/?mode=memory` opens the DevBackend; `?seed=/e2e/seeds/lab.json` opens a
   seeded screen. More URL parameters are in `README.md`.
-- `npm run storybook -w @matrix-widget-tools/widget-host` (port 6006). Screenshots of a leaf, a
-  story or a URL: `node e2e/tools/shot.mjs` (usage in `src/views/README.md`); `shot.mjs all <dir>`
-  shoots every leaf and story, to compare before and after a change that should not change pixels.
+- `npm run storybook -w @matrix-widget-tools/widget-host` (port 6006). Screenshots of a story or a
+  URL: `node e2e/tools/shot.mjs` (usage in `src/views/README.md`); `shot.mjs all <dir>` shoots
+  every story, to compare before and after a change that should not change pixels.
 - Stop every server you started.
 
 ## Checks
@@ -224,7 +225,7 @@ cd packages/widget-host
 npx tsc --noEmit            # there is no ESLint: the type checker is the linter
 npx vitest run
 npx playwright test         # starts or reuses the host and the test widgets
-node e2e/tools/leaves.mjs   # design leaves vs. e2e/leaves.md, tests and comments
+node e2e/tools/stories.mjs  # stories vs. e2e/stories.md, the tests' host.story() and the ids in comments
 ```
 
 Plus the import check above. Known gaps and open decisions are in `implementation_findings.md`;

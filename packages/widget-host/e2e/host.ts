@@ -15,7 +15,7 @@ import type { HostSeed } from "../src/app/controller";
 import { CAPABILITY_APPROVE_DELAY_MS, type AppIntent, type AppViewModel, type MainViewModel } from "../src/appViewModel";
 
 const here = dirname(fileURLToPath(import.meta.url));
-const LEAVES_DIR = join(here, "../leaf-screenshots");
+const STORIES_DIR = join(here, "../story-screenshots");
 
 export const LAB = "!lab:dev.local";
 /** `widgetKey`s of the two test widgets (`packages/test-widgets`). */
@@ -99,14 +99,17 @@ export class Host {
     await this.page.clock.fastForward(CAPABILITY_APPROVE_DELAY_MS);
   }
 
-  /** This screen is the design leaf `id` (`design/leaves/<id>.html`): saves a screenshot next to the others for comparison. */
-  async leaf(id: string): Promise<void> {
-    const path = join(LEAVES_DIR, `${id}.png`);
-    mkdirSync(dirname(path), { recursive: true });
-    await this.page.screenshot({ path, animations: "disabled" });
+  /**
+   * This screen is the state of the story `id` (a Storybook story id, `app-appshell--fullscreen`):
+   * saves a screenshot to `story-screenshots/<id>.png` for comparison with the story's
+   * (`e2e/tools/shot.mjs story <id>`). `e2e/stories.md` lists which test marks which story.
+   */
+  async story(id: string): Promise<void> {
+    mkdirSync(STORIES_DIR, { recursive: true });
+    await this.page.screenshot({ path: join(STORIES_DIR, `${id}.png`), animations: "disabled" });
   }
 
-  // Frequently used elements, by the names of the mockups.
+  // Frequently used elements, by the names of the stories.
   get leftBar(): Locator {
     return this.page.getByTestId("leftbar");
   }

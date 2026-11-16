@@ -51,9 +51,9 @@
  *   its own `WorkspaceLayout`, so switching back restores the panels that were open (the widgets
  *   themselves are started again: the iframes of an inactive account are not kept).
  *
- * The mockups in `design/` show every state of this model (`design/index.html`); the leaf ids in
- * the comments refer to them. `designFeedback.md` lists what the current `LiveSession`,
- * `SessionProvider` and `InMemoryBackend` cannot provide yet.
+ * The stories (`src/views/<area>/*.stories.tsx`, Storybook) show every state of this model; the story
+ * ids in the comments refer to them (`e2e/stories.md` lists them all). `designFeedback.md` lists
+ * what the current `LiveSession`, `SessionProvider` and `InMemoryBackend` cannot provide yet.
  */
 import type { RoomSummary, RoomTimeline, VerificationEmoji } from "./session";
 import type { ResolvedWidget, StateEvent } from "./widgetStateEvent";
@@ -74,7 +74,7 @@ export type WidgetKey = string;
 export type WidgetInstanceId = string;
 export const widgetInstanceId = (roomId: RoomId, widgetKey: WidgetKey): WidgetInstanceId => `${roomId}|${widgetKey}`;
 
-/** Every list has an empty, a loading and an error state. leaves panel/loading, panel/error */
+/** Every list has an empty, a loading and an error state. stories `rooms-roompicker--loading`, `rooms-roompicker--load-error` */
 export type Loadable<T> = { status: "loading" } | { status: "error"; error: string } | { status: "ready"; value: T };
 
 // ---------------------------------------------------------------------------------------------
@@ -88,7 +88,7 @@ export interface AppViewModel {
 export type ScreenViewModel =
   /** Looking for stored logins. */
   | { kind: "restoring" }
-  /** No account at all. leaf app/login. Skipping the login activates the DevBackend and enables dev tools and the DevBackend. */
+  /** No account at all. story `app-loginview--login`. Skipping the login activates the DevBackend and enables dev tools and the DevBackend. */
   | { kind: "login"; login: LoginViewModel }
   | { kind: "main"; main: MainViewModel };
 
@@ -103,7 +103,7 @@ export interface LoginViewModel {
 
 /**
  * Settings are per browser, not per account: they decide which tools exist at all. The two
- * developer switches are independent. leaves sidepanel/settings-off, settings-on, settings-devbackend
+ * developer switches are independent. stories `sidepanel-settingsview--both-off`, `sidepanel-settingsview--both-on`, `sidepanel-settingsview--dev-backend-active`
  */
 export interface SettingsViewModel {
   /**
@@ -148,7 +148,7 @@ export interface MainViewModel {
    * The last "Add widget" that writes to a room (`room/addWidget` with target "room"), while it is
    * sent and once the room refused it. Removed when the room took it, by the next `room/addWidget`
    * and by `room/dismissWidgetWrite`. The "Add widget" form of that room shows it. Not persisted.
-   * leaf overview/add-widget-refused
+   * story `rooms-roomoverview--add-widget-refused`
    */
   widgetWrite?: WidgetWriteViewModel;
   modal?: ModalViewModel;
@@ -174,7 +174,7 @@ export interface AccountViewModel {
   deviceId?: string;
   /**
    * Whether this device is verified (`LiveSession.needsVerification`), following the session.
-   * `false`: the AccountView shows the "Verify this device" box. leaf sidepanel/verify-start
+   * `false`: the AccountView shows the "Verify this device" box. story `sidepanel-deviceverification--start`
    */
   verified?: boolean;
   /** The verification of this device that is running, or how the last one ended. Not set: none. */
@@ -188,15 +188,15 @@ export interface AccountViewModel {
  * box replaces the device details and the menu. The recovery key itself is never in the view model.
  */
 export type VerificationViewModel =
-  /** The request went to the account's other devices; none has accepted yet. leaf sidepanel/verify-waiting */
+  /** The request went to the account's other devices; none has accepted yet. story `sidepanel-emojiverification--waiting` */
   | { step: "waiting" }
-  /** Both devices show `emoji`. `confirming`: "They match" was pressed, the other device has not confirmed yet. leaves sidepanel/verify-emoji, verify-confirming */
+  /** Both devices show `emoji`. `confirming`: "They match" was pressed, the other device has not confirmed yet. stories `sidepanel-emojiverification--compare`, `sidepanel-emojiverification--confirming` */
   | { step: "emoji"; emoji: VerificationEmoji[]; confirming: boolean }
-  /** The recovery key form. `checking`: submitted. `error`: the key was refused. leaves sidepanel/verify-recovery-key, verify-recovery-checking, verify-recovery-wrong */
+  /** The recovery key form. `checking`: submitted. `error`: the key was refused. stories `sidepanel-recoverykeyform--*` */
   | { step: "recoveryKey"; checking: boolean; error?: string }
-  /** It ended without success (cancelled, timed out, the emoji differ, an error): the "Verify this device" box again, with the reason. leaf sidepanel/verify-failed */
+  /** It ended without success (cancelled, timed out, the emoji differ, an error): the "Verify this device" box again, with the reason. story `sidepanel-deviceverification--failed` */
   | { step: "failed"; error: string }
-  /** This device was verified; shown until "Done". leaf sidepanel/verify-done */
+  /** This device was verified; shown until "Done". story `sidepanel-deviceverification--done` */
   | { step: "done" };
 
 /** What the session of the active account knows. Views derive room lists, the RoomPicker and the widget lists of the RoomOverview from it. */
@@ -206,7 +206,7 @@ export interface AccountDataViewModel {
   /**
    * Widgets that exist only in this host, per room, as their state event would describe them
    * ("Add widget", only in this host); never sent. Keyed by `localWidgetKey()`. Persisted per
-   * Matrix account and deleted on logout; the DevBackend's are kept in memory only. leaf overview/devtools
+   * Matrix account and deleted on logout; the DevBackend's are kept in memory only. story `rooms-roomoverview--dev-tools`
    */
   localWidgets: Record<RoomId, StateEvent[]>;
   /** The last opened widgets, newest first. Persisted per Matrix account; the DevBackend's are kept in memory only. */
@@ -229,18 +229,18 @@ export interface RecentRoom {
   lastOpened: number;
 }
 
-/** Tiles per group ("Recent widgets", "Recent rooms") of the RoomPicker. More recents are stored. leaves panel/recents, sidepanel/rooms */
+/** Tiles per group ("Recent widgets", "Recent rooms") of the RoomPicker. More recents are stored. stories `rooms-roompicker--recents`, `sidepanel-sidepanel--room-list` */
 export const RECENT_TILES = 4;
 
 export type ModalViewModel =
-  /** leaf app/info-modal */
+  /** story `app-appshell--info-modal` */
   | { kind: "appInfo" }
-  /** Actions that lose state are confirmed: activating the DevBackend, logging out, revoking capabilities, changing a real room's configuration. `danger`: the alert icon and a danger button. leaves app/confirm, roomtools/confirm */
+  /** Actions that lose state are confirmed: activating the DevBackend, logging out, revoking capabilities, changing a real room's configuration. `danger`: the alert icon and a danger button. stories `app-appshell--confirm`, `app-appshell--room-tools-confirm` */
   | { kind: "confirm"; title: string; body: string; confirmLabel: string; danger: boolean; intent: AppIntent };
 
 export interface ToastViewModel {
   id: string;
-  /** e.g. "Press Esc to show the expand button" (leaf leftbar/collapsed-toast) */
+  /** e.g. "Press Esc to show the expand button" (story `app-appshell--collapsed-toast`) */
   text: string;
 }
 
@@ -248,19 +248,20 @@ export interface ToastViewModel {
 // LeftBar and SidePanel
 
 export interface LeftBarViewModel {
-  /** leaves leftbar/collapsed-* */
+  /** stories `app-appshell--collapsed-*` */
   collapsed: boolean;
   /** While collapsed: revealed by Escape or by the mouse reaching the left screen edge. */
   expandButtonVisible: boolean;
 }
 
-/** leaves sidepanel/*, roomtools/*, devbackend/* */
+/** stories `sidepanel-*--*`, `sidepanel-roomtoolsview--*`, `sidepanel-devbackendview*--*` */
 export interface SidePanelViewModel {
   /**
-   * `undefined`: closed. "rooms": the Room list, the RoomPicker of the SidePanel (leaves
-   * sidepanel/rooms, sidepanel/rooms-app). "roomTools": the Dev tools, only while `devToolsAvailable`;
-   * of the open rooms of a Matrix account (leaves roomtools/*), or the DevBackendView while the
-   * DevBackend is active (leaves devbackend/*). Switching accounts keeps it.
+   * `undefined`: closed. "rooms": the Room list, the RoomPicker of the SidePanel (stories
+   * `sidepanel-sidepanel--room-list`, `app-appshell--room-list`). "roomTools": the Dev tools, only
+   * while `devToolsAvailable`; of the open rooms of a Matrix account (stories
+   * `sidepanel-roomtoolsview--*`), or the DevBackendView while the DevBackend is active (stories
+   * `sidepanel-devbackendview*--*`). Switching accounts keeps it.
    */
   view?: "account" | "settings" | "rooms" | "roomTools";
   /** Persisted. In a narrow window the panel overlays the RoomsArea instead of shifting it. */
@@ -276,7 +277,7 @@ export interface SidePanelViewModel {
 export interface RoomToolsViewModel {
   /**
    * The room picked in the dropdown, per account. The DevBackend's is set when a mocked room is
-   * added or seeded; none: no mocked room yet (leaf devbackend/none). A Matrix account's counts only
+   * added or seeded; none: no mocked room yet (story `sidepanel-devbackendview--no-rooms`). A Matrix account's counts only
    * while the room is open in a room panel: `roomToolsRoomId`.
    */
   selectedRoomIds: Record<AccountId, RoomId>;
@@ -284,9 +285,9 @@ export interface RoomToolsViewModel {
   openSections: RoomToolsSection[];
   /** Which predefined form "send event" shows. "raw" is the JSON editor. */
   sendForm: "message" | "sticker" | "rtcMember" | "media" | "raw";
-  /** Which predefined form "send state" shows. "raw" is type, state key and a JSON editor. leaves devbackend/state, devbackend/state-element-call, devbackend/state-raw */
+  /** Which predefined form "send state" shows. "raw" is type, state key and a JSON editor. stories `sidepanel-devbackendview--state`, `sidepanel-devbackendview-state--element-call`, `sidepanel-devbackendview-state--raw-json` */
   stateForm: "widget" | "elementCall" | "raw";
-  /** DevBackend: the tool boxes below the room box. leaves devbackend/tools-collapsed, devbackend/behavior, devbackend/todevice, devbackend/media-open */
+  /** DevBackend: the tool boxes below the room box. stories `sidepanel-devbackendview--tools-collapsed`, `sidepanel-devbackendview-tools--*` */
   tools: {
     /** The one open tool box; the other tools are buttons. `null`: only the buttons. */
     open: DevBackendTool | null;
@@ -298,7 +299,7 @@ export interface RoomToolsViewModel {
   /**
    * The delayed events (MSC4140) a Matrix account scheduled from the Dev tools, per account and
    * room, until they are sent or cancelled from here or their delay has passed. The homeserver
-   * cannot be asked for them, so the ones of widgets are not listed. Not persisted. leaf roomtools/timeline
+   * cannot be asked for them, so the ones of widgets are not listed. Not persisted. story `sidepanel-roomtoolsview--timeline`
    */
   scheduled: Record<AccountId, Record<RoomId, ScheduledEvent[]>>;
 }
@@ -321,7 +322,7 @@ export interface ScheduledEvent {
 /**
  * State event types that change how the room works for everyone: writing one to a real room from
  * the Dev tools asks first (`roomTools/sendState` with `confirmed`), as does another user's
- * `m.room.member` and replacing a widget of the room. leaf roomtools/confirm
+ * `m.room.member` and replacing a widget of the room. story `app-appshell--room-tools-confirm`
  */
 export const ROOM_CONFIGURATION_TYPES = [
   "m.room.power_levels",
@@ -340,7 +341,7 @@ export type DevBackendTool = "client" | "media";
 /**
  * How the host answers widgets while the DevBackend is active, without a user in the loop.
  * "Fail sends" is not part of it: the DevBackend does that (`MockedRoomData.failSends`).
- * leaf devbackend/behavior
+ * story `sidepanel-devbackendview-tools--behavior`
  */
 export interface WidgetHostBehavior {
   /** Every capability, also the single-use `get_openid`: every OpenID token is handed out without asking. */
@@ -360,7 +361,7 @@ export interface WorkspaceLayout {
   devTools: Record<WidgetInstanceId, WidgetDevToolsLayout>;
 }
 
-/** leaves roomsarea/*, app/devbackend-empty */
+/** stories `app-appshell--one-panel`, `app-appshell--several-panels`, `app-appshell--shifted-by-side-panel`, `app-appshell--dev-backend-empty` */
 export interface RoomsAreaViewModel {
   /** Left to right. Empty right after the DevBackend was activated. */
   panels: RoomPanelViewModel[];
@@ -377,7 +378,7 @@ export interface RoomPanelViewModel {
 
 /**
  * A panel without a room: the RoomPicker (recent widgets, recent rooms, all rooms with search; the
- * search text is view state). leaves panel/recents, panel/no-recents, panel/search, panel/no-rooms, panel/loading, panel/error
+ * search text is view state). stories `rooms-roompicker--*`
  */
 export interface RoomPickerViewModel {
   kind: "picker";
@@ -385,7 +386,7 @@ export interface RoomPickerViewModel {
 
 /**
  * A tabbed room. Its first tab is the room name, which shows the RoomOverview; the others are
- * `tabs`. Two panels may show the same room (Alt+Shift+N). leaves roomview/*, tabs/*, overview/*, timeline/*, roomview2/*
+ * `tabs`. Two panels may show the same room (Alt+Shift+N). stories `rooms-roomview--*`, `rooms-tabbar--*`, `rooms-roomoverview--*`, `rooms-roomtimeline--*`, `app-appshell--different-rooms`, `app-appshell--same-room-twice`
  */
 export interface RoomViewModel {
   kind: "room";
@@ -395,7 +396,7 @@ export interface RoomViewModel {
   tabs: TabViewModel[];
   /**
    * The shown tab. `undefined`: the room name is selected and the body is the RoomOverview
-   * (leaves roomview/header, tabs/overview-active, overview/*). A room opens there, and returns
+   * (stories `rooms-roomview--overview`, `rooms-tabbar--overview-active`, `rooms-roomoverview--*`). A room opens there, and returns
    * there when its last tab is closed; closing another active tab shows its neighbour.
    */
   activeTabId?: TabId;
@@ -406,7 +407,7 @@ export interface RoomViewModel {
  *
  * - `widget` shows a widget. Label, icon, load state and pin marker come from the widget (`widgets`).
  * - `timeline` shows the RoomTimeline of the panel's room, at most one per room panel. Its events
- *   are not in the view model: `useViewEnv().useRoomTimeline(roomId)`. leaves tabs/timeline-active, timeline/*
+ *   are not in the view model: `useViewEnv().useRoomTimeline(roomId)`. stories `rooms-tabbar--timeline-active`, `rooms-roomtimeline--*`
  *
  * Stored layouts can hold the removed kinds "native" (the overview) and "new": they are dropped on load.
  */
@@ -414,7 +415,7 @@ export type TabViewModel = { kind: "widget"; id: TabId; widgetId: WidgetInstance
 
 /**
  * The floating container of the always-on-screen widgets whose tab is not shown. Which widgets
- * those are is derived (`pipWidgetIds`); this is only how the container looks. leaves pip/*
+ * those are is derived (`pipWidgetIds`); this is only how the container looks. stories `app-pippanel--*`, `app-appshell--pip-enlarged-dev-tools`
  */
 export interface PipViewModel {
   stacking: "horizontal" | "vertical";
@@ -423,18 +424,18 @@ export interface PipViewModel {
   boxSize: { width: number; height: number };
 }
 
-/** There is no limit on always-on-screen widgets: the first ones get a box, the others are in the overflow menu. leaves pip/overflow* */
+/** There is no limit on always-on-screen widgets: the first ones get a box, the others are in the overflow menu. stories `app-pippanel--overflow*` */
 export const PIP_VISIBLE_BOXES = 4;
 
 export type DevToolPanel = "messages" | "stats" | "driver" | "console";
-/** Opening one more panel closes the oldest one. leaf devtools/fourth-panel */
+/** Opening one more panel closes the oldest one. story `widget-devtools--fourth-panel` */
 export const MAX_DEV_TOOL_PANELS = 3;
 
-/** leaves devtools/* */
+/** stories `widget-devtools--*` */
 export interface WidgetDevToolsLayout {
   /** Toggled by the ⋯ button of the tab. */
   open: boolean;
-  /** The bar is at the outer edge, the panels between it and the widget. leaves devtools/bar-*, devtools/bottom-panel, devtools/side-panels */
+  /** The bar is at the outer edge, the panels between it and the widget. stories `widget-devtools--bar-*`, `widget-devtools--docked-bottom`, `widget-devtools--side-panels` */
   dock: "top" | "bottom" | "left" | "right";
   /** The panels shown next to each other, oldest first, at most `MAX_DEV_TOOL_PANELS` (they stack when docked to a side). */
   panels: { panel: DevToolPanel; share: number }[];
@@ -445,7 +446,7 @@ export interface WidgetDevToolsLayout {
 // ---------------------------------------------------------------------------------------------
 // Running widgets: runtime, not persisted
 
-/** One running widget. leaves widgetview/* */
+/** One running widget. stories `widget-widgetview--*` */
 export interface WidgetInstanceViewModel {
   id: WidgetInstanceId;
   roomId: RoomId;
@@ -460,17 +461,17 @@ export interface WidgetInstanceViewModel {
   generation?: number;
   /**
    * Set and cleared by the widget. Its tab gets the pin icon; the widget keeps running, and is
-   * shown in the PictureInPicturePanel, whenever its tab is not shown. leaf tabs/pinned
+   * shown in the PictureInPicturePanel, whenever its tab is not shown. story `rooms-tabbar--pinned`
    */
   alwaysOnScreen: boolean;
-  /** Questions of the widget that wait for the user. An OpenID token is a capability (`get_openid`), granted for one use. leaves widgetview/prompt* */
+  /** Questions of the widget that wait for the user. An OpenID token is a capability (`get_openid`), granted for one use. stories `widget-widgetview--capability-prompt*` */
   prompts: { capabilities?: CapabilityPromptViewModel };
 }
 
 /**
  * The open capability question of a widget: one card, however many requests it answers. The view
  * sorts the capabilities into sections and writes the summary from them.
- * leaves widgetview/prompt, widgetview/prompt-long, widgetview/prompt-merged, widgetview/prompt-openid
+ * stories `widget-widgetview--capability-prompt*`
  */
 export interface CapabilityPromptViewModel {
   /**
@@ -489,7 +490,7 @@ export interface CapabilityPromptViewModel {
   unknown: string[];
   /**
    * Of `requested`, those the host grants for one use (the driver's `single_use`: `get_openid`).
-   * Their row offers "Once" (the default) or "Always". leaf widgetview/prompt-openid
+   * Their row offers "Once" (the default) or "Always". story `widget-widgetview--capability-prompt-open-id`
    */
   singleUse: string[];
   /**
@@ -514,7 +515,7 @@ export const OLDER_EVENTS_PER_LOAD = 50;
 
 const mainOf = (vm: AppViewModel) => (vm.screen.kind === "main" ? vm.screen.main : undefined);
 
-/** Until when (ms since epoch) "Approve" of a capability prompt is blocked. leaf widgetview/prompt-merged */
+/** Until when (ms since epoch) "Approve" of a capability prompt is blocked. story `widget-widgetview--capability-prompt-merged` */
 export const approveBlockedUntil = (prompt: CapabilityPromptViewModel): number => prompt.lastRequestAt + CAPABILITY_APPROVE_DELAY_MS;
 
 export const activeAccount = (m: MainViewModel) => m.accounts.find((a) => a.id === m.activeAccountId);
@@ -523,19 +524,19 @@ export const activeWorkspace = (m: MainViewModel): WorkspaceLayout | undefined =
 /** "Leave DevBackend" is only offered when there is an account to go back to (not after "skip login"). */
 export const canLeaveDevBackend = (m: MainViewModel) => m.accounts.some((a) => a.kind === "matrix");
 
-/** Construction-fence background + DevBackend badge. leaves app/devbackend* */
+/** Construction-fence background + DevBackend badge. stories `app-appshell--dev-backend*` */
 export const devBackendActive = (vm: AppViewModel) => {
   const m = mainOf(vm);
   return !!m && activeAccount(m)?.kind === "devBackend";
 };
 
-/** The Dev tools button of the LeftBar and the Dev tools exist. leaves leftbar/devtools, leftbar/devbackend */
+/** The Dev tools button of the LeftBar and the Dev tools exist. stories `app-leftbar--dev-tools-enabled`, `app-leftbar--dev-backend-active` */
 export const devToolsAvailable = (vm: AppViewModel) => vm.settings.devTools || devBackendActive(vm);
 
-/** "Switch to the DevBackend" at the bottom of the Dev tools. leaf roomtools/app */
+/** "Switch to the DevBackend" at the bottom of the Dev tools. story `app-appshell--room-tools` */
 export const canSwitchToDevBackend = (vm: AppViewModel) => vm.settings.devBackend && !devBackendActive(vm);
 
-/** The rooms the Dev tools of a Matrix account offer: those open in a room panel, left to right, each once. leaf roomtools/dropdown */
+/** The rooms the Dev tools of a Matrix account offer: those open in a room panel, left to right, each once. story `sidepanel-roomtoolsview--room-dropdown` */
 export function roomToolsRooms(m: MainViewModel): RoomId[] {
   const ids: RoomId[] = [];
   for (const panel of activeWorkspace(m)?.roomsArea.panels ?? []) {
@@ -546,7 +547,7 @@ export function roomToolsRooms(m: MainViewModel): RoomId[] {
 
 /**
  * The room the Dev tools of a Matrix account show: the picked one while it is open, else the room
- * of the focused panel, else the first open room. `undefined`: no room open (leaf roomtools/none).
+ * of the focused panel, else the first open room. `undefined`: no room open (story `sidepanel-roomtoolsview--no-room-open`).
  * The DevBackend's is `selectedRoomIds` (its rooms are in `MockedRoomData`).
  */
 export function roomToolsRoomId(m: MainViewModel): RoomId | undefined {
@@ -617,7 +618,7 @@ export function widgetSlot(m: MainViewModel, id: WidgetInstanceId, narrow = fals
  * "Collapsing the LeftBar while the only tab open is a widget, and shown, renders the widget
  * fullscreen": no rounded containers. The header keeps the room name, without the tab and without
  * the + button of the tab bar (both appear while the header is hovered or focused). Selecting the
- * room name ends it. leaves app/fullscreen*
+ * room name ends it. stories `app-appshell--fullscreen*`
  */
 export function fullscreenWidget(vm: AppViewModel): WidgetInstanceId | undefined {
   const m = mainOf(vm);
@@ -684,7 +685,7 @@ export type AppIntent =
   | { type: "panel/resize"; panelId: PanelId; widthShare: number }
   | { type: "panel/openRoom"; panelId: PanelId; roomId: RoomId; widgetKey?: WidgetKey } // a pick in the RoomPicker of that panel: the panel becomes the room, on its RoomOverview or with the widget as a new tab. A widget that has a tab already: jumps to it, the panel stays the picker
   | { type: "room/open"; roomId: RoomId; widgetKey?: WidgetKey } // a pick in the Room list of the SidePanel: like panel/openRoom, in the panel that shows the room (focused; a room selects its room name), else the focused picker panel, else a new panel right of the focused one
-  | { type: "picker/reloadRooms" } // "Try again" of the RoomPicker's error state (`data.rooms.status === "error"`, leaf panel/error): asks the session for the rooms again
+  | { type: "picker/reloadRooms" } // "Try again" of the RoomPicker's error state (`data.rooms.status === "error"`, story `rooms-roompicker--load-error`): asks the session for the rooms again
   // tabs
   | { type: "tab/showOverview"; panelId: PanelId } // the room name tab and the + button of the tab bar: selects the room name, the body shows the RoomOverview; the tab left behind may enter the PiP panel
   | { type: "tab/openWidget"; panelId: PanelId; widgetKey: WidgetKey } // a widget of the RoomOverview: a new tab at the end; already running: jumps to its tab
@@ -751,16 +752,16 @@ export function loggableIntent(intent: AppIntent): Partial<AppIntent> {
 
 /** What the dev tool panels of one widget show. Recorded from the start of the widget, also while the dev tools are closed; a reload starts it empty. */
 export interface WidgetDevToolsData {
-  /** Capped (500); the log offers "clear". leaf devtools/messages */
+  /** Capped (500); the log offers "clear". story `widget-devtools--messages-expanded` */
   messages: WidgetMessage[];
-  /** leaves devtools/stats, devtools/stats-direction */
+  /** stories `widget-devtools-stats--total`, `widget-devtools-stats--to-widget-docked-right` */
   stats: WidgetStats;
   /**
-   * leaf devtools/driver. From `DriverSnapshot`; "denied" needs the driver to report it. `singleUse`:
+   * story `widget-devtools--driver`. From `DriverSnapshot`; "denied" needs the driver to report it. `singleUse`:
    * what the driver grants for one use (`DriverSnapshot.singleUse`); an approved one is marked "once".
    */
   capabilities: { approved: string[]; autoApproved: string[]; denied: string[]; singleUse: string[] };
-  /** The widget's own console, forwarded by the widget SDK / compat wrapper. leaf devtools/console */
+  /** The widget's own console, forwarded by the widget SDK / compat wrapper. story `widget-devtools--console` */
   console: { level: "log" | "info" | "warn" | "error"; timestamp: number; text: string }[];
 }
 
@@ -797,7 +798,7 @@ export const MAX_STATS_BUCKETS = 60;
 
 /**
  * The content of the DevBackend, read from its store. The state and timeline of a mocked room are
- * read like those of a real room (`useRoomState`, `useRoomTimeline`). leaves devbackend/*
+ * read like those of a real room (`useRoomState`, `useRoomTimeline`). stories `sidepanel-devbackendview*--*`
  */
 export interface MockedRoomData {
   rooms: { id: RoomId; name: string; avatarUrl?: string; copiedFrom?: { accountId: AccountId; roomId: RoomId } }[];

@@ -25,8 +25,8 @@ export interface RoomOverviewProps {
 const DEFAULT_LAST_EVENTS = 50;
 
 /**
- * What the room name tab shows, and where a room opens. leaves overview/plain, overview/devtools,
- * overview/add-widget*, roomview2/same. The header opens the RoomTimeline (or shows its tab). The
+ * What the room name tab shows, and where a room opens. Stories `rooms-roomoverview--*`,
+ * `app-appshell--same-room-twice`. The header opens the RoomTimeline (or shows its tab). The
  * widget list comes first: the room's widgets, then the local ones. A widget opens as a new tab;
  * one that is already open (a widget runs once per account) is grayed out and offers "jump to
  * tab", and "move widget here" when its tab is in another panel. With dev tools enabled "Add
@@ -168,7 +168,7 @@ export function RoomOverview({ main, panelId, roomId, devTools, devBackend, time
                 <p className="muted">Messages and widget events in this room are readable by the homeserver.</p>
               </>
             )}
-            {/* TODO-FINDING overview-encryption-unknown - `RoomDetails.encrypted` is optional and the mockup only draws "encrypted". For now: "Not encrypted" for `false`, "Unknown" when the session does not say. */}
+            {/* TODO-FINDING overview-encryption-unknown - `RoomDetails.encrypted` is optional and the design only has "encrypted". For now: "Not encrypted" for `false`, "Unknown" when the session does not say. */}
             {info && info.encrypted === undefined && <p className="muted">Unknown: the session does not report the encryption of this room.</p>}
           </section>
           <section className="card span">
@@ -192,7 +192,7 @@ export function RoomOverview({ main, panelId, roomId, devTools, devBackend, time
                 ))}
               </div>
             )}
-            {/* TODO-FINDING overview-show-all-members - the mockup has a "Show all 12 members" link, but `RoomDetails.members` is only "the first members" and there is no intent or data to get the rest. For now a plain text line says how many are shown. */}
+            {/* TODO-FINDING overview-show-all-members - the design has a "Show all 12 members" link (sketch `sketch-rooms-roomoverview--plain`), but `RoomDetails.members` is only "the first members" and there is no intent or data to get the rest. For now a plain text line says how many are shown. */}
             {info && memberCount !== undefined && memberCount > members.length && (
               <span className="muted ov-more">{members.length ? `The first ${members.length} of ${memberCount} members are shown.` : `${memberCount} members.`}</span>
             )}
@@ -238,7 +238,7 @@ export function RoomOverview({ main, panelId, roomId, devTools, devBackend, time
 type OpenProps = ButtonHTMLAttributes<HTMLButtonElement>;
 
 /**
- * One widget of the list. The accessible names are the ones of the tests (and of the mockup). A
+ * One widget of the list. The accessible names are the ones of the tests (and of the stories). A
  * local widget is marked "Local" and has its own buttons (edit with dev tools, remove), so its row
  * is not one button: its `row-open` part opens it.
  */
@@ -310,7 +310,7 @@ function WidgetRow({ main, panelId, roomId, widget: w, devTools, onEdit }: { mai
   }
   const tab = widgetTab(main, widgetId);
   const elsewhere = tab?.panelId !== panelId;
-  // TODO-FINDING tile-widget-without-tab - a running widget can have no tab at all (always on screen, its room panel was closed). The mockups only draw "open in this panel" and "open in the other panel". For now it is treated like "another panel": "jump to tab" opens its panel again, "move widget here" gives it a tab here.
+  // TODO-FINDING tile-widget-without-tab - a running widget can have no tab at all (always on screen, its room panel was closed). The design only has "open in this panel" and "open in the other panel". For now it is treated like "another panel": "jump to tab" opens its panel again, "move widget here" gives it a tab here.
   const where = !tab ? "running without a tab" : elsewhere ? "open in the other panel" : "open in this panel";
   return (
     <div className={`row sm opened ${w.local ? "local" : ""}`} data-widget-key={w.key} data-widget-id={widgetId}>

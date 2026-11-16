@@ -28,7 +28,7 @@ export interface WidgetViewProps {
 
 /**
  * One running widget: the WidgetDevToolBar (if open) around the widget itself, which is a
- * `WidgetSlot` plus the loading / failed / prompt states. leaves widgetview/*, devtools/*
+ * `WidgetSlot` plus the loading / failed / prompt states. stories `widget-widgetview--*`, `widget-devtools--*`
  *
  * The slot is always rendered (the iframe must never lose its place); a state that the user has
  * to see or answer is a layer that covers it.
@@ -57,7 +57,7 @@ function WidgetState({ widget, compact, tab, initialUnchecked, initialAlways }: 
 
   if (load.state === "failed") {
     if (compact) {
-      // TODO-FINDING compact-failed-state - the mockups have no failed state in a PiP box. The compact form is one line and "Retry"; the error text is only in the tooltip
+      // TODO-FINDING compact-failed-state - the design has no failed state in a PiP box. The compact form is one line and "Retry"; the error text is only in the tooltip
       return (
         <div className="wv-over compact" data-testid="widget-failed">
           <div className="wv-state" role="alert" title={load.error}>
@@ -128,8 +128,7 @@ function WidgetState({ widget, compact, tab, initialUnchecked, initialAlways }: 
  * The permission card: a summary, the capabilities in sections (all checked at first) and
  * "Approve", which is blocked for a moment after the card appeared or a request added to it.
  * Capabilities that a later request added are marked "New"; one the host grants for one use has
- * "Once" / "Always". leaves widgetview/prompt, widgetview/prompt-long, widgetview/prompt-merged,
- * widgetview/prompt-openid
+ * "Once" / "Always". Stories `widget-widgetview--capability-prompt*`.
  */
 function CapabilityPrompt({ widget, prompt, initialUnchecked = [], initialAlways = [] }: { widget: WidgetInstanceViewModel; prompt: CapabilityPromptViewModel; initialUnchecked?: string[]; initialAlways?: string[] }) {
   const dispatch = useDispatch();

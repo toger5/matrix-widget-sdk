@@ -1,6 +1,6 @@
 /**
- * The "Timeline" section of the room box (mockup functions `formChips`, `timelineSection`,
- * `accountTimelineSection`, `eventList`). leaves devbackend/timeline*, roomtools/timeline
+ * The "Timeline" section of the room box. Stories `sidepanel-devbackendview--timeline*`,
+ * `sidepanel-roomtoolsview--timeline`.
  */
 import { useId, useMemo, useState, type FormEvent } from "react";
 
@@ -88,7 +88,7 @@ export function TimelineSection({ mode, roomId, sendForm, events, atStart, loadi
         return mxc(draft.stickerUrl) ? { type: "m.sticker", sender, content: { body: draft.stickerBody, url: draft.stickerUrl.trim(), info: {} } } : "The URL must be an mxc:// URI.";
       case "rtcMember":
         if (!draft.rtcDeviceId.trim()) return "The device ID is missing.";
-        // TODO-FINDING devbackend-rtc-member-shape - which event the "RTC member" form sends is not specified. The mockup lists `org.matrix.msc4143.rtc.member` timeline events, the fixtures schedule the `org.matrix.msc3401.call.member` state event. For now: a timeline event of the first type with a minimal MSC4143 content (empty content = left).
+        // TODO-FINDING devbackend-rtc-member-shape - which event the "RTC member" form sends is not specified. The design lists `org.matrix.msc4143.rtc.member` timeline events, the fixtures schedule the `org.matrix.msc3401.call.member` state event. For now: a timeline event of the first type with a minimal MSC4143 content (empty content = left).
         return {
           type: "org.matrix.msc4143.rtc.member",
           sender,

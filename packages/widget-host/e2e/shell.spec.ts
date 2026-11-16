@@ -15,11 +15,11 @@ test.describe("LeftBar while the DevBackend is active", () => {
     await expect(host.leftBar.getByText("DevBackend", { exact: true })).toBeVisible();
     await expect(host.button("Account: DevBackend")).toBeVisible();
     await expect(host.leftBar.getByRole("button", { name: "Dev tools", exact: true })).toHaveAttribute("aria-pressed", "true");
-    await host.leaf("leftbar/devbackend");
+    await host.story("app-leftbar--dev-backend-active");
 
     await host.button("Dev tools of New test widget").click();
     await expect(host.page.getByTestId("widget-dev-tools")).toBeVisible();
-    await host.leaf("app/devbackend");
+    await host.story("app-appshell--dev-backend-active");
   });
 
   test("the Dev tools button only opens and closes the Dev tools: it never leaves the DevBackend", async ({ host }) => {
@@ -27,7 +27,7 @@ test.describe("LeftBar while the DevBackend is active", () => {
     await button.hover();
     await expect(host.leftBar.locator(".tooltip")).toBeVisible();
     await expect(host.leftBar.locator(".tooltip")).toHaveText("Dev tools");
-    await host.leaf("leftbar/devbackend-hover");
+    await host.story("app-leftbar--dev-backend-hover");
 
     await button.click();
     await expect(host.sidePanel).toHaveCount(0);
@@ -73,18 +73,18 @@ test.describe("collapsing the LeftBar", () => {
     await expect(host.leftBar).toHaveCount(0);
     await expect(host.toast).toHaveText(/Press Esc to show the expand button/);
     await expect(host.button("Show the left bar")).toHaveCount(0);
-    await host.leaf("leftbar/collapsed-toast");
+    await host.story("app-appshell--collapsed-toast");
 
     // Without the LeftBar its badge is gone: a floating one takes over.
     await host.toast.getByRole("button", { name: "Dismiss" }).click();
     await expect(host.toast).toHaveCount(0);
     await expect(host.app.locator(".dev-badge")).toBeVisible();
     await expect(host.app).not.toHaveClass(/fullscreen/);
-    await host.leaf("app/devbackend-collapsed");
+    await host.story("app-appshell--dev-backend-collapsed");
 
     await host.page.keyboard.press("Escape");
     await expect(host.button("Show the left bar")).toBeVisible();
-    await host.leaf("leftbar/collapsed-expand");
+    await host.story("app-appshell--collapsed-expand");
 
     await host.button("Show the left bar").click();
     await expect(host.leftBar).toBeVisible();
@@ -116,12 +116,12 @@ test.describe("collapsing the LeftBar", () => {
     // No padding around the only panel: it fills the window.
     expect(await host.panels.boundingBox()).toEqual({ x: 0, y: 0, width: 1280, height: 800 });
     expect(await host.token(NEW)).toBe(token);
-    await host.leaf("app/fullscreen");
+    await host.story("app-appshell--fullscreen");
 
     await host.page.locator(".rp-head").hover();
     await expect(host.tab(/New test widget/)).toBeVisible();
     await expect(host.button("Open a widget")).toBeVisible();
-    await host.leaf("app/fullscreen-hover");
+    await host.story("app-appshell--fullscreen-header-focused");
 
     // Selecting the room name (the + does that too) ends the fullscreen view.
     await host.button("Open a widget").click();
@@ -147,7 +147,7 @@ test.describe("modals", () => {
     await host.button("About this app").click();
     await expect(dialog).toBeVisible();
     await expect(dialog.getByRole("button", { name: "Got it" })).toBeFocused();
-    await host.leaf("app/info-modal");
+    await host.story("app-appshell--info-modal");
 
     // The shortcuts of the app are off while a modal is open.
     await host.page.keyboard.press("Alt+KeyN");
@@ -185,7 +185,7 @@ test.describe("modals", () => {
 
     await stop();
     await expect(confirm.getByRole("button", { name: "Cancel" })).toBeFocused();
-    await host.leaf("app/confirm");
+    await host.story("app-appshell--confirm");
 
     // It needs an answer: a press next to it does not close it. Escape and "Cancel" do, and the widget keeps running.
     await host.page.mouse.click(20, 780);
@@ -223,7 +223,7 @@ test("narrow window: the SidePanel overlays the RoomsArea, one room panel is sho
   const areaBox = (await host.roomsArea.boundingBox())!;
   expect(areaBox.x).toBeLessThan(shifted);
   expect(areaBox.x).toBeLessThan(sideBox.x + sideBox.width);
-  await host.leaf("app/narrow");
+  await host.story("app-appshell--narrow");
 
   // A press next to the SidePanel closes it.
   await host.page.getByTestId("side-scrim").click({ position: { x: 700, y: 400 } });
@@ -247,7 +247,7 @@ test("a fresh browser without a stored login shows the login page; skipping it l
   await expect(fresh.page.getByTestId("login")).toBeVisible();
   await expect(fresh.page.getByRole("textbox", { name: "Homeserver" })).toHaveValue("matrix.org");
   await expect(fresh.button("Continue")).toBeEnabled();
-  await fresh.leaf("app/login");
+  await fresh.story("app-loginview--login");
 
   await fresh.button(/Skip login and use the DevBackend/).click();
   await expect(fresh.app).toHaveClass(/fence/);
@@ -256,6 +256,6 @@ test("a fresh browser without a stored login shows the login page; skipping it l
   // Skipping the login enables the dev tools and the DevBackend, and there is no account to leave the DevBackend for.
   expect((await fresh.state()).settings).toMatchObject({ devTools: true, devBackend: true });
   await expect(fresh.button("Leave DevBackend")).toHaveCount(0);
-  await fresh.leaf("app/devbackend-empty");
+  await fresh.story("app-appshell--dev-backend-empty");
   await context.close();
 });

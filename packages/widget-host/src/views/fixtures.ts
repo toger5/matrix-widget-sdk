@@ -1,6 +1,6 @@
 /**
- * Sample view models for the stories (and for unit tests of the reducer). The names follow the
- * mockups (`design/src/lib.mjs`), so a story can be compared with its leaf in `design/index.html`.
+ * Sample view models and data for the stories (and for unit tests of the reducer): the accounts,
+ * rooms, widgets and members every story shows, so the states of different views fit together.
  */
 import {
   STATS_BUCKET_MS,
@@ -43,7 +43,7 @@ export const WIDGET_EVENTS = {
 /** `widgetKey()` of a fixture widget. */
 export const wk = (key: keyof typeof WIDGET_EVENTS) => `m.widget/${key}`;
 
-/** A local widget ("Add widget", only in this host): a widget in development, as `WIDGETS.proto` of the mockups. Its key is `LOCAL_WIDGET_KEY`. */
+/** A local widget ("Add widget", only in this host): a widget in development. Its key is `LOCAL_WIDGET_KEY`. */
 export const LOCAL_WIDGET: StateEvent = { type: "m.widget", state_key: "proto", content: { name: "Poll prototype", url: "http://localhost:5180/", uses_widget_api: true } };
 export const LOCAL_WIDGET_KEY = "local:m.widget/proto";
 
@@ -77,7 +77,7 @@ export const ACCOUNTS = {
   dev: { id: "devBackend", kind: "devBackend", status: "live", userId: "@alice:dev.local", displayName: "DevBackend", homeserver: "in-memory", deviceId: "DEVBACKEND" },
 } satisfies Record<string, AccountViewModel>;
 
-/** The 7 emoji of an emoji verification, as in the mockups (`SAS_EMOJI`). */
+/** The 7 emoji of an emoji verification. */
 export const SAS_EMOJI: VerificationEmoji[] = [
   { symbol: "🐶", name: "Dog" },
   { symbol: "🔑", name: "Key" },
@@ -88,7 +88,7 @@ export const SAS_EMOJI: VerificationEmoji[] = [
   { symbol: "☂️", name: "Umbrella" },
 ];
 
-/** The recovery key of the mockups. */
+/** A recovery key. */
 export const RECOVERY_KEY = "EsTc LW2K PGiF wKEA 3As5 g5c4 BXwk qeeJ ZJV8 Q9fu gUMN UE4d";
 
 /** The AccountView props of Ada's account while this device is verified (`done`) or not, with `verification` running. */
@@ -151,12 +151,12 @@ export const byId = (widgets: WidgetInstanceViewModel[]): Record<string, WidgetI
 export const panelsVm = (panels: RoomPanelViewModel[], widgets: WidgetInstanceViewModel[], o: Partial<MainViewModel> = {}, layout: Partial<WorkspaceLayout> = {}): MainViewModel =>
   mainVm({ workspaces: { ada: workspace(panels, layout) }, widgets: byId(widgets), ...o });
 
-/** Recent widgets (`[room, widget]`) and rooms, newest first, as in the room picker of the mockups (`pickerBody`). */
+/** Recent widgets (`[room, widget]`) and rooms, newest first, as in the room picker of the stories. */
 export const recentWidgets = (...widgets: [RoomKey, WidgetName][]): RecentWidget[] =>
   widgets.map(([room, widget], i) => ({ roomId: ROOMS[room].id, widgetKey: wk(widget), lastOpened: 1_763_300_000_000 - i * 3_600_000 }));
 export const recentRooms = (...rooms: RoomKey[]): RecentRoom[] => rooms.map((room, i) => ({ roomId: ROOMS[room].id, lastOpened: 1_763_300_000_000 - i * 3_600_000 }));
 
-/** The default screen (leaf app/default): one account, "Design crit" with the call widget open. */
+/** The default screen (story `app-appshell--default`): one account, "Design crit" with the call widget open. */
 export function mainVm(o: Partial<MainViewModel> = {}): MainViewModel {
   const widgets = [widgetVm("design", "call"), widgetVm("design", "board")];
   return {
@@ -189,7 +189,7 @@ export const roomToolsVm = (o: Partial<RoomToolsViewModel> = {}): RoomToolsViewM
   ...o,
 });
 
-/** The DevBackend active (leaf app/devbackend): mocked rooms, the DevBackendView open. */
+/** The DevBackend active (story `app-appshell--dev-backend-active`): mocked rooms, the DevBackendView open. */
 export function devMainVm(o: Partial<MainViewModel> = {}): MainViewModel {
   const widgets = [widgetVm("lab", "call"), widgetVm("lab", "notes")];
   return mainVm({
@@ -205,7 +205,7 @@ export function devMainVm(o: Partial<MainViewModel> = {}): MainViewModel {
   });
 }
 
-/** The confirmation of activating the DevBackend (leaf app/confirm). */
+/** The confirmation of activating the DevBackend (story `app-appshell--confirm`). */
 export const SWITCH_TO_DEV_BACKEND: ModalViewModel = {
   kind: "confirm",
   title: "Switch to the DevBackend?",
@@ -215,7 +215,7 @@ export const SWITCH_TO_DEV_BACKEND: ModalViewModel = {
   intent: { type: "account/switch", accountId: ACCOUNTS.dev.id, confirmed: true },
 };
 
-/** The confirmation of a change of a real room's configuration from the Dev tools (leaf roomtools/confirm). */
+/** The confirmation of a change of a real room's configuration from the Dev tools (story `app-appshell--room-tools-confirm`). */
 export const CHANGE_POWER_LEVELS: ModalViewModel = {
   kind: "confirm",
   title: "Change the power levels of Design crit?",
@@ -230,8 +230,7 @@ export const appVm = (main: MainViewModel = mainVm(), devTools = false, devBacke
 
 const X = "org.matrix.mscXXXX.";
 /**
- * The characters of the stats graph, as in the mockup (`statsPanel` in design/src/components.mjs): 60 buckets of
- * which the newest is the current one when the stories load, so the graph (which ends now) shows them. Empty
+ * The characters of the stats graph: 60 buckets of which the newest is the current one when the stories load, so the graph (which ends now) shows them. Empty
  * buckets are left out, as the runtime does.
  */
 const NOW_BUCKET = Math.floor(Date.now() / STATS_BUCKET_MS) * STATS_BUCKET_MS;
@@ -303,8 +302,8 @@ export function rawEvent(time: string, daysAgo: number, sender: string, type: st
 }
 
 /**
- * The RoomTimeline of "Design crit" (leaf timeline/events): an event of every kind the timeline
- * describes, yesterday and today. The fourth event of today is the one the leaf shows open.
+ * The RoomTimeline of "Design crit" (story `rooms-roomtimeline--events`): an event of every kind the timeline
+ * describes, yesterday and today. The fourth event of today is the one the story shows open.
  */
 export const ROOM_TIMELINE: RoomTimeline = {
   atStart: false,
@@ -361,7 +360,7 @@ export const MOCKED_ROOM_TIMELINE: RoomTimeline = {
   ],
 };
 
-/** The state of "Design crit" as the Dev tools of Ada's account read it (leaf roomtools/state). */
+/** The state of "Design crit" as the Dev tools of Ada's account read it (story `sidepanel-roomtoolsview--state`). */
 export const ROOM_STATE: RawEvent[] = [
   state("m.room.create", "", { room_version: "11" }, "@ada:example.org"),
   state("m.room.name", "", { name: "Design crit" }, "@ada:example.org"),
@@ -375,7 +374,7 @@ export const ROOM_STATE: RawEvent[] = [
   state("m.room.power_levels", "", { users: { "@ada:example.org": 100 } }, "@ada:example.org"),
 ];
 
-/** The newest events of "Design crit" in the Dev tools of Ada's account (leaf roomtools/timeline); older ones can be loaded. */
+/** The newest events of "Design crit" in the Dev tools of Ada's account (story `sidepanel-roomtoolsview--timeline`); older ones can be loaded. */
 export const ROOM_TOOLS_TIMELINE: RoomTimeline = {
   atStart: false,
   loadingOlder: false,

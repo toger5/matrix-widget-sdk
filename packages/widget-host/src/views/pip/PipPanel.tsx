@@ -34,7 +34,7 @@ interface Geometry {
   boxSize: BoxSize;
 }
 
-// The geometry of the mockup CSS (`.pip.hover`, `.pip-grip`, `.pip-label`, `.pip-list`, `.pip-more`).
+// The geometry of the design rules (`src/styles/pip.css`: `.pip.hover`, `.pip-grip`, `.pip-label`, `.pip-list`, `.pip-more`).
 /** Gap between two boxes. */
 const GAP = 6;
 /** What the surround adds left, right and below the boxes: 10px padding + 1px border. */
@@ -54,10 +54,10 @@ const samePosition = (a: Position, b: Position) => a.x === b.x && a.y === b.y;
 const sameSize = (a: BoxSize, b: BoxSize) => a.width === b.width && a.height === b.height;
 
 /**
- * The PictureInPicturePanel. leaves pip/*. Renders nothing without items.
+ * The PictureInPicturePanel. stories `app-pippanel--*`, `app-appshell--pip-enlarged-dev-tools`. Renders nothing without items.
  *
  * `pip.position` is the distance of the boxes from the bottom-right corner of the `.app` element
- * (the mockup positions the panel with `right` / `bottom`). The surround grows outward around the
+ * (the design rules position the panel with `right` / `bottom`). The surround grows outward around the
  * boxes: the panel is anchored at the bottom right, so the grip row and (stacked horizontally) the
  * label rows grow upwards, and the padding of the surround is compensated in `right` / `bottom`.
  */
@@ -171,7 +171,7 @@ export function PipPanel({ pip, items, more, renderWidget, forceHover = false, d
    * growing also moves it, until it reaches the window edge.
    */
   const resized = (from: Geometry, to: BoxSize): Geometry => {
-    // TODO-FINDING pip-resize-moves - `pip.position` is measured from the bottom-right corner, and the mockup draws the resize corner there too. To make the corner follow the pointer a resize sends `pip/resize` AND `pip/move`. Alternatives: a resize corner at the top left, or a top-left `position`.
+    // TODO-FINDING pip-resize-moves - `pip.position` is measured from the bottom-right corner, and the design draws the resize corner there too. To make the corner follow the pointer a resize sends `pip/resize` AND `pip/move`. Alternatives: a resize corner at the top left, or a top-left `position`.
     const box = clampBox(to);
     return { boxSize: box, position: clampPosition({ x: from.position.x - (box.width - from.boxSize.width) * across, y: from.position.y - (box.height - from.boxSize.height) * down }, box) };
   };
@@ -294,7 +294,7 @@ export function PipPanel({ pip, items, more, renderWidget, forceHover = false, d
   );
 
   return (
-    // The mockup uses an <aside>; `role="group"` is not allowed on it, so this is a <div>.
+    // The design used an <aside>; `role="group"` is not allowed on it, so this is a <div>.
     <div
       ref={rootRef}
       className={`pip ${horizontal ? "h" : "v"} ${surround ? "hover" : ""} ${dragging ? `dragging ${dragging}` : ""}`}
@@ -327,10 +327,10 @@ export function PipPanel({ pip, items, more, renderWidget, forceHover = false, d
         </div>
       )}
       {menuOpen && (
-        // TODO-FINDING pip-menu-placement - the mockup always opens the menu above the container, right-aligned. Near the top of the window (likely when stacked vertically) it is cut off: it should flip below or to the side.
+        // TODO-FINDING pip-menu-placement - the design always opens the menu above the container, right-aligned. Near the top of the window (likely when stacked vertically) it is cut off: it should flip below or to the side.
         <div ref={menuRef} className="dropdown pip-menu" role="menu" aria-label="More always-on-screen widgets" data-testid="pip-menu" onKeyDown={onMenuKeyDown}>
           {more.map((item) => (
-            // TODO-FINDING pip-menu-roles - the mockup makes the row the `menuitem` and puts two buttons into it, which is not valid ARIA. Here the row is presentational and the two buttons are the menu items.
+            // TODO-FINDING pip-menu-roles - the design made the row the `menuitem` and puts two buttons into it, which is not valid ARIA. Here the row is presentational and the two buttons are the menu items.
             // TODO-FINDING pip-overflow-no-swap - (designFeedback "Still open" 11) a hidden widget can only be jumped to or stopped; there is no way to swap it into one of the boxes.
             <div key={item.widgetId} className="dd-row" role="none" data-widget-id={item.widgetId}>
               <Avatar name={item.widgetName} id={item.widgetId} size={22} square />
@@ -357,7 +357,7 @@ export function PipPanel({ pip, items, more, renderWidget, forceHover = false, d
       <div className="pip-list">
         {items.map((item) => (
           // The cell and the label are always rendered (CSS hides the label while idle), so a box is never remounted when the surround appears.
-          // TODO-FINDING pip-vertical-label-space - stacked vertically the mockup puts the label rows between the boxes, so showing them would push the boxes apart. The space is reserved while idle instead (32px between the boxes, not the 6px of leaf pip/vertical). Alternative: labels left of the boxes ("next to each box", appDesign.md), which keeps the idle gaps but differs from leaf pip/hover-vertical.
+          // TODO-FINDING pip-vertical-label-space - stacked vertically the design puts the label rows between the boxes, so showing them would push the boxes apart. The space is reserved while idle instead (32px between the boxes, not the 6px of story `app-pippanel--vertical-idle`). Alternative: labels left of the boxes ("next to each box", appDesign.md), which keeps the idle gaps but differs from story `app-pippanel--vertical`.
           <div key={item.widgetId} className="pip-cell" style={{ width: boxSize.width }}>
             <div className="pip-label">
               <span className="pip-names">
@@ -408,7 +408,7 @@ export function PipPanel({ pip, items, more, renderWidget, forceHover = false, d
   );
 }
 
-/** The mockup's `ibtn(…, "xs")`, with an accessible name that may differ from the (longer) tooltip. */
+/** An extra small `IconButton`, with an accessible name that may differ from the (longer) tooltip. */
 function LabelButton({ icon, label, title = label, className = "", role, testId, onClick }: { icon: IconName; label: string; title?: string; className?: string; role?: "menuitem"; testId: string; onClick: () => void }) {
   return (
     <button type="button" className={`ibtn xs ${className}`} title={title} aria-label={label} role={role} data-testid={testId} onClick={onClick}>

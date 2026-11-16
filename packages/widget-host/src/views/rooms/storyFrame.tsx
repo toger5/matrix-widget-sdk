@@ -1,4 +1,4 @@
-/** Wrappers of the rooms stories: what the app shell (or a mockup's stage) puts around a room panel. */
+/** Wrappers of the rooms stories: what the app shell (or a story's stage) puts around a room panel. */
 import type { ReactNode } from "react";
 
 import type { MainViewModel, RoomPanelViewModel, SettingsViewModel, WidgetDevToolsLayout, WidgetInstanceViewModel } from "../../appViewModel";

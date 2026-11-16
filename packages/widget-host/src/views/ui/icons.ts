@@ -1,4 +1,4 @@
-// Generated from design/src/lib.mjs: stroke icons on a 24px grid.
+// The icons of the app (`Icon` of atoms.tsx): stroke paths on a 24px grid. This is their only source: a new icon is added here.
 export const ICONS = {
   plus: "<path d=\"M12 5v14M5 12h14\"/>",
   minus: "<path d=\"M5 12h14\"/>",

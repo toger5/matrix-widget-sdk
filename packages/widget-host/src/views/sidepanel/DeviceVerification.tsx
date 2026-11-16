@@ -23,7 +23,7 @@ export const verificationRunning = (verification: VerificationViewModel | undefi
 /**
  * The "Verify this device" box of the AccountView, under the account card: the two ways to verify
  * (another device, the recovery key), the running step, a failure, the success.
- * leaves sidepanel/verify-start, verify-failed, verify-done; the running steps are `EmojiVerification`
+ * stories `sidepanel-deviceverification--*`; the running steps are `EmojiVerification`
  * and `RecoveryKeyForm`.
  */
 export function DeviceVerification({ accountId, userId, verification, initialRecoveryKey }: DeviceVerificationProps) {

@@ -15,16 +15,16 @@ test("always on screen: the tab gets a pin, moving away shows the widget in the 
   await host.frame(NEW).getByRole("button", { name: "set_always_on_screen true" }).click();
   await expect(host.tab(/New test widget/).locator(".ico")).not.toHaveCount(0);
   await expect(host.pip).toHaveCount(0);
-  await host.leaf("tabs/pinned");
+  await host.story("rooms-tabbar--pinned");
 
   await host.tab(/Legacy test widget/).click();
   await expect(host.pip.getByTestId("pip-box")).toHaveCount(1);
   await expect(host.iframe(NEW)).toBeVisible();
   expect(await host.token(NEW)).toBe(token);
-  await host.leaf("pip/idle-1");
+  await host.story("app-pippanel--idle");
 
   await host.pip.hover();
-  await host.leaf("pip/hover");
+  await host.story("app-pippanel--hover");
 
   await host.tab(/New test widget/).click();
   await expect(host.pip).toHaveCount(0);
@@ -36,7 +36,7 @@ test("move widget here: the widget changes the room panel without a reload", asy
 
   await host.page.keyboard.press("Alt+Shift+KeyN");
   await expect(host.panels).toHaveCount(2);
-  await host.leaf("roomview2/same");
+  await host.story("app-appshell--same-room-twice");
 
   await host.panels.nth(1).getByRole("button", { name: "Move New test widget here" }).click();
   await expect(host.panels.nth(1).getByRole("tab", { name: /New test widget/ })).toBeVisible();

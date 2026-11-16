@@ -18,11 +18,11 @@ function activeElementOf(node: Node): Element | null {
   return root instanceof Document || root instanceof ShadowRoot ? root.activeElement : document.activeElement;
 }
 
-// TODO-FINDING info-modal-links - the mockup's "Documentation" and "Source code" links have no target and the view model has none. These point at the repository of this checkout.
+// TODO-FINDING info-modal-links - the designed "Documentation" and "Source code" links have no target and the view model has none. These point at the repository of this checkout.
 const SOURCE_URL = "https://github.com/toger5/matrix-widget-sdk";
 const DOCS_URL = `${SOURCE_URL}#readme`;
 
-/** leaves app/info-modal, app/confirm, roomtools/confirm (`danger`: the alert icon and a danger button): scrim + dialog, focus trap, Escape closes (modal/close). A confirm dispatches its `intent`, then closes. */
+/** stories `app-appshell--info-modal`, `app-appshell--confirm`, `app-appshell--room-tools-confirm` (`danger`: the alert icon and a danger button): scrim + dialog, focus trap, Escape closes (modal/close). A confirm dispatches its `intent`, then closes. */
 export function Modal({ modal, version = "0.1.0" }: ModalProps) {
   const dispatch = useDispatch();
   const ref = useRef<HTMLDivElement>(null);
@@ -74,7 +74,7 @@ export function Modal({ modal, version = "0.1.0" }: ModalProps) {
               <h2 id={titleId}>{modal.title}</h2>
             </div>
           </header>
-          {/* TODO-FINDING confirm-modal-body-plain - the mockup emphasises parts of the text (<b>2 room panels</b>); `body` is a plain string, so nothing is bold. */}
+          {/* TODO-FINDING confirm-modal-body-plain - the design emphasises parts of the text (<b>2 room panels</b>); `body` is a plain string, so nothing is bold. */}
           <p>{modal.body}</p>
           <footer>
             <span className="sp" />
@@ -105,7 +105,7 @@ export function Modal({ modal, version = "0.1.0" }: ModalProps) {
           <Logo size={32} />
           <div>
             <h2 id={titleId}>Widget Host</h2>
-            {/* TODO-FINDING info-modal-version - neither the version nor the SDK ("matrix-js-sdk" or the rust-sdk player) is in the view model; the text is the mockup's, with an optional `version` prop. */}
+            {/* TODO-FINDING info-modal-version - neither the version nor the SDK ("matrix-js-sdk" or the rust-sdk player) is in the view model; the text is the design's, with an optional `version` prop. */}
             <small>version {version} · matrix-js-sdk</small>
           </div>
           <span className="sp" />

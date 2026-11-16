@@ -11,7 +11,7 @@ import { StatsPanel, type StatsSeries } from "./StatsPanel";
 
 /** The smallest panel area, and what "reset" (double click, Enter) goes back to. */
 const MIN_SIZE = 80;
-// TODO-FINDING devtools-default-size - "reset on double click" needs the default size of the panel area; it is not in the view model (fixtures use 240 / 360, the mockups 250 / 340). The view resets to these constants
+// TODO-FINDING devtools-default-size - "reset on double click" needs the default size of the panel area; it is not in the view model (fixtures use 240 / 360, the design 250 / 340). The view resets to these constants
 const DEFAULT_SIZE = { top: 240, side: 360 };
 /** What the widget keeps at least, next to the bar (30px) and the separator (8px). */
 const MIN_WIDGET = 48;
@@ -135,7 +135,7 @@ export interface DevToolsProps {
 /**
  * The WidgetDevToolBar of one widget: the bar, the open panels next to each other (stacked when
  * docked to a side) and the separator towards the widget. Rendered by `WidgetView` at the dock
- * position; the bar is at the outer edge. leaves devtools/*
+ * position; the bar is at the outer edge. stories `widget-devtools--*`
  */
 export function DevTools({ widget, layout, initialExpandedMessage, initialStatsSeries }: DevToolsProps) {
   const dispatch = useDispatch();

@@ -1,8 +1,8 @@
 /**
- * "Add widget" of the RoomOverview (mockup function `addWidgetForm`): a form at the top of the
+ * "Add widget" of the RoomOverview: a form at the top of the
  * Widgets card. Where the definition comes from (the chips: the widget form, Element Call, a
  * pasted state event) is separate from where it goes ("Add to": only in this host, or the room).
- * The draft is view state. leaves overview/add-widget, overview/add-widget-json, overview/add-widget-refused
+ * The draft is view state. stories `rooms-roomoverview--add-widget*`, `rooms-addwidgetform--*`
  */
 import { useEffect, useState, type FormEvent, type KeyboardEvent } from "react";
 

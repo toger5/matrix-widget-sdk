@@ -4,7 +4,7 @@ import type { MainViewModel, RoomPanelViewModel } from "../../appViewModel";
 import type { RoomTimeline as RoomTimelineData } from "../../session";
 import type { RoomTimelineData as TimelineHook } from "../env";
 import { ACCOUNTS, devMainVm, mainVm, rawEvent, roomPanel, timelineTab, widgetTab, widgetVm, workspace, WIDGET_EVENTS } from "../fixtures";
-import { StoryEnv } from "../storyEnv";
+import { findElement, StoryEnv } from "../storyEnv";
 import { RoomTimeline } from "./RoomTimeline";
 import { SoloPanel } from "./storyFrame";
 
@@ -33,16 +33,10 @@ const design = roomPanel("design", [widgetTab("design", "call"), timelineTab("de
  * first shows loaded events that are not rendered (the newest 200 are), then asks the session for
  * 50 more; while it loads it reads "Loading older events…" and is disabled.
  */
-// leaf timeline/events
 export const Events: Story = {
   render: () => <SoloPanel main={vm(design)} panel={design} />,
   parameters: { size: [900, 800] },
-  play: async ({ canvasElement }) => {
-    await new Promise((resolve) => setTimeout(resolve, 100));
-    Array.from(canvasElement.querySelectorAll<HTMLButtonElement>(".tl-h"))
-      .find((b) => b.textContent?.includes("Starting the call now"))
-      ?.click();
-  },
+  play: async ({ canvasElement }) => (await findElement(canvasElement, ".tl-h", "Starting the call now")).click(),
 };
 
 const LAB: RoomTimelineData = {
@@ -67,7 +61,6 @@ const lab = roomPanel("lab", [timelineTab("lab")]);
  * always reached there. The last events were sent by a widget (the RTC member event and a custom
  * type).
  */
-// leaf timeline/start
 export const Start: Story = {
   parameters: { size: [900, 640] },
   render: () => (
@@ -79,7 +72,6 @@ export const Start: Story = {
 
 const alone = roomPanel("design", [timelineTab("design")]);
 /** Loading. */
-// leaf timeline/loading
 export const Loading: Story = {
   render: () => (
     <StoryEnv env={{ useRoomTimeline: hook({ status: "loading" }) }}>
@@ -89,7 +81,6 @@ export const Loading: Story = {
 };
 
 /** Failed to load: "Try again" loads the timeline again. */
-// leaf timeline/error
 export const LoadError: Story = {
   render: () => (
     <StoryEnv env={{ useRoomTimeline: hook({ status: "error", error: "The homeserver did not answer (example.org, timeout after 30 s)." }) }}>

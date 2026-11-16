@@ -1,4 +1,4 @@
-/** The content of the Media Backend Tool (mockup function `mediaBox`). leaf devbackend/media-open */
+/** The content of the Media Backend Tool. story `sidepanel-devbackendview-tools--media` */
 import { useRef, useState } from "react";
 
 import type { MockedRoomData } from "../../appViewModel";
@@ -61,7 +61,7 @@ export function MediaBox({ media, heightShare }: { media: MockedRoomData["media"
               <span className="media-t">
                 <b>{nameOf(m)}</b>
                 <small>
-                  {/* TODO-FINDING devbackend-media-uploader-name - `uploadedBy` is a WidgetInstanceId; the mockup shows the widget's name ("by Whiteboard"). The view has no widget names, so it shows the widget key. */}
+                  {/* TODO-FINDING devbackend-media-uploader-name - `uploadedBy` is a WidgetInstanceId; the design shows the widget's name ("by Whiteboard"). The view has no widget names, so it shows the widget key. */}
                   {m.mimetype ?? "unknown type"} · {sizeOf(m.bytes)} · <i>{m.uploadedBy ? `by ${m.uploadedBy.split("|").pop()}` : "uploaded here"}</i>
                 </small>
                 <small className="mono">{m.mxcUri}</small>

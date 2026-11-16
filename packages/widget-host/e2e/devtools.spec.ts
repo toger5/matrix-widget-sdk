@@ -1,4 +1,4 @@
-/** The WidgetDevToolBar of a widget tab: the bar, its four panels, docking, resizing and reloading. leaves devtools/* */
+/** The WidgetDevToolBar of a widget tab: the bar, its four panels, docking, resizing and reloading. stories `widget-devtools--*` */
 import type { Locator } from "@playwright/test";
 
 import type { WidgetDevToolsLayout } from "../src/appViewModel";
@@ -31,30 +31,30 @@ test("the ⋯ button of the tab opens the bar with the messages panel; the bar d
   await expect(host.page.getByTestId("devtools-messages")).toBeVisible();
   await expect(toggle(host, "Messages")).toHaveAttribute("aria-pressed", "true");
   expect(await openPanels(host)).toEqual(["messages"]);
-  await host.leaf("devtools/one-panel");
+  await host.story("widget-devtools--one-panel");
 
   // Without a panel only the bar is left, above the widget.
   await toggle(host, "Messages").click();
   await expect(devTools(host).locator("section")).toHaveCount(0);
   await expect(dock(host, "top")).toBeChecked();
   expect((await box(bar(host))).y + (await box(bar(host))).height).toBeLessThanOrEqual((await box(host.iframe(NEW))).y);
-  await host.leaf("devtools/bar-top");
+  await host.story("widget-devtools--bar-top");
 
   await dock(host, "bottom").click();
   await expect(dock(host, "bottom")).toBeChecked();
   await expect(bar(host)).toHaveAttribute("aria-orientation", "horizontal");
   expect((await box(bar(host))).y).toBeGreaterThanOrEqual((await box(host.iframe(NEW))).y + (await box(host.iframe(NEW))).height);
-  await host.leaf("devtools/bar-bottom");
+  await host.story("widget-devtools--bar-bottom");
 
   await dock(host, "left").click();
   await expect(bar(host)).toHaveAttribute("aria-orientation", "vertical");
   expect((await box(bar(host))).x + (await box(bar(host))).width).toBeLessThanOrEqual((await box(host.iframe(NEW))).x);
-  await host.leaf("devtools/bar-left");
+  await host.story("widget-devtools--bar-left");
 
   await dock(host, "right").click();
   await expect(dock(host, "right")).toBeChecked();
   expect((await box(bar(host))).x).toBeGreaterThanOrEqual((await box(host.iframe(NEW))).x + (await box(host.iframe(NEW))).width);
-  await host.leaf("devtools/bar-right");
+  await host.story("widget-devtools--bar-right");
 
   await bar(host).getByRole("button", { name: "Close the dev tools" }).click();
   await expect(bar(host)).toHaveCount(0);
@@ -72,19 +72,19 @@ test("panels open next to each other; the fourth closes the oldest; docked to a 
   const [messages, stats] = [devTools(host).getByRole("region", { name: "Messages" }), devTools(host).getByRole("region", { name: "Stats" })];
   expect((await box(stats)).x).toBeGreaterThanOrEqual((await box(messages)).x + (await box(messages)).width);
   expect((await box(stats)).y).toBe((await box(messages)).y);
-  await host.leaf("devtools/two-panels");
+  await host.story("widget-devtools--two-panels");
 
   await toggle(host, "Driver").click();
   await expect(host.page.getByTestId("devtools-driver")).toBeVisible();
   expect(await openPanels(host)).toEqual(["messages", "stats", "driver"]);
-  await host.leaf("devtools/three-panels");
+  await host.story("widget-devtools--three-panels");
 
   await toggle(host, "Console").click();
   await expect(host.page.getByTestId("devtools-console")).toBeVisible();
   await expect(host.page.getByTestId("devtools-messages")).toHaveCount(0);
   await expect(toggle(host, "Messages")).toHaveAttribute("aria-pressed", "false");
   expect(await openPanels(host)).toEqual(["stats", "driver", "console"]);
-  await host.leaf("devtools/fourth-panel");
+  await host.story("widget-devtools--fourth-panel");
 
   // A panel closes with its own × too.
   await devTools(host).getByRole("button", { name: "Close Stats" }).click();
@@ -95,7 +95,7 @@ test("panels open next to each other; the fourth closes the oldest; docked to a 
   const [driver, list] = [devTools(host).getByRole("region", { name: "Driver" }), devTools(host).getByRole("region", { name: "Messages" })];
   await expect.poll(async () => (await box(list)).y).toBeGreaterThanOrEqual((await box(driver)).y + (await box(driver)).height);
   expect((await box(list)).x).toBe((await box(driver)).x);
-  await host.leaf("devtools/side-panels");
+  await host.story("widget-devtools--side-panels");
 });
 
 test("messages panel: lists the actions, a row expands to its JSON, the filter filters, Clear empties", async ({ host }) => {
@@ -125,7 +125,7 @@ test("messages panel: lists the actions, a row expands to its JSON, the filter f
   await rows.filter({ hasText: "send_event" }).first().getByRole("button", { expanded: false }).click();
   await expect(rows.filter({ hasText: "send_event" }).first().locator("pre").first()).toContainText("hello from the new widget");
   await expect(rows.filter({ hasText: "send_event" }).first().locator("pre").last()).toContainText("event_id");
-  await host.leaf("devtools/messages");
+  await host.story("widget-devtools--messages-expanded");
 
   // Only one direction.
   await panel.getByRole("button", { name: /from widget$/ }).click();
@@ -168,7 +168,7 @@ test("stats panel: the tiles count actions and events; the totals of characters 
   await expect(tile("actions sent")).toHaveText(String(before.actionsFromWidget + before.actionsToWidget + 2));
   const figure = stats.getByRole("figure");
   await expect(figure).toHaveAccessibleName(/^Characters sent over the widget API per 5 seconds: both directions, the last /);
-  await host.leaf("devtools/stats");
+  await host.story("widget-devtools-stats--total");
 
   // The selector shows the characters sent since the widget started, per direction and both together.
   const graph = stats.getByRole("radiogroup", { name: "Graph" });
@@ -217,7 +217,7 @@ test("stats panel: the tiles count actions and events; the totals of characters 
   await expect(radio("to widget")).toHaveAttribute("aria-checked", "true");
   await expect(async () => expect(await bars.count()).toBeLessThan(wide)).toPass();
   await expect(table.locator("tbody tr")).toHaveCount(await bars.count());
-  await host.leaf("devtools/stats-direction");
+  await host.story("widget-devtools-stats--to-widget-docked-right");
 });
 
 test("driver panel: mock host actions reach the widget", async ({ host }) => {
@@ -251,7 +251,7 @@ test("driver panel: revoke one capability and all (confirm modal), add a capabil
   const all = (await approved(host)).length;
   await expect(held).toHaveCount(all);
   await expect(driver).toContainText(`Approved capabilities ${all}`);
-  await host.leaf("devtools/driver");
+  await host.story("widget-devtools--driver");
 
   // Revoke one: cancelling keeps it.
   const row = driver.locator(`[data-capability="${SEND_MESSAGE}"]`);
@@ -303,7 +303,7 @@ test("console panel: lists what the host logs about the widget; filter and Clear
 
   await host.dispatch({ type: "devTools/revokeCapabilities", widgetId: NEW, capabilities: [SEND_MESSAGE], confirmed: true });
   await expect(console_.locator(".cl", { hasText: "revoked 1 capability" })).toHaveCount(1);
-  await host.leaf("devtools/console");
+  await host.story("widget-devtools--console");
 
   await panel.getByRole("searchbox", { name: "Filter console lines" }).fill("no such line");
   await expect(console_).toContainText("No line matches the filter.");
@@ -369,7 +369,7 @@ test("the dev tools are resized with the separator: keyboard and drag", async ({
   await host.page.mouse.up();
   await expect(separator).toHaveAttribute("aria-valuenow", "296");
   await expect.poll(async () => (await box(panels)).height).toBe(296);
-  await host.leaf("devtools/bottom-panel");
+  await host.story("widget-devtools--docked-bottom");
   expect(await host.token(NEW)).toBe(token);
 });
 

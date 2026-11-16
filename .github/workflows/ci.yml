@@ -76,6 +76,9 @@ jobs:
           path: ${{ runner.temp }}/matrix-sdk-uniffi-js-*.tgz
       - run: npm run build --workspaces --if-present
       - run: npm test
+      # Every story has a row in e2e/stories.md, every story id named in docs and tests exists,
+      # sketch stories follow their rules (packages/widget-host/e2e/tools/stories.mjs; no server).
+      - run: npm run stories -w @matrix-widget-tools/widget-host
       # The dev site: both host builds and the test widgets under one path (scripts/build-dev-site.mjs).
       # Built on every run, so a pull request also checks that the sub-path build works.
       - name: Build the dev site

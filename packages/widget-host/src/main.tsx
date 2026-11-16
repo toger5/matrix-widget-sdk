@@ -11,7 +11,7 @@ import "./styles/fonts";
 import css from "./styles/app.css?inline";
 
 // One stylesheet for the document (the tokens on `:root`, the page itself) and for the shadow root (the views).
-// `app.css` lists the files of `design/css` and `src/views/**`; Vite inlines them (an adopted sheet ignores `@import`).
+// `app.css` lists the design rules (`src/styles/<area>.css`) and the app-only rules (`src/views/**`); Vite inlines them (an adopted sheet ignores `@import`).
 const sheet = new CSSStyleSheet();
 sheet.replaceSync(css);
 document.adoptedStyleSheets = [...document.adoptedStyleSheets, sheet];

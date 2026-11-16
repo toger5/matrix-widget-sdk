@@ -20,7 +20,7 @@ export interface RoomPanelProps {
   className?: string;
 }
 
-/** One room panel of the RoomsArea, the rounded box: a RoomPicker (no room yet) or a RoomView. leaves panel/*, roomview/* */
+/** One room panel of the RoomsArea, the rounded box: a RoomPicker (no room yet) or a RoomView. stories `rooms-roompicker--*`, `rooms-roomview--*` */
 export function RoomPanel({ main, settings, panel, focused, fullscreen = false, renderWidget, className = "" }: RoomPanelProps) {
   const dispatch = useDispatch();
   const { content } = panel;

@@ -10,7 +10,7 @@ export interface LoginViewProps {
   adding?: boolean;
 }
 
-/** leaf app/login. Intents: login/continue, login/withPassword, login/skip, login/cancel. */
+/** story `app-loginview--login`. Intents: login/continue, login/withPassword, login/skip, login/cancel. */
 export function LoginView({ login, adding = false }: LoginViewProps) {
   const dispatch = useDispatch();
   // Form drafts are view state.
@@ -20,7 +20,7 @@ export function LoginView({ login, adding = false }: LoginViewProps) {
   const errorId = useId();
 
   // The password form belongs to the homeserver that was looked up: editing the field goes back to "Continue".
-  // TODO-FINDING login-password-step - the mockup only draws the homeserver step ("No password is entered here"). The password step (fields below the homeserver, "Sign in") is not designed, and it is undecided what is shown when a homeserver offers both OAuth and a password: for now the password form is shown whenever `options.password` is set, and "Continue" stays the way to (re)start OAuth.
+  // TODO-FINDING login-password-step - the design only has the homeserver step ("No password is entered here"). The password step (fields below the homeserver, "Sign in") is not designed, and it is undecided what is shown when a homeserver offers both OAuth and a password: for now the password form is shown whenever `options.password` is set, and "Continue" stays the way to (re)start OAuth.
   const [edited, setEdited] = useState(false);
   const passwordStep = !!login.options?.password && !edited;
 

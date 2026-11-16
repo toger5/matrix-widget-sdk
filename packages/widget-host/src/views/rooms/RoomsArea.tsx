@@ -18,7 +18,7 @@ export interface RoomsAreaProps {
 export const MIN_PANEL_WIDTH = 280;
 const KEY_STEP = 24;
 
-/** leaves roomsarea/*, panel/*, roomview/*, tabs/*, roomview2/*, overview/*. The `<main class="roomsarea">` with its room panels. */
+/** stories `app-appshell--one-panel`, `app-appshell--several-panels`, `app-appshell--different-rooms`, `app-appshell--same-room-twice`; its parts: `rooms-*--*`. The `<main class="roomsarea">` with its room panels. */
 export function RoomsArea({ main, settings, fullscreen, renderWidget }: RoomsAreaProps) {
   const dispatch = useDispatch();
   const { narrow } = useViewEnv();

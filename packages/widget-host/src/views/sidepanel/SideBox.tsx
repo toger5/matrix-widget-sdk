@@ -11,7 +11,7 @@ interface SideBoxProps {
   children: ReactNode;
 }
 
-/** The box of a SidePanel view (`sideBox` + `sideTitle` of the mockups): a header with the title and the close button, and the body. */
+/** The box of a SidePanel view: a header with the title and the close button, and the body. */
 export function SideBox({ title, sub, className = "", testId, children }: SideBoxProps) {
   const dispatch = useDispatch();
   return (

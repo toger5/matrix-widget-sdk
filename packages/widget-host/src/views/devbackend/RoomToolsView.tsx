@@ -13,9 +13,9 @@ export interface RoomToolsViewProps {
 }
 
 /**
- * The Dev tools of a Matrix account (mockup function `roomToolsView`): the room box of the rooms
+ * The Dev tools of a Matrix account: the room box of the rooms
  * open in the room panels (`roomToolsRooms`), everything sent as the account, and "Switch to the
- * DevBackend" at the bottom. leaves roomtools/*
+ * DevBackend" at the bottom. stories `sidepanel-roomtoolsview--*`
  */
 export function RoomToolsView({ main, roomTools, canSwitchToDevBackend }: RoomToolsViewProps) {
   const dispatch = useDispatch();

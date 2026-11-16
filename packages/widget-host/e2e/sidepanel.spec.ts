@@ -11,7 +11,7 @@ test.describe("SidePanel", () => {
 
   test("the LeftBar buttons show one view at a time; pressing a button again or the close button closes the panel", async ({ host }) => {
     await expect(host.sidePanel).toHaveCount(0);
-    await host.leaf("sidepanel/closed");
+    await host.story("app-appshell--side-panel-closed");
 
     await host.button("Settings").click();
     await expect(host.sidePanel).toHaveAttribute("data-view", "settings");
@@ -46,7 +46,7 @@ test.describe("SidePanel", () => {
     expect(shifted.x).toBeGreaterThanOrEqual(side.x + side.width);
     expect(shifted.x + shifted.width).toBe(closed.x + closed.width);
     await expect(host.panels.filter({ visible: true })).toHaveCount(2);
-    await host.leaf("roomsarea/shifted");
+    await host.story("app-appshell--shifted-by-side-panel");
 
     const handle = host.page.getByRole("separator", { name: "Resize side panel" });
     await handle.focus();
@@ -87,7 +87,7 @@ test.describe("SidePanel", () => {
     await expect(settings.getByText("The DevBackend cannot be turned off while it is active")).toBeVisible();
     const lists = { devTools: [/^Dev tools.*button in the left bar/, /^Widget dev tools/, /^Add widget/], devBackend: [/^DevBackend.*in the account list/, /^Copy to DevBackend/] };
     await expect(settings.getByRole("listitem")).toHaveText([...lists.devTools, ...lists.devBackend]);
-    await host.leaf("sidepanel/settings-on");
+    await host.story("sidepanel-settingsview--both-on");
 
     // Not even by an intent.
     await host.dispatch({ type: "settings/set", settings: { devBackend: false } });
@@ -104,7 +104,7 @@ test.describe("SidePanel", () => {
     await expect(host.app).toHaveClass(/fence/);
     await expect(host.leftBar.getByText("DevBackend", { exact: true })).toBeVisible();
     await expect(devToolsButton).toBeVisible();
-    await host.leaf("sidepanel/settings-devbackend");
+    await host.story("sidepanel-settingsview--dev-backend-active");
     await devToolsButton.click();
     await expect(host.page.getByTestId("devbackend-view")).toBeVisible();
     await host.button("Settings").click();
@@ -147,7 +147,7 @@ test.describe("SidePanel", () => {
     await expect(account.getByText(/Add a Matrix account to leave it/)).toBeVisible();
     await expect(account.getByRole("button", { name: "Log out" })).toHaveCount(0);
     await expect(account.getByRole("button", { name: /^Switch to/ })).toHaveCount(0);
-    await host.leaf("sidepanel/account-dev");
+    await host.story("sidepanel-accountview--dev-backend-mode");
 
     await account.getByRole("button", { name: "Add account" }).click();
     const login = host.page.getByTestId("add-account");
@@ -172,8 +172,8 @@ test("Room list: a pick opens in the panel showing the room, else in the focused
   await expect(list.getByRole("heading")).toHaveText(["Recent widgets", "Recent rooms", "All rooms 2"]);
   const jump = list.getByRole("button", { name: "Jump to the tab of New test widget in Widget lab" });
   await expect(jump).toContainText("open");
-  await host.leaf("sidepanel/rooms");
-  await host.leaf("sidepanel/rooms-app");
+  await host.story("sidepanel-sidepanel--room-list");
+  await host.story("app-appshell--room-list");
 
   // A room no panel shows: a new panel right of the focused one, on the RoomOverview. The list stays open (wide window).
   await list.locator(`button.row[data-room-id="${STANDUP}"]`).click();
@@ -213,7 +213,7 @@ test("Room list: a pick opens in the panel showing the room, else in the focused
 });
 
 test.describe("complete views", () => {
-  // The size of the "complete" mockups.
+  // The size of the `app-complete--*` stories.
   test.beforeEach(({ host }) => host.page.setViewportSize({ width: 1440, height: 900 }));
 
   test("workspace: two rooms, the AccountView, dev tools with two panels and a widget in the PiP panel", async ({ host }) => {
@@ -236,7 +236,7 @@ test.describe("complete views", () => {
     await expect(host.page.getByTestId("widget-dev-tools").locator("section[data-dev-panel]")).toHaveCount(2);
     await expect(host.page.getByTestId("account-view")).toBeVisible();
     await expect(host.panels).toHaveCount(2);
-    await host.leaf("complete/workspace");
+    await host.story("app-complete--workspace");
   });
 
   test("DevBackend: the DevBackendView with the media tool, dev tools docked to the right", async ({ host }) => {
@@ -251,7 +251,7 @@ test.describe("complete views", () => {
     await expect(host.page.getByTestId("widget-dev-tools")).toHaveClass(/dt-right/);
     await expect(tools).toHaveAttribute("aria-orientation", "vertical");
     await expect(host.app).toHaveClass(/fence/);
-    await host.leaf("complete/devbackend");
+    await host.story("app-complete--dev-backend");
   });
 
   test("light theme: the same screen in the other theme", async ({ host }) => {
@@ -259,7 +259,7 @@ test.describe("complete views", () => {
     await expect(host.page.locator(".app-root")).toHaveAttribute("data-theme", "light");
     await expect(host.page.getByRole("radio", { name: "Light" })).toBeChecked();
     await expect(host.tab(/Standup notes/)).toBeVisible();
-    await host.leaf("complete/light");
+    await host.story("app-complete--light");
     await host.dispatch({ type: "settings/set", settings: { theme: "system" } });
   });
 });

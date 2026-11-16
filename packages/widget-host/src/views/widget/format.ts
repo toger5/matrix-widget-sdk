@@ -31,8 +31,8 @@ export function splitCapability(capability: string): { side: string; name: strin
 }
 
 // ---------------------------------------------------------------------------------------------
-// The capability prompt: sections, labels, risky capabilities and the summary sentence. The copy
-// is that of the mockups (`design/src/lib.mjs`: `CAP_SECTIONS`, `CAP_LABELS`, `CAP_RISKS`).
+// The capability prompt: sections, labels, risky capabilities and the summary sentence. This is
+// the only source of the copy (`test/capabilityFormat.test.ts` checks it against the test widget).
 // TODO-FINDING capability-labels-in-view - the human labels are a table in the view, keyed by the action name without namespace; whether a capability is known at all comes from the driver (`CapabilityPromptViewModel.unknown`). The SDK (or the view model) could provide the labels; they change with the capability naming proposal
 
 export type CapabilitySectionId = "read" | "send" | "state" | "devices" | "account" | "files" | "calls" | "app" | "other";

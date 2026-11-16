@@ -79,7 +79,7 @@ function ResizeHandle({ width }: { width: number }) {
 /**
  * The column next to the LeftBar: AccountView, SettingsView, the Room list or the Dev tools (the
  * DevBackendView while the DevBackend is active) by `main.sidePanel.view`; nothing while closed.
- * leaves sidepanel/*, roomtools/*, devbackend/*
+ * stories `sidepanel-*--*`, `sidepanel-roomtoolsview--*`, `sidepanel-devbackendview*--*`
  */
 export function SidePanel({ main, settings }: SidePanelProps) {
   const { narrow } = useViewEnv();

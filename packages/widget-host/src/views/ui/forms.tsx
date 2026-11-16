@@ -1,12 +1,12 @@
 /**
  * Pieces of the forms of several views: the DevBackendView's send forms and editors, and "Add
- * widget" of the RoomOverview (mockup function `formChips`, the `.code.edit` JSON editor, the
- * error line of a form).
+ * widget" of the RoomOverview (the chips of the predefined forms, the `.code.edit` JSON editor,
+ * the error line of a form).
  */
 import type { KeyboardEvent } from "react";
 
 /**
- * The predefined forms of "send state", "send event" and "Add widget" (mockup function `formChips`): a tablist
+ * The predefined forms of "send state", "send event" and "Add widget": a tablist
  * named `label`. Only the selected chip is in the tab order; the arrow keys, Home and End select
  * another one.
  */
@@ -44,7 +44,7 @@ export function parseJsonObject(text: string): { value: Record<string, unknown> 
   }
 }
 
-/** The editable version of the mockup's `<pre class="code edit">`. */
+/** The editable version of the design's `<pre class="code edit">`. */
 export function JsonArea({ label, value, onChange, tall = false, autoFocus }: { label: string; value: string; onChange: (text: string) => void; tall?: boolean; autoFocus?: boolean }) {
   const rows = Math.min(14, Math.max(3, value.split("\n").length));
   return <textarea className={`code edit ${tall ? "tall" : ""}`} aria-label={label} spellCheck={false} rows={rows} value={value} autoFocus={autoFocus} onChange={(e) => onChange(e.target.value)} />;

@@ -1,0 +1,51 @@
+/* Widget view (layer views): loading and failed states, the capability prompt. The design rules: with the stories, the specification (listed in src/styles/app.css). */
+
+.wv { flex: 1; width: 100%; height: 100%; min-height: 0; display: flex; flex-direction: column; container: wv / inline-size; }
+.wv.dock-left, .wv.dock-right { flex-direction: row; }
+.wv-widget { flex: 1; min-width: 0; min-height: 0; position: relative; }
+.wv-state { height: 100%; display: grid; place-content: center; justify-items: center; gap: 8px; text-align: center; padding: 24px; }
+.wv-state b { font-size: 15px; }
+.wv-state .muted { max-width: 340px; }
+.wv-state code { padding: 4px 8px; border-radius: var(--r-2); background: var(--surface-2); color: var(--text-muted); }
+.wv-state .btn, .wv-state .inline-row { margin-top: 8px; }
+.wv-state .inline-row .btn { margin-top: 0; }
+.spinner { width: 28px; height: 28px; border-radius: 50%; border: 3px solid var(--surface-3); border-top-color: var(--text); }
+@media (prefers-reduced-motion: no-preference) { .spinner { animation: spin 0.9s linear infinite; } }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.prompt-card { width: min(440px, 100%); display: grid; justify-items: center; gap: 8px; padding: 20px; border-radius: var(--r-4); border: 1px solid var(--border-strong); background: var(--surface-2); }
+.prompt-card .inline-row { width: 100%; margin-top: 8px; }
+.perm { display: flex; align-items: center; gap: 10px; padding: 6px 8px; border-radius: var(--r-2); }
+.perm > span:last-child { display: grid; min-width: 0; }
+.perm b { font-size: 13px; font-weight: 500; }
+.perm small { color: var(--text-muted); overflow-wrap: anywhere; }
+
+/* Capability prompt: the card is at most as tall as the widget area; only the sections scroll */
+.wv-state.wv-prompt { display: flex; place-content: normal; text-align: left; }
+.prompt-card.caps { margin: auto; width: min(540px, 100%); max-height: 100%; display: flex; flex-direction: column; justify-items: stretch; gap: 0; padding: 0; overflow: hidden; }
+.pc-head { display: flex; align-items: flex-start; gap: 12px; padding: 16px 18px 12px; }
+.pc-head b { display: block; font-size: 15px; }
+.pc-sum { margin: 3px 0 0; color: var(--text-muted); font-size: 13px; line-height: 1.45; }
+.pc-sum b { display: inline; font-size: inherit; font-weight: 600; color: var(--text); }
+.pc-body { flex: 1 1 auto; min-height: 96px; overflow: auto; padding: 0 10px 8px; border-block: 1px solid var(--border); }
+.pc-sh { position: sticky; top: 0; z-index: 1; display: flex; align-items: center; gap: 8px; padding: 8px 8px 3px; background: var(--surface-2); }
+.pc-sh b { font-size: 11.5px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--text-muted); }
+.pc-sh small { margin-left: auto; color: var(--text-faint); font-size: 12px; font-variant-numeric: tabular-nums; }
+.pc-sec .perm { margin-left: 26px; padding: 4px 8px; }
+.pc-l { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.pc-risk { flex: none; display: inline-flex; color: var(--warning); }
+/* "Once" / "Always" of a one-use capability, under its capability string */
+.pc-life { justify-self: start; margin-top: 4px; }
+.pc-life[aria-disabled="true"] { opacity: 0.5; }
+.perm.new { background: var(--highlight-soft); }
+.pill.new { height: 16px; padding: 0 6px; background: var(--highlight); color: var(--on-primary); }
+.check.mixed { color: var(--on-primary); }
+.pc-note { margin: 0 8px 2px 34px; color: var(--text-faint); font-size: 12px; }
+.pc-foot { display: grid; gap: 10px; padding: 12px 18px 14px; }
+.pc-foot .inline-row { margin-top: 0; }
+.pc-status { display: flex; align-items: center; gap: 8px; margin: 0; color: var(--text-muted); font-size: 12.5px; }
+.pc-status .ico { flex: none; color: var(--warning); }
+.pc-status b { font-size: inherit; color: var(--text); font-variant-numeric: tabular-nums; }
+.pc-approve { position: relative; overflow: hidden; }
+.pc-approve[aria-disabled="true"] { opacity: 0.6; cursor: not-allowed; }
+.pc-approve[aria-disabled="true"]::after { content: ""; position: absolute; left: 0; bottom: 0; width: var(--wait, 100%); height: 3px; background: var(--highlight); }

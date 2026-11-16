@@ -17,7 +17,6 @@ export default meta;
 type Story = StoryObj<typeof LoginView>;
 
 /** Login page (with the skip login option): you sign in on your homeserver's own page; skipping the login ends up in the DevBackend (and enables dev tools and the DevBackend). */
-// leaf app/login
 export const Login: Story = {};
 
 /** The homeserver only offers a password, and the last attempt failed. */

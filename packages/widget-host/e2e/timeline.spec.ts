@@ -1,4 +1,4 @@
-/** The RoomTimeline: the Timeline tab of a room panel, its events (the DevBackend's), live updates, the newest 200 and the older ones. leaves timeline/*, tabs/timeline-active */
+/** The RoomTimeline: the Timeline tab of a room panel, its events (the DevBackend's), live updates, the newest 200 and the older ones. stories `rooms-roomtimeline--*`, `rooms-tabbar--timeline-active` */
 import type { HostSeed } from "../src/app/controller";
 import { expect, type Host, LAB, NEW_WIDGET, test, widgetId } from "./host";
 
@@ -35,8 +35,8 @@ test("“Open timeline” adds the Timeline tab at the end; its lines are the ro
   await expect(widgetAdded).toContainText("m.widget");
   await expect(rows(host).last()).toContainText(/@carol:dev\.local\s*The landscape picture is in the media repository\.\s*m\.room\.message/);
   await expect(rows(host).last()).not.toHaveClass(/state/);
-  await host.leaf("tabs/timeline-active");
-  await host.leaf("timeline/start");
+  await host.story("rooms-tabbar--timeline-active");
+  await host.story("rooms-roomtimeline--start");
 
   const last = rows(host).last();
   const [lastId] = (await storeIds(host)).slice(-1);
@@ -141,7 +141,7 @@ test("250 events: the newest 200 are shown, at the bottom; “Load older events�
   await anchor.getByRole("button").click();
   await expect(anchor.locator("pre.code")).toContainText('"body": "message 120"');
   await anchor.evaluate((row) => row.scrollIntoView({ block: "center" }));
-  await host.leaf("timeline/events");
+  await host.story("rooms-roomtimeline--events");
 
   // The loaded events that are not rendered first: here every event, so the start of the room is
   // reached. "Start of the room" replaces the button, and the focus moves on to the oldest event.

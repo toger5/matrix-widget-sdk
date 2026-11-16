@@ -38,7 +38,7 @@ export interface DevToolBarProps {
 /**
  * The bar of the WidgetDevToolBar: status dot, one toggle per panel, reload, the dock switch and close.
  * A toolbar with a roving tabindex: Tab enters it once, the arrow keys move between its buttons.
- * leaves devtools/bar-*
+ * stories `widget-devtools--bar-*`
  */
 export function DevToolBar({ widget, layout, messageCount, errorCount }: DevToolBarProps) {
   const dispatch = useDispatch();
@@ -68,7 +68,7 @@ export function DevToolBar({ widget, layout, messageCount, errorCount }: DevTool
   return (
     <div className="dt-bar" role="toolbar" aria-label="Widget dev tools" aria-orientation={vertical ? "vertical" : "horizontal"} onKeyDown={onKeyDown}>
       <span className="dt-title">
-        {/* TODO-FINDING tooltip-component - tooltips are `title` attributes as in the mockups; a keyboard user never sees them (designFeedback "Later": use a tooltip component) */}
+        {/* TODO-FINDING tooltip-component - tooltips are `title` attributes as designed; a keyboard user never sees them (designFeedback "Later": use a tooltip component) */}
         <i className={`dot ${status.cls}`} role="img" aria-label={status.label} title={status.label} />
         <span>Dev tools</span>
       </span>

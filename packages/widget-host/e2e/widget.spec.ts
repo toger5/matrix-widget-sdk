@@ -1,4 +1,4 @@
-/** The WidgetView: loading, failed, the capability prompt (OpenID included), and the widget API of both test widgets. leaves widgetview/* */
+/** The WidgetView: loading, failed, the capability prompt (OpenID included), and the widget API of both test widgets. stories `widget-widgetview--*` */
 import type { Locator } from "@playwright/test";
 
 import type { HostSeed } from "../src/app/controller";
@@ -11,7 +11,7 @@ const SEND_TOPIC = "widget:org.matrix.mscXXXX.send_event.state:m.room.topic";
 const SEND_DELAYED = "widget:org.matrix.mscXXXX.send_event.delayed";
 /** The single-use capability: one OpenID token per grant. */
 const GET_OPENID = "widget:org.matrix.mscXXXX.get_openid";
-/** What leaf widgetview/prompt requests: four sections. */
+/** What story `widget-widgetview--capability-prompt` requests: four sections. */
 const SHORT = [
   "widget:org.matrix.msc2876.read_events.timeline:m.room.message",
   "host:org.matrix.mscXXXX.forward_event.timeline:m.room.message",
@@ -53,7 +53,7 @@ test("a widget is loading until it sends notify_ready", async ({ host }) => {
   await expect(view.getByTestId("widget-loading")).toContainText("Loading New test widget…");
   await expect(view.getByRole("status", { name: "Loading" })).toBeVisible();
   await expect(host.iframe(NEW)).toBeAttached();
-  await host.leaf("widgetview/loading");
+  await host.story("widget-widgetview--loading");
 
   await press(host, NEW, "request_capabilities");
   await press(host, NEW, "notify_ready");
@@ -61,7 +61,7 @@ test("a widget is loading until it sends notify_ready", async ({ host }) => {
   await expect(view.getByTestId("widget-loading")).toHaveCount(0);
   await expect(host.frame(NEW).getByRole("heading", { name: "MSC4412 test widget (widget-base-sdk)" })).toBeVisible();
   expect(await host.actions(NEW, "fromWidget")).toContainEqual(expect.stringMatching(/\.notify_ready$/));
-  await host.leaf("widgetview/plain");
+  await host.story("widget-widgetview--ready");
 });
 
 test("a widget that never answers fails: retry starts it again, close tab gives up", async ({ host }) => {
@@ -70,7 +70,7 @@ test("a widget that never answers fails: retry starts it again, close tab gives 
   await expect(failed.getByRole("alert")).toContainText("New test widget could not be loaded");
   await expect(failed).toContainText("The widget did not answer within 0.3 seconds.");
   await expect(failed).toContainText("http://localhost:5175/new/?autostart=0");
-  await host.leaf("widgetview/failed");
+  await host.story("widget-widgetview--failed");
 
   const generation = (await host.main()).widgets[NEW].generation!;
   await failed.getByRole("button", { name: "Retry" }).click();
@@ -128,7 +128,7 @@ test("capability prompt: deny all, then approve a subset; the widget's actions s
   await expect(prompt.getByRole("checkbox", { name: "All in This app" })).toHaveAttribute("aria-checked", "mixed");
   await prompt.getByRole("button", { name: "Deny all" }).evaluate((deny) => deny.closest(".prompt-card")!.querySelector(".pc-body")!.scrollTo(0, 1e6));
   await expect(prompt.getByRole("button", { name: "Deny all" })).toBeInViewport();
-  await host.leaf("widgetview/prompt-long");
+  await host.story("widget-widgetview--capability-prompt-long");
   await navigate.click();
   await prompt.getByRole("checkbox", { name: escape(SEND_TOPIC) }).click();
   await prompt.getByRole("button", { name: `Approve ${all - 1} selected` }).click();
@@ -153,7 +153,7 @@ test("capability prompt: a section's checkbox checks its rows; approving nothing
   await expect(prompt).toHaveAccessibleDescription("New test widget wants to send messages as you, exchange hidden messages with devices, read this room and know who you are.");
   await expect(prompt.getByRole("group", { name: "Send as you" })).toContainText("2 of 2");
   await host.passApproveDelay();
-  await host.leaf("widgetview/prompt");
+  await host.story("widget-widgetview--capability-prompt");
 
   // A row unchecked: its section is mixed; the section's checkbox checks all of them again, then none.
   const send = prompt.getByRole("checkbox", { name: "All in Send as you" });
@@ -196,7 +196,7 @@ test("a request while the prompt is open joins it: the choices stay, the new one
   await expect(prompt.getByRole("checkbox", { name: escape(SEND_DELAYED) })).not.toBeChecked();
   await expect(approve).toHaveAttribute("aria-disabled", "true");
   await expect(status).toHaveText("1 permission was added. You can approve in 3 s.");
-  await host.leaf("widgetview/prompt-merged");
+  await host.story("widget-widgetview--capability-prompt-merged");
   // A press on the blocked button does nothing, and neither does the intent sent past the view.
   await approve.click({ force: true });
   await host.dispatch({ type: "widget/answerCapabilities", widgetId: NEW, approved: [SEND_MESSAGE, SEND_TOPIC] });
@@ -342,7 +342,7 @@ test("OpenID is a one-use capability: every token is a grant of its own, asked i
   await expect(prompt.getByRole("checkbox", { name: escape(GET_OPENID) })).toBeVisible();
   await expect(lifetime(prompt).getByRole("radio", { name: "Once" })).toBeChecked();
   await expect(prompt.getByRole("status")).toContainText("You can approve in");
-  await host.leaf("widgetview/prompt-openid");
+  await host.story("widget-widgetview--capability-prompt-open-id");
   await host.passApproveDelay();
   await prompt.getByRole("button", { name: "Approve 1 selected" }).click();
   await expect(prompt).toHaveCount(0);

@@ -1,6 +1,7 @@
 /** The `ViewEnv` of the stories: intents are logged, the data hooks answer from fixtures, widgets are fakes. */
 import type { Decorator, Parameters } from "@storybook/react-vite";
 import type { CSSProperties, ReactNode } from "react";
+import { waitFor } from "storybook/test";
 
 import { WIDGET_EVENT_TYPES, type WidgetEventParser } from "../widgetStateEvent";
 import { DEFAULT_VIEW_ENV, ViewEnvContext, type RoomStateData, type RoomTimelineData, type ViewEnv } from "./env";
@@ -33,7 +34,7 @@ const STORY_WIDGET_EVENTS: WidgetEventParser = {
   urlProblem: (url) => (URL.canParse(url) && /^https?:$/.test(new URL(url).protocol) ? undefined : "the URL is not an absolute http: or https: URL"),
 };
 
-/** `DEV_TOOLS_DATA` with the run duration of the mockups ("3 m 12 s") when the stories load, instead of the fixture's fixed date. */
+/** `DEV_TOOLS_DATA` with the run duration of the design ("3 m 12 s") when the stories load, instead of the fixture's fixed date. */
 const STORY_DEV_TOOLS_DATA = { ...DEV_TOOLS_DATA, stats: { ...DEV_TOOLS_DATA.stats, runningSince: Date.now() - 192_000 } };
 
 export const STORY_ENV: ViewEnv = {
@@ -52,7 +53,7 @@ export function StoryEnv({ env, children }: { env?: Partial<ViewEnv>; children: 
   return <ViewEnvContext.Provider value={{ ...STORY_ENV, ...env }}>{children}</ViewEnvContext.Provider>;
 }
 
-/** The fake widgets of the mockups: what a fixture widget (`WIDGET_EVENTS`) looks like. */
+/** The fake widgets of the stories: what a fixture widget (`WIDGET_EVENTS`) looks like. */
 export type FakeWidgetKind = "call" | "board" | "poll" | "notes" | "timer";
 const FAKE_KINDS: readonly string[] = ["call", "board", "poll", "notes", "timer"] satisfies FakeWidgetKind[];
 
@@ -66,8 +67,8 @@ const hue = (h: number) => ({ "--h": h }) as CSSProperties;
 
 /**
  * A stand-in for a widget iframe: what a `WidgetSlot` shows in a story (`ViewEnv.widgetStandIn`).
- * The fake widgets of the mockups (a call grid, a whiteboard, a poll, notes, a timer); they do not
- * use the host's tokens, a widget is foreign content (`design/css/mockup.css`). Another widget is
+ * The fake widgets (a call grid, a whiteboard, a poll, notes, a timer); they do not use the host's
+ * tokens, a widget is foreign content (`.storybook/mockup.css`). Another widget is
  * its name on a plain background. `compact`: inside a PiP box.
  */
 export function FakeWidget({ kind, name = "Widget", compact = false }: { kind?: FakeWidgetKind; name?: string; compact?: boolean }) {
@@ -203,3 +204,15 @@ export function fillIn(field: HTMLElement, value: string) {
   Object.getOwnPropertyDescriptor(proto, "value")?.set?.call(field, value);
   field.dispatchEvent(new Event("input", { bubbles: true }));
 }
+
+/**
+ * For play functions: the first element of `selector` in `root` whose text includes `text`, as soon as there is one
+ * (it waits as `findBy…` does). Throws when there is none: a play function that missed its element would draw another
+ * state without telling. Prefer `within(canvasElement).findByRole(…)` where the element has a fitting name.
+ */
+export const findElement = <T extends HTMLElement = HTMLElement>(root: HTMLElement, selector: string, text = ""): Promise<T> =>
+  waitFor(() => {
+    const found = Array.from(root.querySelectorAll<T>(selector)).find((el) => el.textContent?.includes(text));
+    if (!found) throw new Error(`no ${selector}${text ? ` containing "${text}"` : ""}`);
+    return found;
+  });

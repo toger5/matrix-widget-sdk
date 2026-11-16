@@ -1,4 +1,4 @@
-/* Rooms, app-only (layer views, after the design files): panel resizing, scrolling bodies, tab hover states, the overflowing tab bar, real search and form inputs. The design rules are design/css/rooms.css. */
+/* Rooms, app-only (layer views, after the design files): panel resizing, scrolling bodies, tab hover states, the overflowing tab bar, real search and form inputs. The design rules are src/styles/rooms.css. */
 
 /* The drag handle between two room panels lies over the 8px gap of the RoomsArea (no extra space). */
 .rp-sep { position: relative; z-index: 2; flex: none; align-self: stretch; width: 8px; margin: 0 -8px; display: grid; place-items: center; cursor: col-resize; touch-action: none; border-radius: 4px; }
@@ -6,7 +6,7 @@
 .rp-sep:hover i, .rp-sep:focus-visible i, .rp-sep:active i { background: var(--text-muted); }
 .rp-sep:focus-visible { outline-offset: -1px; }
 
-/* Bodies scroll when the real content does not fit (the mockups only clip). */
+/* Bodies scroll when the real content does not fit (the design rules only clip). */
 .rp-body > .ov, .rp-body > .picker, .side-body > .picker { overflow-y: auto; }
 /* The RoomTimeline scrolls; it keeps the events in view in place itself (RoomTimeline.tsx), so the browser must not. */
 .rp-body > .tl { overflow-y: auto; overflow-anchor: none; }
@@ -57,7 +57,7 @@
 .ov-more { font-size: 12px; }
 /* A local widget's row lights up like a row button while its open part is hovered. */
 .row.local:has(> .row-open:not([aria-disabled="true"]):hover) { border-color: var(--border-strong); }
-/* "Add widget": real form controls in the look of the mockup's spans (as in the DevBackendView). */
+/* "Add widget": real form controls in the look of the design's spans (as in the DevBackendView). */
 .add-widget input.input, .add-widget select.input { width: 100%; font: inherit; color: inherit; }
 .add-widget input.input.mono, .add-widget select.input.mono { font-family: var(--font-mono); font-size: 11.5px; }
 .add-widget input.input[readonly] { color: var(--text-muted); }

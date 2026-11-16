@@ -1,6 +1,6 @@
 /**
- * The Client Backend Tool (mockup functions `clientBox`, `behaviorSection`, `toDeviceSection`): what
- * the mocked rooms share, in collapsible sections. leaves devbackend/behavior, devbackend/todevice
+ * The Client Backend Tool: what the mocked rooms share, in collapsible sections. Stories
+ * `sidepanel-devbackendview-tools--behavior`, `sidepanel-devbackendview-tools--to-device`.
  */
 import { useState, type FormEvent } from "react";
 
@@ -74,7 +74,7 @@ export function ToDeviceSection({ toDevice, userId = "" }: { toDevice: ToDeviceM
         <Field label="Type">
           <input className="input mono" value={draft.type} onChange={(e) => setDraft({ ...draft, type: e.target.value })} />
         </Field>
-        {/* TODO-FINDING devbackend-todevice-sender - the mockup has one "Sender" select (user · device); `ToDeviceMessage` has `userId` and `deviceId` without saying whose they are. For now two text fields, meaning the sender for a message to the widget. */}
+        {/* TODO-FINDING devbackend-todevice-sender - the design has one "Sender" select (user · device; sketch `sketch-sidepanel-devbackendview-tools--to-device`); `ToDeviceMessage` has `userId` and `deviceId` without saying whose they are. For now two text fields, meaning the sender for a message to the widget. */}
         <Field label="User ID">
           <input className="input mono" value={draft.userId} onChange={(e) => setDraft({ ...draft, userId: e.target.value })} />
         </Field>

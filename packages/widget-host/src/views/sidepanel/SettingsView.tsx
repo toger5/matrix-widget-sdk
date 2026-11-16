@@ -33,7 +33,7 @@ function SetList({ items }: { items: [IconName, string, string][] }) {
   );
 }
 
-/** leaves sidepanel/settings-off, settings-on, settings-devbackend. Two independent switches. */
+/** stories `sidepanel-settingsview--*`. Two independent switches. */
 export function SettingsView({ settings, devBackendActive }: SettingsViewProps) {
   const dispatch = useDispatch();
   const setTheme = (theme: SettingsViewModel["theme"]) => dispatch({ type: "settings/set", settings: { theme } });

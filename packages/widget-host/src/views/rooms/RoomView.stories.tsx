@@ -19,7 +19,6 @@ const overviewPanel = roomPanel("rtc", []);
  * The room name is the first tab. With no widget tab shown it is selected, and the body (cut off
  * here) is the RoomOverview. It has no close button.
  */
-// leaf roomview/header
 export const Overview: Story = { render: () => <HeadOnly main={withPanels([overviewPanel], [])} panel={overviewPanel} />, parameters: { size: [640, 72] } };
 
 const widgetPanel = roomPanel("design", [widgetTab("design", "call"), widgetTab("design", "board")]);

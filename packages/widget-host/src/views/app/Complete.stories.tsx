@@ -23,7 +23,6 @@ const board = widgetVm("design", "board", { alwaysOnScreen: true });
  * the dev tools are docked on top with two panels, the whiteboard is always on screen and its tab is
  * not the active one, so it is in the floating panel (with the timer of a room no panel shows).
  */
-// leaf complete/workspace
 export const Workspace: Story = {
   args: {
     vm: appVm(
@@ -56,7 +55,6 @@ const labCall = widgetVm("lab", "call");
  * background and the DevBackend badge; the DevBackendView with the Media Backend Tool open; the
  * notes are always on screen.
  */
-// leaf complete/devbackend
 export const DevBackend: Story = {
   args: {
     vm: appVm(
@@ -86,7 +84,6 @@ export const DevBackend: Story = {
 };
 
 /** Light theme: the overall screen in the other theme, whatever the toolbar's theme switch says. */
-// leaf complete/light
 export const Light: Story = {
   args: {
     vm: appVm(

@@ -1,4 +1,4 @@
-/** The PictureInPicturePanel with several always-on-screen widgets. leaves pip/* (`pip/idle-1` and `pip/hover`: widgetMove.spec.ts) */
+/** The PictureInPicturePanel with several always-on-screen widgets. stories `app-pippanel--*`, `app-appshell--pip-enlarged-dev-tools` (`app-pippanel--idle` and `app-pippanel--hover`: widgetMove.spec.ts) */
 import type { Locator } from "@playwright/test";
 
 import type { PipViewModel } from "../src/appViewModel";
@@ -47,7 +47,7 @@ test("four always-on-screen widgets: four boxes; hover and focus show the surrou
   const before = await rects(host);
   expect(new Set(before.map((r) => r.y)).size).toBe(1);
   expect(before.map((r) => r.x)).toEqual([...before.map((r) => r.x)].sort((a, b) => a - b));
-  await host.leaf("pip/idle-4");
+  await host.story("app-pippanel--idle-four");
 
   await host.pip.hover();
   await expect(host.pip).toHaveAttribute("data-surround", "true");
@@ -79,14 +79,14 @@ test("the stacking switch puts the boxes below each other", async ({ host }) => 
   const before = await rects(host);
   expect(new Set(before.map((r) => r.x)).size).toBe(1);
   expect(before.map((r) => r.y)).toEqual([...before.map((r) => r.y)].sort((a, b) => a - b));
-  await host.leaf("pip/vertical");
+  await host.story("app-pippanel--vertical-idle");
 
   await host.pip.hover();
   await expect(host.pip.getByRole("button", { name: "Stack horizontally" })).toBeVisible();
   await expect(host.pip.getByRole("button", { name: "Go to Widget 2" })).toBeVisible();
   expect(await rects(host)).toEqual(before);
   await surroundShown(host);
-  await host.leaf("pip/hover-vertical");
+  await host.story("app-pippanel--vertical");
 
   await host.pip.getByRole("button", { name: "Stack horizontally" }).click();
   await expect(host.pip).toHaveAttribute("data-stacking", "horizontal");
@@ -101,7 +101,7 @@ test("more widgets than boxes: the overflow button and its menu go to or stop th
   // The widgets without a box keep running.
   expect(await running(host)).toHaveLength(6);
   await idle(host);
-  await host.leaf("pip/overflow");
+  await host.story("app-pippanel--overflow");
 
   await more.click();
   const menu = host.page.getByRole("menu", { name: "More always-on-screen widgets" });
@@ -110,7 +110,7 @@ test("more widgets than boxes: the overflow button and its menu go to or stop th
   await expect(menu).toContainText("Widget 6");
   await expect(menu.getByRole("menuitem", { name: "Go to Widget 5" })).toBeFocused();
   await surroundShown(host);
-  await host.leaf("pip/overflow-menu");
+  await host.story("app-pippanel--overflow-menu");
 
   // Esc closes the menu and gives the focus back to the button.
   await host.page.keyboard.press("Escape");
@@ -262,7 +262,7 @@ test("the dev tools of a widget stay open inside its PiP box, which can be enlar
   // Only the box with open dev tools offers to close them.
   await expect(host.pip.getByRole("button", { name: "Close dev tools" })).toHaveCount(1);
   await surroundShown(host);
-  await host.leaf("pip/enlarged-devtools");
+  await host.story("app-appshell--pip-enlarged-dev-tools");
 
   // With dev tools disabled no box shows them or offers to close them.
   await host.dispatch({ type: "settings/set", settings: { devTools: false } });

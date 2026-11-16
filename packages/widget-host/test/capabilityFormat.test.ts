@@ -1,7 +1,7 @@
 /**
- * The capability prompt's copy (`src/views/widget/format.ts`): labels, sections, risky
- * capabilities and the summary sentence. They follow the mockups (`design/src/lib.mjs`), and what
- * is known at all comes from the driver (`capabilityIsKnown` of the bindings).
+ * The capability prompt's copy (`src/views/widget/format.ts`, the only source): labels, sections,
+ * risky capabilities and the summary sentence. What is known at all comes from the driver
+ * (`capabilityIsKnown` of the bindings).
  */
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
@@ -10,8 +10,6 @@ import { describe, expect, it } from "vitest";
 import initWasm from "../../widget-host-bindings/src/generated/wasm-bindgen/index.js";
 import * as widgetActions from "../../widget-host-bindings/src/generated/widget_actions";
 import { DEFAULT_CAPABILITIES, DELAYED_CAPABILITIES, EXTRA_CAPABILITIES, RELATION_CAPABILITIES, TO_DEVICE_CAPABILITIES } from "../../test-widgets/new/capabilities";
-// @ts-expect-error -- plain JavaScript without types
-import { CAP_LABELS, CAP_RISKS, CAP_SECTIONS, OPENID_PHRASE } from "../design/src/lib.mjs";
 import { capabilityLabel, capabilityRisk, capabilitySection, capabilitySections, capabilitySummary } from "../src/views/widget/format";
 
 const require = createRequire(import.meta.url);
@@ -66,24 +64,23 @@ describe("capability prompt copy", () => {
     expect(capabilitySections(["a", "b"], ["a", "b"])[0].phrase).toBe("ask for 2 things this app does not know");
   });
 
-  it("has the labels, sections and risks of the mockups", () => {
-    const keys = Object.keys(CAP_LABELS as Record<string, unknown>);
-    expect(keys).toHaveLength(31);
-    for (const key of keys) {
-      const [source, head] = key.split(":");
-      for (const data of ["m.room.message", "org.example.x"]) {
-        const capability = `${source}:m.${head}:${data}`;
-        expect(capabilityLabel(capability), capability).toBe((CAP_LABELS as Record<string, (t: string) => string>)[key](data));
-        expect(capabilityRisk(capability), capability).toBe((CAP_RISKS as Record<string, string | undefined>)[key]);
-        const action = key.split(".")[0];
-        const section = (CAP_SECTIONS as [string, string, string, string[]][]).find(([, , , members]) => members.includes(key) || members.includes(action));
-        expect(capabilitySection(capability), capability).toBe(section?.[0]);
-      }
-    }
-    // Section titles and phrases, in their order.
-    const all = capabilitySections(keys.map((key) => `${key.split(":")[0]}:m.${key.split(":")[1]}:m.x`));
-    expect(all.map((s) => [s.id, s.title])).toEqual((CAP_SECTIONS as string[][]).map(([id, title]) => [id, title]));
-    expect(all.find((s) => s.id === "account")?.phrase).toBe(OPENID_PHRASE);
+  it("has its sections in a fixed order, the risky ones marked", () => {
+    const all = capabilitySections([...TEST_WIDGET, ...OTHERS, "garbage"], ["garbage"]);
+    expect(all.map((s) => [s.id, s.title])).toEqual([
+      ["read", "Read this room"],
+      ["send", "Send as you"],
+      ["state", "Change the room"],
+      ["devices", "Direct messages to devices"],
+      ["account", "You and your account"],
+      ["files", "Files"],
+      ["calls", "Calls"],
+      ["app", "This app"],
+      ["other", "Unknown to this app"],
+    ]);
+    expect(all.filter((s) => s.risky).map((s) => s.id)).toEqual(["send", "state", "devices", "account"]);
+    // the phrase of "You and your account" when it holds `get_openid`
+    expect(all.find((s) => s.id === "account")?.phrase).toBe("prove who you are to other servers");
+    expect(capabilitySections([`widget:${X}get_matrix_context`])[0].phrase).toBe("know who you are");
   });
 
   it("orders the sections, whatever the order of the request, and counts on the risky ones", () => {

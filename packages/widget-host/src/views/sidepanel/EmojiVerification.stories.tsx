@@ -10,13 +10,10 @@ export default meta;
 type Story = StoryObj<typeof AccountView>;
 
 /** With another device: waiting for one to accept the request. The request goes to every other device of the account. */
-// leaf sidepanel/verify-waiting
 export const Waiting: Story = { args: verifyingAccount({ step: "waiting" }) };
 
 /** With another device: comparing the 7 emoji. */
-// leaf sidepanel/verify-emoji
 export const Compare: Story = { args: verifyingAccount({ step: "emoji", emoji: SAS_EMOJI, confirming: false }) };
 
 /** With another device: "They match" pressed, waiting for it to confirm. */
-// leaf sidepanel/verify-confirming
 export const Confirming: Story = { args: verifyingAccount({ step: "emoji", emoji: SAS_EMOJI, confirming: true }) };

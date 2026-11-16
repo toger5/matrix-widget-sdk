@@ -50,7 +50,6 @@ export const AccountOpen: Story = { args: { settings, main: mainVm({ accounts: s
  * The Room list: the room picker in the SidePanel (the recents of `mainVm`; Element Call has a tab).
  * The same content as an empty room panel; the tiles wrap to two columns. The body scrolls.
  */
-// leaf sidepanel/rooms
 export const RoomList: Story = {
   args: { settings, main: mainVm({ sidePanel: { view: "rooms", width: 324 } }) },
   parameters: { size: [348, 760] },

@@ -21,7 +21,7 @@ test("a room opens on its overview: the room name is selected; topic, members an
   await expect(overview.locator(".ov-widgets button")).toHaveText([/New test widget/, /Legacy test widget/]);
   await expect(overview.getByText("Copy to DevBackend")).toHaveCount(0);
   await expect(overview.getByRole("button", { name: "Open timeline" })).toHaveAttribute("title", "Open the timeline of this room in a new tab");
-  await host.leaf("overview/plain");
+  await host.story("rooms-roomoverview--plain");
 });
 
 test("pressing a widget in the overview opens it as a new tab at the end; the room name shows the overview again, where it is grayed out", async ({ host }) => {
@@ -74,9 +74,9 @@ test("with dev tools enabled: “Add widget” and the local widgets after the r
   await expect(overview.getByRole("button", { name: "Add widget" })).toHaveAttribute("title", "Add a widget to this room");
   await expect(local.getByRole("button", { name: "Edit Poll prototype" })).toBeVisible();
   await expect(local.getByRole("button", { name: "Remove Poll prototype" })).toBeVisible();
-  // A DevBackend room is already in the DevBackend, so the DevBackend card of the mockup is not reachable here.
+  // A DevBackend room is already in the DevBackend, so the DevBackend card of story `rooms-roomoverview--dev-tools` is not reachable here.
   await expect(overview.getByText("Copy to DevBackend")).toHaveCount(0);
-  await host.leaf("overview/devtools");
+  await host.story("rooms-roomoverview--dev-tools");
 
   // Without dev tools a local widget is still listed and runs; it can be removed, not added or edited.
   await host.dispatch({ type: "settings/set", settings: { devTools: false } });
@@ -109,7 +109,7 @@ test("Add widget, only in this host: listed as “Local”, nothing is sent; it 
   await expect(form.getByRole("radio", { name: "Only in this host" })).toBeChecked();
   await expect(form.getByText("Nothing is sent to the room")).toBeVisible();
   await expect(overview.getByRole("button", { name: "Add widget" })).toHaveCount(1); // the form's own; the card's is replaced by the form
-  await host.leaf("overview/add-widget");
+  await host.story("rooms-roomoverview--add-widget");
 
   // The same type and ID as the room's widget: its key is still its own.
   await form.getByRole("textbox", { name: "Widget ID" }).fill("widget-1");
@@ -168,7 +168,7 @@ test("Add widget, Paste JSON: a whole state event, other fields ignored; not a w
   await json.fill(JSON.stringify(pasted, null, 2));
   // Editing the draft takes the refusal away.
   await expect(refusal).toHaveCount(0);
-  await host.leaf("overview/add-widget-json");
+  await host.story("rooms-roomoverview--add-widget-json");
   await add.click();
   await expect(form).toHaveCount(0);
   await expect(overview.locator('[data-widget-key="local:im.vector.modular.widgets/etherpad_1763294567"]')).toContainText("Etherpad");
@@ -219,7 +219,7 @@ test("Add widget, to the room: the state event is sent as you; replacing a widge
   await expect(refusal).toContainText("simulated failure (fail sends is on)");
   await expect(form.getByRole("textbox", { name: "Name" })).toHaveValue("Refused widget");
   expect((await host.main()).widgetWrite).toMatchObject({ roomId: LAB, widgetKey: "m.widget/widget-3", state: "failed" });
-  await host.leaf("overview/add-widget-refused");
+  await host.story("rooms-roomoverview--add-widget-refused");
   await form.getByRole("radio", { name: "Only in this host" }).click();
   await form.getByRole("button", { name: "Add widget" }).click();
   await expect(form).toHaveCount(0);
@@ -261,6 +261,7 @@ test("a local widget: editing its URL forgets its capabilities and reloads it; r
   await expect(form.getByRole("radiogroup", { name: "Add to" })).toHaveCount(0);
   await expect(form.getByRole("textbox", { name: "Event type" })).toHaveAttribute("readonly", "");
   await expect(form.getByRole("textbox", { name: "Widget ID" })).toHaveAttribute("readonly", "");
+  await host.story("rooms-addwidgetform--edit");
   await form.getByRole("textbox", { name: "Name" }).fill("Poll prototype 2");
   await form.getByRole("button", { name: "Save" }).click();
   await expect(form).toHaveCount(0);

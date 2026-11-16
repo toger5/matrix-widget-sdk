@@ -1,4 +1,4 @@
-/* PictureInPicturePanel, app-only (layer views, after the design files): moving and resizing. The design rules are design/css/pip.css. */
+/* PictureInPicturePanel, app-only (layer views, after the design files): moving and resizing. The design rules are src/styles/pip.css. */
 
 /* The label rows are always in the DOM, so a box is not remounted when the surround appears.
    Horizontal: they are above the boxes and the panel is anchored at the bottom, so they can come and go.

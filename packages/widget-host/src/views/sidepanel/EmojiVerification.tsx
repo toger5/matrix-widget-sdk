@@ -22,7 +22,7 @@ function VerifyStatus({ text }: { text: string }) {
 /**
  * Verifying with another device, inside the box of `DeviceVerification`: waiting for a device to
  * accept the request, comparing the emoji, waiting for the other device to confirm.
- * leaves sidepanel/verify-waiting, verify-emoji, verify-confirming
+ * stories `sidepanel-emojiverification--*`
  */
 export function EmojiVerification({ accountId, userId, verification }: EmojiVerificationProps) {
   const dispatch = useDispatch();

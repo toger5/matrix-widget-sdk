@@ -18,7 +18,7 @@ test.describe("lab room with both widgets open", () => {
     await expect(host.page.getByRole("tablist", { name: "Tabs of Widget lab" }).getByRole("tab")).toHaveText([/Widget lab/, /New test widget/, /Legacy test widget/]);
     await expect(host.tab(/New test widget/)).toHaveAttribute("aria-selected", "true");
     await expect(host.tab(ROOM)).toHaveAttribute("aria-selected", "false");
-    await host.leaf("tabs/widget-active");
+    await host.story("rooms-tabbar--widget-active");
 
     await host.tab(ROOM).click();
     await expect(host.tab(ROOM)).toHaveAttribute("aria-selected", "true");
@@ -28,7 +28,7 @@ test.describe("lab room with both widgets open", () => {
     // Dev tools are enabled: the widget tabs have the â‹¯ button. The room name cannot be closed.
     await expect(host.button("Dev tools of New test widget")).toHaveCount(1);
     await expect(host.button(/^Close Widget lab/)).toHaveCount(0);
-    await host.leaf("tabs/overview-active");
+    await host.story("rooms-tabbar--overview-active");
 
     // Both widgets run in this panel: grayed out, "Jump to tab" only.
     await expect(overview.locator(".row.opened")).toHaveText([/New test widget.*open in this panel/, /Legacy test widget.*open in this panel/]);
@@ -212,7 +212,7 @@ test("more tabs than fit: the widget tabs scroll behind the room name and the â€
   await expect(menu.getByRole("menuitemradio")).toHaveCount(8);
   await expect(menu.getByRole("menuitemradio", { name: /Quick poll/ })).toHaveAttribute("aria-checked", "true");
   await expect(menu.getByRole("menuitemradio", { name: /Quick poll/ })).toBeFocused();
-  await host.leaf("tabs/overflow");
+  await host.story("rooms-tabbar--overflow");
 
   await menu.getByRole("menuitemradio", { name: /Etherpad/ }).click();
   await expect(menu).toHaveCount(0);

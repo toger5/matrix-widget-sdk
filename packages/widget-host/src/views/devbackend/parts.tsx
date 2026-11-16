@@ -1,4 +1,4 @@
-/** Shared pieces of the DevBackendView sections (mockup functions `acc`, `sub`, `delayRow`). The form pieces other views use too are in `../ui/forms`. */
+/** Shared pieces of the DevBackendView sections (collapsible section, sub heading, delay row). The form pieces other views use too are in `../ui/forms`. */
 import { useEffect, useRef, useState, type ReactNode } from "react";
 
 import { Button, Icon, Toggle } from "../ui/atoms";

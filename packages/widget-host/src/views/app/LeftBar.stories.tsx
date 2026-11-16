@@ -23,22 +23,18 @@ export default meta;
 type Story = StoryObj<typeof LeftBar>;
 
 /** Expanded, dev tools disabled. */
-// leaf leftbar/expanded
 export const Expanded: Story = {};
 
 /** Dev tools enabled: the Dev tools button. Whether the DevBackend is enabled makes no difference here: it is activated from the AccountView or the bottom of the Dev tools. */
-// leaf leftbar/devtools
 export const DevToolsEnabled: Story = { args: { devTools: true } };
 
 /** DevBackend active: the Dev tools button highlighted (shown even with dev tools disabled). The account icon is the DevBackend icon. */
-// leaf leftbar/devbackend
 export const DevBackendActive: Story = { args: { devTools: true, devBackendActive: true, sidePanelView: "roomTools", account: ACCOUNTS.dev } };
 
 /**
  * DevBackend active, the Dev tools button hovered (here: focused, which shows the same tooltip): it
  * opens and closes the Dev tools, never switches accounts.
  */
-// leaf leftbar/devbackend-hover
 export const DevBackendHover: Story = {
   args: DevBackendActive.args,
   parameters: { size: [230, 620] },

@@ -1,7 +1,7 @@
 /**
- * The tool boxes below the room box (mockup functions `toolButton`, `toolSplit`, `toolHead`): each
- * tool is a button; at most one is open as a box, in the place of its button.
- * leaves devbackend/tools-collapsed, devbackend/behavior, devbackend/todevice, devbackend/media-open
+ * The tool boxes below the room box: each tool is a button; at most one is open as a box, in the
+ * place of its button. Stories `sidepanel-devbackendview--tools-collapsed`,
+ * `sidepanel-devbackendview-tools--*`.
  */
 import { useRef, type KeyboardEvent, type PointerEvent, type ReactNode } from "react";
 

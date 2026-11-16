@@ -25,13 +25,11 @@ export default meta;
 type Story = StoryObj<typeof DevBackendView>;
 
 /** The Client Backend Tool open below the room box: "Widget host behavior" (for all mocked rooms), with the resize handle and the minimise button. */
-// leaf devbackend/behavior
 export const Behavior: Story = {
   args: { roomTools: roomTools({ openSections: ["widgetHostBehavior"], tools: { open: "client", heightShare: 0.5 } }) },
 };
 
 /** The Client Backend Tool dragged higher, "To-device messages" open: send to the widget's device, the messages sent by widgets. */
-// leaf devbackend/todevice
 export const ToDevice: Story = {
   args: { roomTools: roomTools({ openSections: ["toDevice"], tools: { open: "client", heightShare: 0.73 } }) },
   parameters: { size: [348, 900] },
@@ -45,7 +43,6 @@ export const ToDevice: Story = {
 };
 
 /** The Media Backend Tool open below the room box: upload, the list of all media (also those uploaded by widgets), copy an MXC URI. */
-// leaf devbackend/media-open
 export const Media: Story = {
   args: { roomTools: roomTools({ tools: { open: "media", heightShare: 0.5 } }) },
 };

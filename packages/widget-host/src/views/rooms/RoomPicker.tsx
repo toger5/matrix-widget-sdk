@@ -82,7 +82,7 @@ function Tile({ label, avatar, name, sub, onClick, ...data }: { label: string; a
 /**
  * Choosing a room, no title: "Recent widgets" and "Recent rooms" (tiles; a group without entries
  * is left out), then "All rooms" with the search field and the list. The body of a room panel
- * without a room, and the Room list of the SidePanel. leaves panel/*, sidepanel/rooms
+ * without a room, and the Room list of the SidePanel. stories `rooms-roompicker--*`, `sidepanel-sidepanel--room-list`
  */
 export function RoomPicker({ main, panelId }: RoomPickerProps) {
   const dispatch = useDispatch();

@@ -40,7 +40,7 @@ function LbButton({ icon, title, pressed, className = "", noTitle, onClick }: Lb
   );
 }
 
-/** leaves leftbar/*. Renders nothing while collapsed (the AppShell shows the expand button and the toast). */
+/** stories `app-leftbar--*`. Renders nothing while collapsed (the AppShell shows the expand button and the toast). */
 export function LeftBar({ leftBar, devTools, devBackendActive, sidePanelView, account }: LeftBarProps) {
   const dispatch = useDispatch();
   if (leftBar.collapsed) return null;
@@ -63,7 +63,7 @@ export function LeftBar({ leftBar, devTools, devBackendActive, sidePanelView, ac
             className={devBackendActive ? "dev-on" : ""}
             onClick={() => dispatch({ type: "sidePanel/toggle", view: "roomTools" })}
           />
-          {/* TODO-FINDING tooltip-component - only this button has a drawn tooltip (as in leaf leftbar/devbackend-hover; shown on hover and on keyboard focus). All other buttons still rely on `title`, which a keyboard user never sees. */}
+          {/* TODO-FINDING tooltip-component - only this button has a drawn tooltip (as in story `app-leftbar--dev-backend-hover`; shown on hover and on keyboard focus). All other buttons still rely on `title`, which a keyboard user never sees. */}
           <span className="tooltip" aria-hidden="true">
             Dev tools
           </span>

@@ -1,23 +1,25 @@
 /* The app's stylesheet: a list of files in cascade layers. Vite inlines the imports (`?inline` in src/main.tsx,
    which adopts the sheet into the document and the shadow root; an adopted sheet ignores `@import`).
-   - The design rules come first: design/css/*.css, the same files in the same order and layers as in
-     design/mock.css (test/styles.test.ts checks it). They are the specification; change them as a design step.
-   - Then the app-only rules of each area (src/views/<area>/<file>.css): what the mockups do not draw. They are
-     in the layer of their area, after all design files, so they win over a design rule of the same specificity.
+   - The design rules come first: src/styles/<area>.css. They are the specification, together with the stories;
+     a change to them is a design step (it changes every view that uses the rule).
+   - Then the app-only rules of each area (src/views/<area>/<file>.css): real inputs, scrolling, resizing, hover
+     states. They are in the layer of their area, after all design files, so they win over a design rule of the
+     same specificity.
    Layers: tokens < base < atoms < views; a rule of a later layer wins whatever the specificity.
-   In the views layer the order matters between areas (`.caps` of the dev tools before `.prompt-card`). */
+   In the views layer the order matters between areas (`.caps` of the dev tools before `.prompt-card`).
+   test/styles.test.ts checks the list. Storybook adds .storybook/mockup.css (.storybook/preview.css). */
 @layer tokens, base, atoms, views;
-@import "../../design/css/tokens.css" layer(tokens);
-@import "../../design/css/base.css" layer(base);
-@import "../../design/css/atoms.css" layer(atoms);
+@import "./tokens.css" layer(tokens);
+@import "./base.css" layer(base);
+@import "./atoms.css" layer(atoms);
 @import "../views/ui/atoms.css" layer(atoms);
-@import "../../design/css/shell.css" layer(views);
-@import "../../design/css/sidepanel.css" layer(views);
-@import "../../design/css/devbackend.css" layer(views);
-@import "../../design/css/rooms.css" layer(views);
-@import "../../design/css/devtools.css" layer(views);
-@import "../../design/css/widget.css" layer(views);
-@import "../../design/css/pip.css" layer(views);
+@import "./shell.css" layer(views);
+@import "./sidepanel.css" layer(views);
+@import "./devbackend.css" layer(views);
+@import "./rooms.css" layer(views);
+@import "./devtools.css" layer(views);
+@import "./widget.css" layer(views);
+@import "./pip.css" layer(views);
 @import "../views/app/shell.css" layer(views);
 @import "../views/sidepanel/sidepanel.css" layer(views);
 @import "../views/devbackend/devbackend.css" layer(views);

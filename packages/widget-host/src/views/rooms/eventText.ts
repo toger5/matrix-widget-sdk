@@ -1,5 +1,5 @@
 /**
- * What an event of the RoomTimeline says, in words (mockup function `timelineBody`). Pure
+ * What an event of the RoomTimeline says, in words. Pure
  * functions of the raw event JSON; the sender, the time and the event type are shown next to it.
  * Nothing is hidden or merged: an edit, a reaction, an undecryptable or a deleted event gets its own line.
  */
