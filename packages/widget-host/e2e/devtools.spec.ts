@@ -1,4 +1,4 @@
-/** The WidgetDevToolBar of a widget tab: the bar, its four panels, docking and resizing. leaves devtools/* */
+/** The WidgetDevToolBar of a widget tab: the bar, its four panels, docking, resizing and reloading. leaves devtools/* */
 import type { Locator } from "@playwright/test";
 
 import type { WidgetDevToolsLayout } from "../src/appViewModel";
@@ -11,7 +11,7 @@ const devTools = (host: Host): Locator => host.page.getByTestId("widget-dev-tool
 const bar = (host: Host): Locator => host.page.getByRole("toolbar", { name: "Widget dev tools" });
 /** A panel toggle of the bar. Its name ends with a badge ("Messages, 8") once there is something to count. */
 const toggle = (host: Host, panel: "Messages" | "Stats" | "Driver" | "Console"): Locator => bar(host).getByRole("button", { name: new RegExp(`^${panel}`) });
-const dock = (host: Host, side: "left" | "top" | "right"): Locator => bar(host).getByRole("radio", { name: `Dock to the ${side}` });
+const dock = (host: Host, side: "left" | "top" | "bottom" | "right"): Locator => bar(host).getByRole("radio", { name: `Dock to the ${side}` });
 /** The open panels, left to right (top to bottom when docked to a side). */
 const openPanels = (host: Host) => devTools(host).locator("section[data-dev-panel]").evaluateAll((els) => els.map((el) => el.getAttribute("data-dev-panel")));
 const layout = async (host: Host): Promise<WidgetDevToolsLayout> => Object.values((await host.main()).workspaces)[0].devTools[NEW];
@@ -24,7 +24,7 @@ test.beforeEach(async ({ host }) => {
   await host.button("Dev tools of New test widget").click();
 });
 
-test("the ⋯ button of the tab opens the bar with the messages panel; the bar docks top, left and right", async ({ host }) => {
+test("the ⋯ button of the tab opens the bar with the messages panel; the bar docks top, bottom, left and right", async ({ host }) => {
   await expect(bar(host)).toBeVisible();
   await expect(host.button("Dev tools of New test widget")).toHaveAttribute("aria-pressed", "true");
   await expect(bar(host).getByRole("img", { name: "Widget is ready" })).toBeVisible();
@@ -39,6 +39,12 @@ test("the ⋯ button of the tab opens the bar with the messages panel; the bar d
   await expect(dock(host, "top")).toBeChecked();
   expect((await box(bar(host))).y + (await box(bar(host))).height).toBeLessThanOrEqual((await box(host.iframe(NEW))).y);
   await host.leaf("devtools/bar-top");
+
+  await dock(host, "bottom").click();
+  await expect(dock(host, "bottom")).toBeChecked();
+  await expect(bar(host)).toHaveAttribute("aria-orientation", "horizontal");
+  expect((await box(bar(host))).y).toBeGreaterThanOrEqual((await box(host.iframe(NEW))).y + (await box(host.iframe(NEW))).height);
+  await host.leaf("devtools/bar-bottom");
 
   await dock(host, "left").click();
   await expect(bar(host)).toHaveAttribute("aria-orientation", "vertical");
@@ -296,6 +302,24 @@ test("the dev tools are resized with the separator: keyboard and drag", async ({
   await separator.press("ArrowRight");
   await expect(separator).toHaveAttribute("aria-valuenow", "376");
   expect((await layout(host)).size).toEqual({ top: 240, side: 376 });
+
+  // Docked to the bottom it shares the height with the top dock. The bar is at the bottom edge and the
+  // separator above the panels, so ArrowUp and dragging up make them larger.
+  await dock(host, "bottom").click();
+  await expect(separator).toHaveAttribute("aria-valuenow", "240");
+  expect((await box(separator)).y + (await box(separator)).height).toBeLessThanOrEqual((await box(panels)).y);
+  expect((await box(panels)).y + (await box(panels)).height).toBeLessThanOrEqual((await box(bar(host))).y);
+  await separator.press("ArrowUp");
+  await expect(separator).toHaveAttribute("aria-valuenow", "256");
+  expect((await layout(host)).size).toEqual({ top: 256, side: 376 });
+  const bottom = await box(separator);
+  await host.page.mouse.move(bottom.x + bottom.width / 2, bottom.y + bottom.height / 2);
+  await host.page.mouse.down();
+  await host.page.mouse.move(bottom.x + bottom.width / 2, bottom.y + bottom.height / 2 - 40, { steps: 3 });
+  await host.page.mouse.up();
+  await expect(separator).toHaveAttribute("aria-valuenow", "296");
+  await expect.poll(async () => (await box(panels)).height).toBe(296);
+  await host.leaf("devtools/bottom-panel");
   expect(await host.token(NEW)).toBe(token);
 });
 
@@ -345,4 +369,83 @@ test("the dev tools layout survives moving the widget into the PiP panel and bac
   expect(await openPanels(host)).toEqual(["messages", "driver"]);
   expect(await layout(host)).toEqual(before);
   expect(await host.token(NEW)).toBe(token);
+});
+
+test("the reload button starts the widget again: new iframe and driver, the log starts empty, the layout stays", async ({ host }) => {
+  await toggle(host, "Driver").click();
+  await dock(host, "bottom").click();
+  const before = await layout(host);
+  const token = await host.token(NEW);
+  const generation = (await host.main()).widgets[NEW].generation!;
+  expect(await approved(host)).toContain(SEND_MESSAGE);
+  const pressedAt = await host.page.evaluate(() => Date.now());
+
+  // By keyboard: the reload button sits between the panel toggles and the dock group of the toolbar.
+  const reload = bar(host).getByRole("button", { name: "Reload the widget" });
+  await toggle(host, "Messages").focus();
+  await host.page.keyboard.press("End");
+  await expect(bar(host).getByRole("button", { name: "Close the dev tools" })).toBeFocused();
+  for (let i = 0; i < 5; i++) await host.page.keyboard.press("ArrowLeft");
+  await expect(reload).toBeFocused();
+  await expect(reload).toHaveAttribute("tabindex", "0");
+  await host.page.keyboard.press("Enter");
+  await expect.poll(async () => (await host.main()).widgets[NEW].generation).toBeGreaterThan(generation);
+  await expect(reload).toBeFocused();
+  await host.ready(NEW);
+  await expect(bar(host).getByRole("img", { name: "Widget is ready" })).toBeVisible();
+  expect(await host.token(NEW)).not.toBe(token);
+  expect(await layout(host)).toEqual(before);
+
+  // The new driver negotiates the capabilities again (auto-approved by the seed's behavior), and the
+  // message log only holds what happened since the reload.
+  await expect.poll(() => approved(host)).toContain(SEND_MESSAGE);
+  const timestamps = await host.page.evaluate((i) => window.widgetHost!.devTools(i)!.messages.map((m) => m.timestamp), NEW);
+  expect(timestamps.length).toBeGreaterThan(0);
+  expect(Math.min(...timestamps)).toBeGreaterThanOrEqual(pressedAt);
+});
+
+test("a reload decides nothing for the user: an open prompt and denied capabilities are asked again", async ({ host }) => {
+  // Without auto-approval and without remembering (the DevBackend's default behavior).
+  await host.populate("lab", { sidePanel: null, open: [{ room: LAB, widgets: [NEW_WIDGET], active: NEW_WIDGET }] });
+  const prompt = host.page.getByTestId("capability-prompt");
+  await expect(prompt).toBeVisible();
+  await host.button("Dev tools of New test widget").click();
+  const reload = async () => {
+    const generation = (await host.main()).widgets[NEW].generation!;
+    await bar(host).getByRole("button", { name: "Reload the widget" }).click();
+    await expect.poll(async () => (await host.main()).widgets[NEW].generation).toBeGreaterThan(generation);
+  };
+
+  // Reloaded while the prompt is open: the new driver asks again, nothing is granted meanwhile.
+  await reload();
+  await expect.poll(() => host.actions(NEW, "fromWidget")).toContainEqual(expect.stringMatching(/\.request_capabilities$/));
+  await expect(prompt).toBeVisible();
+  expect(await approved(host)).toEqual([]);
+
+  await prompt.getByRole("button", { name: "Deny all" }).click();
+  await host.ready(NEW);
+  expect(await approved(host)).toEqual([]);
+
+  // What was denied (and not remembered) is not granted by the restart: the user is asked again.
+  await reload();
+  await expect.poll(() => host.actions(NEW, "fromWidget")).toContainEqual(expect.stringMatching(/\.request_capabilities$/));
+  await expect(prompt).toBeVisible();
+  expect(await approved(host)).toEqual([]);
+});
+
+test("a reload loads the current URL of the widget's state event", async ({ host }) => {
+  const url = "http://localhost:5175/new/?changed=1";
+  await host.dispatch({ type: "mock/sendState", roomId: LAB, event: { type: "m.widget", stateKey: "widget-1", content: { name: "New test widget", url, uses_widget_api: true } } });
+  const eventUrl = async () => {
+    const rooms = (await host.main()).data.rooms;
+    const event = rooms.status === "ready" ? rooms.value.find((r) => r.id === LAB)?.widgetEvents?.find((e) => e.type === "m.widget") : undefined;
+    return event?.content.url;
+  };
+  await expect.poll(eventUrl).toBe(url);
+  // The running widget keeps its URL (finding widget-url-changes-while-running) until it is reloaded.
+  await expect(host.iframe(NEW)).toHaveAttribute("src", "http://localhost:5175/new/");
+
+  await bar(host).getByRole("button", { name: "Reload the widget" }).click();
+  await expect(host.iframe(NEW)).toHaveAttribute("src", url);
+  await host.ready(NEW);
 });

@@ -300,10 +300,11 @@ export const MAX_DEV_TOOL_PANELS = 3;
 export interface WidgetDevToolsLayout {
   /** Toggled by the ⋯ button of the tab. */
   open: boolean;
-  dock: "top" | "left" | "right";
+  /** The bar is at the outer edge, the panels between it and the widget. leaves devtools/bar-*, devtools/bottom-panel, devtools/side-panels */
+  dock: "top" | "bottom" | "left" | "right";
   /** The panels shown next to each other, oldest first, at most `MAX_DEV_TOOL_PANELS` (they stack when docked to a side). */
   panels: { panel: DevToolPanel; share: number }[];
-  /** Size of the panel area in px, per dock orientation. */
+  /** Size of the panel area in px, per orientation (`sideDock`): `top` is the height when docked top or bottom, `side` the width when docked left or right. */
   size: { top: number; side: number };
 }
 
@@ -319,7 +320,7 @@ export interface WidgetInstanceViewModel {
   widget: ResolvedWidget;
   load: { state: "loading" } | { state: "ready" } | { state: "failed"; error: string };
   /**
-   * Counts the starts of this widget ("retry" starts it again). `undefined` until its driver
+   * Counts the starts of this widget (`widget/reload` starts it again). `undefined` until its driver
    * exists: only then is the iframe rendered, so no message of the widget is lost.
    */
   generation?: number;
@@ -403,6 +404,9 @@ export function fullscreenWidget(vm: AppViewModel): WidgetInstanceId | undefined
   return tab.kind === "widget" ? tab.widgetId : undefined;
 }
 
+/** Docked left or right: the bar is a vertical strip, the panels stack and the size is `size.side`. */
+export const sideDock = (dock: WidgetDevToolsLayout["dock"]): boolean => dock === "left" || dock === "right";
+
 /** Alt+W closes the active tab of a panel that has a widget tab, and else the panel itself. */
 export const hasWidgetTab = (panel: RoomPanelViewModel): boolean => panel.content.kind === "room" && panel.content.tabs.some((t) => t.kind === "widget");
 
@@ -455,7 +459,7 @@ export type AppIntent =
   | { type: "tab/move"; panelId: PanelId; tabId: TabId; toIndex: number }
   | { type: "tab/close"; panelId: PanelId; tabId: TabId } // Alt+W in a panel with a widget tab; stops the widget, unless it is always on screen: then it keeps running in the PiP panel (assumption, see designFeedback.md)
   // widgets
-  | { type: "widget/retry"; widgetId: WidgetInstanceId }
+  | { type: "widget/reload"; widgetId: WidgetInstanceId } // "Retry" of a failed widget and the reload button of its dev tool bar: stops it and starts it again (new iframe and driver, the current URL of its state event); its dev tools data starts empty
   | { type: "widget/answerCapabilities"; widgetId: WidgetInstanceId; approved: string[] }
   | { type: "widget/answerOpenId"; widgetId: WidgetInstanceId; allow: boolean }
   | { type: "widget/jumpToTab"; widgetId: WidgetInstanceId } // activates its tab, which takes it out of the PiP panel; opens the room panel again if it was closed
@@ -496,7 +500,7 @@ export type AppIntent =
 // Data that is NOT part of AppViewModel (see the top of the file): one store per widget / per
 // mocked room, subscribed to by the view that shows it.
 
-/** What the dev tool panels of one widget show. Recorded from the start of the widget, also while the dev tools are closed. */
+/** What the dev tool panels of one widget show. Recorded from the start of the widget, also while the dev tools are closed; a reload starts it empty. */
 export interface WidgetDevToolsData {
   /** Capped (500); the log offers "clear". leaf devtools/messages */
   messages: WidgetMessage[];

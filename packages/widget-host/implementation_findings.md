@@ -28,7 +28,7 @@ Not decisions, but statements in the documents that turned out wrong or outdated
 | `driver-denied-list` | `widgetRuntime.ts` (`refreshCapabilities`) | The driver panel shows "denied", `DriverSnapshot` has no such list | (a) the driver reports it (b) the host records it | (b): what this host denied since the widget started, minus later grants. Lost on reload |
 | `navigate-confirm-is-synchronous` | `widgetRuntime.ts` (`navigate`) | The driver's `navigate` callback must answer synchronously, so the confirmation cannot be the app's modal | (a) async platform callback in the driver (b) answer "ok" at once and ask afterwards (c) keep `window.confirm` | (c) |
 | `console-panel-source` | `widgetRuntime.ts` (constructor) | The console panel should show the widget's own console; a cross-origin iframe's console cannot be read | (a) a new widget API action with which the SDK / compat wrapper forwards logs (b) show the host's and the driver's log about the widget | (b). The driver's log is global, so with several widgets every console shows every record |
-| `widget-url-changes-while-running` | `src/app/controller.ts` (`reconcile`) | A widget's state event changes (URL, name) while it runs | (a) reload at once (loses state) (b) mark the tab "changed, reload?" (c) nothing | (c): it keeps the old URL until it is closed and opened again |
+| `widget-url-changes-while-running` | `src/app/controller.ts` (`reconcile`) | A widget's state event changes (URL, name) while it runs | (a) reload at once (loses state) (b) mark the tab "changed, reload?" (c) nothing | (c): it keeps the old URL until it is reloaded (reload button of the dev tool bar) or closed and opened again |
 | `close-tab-of-always-on-screen-widget` | `controller.ts` (`closeTab`) | Closing the tab or the room panel of an always-on-screen widget | (a) it keeps running in the PiP panel; only the PiP close button stops it (b) it stops like any widget | (a), the reading of designFeedback.md that is not in appDesign.md |
 
 ### App shell, login, accounts
@@ -137,6 +137,7 @@ Login, sync, suspend/resume and the storage migration of both SDKs are only veri
 - Fonts are self-hosted (`@fontsource`) instead of loaded from Google Fonts: an adopted stylesheet cannot `@import`, and a dev tool should not call a third party.
 - The stats graph samples also while its panel is hidden (cheap; appDesign.md asks to pause it).
 - An always-on-screen widget without a tab that turns always-on-screen off is stopped: there is no place left to show it.
+- A reload (or Retry) keeps the widget's always-on-screen flag until the restarted widget changes it, so a widget in the PiP panel stays there while it starts again.
 - The DevBackend's workspace is not restored after a page reload, because its content only lives in memory.
 - All stored Matrix logins are restored at start, not only the active one.
 - `message-log-not-virtualized`: the message log is a plain list capped at 500; `message-log-cap-constant`: the cap is repeated in the view.

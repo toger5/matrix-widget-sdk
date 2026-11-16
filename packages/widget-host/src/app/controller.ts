@@ -42,6 +42,7 @@ import {
   putTab,
   removePanel,
   removeTab,
+  resizeDevTools,
   resizePanel,
   roomOfPanel,
   toggleDevToolPanel,
@@ -395,7 +396,7 @@ export class AppController {
     if (complete) {
       for (const widget of Object.values(this.main?.widgets ?? {})) {
         if (!known(widget.roomId, widget.widgetKey)) this.stopWidget(widget.id, true);
-        // TODO-FINDING widget-url-changes-while-running - the widget's state event changed (new URL or name) while the widget runs. Nothing happens today: the running widget keeps the old URL until it is closed and opened again. Options: reload it at once (loses its state), or mark the tab "changed, reload?".
+        // TODO-FINDING widget-url-changes-while-running - the widget's state event changed (new URL or name) while the widget runs. Nothing happens today: the running widget keeps the old URL until it is reloaded (the dev tool bar's reload button) or closed and opened again. Options: reload it at once (loses its state), or mark the tab "changed, reload?".
       }
     }
   }
@@ -900,7 +901,7 @@ export class AppController {
         return this.closeTab(intent.panelId, intent.tabId);
 
       // widgets
-      case "widget/retry": {
+      case "widget/reload": {
         const widget = this.main?.widgets[intent.widgetId];
         if (!widget) return;
         const runtime = this.runtimes.get(intent.widgetId);
@@ -943,13 +944,7 @@ export class AppController {
       case "devTools/togglePanel":
         return this.setWorkspace((ws) => updateDevTools(ws, intent.widgetId, (l) => toggleDevToolPanel(l, intent.panel)));
       case "devTools/resize":
-        return this.setWorkspace((ws) =>
-          updateDevTools(ws, intent.widgetId, (l) => ({
-            ...l,
-            size: intent.size === undefined ? l.size : { ...l.size, [l.dock === "top" ? "top" : "side"]: Math.round(intent.size) },
-            panels: intent.shares ? l.panels.map((p, i) => ({ ...p, share: intent.shares![i] ?? p.share })) : l.panels,
-          })),
-        );
+        return this.setWorkspace((ws) => updateDevTools(ws, intent.widgetId, (l) => resizeDevTools(l, intent)));
       case "devTools/clear":
         return this.runtimes.get(intent.widgetId)?.clear(intent.what);
       case "devTools/revokeCapabilities": {

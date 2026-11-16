@@ -63,7 +63,8 @@ Every leaf of `design/index.html` (`design/src/leaves.mjs`), with the test in wh
 | `widgetview/loading`, `widgetview/plain` | `widget.spec.ts` › a widget is loading until it sends notify_ready |
 | `widgetview/failed` | `widget.spec.ts` › a widget that never answers fails: retry starts it again, close tab gives up |
 | `widgetview/prompt` | `widget.spec.ts` › capability prompt: deny all, then approve a subset |
-| `devtools/one-panel`, `devtools/bar-top`, `devtools/bar-left`, `devtools/bar-right` | `devtools.spec.ts` › the ⋯ button of the tab opens the bar with the messages panel; the bar docks top, left and right |
+| `devtools/one-panel`, `devtools/bar-top`, `devtools/bar-bottom`, `devtools/bar-left`, `devtools/bar-right` | `devtools.spec.ts` › the ⋯ button of the tab opens the bar with the messages panel; the bar docks top, bottom, left and right |
+| `devtools/bottom-panel` | `devtools.spec.ts` › the dev tools are resized with the separator: keyboard and drag |
 | `devtools/two-panels`, `devtools/three-panels`, `devtools/fourth-panel`, `devtools/side-panels` | `devtools.spec.ts` › panels open next to each other; the fourth closes the oldest; docked to a side they stack |
 | `devtools/messages` | `devtools.spec.ts` › messages panel |
 | `devtools/stats` | `devtools.spec.ts` › stats panel |

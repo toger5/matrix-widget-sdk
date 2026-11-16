@@ -2,7 +2,20 @@
 import { describe, expect, it } from "vitest";
 
 import { MAX_DEV_TOOL_PANELS } from "../src/appViewModel";
-import { addPanel, DEFAULT_DEV_TOOLS, emptyWorkspace, findWidgetTab, putTab, removePanel, removeTab, resizePanel, roomOfPanel, toggleDevToolPanel, workspaceWidgetIds } from "../src/app/layout";
+import {
+  addPanel,
+  DEFAULT_DEV_TOOLS,
+  emptyWorkspace,
+  findWidgetTab,
+  putTab,
+  removePanel,
+  removeTab,
+  resizeDevTools,
+  resizePanel,
+  roomOfPanel,
+  toggleDevToolPanel,
+  workspaceWidgetIds,
+} from "../src/app/layout";
 
 const room = (roomId: string) => ({ kind: "room" as const, roomId, tabs: [] });
 
@@ -42,5 +55,15 @@ describe("layout", () => {
     expect(layout.panels.map((p) => p.panel)).toEqual(["stats", "driver", "console"]);
     expect(layout.panels).toHaveLength(MAX_DEV_TOOL_PANELS);
     expect(toggleDevToolPanel(layout, "driver").panels.map((p) => p.panel)).toEqual(["stats", "console"]);
+  });
+
+  it("resizes the dev tools in the orientation of their dock: top and bottom share a height, left and right a width", () => {
+    const size = (dock: (typeof DEFAULT_DEV_TOOLS)["dock"]) => resizeDevTools({ ...DEFAULT_DEV_TOOLS, dock }, { size: 300.4 }).size;
+    expect(size("top")).toEqual({ top: 300, side: 360 });
+    expect(size("bottom")).toEqual({ top: 300, side: 360 });
+    expect(size("left")).toEqual({ top: 240, side: 300 });
+    expect(size("right")).toEqual({ top: 240, side: 300 });
+    const two = toggleDevToolPanel(toggleDevToolPanel(DEFAULT_DEV_TOOLS, "messages"), "stats");
+    expect(resizeDevTools(two, { shares: [1.5, 0.5] })).toMatchObject({ size: DEFAULT_DEV_TOOLS.size, panels: [{ share: 1.5 }, { share: 0.5 }] });
   });
 });

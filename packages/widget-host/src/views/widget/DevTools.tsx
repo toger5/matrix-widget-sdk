@@ -1,6 +1,6 @@
 import { Fragment, useLayoutEffect, useRef, useState, type KeyboardEvent, type PointerEvent, type ReactNode, type RefObject } from "react";
 
-import type { DevToolPanel, WidgetDevToolsLayout, WidgetInstanceViewModel } from "../../appViewModel";
+import { sideDock, type DevToolPanel, type WidgetDevToolsLayout, type WidgetInstanceViewModel } from "../../appViewModel";
 import { useDispatch, useViewEnv } from "../env";
 import { Icon, IconButton } from "../ui/atoms";
 import { ConsolePanel } from "./ConsolePanel";
@@ -31,7 +31,7 @@ interface SeparatorProps {
   /** Arrow key step, in units of `value`. */
   step: number;
   valueText?: string;
-  /** -1: moving the separator right / down makes the value smaller (dev tools docked right). */
+  /** -1: moving the separator right / down makes the value smaller (dev tools docked right or bottom). */
   sign?: 1 | -1;
   /** Units of `value` per pixel of drag, measured when the drag starts. */
   unitsPerPx: () => number;
@@ -133,14 +133,14 @@ export interface DevToolsProps {
 /**
  * The WidgetDevToolBar of one widget: the bar, the open panels next to each other (stacked when
  * docked to a side) and the separator towards the widget. Rendered by `WidgetView` at the dock
- * position. leaves devtools/*
+ * position; the bar is at the outer edge. leaves devtools/*
  */
 export function DevTools({ widget, layout, initialExpandedMessage }: DevToolsProps) {
   const dispatch = useDispatch();
   const data = useViewEnv().useDevToolsData(widget.id);
   const widgetId = widget.id;
   const { dock, panels } = layout;
-  const vertical = dock !== "top";
+  const vertical = sideDock(dock);
   const root = useRef<HTMLDivElement>(null);
   const panelsRef = useRef<HTMLDivElement>(null);
 
@@ -224,7 +224,7 @@ export function DevTools({ widget, layout, initialExpandedMessage }: DevToolsPro
             max={maxSize}
             step={16}
             valueText={`${Math.round(Math.min(size, maxSize))} pixels`}
-            sign={dock === "right" ? -1 : 1}
+            sign={dock === "right" || dock === "bottom" ? -1 : 1}
             unitsPerPx={() => 1}
             onChange={(next) => dispatch({ type: "devTools/resize", widgetId, size: next })}
             onReset={() => dispatch({ type: "devTools/resize", widgetId, size: Math.min(maxSize, vertical ? DEFAULT_SIZE.side : DEFAULT_SIZE.top) })}

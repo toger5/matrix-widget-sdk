@@ -1,6 +1,6 @@
 import { useState, type KeyboardEvent } from "react";
 
-import type { DevToolPanel, WidgetDevToolsLayout, WidgetInstanceViewModel } from "../../appViewModel";
+import { sideDock, type DevToolPanel, type WidgetDevToolsLayout, type WidgetInstanceViewModel } from "../../appViewModel";
 import { useDispatch } from "../env";
 import { plural } from "../helpers";
 import { Icon, type IconName } from "../ui/atoms";
@@ -16,6 +16,7 @@ export const DEV_TOOL_PANELS: Record<DevToolPanel, { icon: IconName; label: stri
 const DOCKS = [
   { dock: "left", icon: "dockLeft" },
   { dock: "top", icon: "dockTop" },
+  { dock: "bottom", icon: "dockBottom" },
   { dock: "right", icon: "dockRight" },
 ] as const satisfies readonly { dock: WidgetDevToolsLayout["dock"]; icon: IconName }[];
 
@@ -35,14 +36,14 @@ export interface DevToolBarProps {
 }
 
 /**
- * The bar of the WidgetDevToolBar: status dot, one toggle per panel, the dock switch and close.
+ * The bar of the WidgetDevToolBar: status dot, one toggle per panel, reload, the dock switch and close.
  * A toolbar with a roving tabindex: Tab enters it once, the arrow keys move between its buttons.
  * leaves devtools/bar-*
  */
 export function DevToolBar({ widget, layout, messageCount, errorCount }: DevToolBarProps) {
   const dispatch = useDispatch();
   const widgetId = widget.id;
-  const vertical = layout.dock !== "top";
+  const vertical = sideDock(layout.dock);
   const open = new Set(layout.panels.map((p) => p.panel));
   const status = STATUS[widget.load.state];
   // Which button of the bar is the tab stop (index in DOM order).
@@ -100,6 +101,9 @@ export function DevToolBar({ widget, layout, messageCount, errorCount }: DevTool
         );
       })}
       <span className="sp" />
+      <button type="button" className="dt-ib dt-reload" title="Reload the widget" aria-label="Reload the widget" onClick={() => dispatch({ type: "widget/reload", widgetId })} {...roving()}>
+        <Icon name="refresh" size={13} />
+      </button>
       <span className="dt-dock" role="radiogroup" aria-label="Dock position">
         {DOCKS.map(({ dock, icon }) => (
           <button

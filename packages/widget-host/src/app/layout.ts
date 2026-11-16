@@ -5,6 +5,7 @@
  */
 import {
   MAX_DEV_TOOL_PANELS,
+  sideDock,
   type DevToolPanel,
   type PanelId,
   type RoomPanelViewModel,
@@ -130,6 +131,15 @@ export function resizePanel(ws: WorkspaceLayout, panelId: PanelId, widthShare: n
 
 export function updateDevTools(ws: WorkspaceLayout, widgetId: WidgetInstanceId, change: (layout: WidgetDevToolsLayout) => WidgetDevToolsLayout): WorkspaceLayout {
   return { ...ws, devTools: { ...ws.devTools, [widgetId]: change(ws.devTools[widgetId] ?? DEFAULT_DEV_TOOLS) } };
+}
+
+/** Resize the panel area (the size of the dock's orientation, `sideDock`) and / or the shares of the panels. */
+export function resizeDevTools(layout: WidgetDevToolsLayout, { size, shares }: { size?: number; shares?: number[] }): WidgetDevToolsLayout {
+  return {
+    ...layout,
+    size: size === undefined ? layout.size : { ...layout.size, [sideDock(layout.dock) ? "side" : "top"]: Math.round(size) },
+    panels: shares ? layout.panels.map((p, i) => ({ ...p, share: shares[i] ?? p.share })) : layout.panels,
+  };
 }
 
 /** Open or close a dev tool panel. Opening one more than `MAX_DEV_TOOL_PANELS` closes the oldest. */

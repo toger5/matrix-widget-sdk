@@ -94,8 +94,9 @@ grep -rlE '(from |import\()"(matrix-js-sdk|matrix-sdk-uniffi-js)' src | grep -vE
 - `WidgetRuntime` owns the driver of one widget. The driver calls the platform callbacks
   synchronously from inside its own methods, so anything that calls back into the driver or
   changes the view model is deferred (`later`, a microtask). Messages are accepted only from the
-  widget's own `contentWindow` and posted to the widget's origin; keep both checks. Retry disposes
-  the runtime and starts a new generation.
+  widget's own `contentWindow` and posted to the widget's origin; keep both checks. A reload
+  (`widget/reload`: Retry, the reload button of the dev tools) disposes the runtime (and frees its
+  driver) and starts a new generation.
 - A widget runs once per account (`WidgetInstanceId` = `<room id>|<widget key>`). Switching the
   account stops every widget; its workspace starts them again.
 - `src/widgetStateEvent.ts` decides which state events are widgets and how they are embedded

@@ -97,11 +97,12 @@ hands it to the driver of each widget of that room like any other `MatrixBackend
     (`mxc://example.org/demo-landscape`, `…/demo-tiles`, `…/demo-notes`). Upload more; files a
     widget uploads appear here too. Every file has a button to copy its `mxc://` URI.
   Approving capabilities also pushes the current permitted state (`update_state`) at once.
-- **Dev tools of a widget** (the ⋯ button of its tab; enable dev tools in the settings):
-  **Messages** (every envelope in both directions, expandable), **Stats**, **Driver** (approved,
-  auto-approved and denied capabilities, revoke, and buttons that push `update_theme`,
-  `update_language` and `update_visibility`) and **Console** (this host's and the driver's log
-  about the widget).
+- **Dev tools of a widget** (the ⋯ button of its tab; enable dev tools in the settings), docked
+  top, bottom, left or right: **Messages** (every envelope in both directions, expandable),
+  **Stats**, **Driver** (approved, auto-approved and denied capabilities, revoke, and buttons that
+  push `update_theme`, `update_language` and `update_visibility`) and **Console** (this host's and
+  the driver's log about the widget). **Reload** starts the widget again like Retry: a new iframe
+  and driver, the current URL of its state event, empty panels; capabilities are negotiated again.
 - **Remembered capabilities** (logged-in mode): what you approve is stored in `localStorage` per
   account, room and widget, and granted without a prompt the next time the widget is opened; only
   capabilities it has not been given before are prompted for. Logging out forgets them. In the

@@ -126,12 +126,11 @@ A NativeTab with the default room information, in a pretty layout that follows a
 
 A toolbar for a single widget, with information like the driver state (approved capabilities) and a log of the messages.
 
-- It looks very technical. Take inspiration from Photoshop, Godot and the browser devtools: less rounded corners for separation and a different font (not monospace, but more technical).
-- It is docked at the top of the widget by default and can be moved to the left or right (as in the browser devtools).
-- The bar itself only has buttons to open and close specific panels:
-  - The first panel opens at full width, the second opens next to it, the third next to those.
-  - At most three panels are open: opening a fourth closes the oldest one.
-  - Panels are resized by dragging between them.
+- It looks technical, like Photoshop, Godot and the browser devtools: less rounded corners and a technical font (not monospace).
+- It is docked at the top of the widget by default and can be moved to the bottom, left or right, with the bar at the outer edge.
+- A reload button restarts the widget like "Retry" (new iframe and driver); its panels start empty.
+- The other buttons open and close panels: the first opens at full width, the second next to it, the third next to those. Opening a fourth closes the oldest one.
+- Panels are resized by dragging between them.
 
 ### WidgetDevToolMessagesPanel
 
@@ -316,7 +315,7 @@ The mockups needed to review the full design. Each leaf is one state to draw. Do
         - Loading / failed to load
         - Dev tools: no (full widget)
         - Dev tools: yes
-          - Bar only, docked top / left / right
+          - Bar only, docked top / bottom / left / right
           - One panel open (full width)
           - Two and three panels next to each other
           - Fourth panel opened: the oldest one closes

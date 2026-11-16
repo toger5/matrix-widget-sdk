@@ -497,16 +497,17 @@ function dtPanel(kind, { expanded = false } = {}) {
 }
 
 /**
- * dev: { dock: "top" | "left" | "right", panels: kind[] (at most 3, oldest first), expanded?: bool, size?: px }
+ * dev: { dock: "top" | "bottom" | "left" | "right", panels: kind[] (at most 3, oldest first), expanded?: bool, size?: px }
+ * The bar is at the outer edge, the panels between it and the widget.
  */
 export function devToolBar({ dock = "top", panels = [], expanded = false, size } = {}) {
   if (panels.length > 3) throw new Error("at most three dev tool panels are open: opening a fourth closes the oldest");
   const open = new Set(panels);
-  const vertical = dock !== "top";
+  const vertical = dock === "left" || dock === "right";
   const cap = (s) => s[0].toUpperCase() + s.slice(1);
   const bar = `<div class="dt-bar" role="toolbar" aria-label="Widget dev tools" aria-orientation="${vertical ? "vertical" : "horizontal"}"><span class="dt-title"><i class="dot ok" role="img" aria-label="Widget is ready" title="Widget is ready"></i><span>Dev tools</span></span>${Object.entries(DT)
     .map(([k, [ico, label]]) => `<button class="dt-btn ${open.has(k) ? "on" : ""}" aria-pressed="${open.has(k)}" title="${label}" aria-label="${k === "messages" ? "Messages, 42" : k === "console" ? "Console, 2 errors" : label}">${icon(ico, 13)}<span>${label}</span>${k === "messages" ? "<em>42</em>" : k === "console" ? `<em class="err">${icon("alert", 9)}2</em>` : ""}</button>`)
-    .join("")}<span class="sp"></span><span class="dt-dock" role="group" aria-label="Dock position">${["left", "top", "right"].map((d) => `<button class="dt-ib ${d === dock ? "on" : ""}" title="Dock to the ${d}" aria-label="Dock to the ${d}" aria-pressed="${d === dock}">${icon("dock" + cap(d), 13)}</button>`).join("")}</span><button class="dt-ib" title="Close the dev tools" aria-label="Close the dev tools">${icon("x", 13)}</button></div>`;
+    .join("")}<span class="sp"></span><button class="dt-ib dt-reload" title="Reload the widget" aria-label="Reload the widget">${icon("refresh", 13)}</button><span class="dt-dock" role="radiogroup" aria-label="Dock position">${["left", "top", "bottom", "right"].map((d) => `<button class="dt-ib ${d === dock ? "on" : ""}" role="radio" title="Dock to the ${d}" aria-label="Dock to the ${d}" aria-checked="${d === dock}">${icon("dock" + cap(d), 13)}</button>`).join("")}</span><button class="dt-ib" title="Close the dev tools" aria-label="Close the dev tools">${icon("x", 13)}</button></div>`;
   const split = `<div class="dt-split" role="separator" aria-orientation="${vertical ? "horizontal" : "vertical"}" aria-label="Resize the dev tool panels" aria-valuenow="50" aria-valuemin="15" aria-valuemax="85" tabindex="0" title="Drag or use the arrow keys to resize · double click or Enter to reset"></div>`;
   const body = open.size
     ? `<div class="dt-panels" style="${vertical ? "width" : "height"}:${size ?? (vertical ? 340 : 250)}px">${panels.map((p) => dtPanel(p, { expanded })).join(split)}</div><div class="dt-resize" role="separator" aria-orientation="${vertical ? "vertical" : "horizontal"}" aria-label="Resize the dev tools" aria-valuenow="40" aria-valuemin="15" aria-valuemax="85" tabindex="0" title="Drag or use the arrow keys to resize · double click or Enter to reset"><i></i></div>`

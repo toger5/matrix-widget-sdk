@@ -38,6 +38,7 @@ const ICONS = {
   refresh: '<path d="M3 12a9 9 0 0 1 15-6.7L21 8M21 3v5h-5M21 12a9 9 0 0 1-15 6.7L3 16M3 21v-5h5"/>',
   cone: '<path d="M10.5 3h3l4.5 15H6zM3 21h18M8.4 10h7.2M7 14.5h10"/>',
   dockTop: '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/>',
+  dockBottom: '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 15h18"/>',
   dockLeft: '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18"/>',
   dockRight: '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M15 3v18"/>',
   columns: '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M12 3v18"/>',

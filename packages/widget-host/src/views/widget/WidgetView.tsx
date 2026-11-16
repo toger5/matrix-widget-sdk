@@ -56,7 +56,7 @@ function WidgetState({ widget, compact, tab }: Pick<WidgetViewProps, "widget" | 
         <div className="wv-over compact" data-testid="widget-failed">
           <div className="wv-state" role="alert" title={load.error}>
             <b>{name} could not be loaded</b>
-            <Button sm icon="refresh" onClick={() => dispatch({ type: "widget/retry", widgetId })}>
+            <Button sm icon="refresh" onClick={() => dispatch({ type: "widget/reload", widgetId })}>
               Retry
             </Button>
           </div>
@@ -71,7 +71,7 @@ function WidgetState({ widget, compact, tab }: Pick<WidgetViewProps, "widget" | 
           <span className="muted">{load.error}</span>
           <code>{url}</code>
           <div className="inline-row">
-            <Button kind="primary" icon="refresh" onClick={() => dispatch({ type: "widget/retry", widgetId })}>
+            <Button kind="primary" icon="refresh" onClick={() => dispatch({ type: "widget/reload", widgetId })}>
               Retry
             </Button>
             {tab && <Button onClick={() => dispatch({ type: "tab/close", panelId: tab.panelId, tabId: tab.tabId })}>Close tab</Button>}

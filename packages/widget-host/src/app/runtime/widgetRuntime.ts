@@ -2,7 +2,8 @@
  * One running widget: its `WidgetHostDriver`, the message pump between the driver and the iframe,
  * and the data its dev tools show. The iframe element itself is rendered by `WidgetIframes`, which
  * hands it over with `attach()`. A runtime is created when a widget starts and disposed when it
- * stops; "retry" disposes it and creates a new one.
+ * stops; a reload (`widget/reload`: "Retry", the reload button of the dev tool bar) disposes it and
+ * creates a new one.
  */
 import { WidgetHostDriver, type DriverSnapshot, type MatrixBackend, type WidgetHostPlatform } from "@matrix-widget-tools/widget-host-bindings";
 
@@ -237,6 +238,11 @@ export class WidgetRuntime {
     // Taking every capability away makes the driver cancel its backend subscriptions.
     this.driver.revokeCapabilities(this.driver.snapshot().approved);
     this.iframe = null;
+    // Free the driver now: the bindings keep the platform callbacks (which hold this runtime, and so
+    // the driver) in a global handle map until the driver is freed, so its finalizer never runs and
+    // every stop or reload would keep the old driver and its data. A driver call still in flight
+    // holds its own reference. Nothing calls the driver after this (`disposed`, `later`).
+    this.driver.uniffiDestroy();
   }
 
   /**

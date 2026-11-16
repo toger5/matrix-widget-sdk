@@ -25,8 +25,8 @@ type Story = StoryObj<typeof WidgetView>;
 
 const STORY_DATA = { ...DEV_TOOLS_DATA, stats: { ...DEV_TOOLS_DATA.stats, runningSince: Date.now() - 192_000 } };
 
-/** leaf devtools/bar-top */
-export const BarTop: Story = { args: { devTools: devToolsLayout({ panels: [] }) } };
+/** leaf devtools/bottom-panel (the bar without panels is in leaves devtools/bar-*) */
+export const DockedBottom: Story = { args: { devTools: devToolsLayout({ dock: "bottom", size: { top: 250, side: 340 } }) } };
 
 /** leaf devtools/two-panels */
 export const TwoPanels: Story = {

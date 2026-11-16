@@ -462,6 +462,7 @@ button.tile { display: block; text-align: center; }
 .dt-dock { display: inline-flex; gap: 1px; padding: 1px; border: 1px solid var(--dt-border); border-radius: var(--r-1); margin-right: 4px; }
 .dt-ib { width: 24px; height: 24px; border: 1px solid transparent; display: grid; place-items: center; border-radius: 2px; color: var(--text-muted); }
 .dt-ib.on { background: var(--surface-3); color: var(--text); border-color: var(--text-muted); }
+.dt-reload { margin-right: 2px; }
 .dt-panels { position: relative; flex: none; display: flex; min-height: 0; min-width: 0; }
 .dt-split { flex: none; width: 8px; background: linear-gradient(90deg, transparent 3px, var(--text-muted) 3px 5px, transparent 5px) var(--dt-bar); cursor: col-resize; }
 .dt-resize { flex: none; height: 8px; display: grid; place-items: center; background: var(--dt-bar); border-block: 1px solid var(--dt-border); cursor: row-resize; }
@@ -490,6 +491,12 @@ button.tile { display: block; text-align: center; }
 .wv.dock-left .dt-split, .wv.dock-right .dt-split { width: auto; height: 8px; background: linear-gradient(transparent 3px, var(--text-muted) 3px 5px, transparent 5px) var(--dt-bar); cursor: row-resize; }
 .wv.dock-left .dt-resize, .wv.dock-right .dt-resize { width: 8px; height: auto; border-block: 0; border-inline: 1px solid var(--dt-border); cursor: col-resize; }
 .wv.dock-left .dt-resize i, .wv.dock-right .dt-resize i { width: 2px; height: 28px; }
+.wv.dock-left .dt-reload, .wv.dock-right .dt-reload { margin: 0 0 2px; }
+/* the vertical bar is a size container: a short one shows icons only (see below) */
+.wv.dock-left .dt-bar, .wv.dock-right .dt-bar { container: dtbar / size; }
+/* dock bottom: the bar at the bottom edge, the panels and their separator above it (mirrors dock right) */
+.wv.dock-bottom .dt { order: 2; flex-direction: column-reverse; }
+.wv.dock-bottom .dt-bar { border-bottom: 0; border-top: 1px solid var(--dt-border); }
 
 .msgs { flex: 1; overflow: hidden; }
 .msg { border-bottom: 1px solid var(--dt-border); }
@@ -597,9 +604,12 @@ button.tile { display: block; text-align: center; }
 .roompanel.cut { flex: none; width: 100%; height: 100%; border-bottom: 0; border-radius: var(--r-4) var(--r-4) 0 0; }
 .roompanel.cut .rp-body { background: linear-gradient(var(--surface-2), var(--surface)); }
 
-/* --- narrow dev tools: icons only in the bar, no action prefix, stat tiles in one row -------- */
+/* --- narrow dev tools: icons only in a narrow or short bar, no action prefix, stat tiles in one row */
 @container wv (max-width: 600px) {
-  .dt-top .dt-btn > span, .dt-top .dt-title > span { display: none; }
+  .dt-top .dt-btn > span, .dt-top .dt-title > span, .dt-bottom .dt-btn > span, .dt-bottom .dt-title > span { display: none; }
+}
+@container dtbar (max-height: 600px) {
+  .dt-btn > span { display: none; }
 }
 @container dtp (max-width: 420px) {
   .dt-tools .muted, .dt-tools .chip { display: none; }
@@ -815,7 +825,7 @@ button.tile { display: block; text-align: center; }
 .dot.wait { background: var(--warning); }
 .dot.err { background: var(--danger); }
 /* the panel area never pushes the widget out of the view */
-.wv.dock-top .dt { max-height: calc(100% - 48px); }
+.wv.dock-top .dt, .wv.dock-bottom .dt { max-height: calc(100% - 48px); }
 .wv.dock-left .dt, .wv.dock-right .dt { max-width: calc(100% - 48px); }
 .wv .dt-panels { flex: 0 1 auto; }
 .dt-split, .dt-resize { touch-action: none; }
