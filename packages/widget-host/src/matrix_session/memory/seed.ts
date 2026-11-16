@@ -119,7 +119,11 @@ function member(value: unknown, path: string): SeedMember {
   return compact({ userId: userId(o.userId, `${path}.userId`), displayName: optional(o.displayName, `${path}.displayName`, string) });
 }
 
-function widget(value: unknown, path: string): StateEvent {
+/**
+ * Check parsed JSON against a widget state event (`{ type, state_key, content }`, nothing else),
+ * naming `path` in the error. Also used for the local widgets of a `HostSeed`.
+ */
+export function validateWidgetEvent(value: unknown, path: string): StateEvent {
   const o = object(value, path, ["type", "state_key", "content"]);
   return { type: string(o.type, `${path}.type`), state_key: string(o.state_key, `${path}.state_key`), content: content(o.content, `${path}.content`) };
 }
@@ -141,7 +145,7 @@ function room(value: unknown, path: string): SeedRoom {
     name: string(o.name, `${path}.name`),
     topic: optional(o.topic, `${path}.topic`, string),
     members: optional(o.members, `${path}.members`, (v, p) => list(v, p, member)),
-    widgets: optional(o.widgets, `${path}.widgets`, (v, p) => list(v, p, widget)),
+    widgets: optional(o.widgets, `${path}.widgets`, (v, p) => list(v, p, validateWidgetEvent)),
     state: optional(o.state, `${path}.state`, (v, p) => list(v, p, stateEvent)),
     timeline: optional(o.timeline, `${path}.timeline`, (v, p) => list(v, p, timelineEvent)),
   });

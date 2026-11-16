@@ -253,8 +253,8 @@ test("a fresh browser without a stored login shows the login page; skipping it l
   await expect(fresh.app).toHaveClass(/fence/);
   await expect(fresh.page.getByTestId("devbackend-view")).toBeVisible();
   await expect(fresh.panels).toHaveCount(0);
-  // Skipping the login enables the dev tools, and there is no account to leave the DevBackend for.
-  expect((await fresh.state()).settings.devTools).toBe(true);
+  // Skipping the login enables the dev tools and the DevBackend, and there is no account to leave the DevBackend for.
+  expect((await fresh.state()).settings).toMatchObject({ devTools: true, devBackend: true });
   await expect(fresh.button("Leave DevBackend")).toHaveCount(0);
   await fresh.leaf("app/devbackend-empty");
   await context.close();

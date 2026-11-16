@@ -48,7 +48,7 @@ export function RoomView({ main, settings, panelId, content, fullscreen = false,
         ) : active?.kind === "timeline" ? (
           <RoomTimeline roomId={roomId} />
         ) : (
-          <RoomOverview main={main} panelId={panelId} roomId={roomId} devTools={settings.devTools} timelineOpen={tabs.some((t) => t.kind === "timeline")} />
+          <RoomOverview main={main} panelId={panelId} roomId={roomId} devTools={settings.devTools} devBackend={settings.devBackend} timelineOpen={tabs.some((t) => t.kind === "timeline")} />
         )}
       </div>
     </>

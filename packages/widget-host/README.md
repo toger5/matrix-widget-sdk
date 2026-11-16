@@ -10,8 +10,10 @@ in `../widget-host-bindings`. One React app (`src/`) with two modes that share e
 | in-memory store (the DevBackend) | the crate's `InMemoryBackend`, an in-memory Matrix room; nothing leaves the page | widget development without a homeserver, end-to-end tests of widgets and of the compat wrapper |
 
 The start page is the login screen. **Skip login and use the DevBackend** on it switches to the
-in-memory mode, and so do the URL parameters below. Logged in, the cone button of the left bar
-(shown when dev tools are enabled in the settings) activates it. The app has no Element Web or Compound
+in-memory mode (and enables the dev tools and the DevBackend), and so do the URL parameters below.
+Logged in, the cone button of the left bar (shown when **Enable the DevBackend** is on in the
+settings) activates it. **Enable dev tools** is a switch of its own: the widget dev tools and
+**Add widget** work with a Matrix account as well. The app has no Element Web or Compound
 components yet.
 
 ## Structure
@@ -117,6 +119,17 @@ hands it to the driver of each widget of that room like any other `MatrixBackend
   Approving capabilities also pushes the current permitted state (`update_state`) at once.
 - **Timeline tab** (**Open timeline** in the room overview): every event of the mocked room, the
   ones widgets send included, as they arrive.
+- **Add widget** (the Widgets card of the room overview; enable dev tools in the settings), in
+  any room, logged in or in the DevBackend: the **Widget** or **Element Call** form of the
+  DevBackendView, or **Paste JSON** (a whole `{ type, state_key, content }`, e.g. from Element's
+  room state explorer; other fields are ignored). It adds the widget without opening it, either
+  **only in this host** (a local widget, marked "Local": kept in `localStorage` per account and
+  room, deleted on logout, the DevBackend's in memory only; edit and remove are in its row) or to
+  **the room** as a state event sent as you (replacing a widget of the room asks first; a refusal
+  such as `M_FORBIDDEN` stays in the form). A local widget's key is `local:<type>/<state key>`, so
+  it never shares remembered capabilities with a room widget; they are forgotten when its URL
+  (of a legacy widget also its `data`, the values of the URL's variables) changes (it reloads) or
+  it is removed. Only `http:` / `https:` URLs are accepted.
 - **Dev tools of a widget** (the ⋯ button of its tab; enable dev tools in the settings), docked
   top, bottom, left or right: **Messages** (every envelope in both directions, expandable),
   **Stats** (counters, and a bar graph of the characters sent per 5 s: both directions, to or from
@@ -217,13 +230,13 @@ Open the host with the URL parameters above (or `?seed=<url of a seed json>`), t
 
 | call | gives |
 |---|---|
-| `populate(seed)` | Resets the app to the DevBackend with exactly this content and screen (`HostSeed` in `src/app/controller.ts`, examples in `e2e/seeds/`); `open: [{ room, widgets, timeline, active, overview }]` are the room panels and their tabs |
+| `populate(seed)` | Resets the app to the DevBackend with exactly this content and screen (`HostSeed` in `src/app/controller.ts`, examples in `e2e/seeds/`); `open: [{ room, widgets, timeline, active, overview }]` are the room panels and their tabs, `localWidgets: { [room id]: [state event] }` the local widgets ("Add widget", only in this host) |
 | `messages(widgetId)` | Every envelope of a widget in both directions, as it crossed the wire |
 | `driverSnapshot(widgetId)` | The negotiated state of its driver |
 | `store(roomId)` | Timeline, state, delayed events and sent to-device messages of a mocked room |
 | `state()` / `dispatch(intent)` | The view model / send an intent |
 
-A widget id is `<room id>|<widget key>`, e.g. `!room:example.org|m.widget/widget-1`. No Matrix SDK code is loaded on this path. The message log and the driver panel of the dev tools show the same data, but collapsed and capped, so assert on the hook. Why the driver refused or dropped something is in the widget's console panel and in the browser console (see `log=` above). Widget-side assertions are available in the test widgets' own log.
+A widget id is `<room id>|<widget key>`, e.g. `!room:example.org|m.widget/widget-1`; a local widget's key starts with `local:` (`!room:example.org|local:m.widget/widget-1`). No Matrix SDK code is loaded on this path. The message log and the driver panel of the dev tools show the same data, but collapsed and capped, so assert on the hook. Why the driver refused or dropped something is in the widget's console panel and in the browser console (see `log=` above). Widget-side assertions are available in the test widgets' own log.
 
 The host's own Playwright tests are in `e2e/` ([`e2e/README.md`](e2e/README.md)): `npm run e2e`.
 

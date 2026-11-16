@@ -2,12 +2,12 @@ import type { KeyboardEvent } from "react";
 
 import type { SettingsViewModel } from "../../appViewModel";
 import { useDispatch } from "../env";
-import { Icon, Toggle } from "../ui/atoms";
+import { Icon, Toggle, type IconName } from "../ui/atoms";
 import { SideBox } from "./SideBox";
 
 export interface SettingsViewProps {
   settings: SettingsViewModel;
-  /** Dev tools cannot be turned off while the DevBackend is active. */
+  /** The DevBackend switch cannot be turned off while the DevBackend is active. */
   devBackendActive: boolean;
 }
 
@@ -17,11 +17,27 @@ const THEMES: { value: SettingsViewModel["theme"]; label: string }[] = [
   { value: "dark", label: "Dark" },
 ];
 
-/** leaves sidepanel/settings-on, settings-off. */
+/** What a switch enables, listed under it while it is on: [icon, name, where]. */
+function SetList({ items }: { items: [IconName, string, string][] }) {
+  return (
+    <ul className="set-list on">
+      {items.map(([icon, name, where]) => (
+        <li key={name}>
+          <Icon name={icon} size={14} />
+          <span>
+            <b>{name}</b> {where}
+          </span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+/** leaves sidepanel/settings-off, settings-on, settings-devbackend. Two independent switches. */
 export function SettingsView({ settings, devBackendActive }: SettingsViewProps) {
   const dispatch = useDispatch();
   const setTheme = (theme: SettingsViewModel["theme"]) => dispatch({ type: "settings/set", settings: { theme } });
-  const locked = devBackendActive && settings.devTools;
+  const locked = devBackendActive && settings.devBackend;
 
   // Radio group: the arrow keys move the selection (and the focus with it).
   const onThemeKey = (e: KeyboardEvent<HTMLDivElement>) => {
@@ -56,40 +72,40 @@ export function SettingsView({ settings, devBackendActive }: SettingsViewProps) 
       <div className="set-row">
         <div>
           <b>Enable dev tools</b>
-          <small>Tools to inspect and mock what a widget sees.</small>
+          <small>Inspect what a widget sees, and add your own widgets to a room.</small>
         </div>
-        <Toggle on={settings.devTools} label="Enable dev tools" disabled={locked} onChange={(devTools) => dispatch({ type: "settings/set", settings: { devTools } })} />
+        <Toggle on={settings.devTools} label="Enable dev tools" onChange={(devTools) => dispatch({ type: "settings/set", settings: { devTools } })} />
+      </div>
+      {settings.devTools && (
+        <SetList
+          items={[
+            ["dots", "Widget dev tools", "via the ⋯ button of a widget tab"],
+            ["plus", "Add widget", "in the room overview"],
+          ]}
+        />
+      )}
+      <div className="set-row">
+        <div>
+          <b>Enable the DevBackend</b>
+          <small>Mocked rooms in memory, without a homeserver.</small>
+        </div>
+        <Toggle on={settings.devBackend} label="Enable the DevBackend" disabled={locked} onChange={(devBackend) => dispatch({ type: "settings/set", settings: { devBackend } })} />
       </div>
       {locked && (
         <p className="hint set-locked">
           <Icon name="lock" size={13} />
-          Dev tools cannot be turned off while the DevBackend is active
+          The DevBackend cannot be turned off while it is active
         </p>
       )}
-      {settings.devTools ? (
-        <ul className="set-list on">
-          <li>
-            <Icon name="cone" size={14} />
-            <span>
-              <b>DevBackend</b> button in the left bar
-            </span>
-          </li>
-          <li>
-            <Icon name="dots" size={14} />
-            <span>
-              <b>Widget dev tools</b> via the ⋯ button of a widget tab
-            </span>
-          </li>
-          <li>
-            <Icon name="copy" size={14} />
-            <span>
-              <b>Copy to DevBackend</b> in the room overview
-            </span>
-          </li>
-        </ul>
-      ) : (
-        <p className="hint">While this is off, no dev tool is shown anywhere in the app.</p>
+      {settings.devBackend && (
+        <SetList
+          items={[
+            ["cone", "DevBackend", "button in the left bar"],
+            ["copy", "Copy to DevBackend", "in the room overview"],
+          ]}
+        />
       )}
+      {!settings.devTools && !settings.devBackend && <p className="hint">While both are off, no dev tool is shown anywhere in the app.</p>}
     </SideBox>
   );
 }

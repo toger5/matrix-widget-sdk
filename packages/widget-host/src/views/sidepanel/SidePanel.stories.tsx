@@ -34,7 +34,7 @@ const meta: Meta<typeof SidePanel> = { title: "SidePanel/SidePanel", component: 
 export default meta;
 type Story = StoryObj<typeof SidePanel>;
 
-const settings = { devTools: false, theme: "system" } as const;
+const settings = { devTools: false, devBackend: false, theme: "system" } as const;
 const several = [ACCOUNTS.ada, ACCOUNTS.work, ACCOUNTS.bot];
 
 // leaf sidepanel/account-several inside the shell (as in app/account)

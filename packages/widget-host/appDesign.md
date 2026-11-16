@@ -27,6 +27,7 @@ While the [DevBackend](#devbackend) is active, the app background (on which all 
 - Multi-account ([AccountView](#accountview))
 - An in-memory session that mocks a full session: multiple rooms and all events in them ([DevBackend](#devbackend))
 - Copy an existing room into the DevBackend (last X timeline events + state) to experiment with it entirely offline
+- Custom widgets: add a widget to a room, only in this host or as a state event of the room ([RoomOverview](#roomoverview))
 - Tabbed widget panels ([RoomView](#roomview))
 - Multiple room panels ([RoomsArea](#roomsarea))
 - User device management, via a button that links to the OIDC auth service (MAS)
@@ -41,7 +42,7 @@ See the leftmost bar in the `reference_image`. It contains:
 - An app icon in the top left corner. It opens a modal explaining what this app is.
 - A + button, equivalent to Ctrl+N (new room panel).
 - A room list button. It opens the [Room list](#room-list).
-- A DevBackend button (only if dev tools are enabled). It activates the [DevBackend](#devbackend). While the DevBackend is active, it opens and closes the DevBackendView (tooltip: "DevBackend panel").
+- A DevBackend button (only if the DevBackend is enabled). It activates the [DevBackend](#devbackend). While the DevBackend is active, it opens and closes the DevBackendView (tooltip: "DevBackend panel").
 - A settings button. It opens [Settings](#settings).
 - The user avatar. It opens the [AccountView](#accountview). While the DevBackend is active, it is the DevBackend icon.
 - A collapse button.
@@ -69,9 +70,9 @@ In DevBackend mode the account icon is the DevBackend icon, and the view shows t
 
 ### Settings
 
-- Enable dev tools. If enabled, all dev tool options are visible; if not, they are fully hidden:
-  - the DevBackend button in the LeftBar
-  - the WidgetDevToolBar (and the overflow button that opens it) in the tabs
+- Two independent switches. What one enables is hidden while it is off and listed under it while it is on:
+  - Dev tools: the overflow button of widget tabs with the [WidgetDevToolBar](#widgetdevtoolbar), and "Add widget" in the [RoomOverview](#roomoverview).
+  - DevBackend: the DevBackend button in the LeftBar and "Copy to DevBackend" in the RoomOverview. It cannot be turned off while the DevBackend is active.
 
 ### Room list
 
@@ -114,9 +115,12 @@ A room view is a tabbed container, shown inside a room panel. Its first tab is t
 - Widget list, first and full width. Pressing a widget opens it. A widget that is already open is grayed out, says where it is open and offers:
   - "jump to tab"
   - "move widget here", if it is open in another room view: it closes the tab there and opens the widget in this room view.
-- Encryption status
-- Member list
-- Devtools (only if dev tools are enabled). For now just one button: copy to DevBackend.
+- "Add widget" (dev tools) opens a form at the top of the widget list: the widget or Element Call form of the DevBackendView, or a pasted state event. It adds the widget, it does not open it:
+  - only in this host (the default): a local widget, kept in this browser for this account and room and never sent. The same type and ID replaces it.
+  - to the room: sends the state event as you. Replacing a widget of the room asks first; a refusal (no permission) is shown in the form, the draft stays.
+- Local widgets follow the room's widgets, marked "Local", with edit (dev tools; the form with type and ID fixed) and remove (asks first). They are listed and run also with dev tools disabled.
+- Encryption status and member list
+- DevBackend card (DevBackend enabled, not in a DevBackend room): "Copy to DevBackend". It does not copy local widgets.
 
 ## RoomTimeline
 
@@ -196,7 +200,6 @@ The container:
   - Close stops (kills) the widget. An always-on-screen widget otherwise always stays running. (killing prompts the user with a modal to confirm closing even though the widget still wants to be on screen)
 - This larger surrounding box is also the drag area of the floating panel.
 - Moving a widget to PiP does not change its WidgetDevToolBar state and layout.
-- Widgets need to be started in a shadow DOM so that they can be remounted from the room view to the PictureInPicturePanel.
 
 ## DevBackend
 
@@ -204,7 +207,6 @@ The DevBackend is a custom in-memory backend. It is implemented as a separate ac
 
 - Activating it removes all current panels (empty RoomsArea).
 - Once active, no Matrix CS API calls are made anymore. Only widget <-> host, with the memory widget driver.
-- The app renders the construction-fence background (see [Design](#design)).
 - The SidePanel opens with the DevBackendView.
 - The RoomsArea keeps the same design, but only shows the rooms that were created in the DevBackendView or copied over from a RoomOverview.
 - It is left by switching to an account in the AccountView or with the "Leave DevBackend" text button at the bottom of the DevBackendView, not with the LeftBar button. Leaving restores the panels of the account; their widgets reload.
@@ -245,7 +247,7 @@ Remove the leave options in case there is no logged in account to fallback to.
 
 ## Login page
 
-A simple fullscreen login. It allows skipping the login, which immediately ends up in the DevBackend (and enables dev tools).
+A simple fullscreen login. It allows skipping the login, which immediately ends up in the DevBackend (and enables dev tools and the DevBackend).
 
 # Custom behavior
 
@@ -265,8 +267,7 @@ The mockups needed to review the full design. Each leaf is one state to draw. Do
   - Fullscreen: LeftBar collapsed, one widget, no rounded containers: room header without tab and + button / header hovered
   - Narrow window: SidePanel overlays, one room panel
 - LeftBar
-  - Expanded, dev tools disabled
-  - Expanded, dev tools enabled (DevBackend button), DevBackend inactive / active / active and hovered ("DevBackend panel" tooltip)
+  - Expanded: DevBackend disabled / enabled (DevBackend button), inactive / active / active and hovered ("DevBackend panel" tooltip)
   - Collapsed with toast
   - Collapsed, expand icon revealed (after Esc)
 - SidePanel
@@ -279,7 +280,7 @@ The mockups needed to review the full design. Each leaf is one state to draw. Do
       - With another device: waiting for it / comparing the emoji / waiting for it to confirm
       - Recovery key: entering it / checking it / refused
   - Settings
-    - Dev tools disabled / enabled
+    - Both switches off / both on / DevBackend active (its switch locked), dev tools off
   - Room list: the room picker / next to the room panels (LeftBar button pressed)
   - DevBackendView
     - No rooms yet
@@ -317,7 +318,8 @@ The mockups needed to review the full design. Each leaf is one state to draw. Do
       - More tabs than fit
     - RoomOverview
       - No widget open, dev tools disabled
-      - A widget open in this panel ("jump to tab"), dev tools enabled (copy to DevBackend)
+      - A widget open in this panel ("jump to tab"), a local widget, dev tools and DevBackend enabled ("Add widget", copy to DevBackend)
+      - Add widget: the widget form, only in this host / a pasted state event / to the room, refused (the reason)
     - RoomTimeline
       - Events of every kind, one showing its JSON, "Load older events"
       - Start of the room reached
@@ -352,7 +354,8 @@ Notes for the implementation. They add to the design above, they do not change i
 **Widgets are iframes**
 
 - Moving an iframe in the DOM reloads it. To move a widget between a tab and the PictureInPicturePanel without a reload, every iframe stays where it is in one persistent layer and is displayed through a shadow DOM slot where the view shows the widget.
-- Only absolute `http:` / `https:` widget URLs are embedded, for both widget kinds (a legacy URL is checked as its template, so one starting with `$variable` is refused); any other widget is listed disabled, with the reason.
+- Only absolute `http:` / `https:` widget URLs are embedded, for both widget kinds (a legacy URL is checked as its template, so one starting with `$variable` is refused); any other widget is listed disabled, with the reason. The "Add widget" forms refuse such a URL; a stored local widget is checked again.
+- A local widget's key is `local:` plus its type and state key, so it never shares remembered capabilities with a room widget of the same ID; they are forgotten when its URL (of a legacy widget also its `data`, the values of the URL's variables) changes or it is removed. Local widgets are persisted with the account's layout and deleted on logout (the DevBackend's are kept in memory).
 - The host cannot read the console of a cross-origin iframe. The WidgetDevToolConsolePanel needs the widget side (SDK or compat wrapper) to forward its logs.
 
 **DevBackend forms**

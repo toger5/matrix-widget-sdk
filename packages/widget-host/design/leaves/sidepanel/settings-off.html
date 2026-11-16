@@ -2,7 +2,7 @@
 <html lang="en" data-theme="dark">
 <head>
 <meta charset="utf-8">
-<title>Dev tools disabled · Widget host mockup</title>
+<title>Both switches off · Widget host mockup</title>
 <meta name="viewport" content="width=348">
 <link rel="stylesheet" href="../../mock.css">
 <script>
@@ -15,7 +15,11 @@
     <div class="set-row"><div><b>Theme</b><small>Follows the system unless you choose one.</small></div></div>
     <div class="seg" role="radiogroup" aria-label="Theme"><span class="on" role="radio" aria-checked="true">System</span><span role="radio" aria-checked="false">Light</span><span role="radio" aria-checked="false">Dark</span></div>
     <h4 class="side-h">Developer</h4>
-    <div class="set-row"><div><b>Enable dev tools</b><small>Tools to inspect and mock what a widget sees.</small></div><button class="toggle " role="switch" aria-checked="false" aria-label="Enable dev tools"><i></i></button></div>
-    <p class="hint">While this is off, no dev tool is shown anywhere in the app.</p></div></section></div></div>
+    <div class="set-row"><div><b>Enable dev tools</b><small>Inspect what a widget sees, and add your own widgets to a room.</small></div><button class="toggle " role="switch" aria-checked="false" aria-label="Enable dev tools"><i></i></button></div>
+    
+    <div class="set-row"><div><b>Enable the DevBackend</b><small>Mocked rooms in memory, without a homeserver.</small></div><button class="toggle " role="switch" aria-checked="false" aria-label="Enable the DevBackend"><i></i></button></div>
+    
+    
+    <p class="hint">While both are off, no dev tool is shown anywhere in the app.</p></div></section></div></div>
 </body>
 </html>

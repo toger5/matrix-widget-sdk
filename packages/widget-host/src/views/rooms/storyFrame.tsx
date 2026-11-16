@@ -6,8 +6,9 @@ import type { RenderWidget } from "../app/AppShell";
 import { FakeWidget } from "../storyEnv";
 import { RoomPanel } from "./RoomPanel";
 
-export const SETTINGS: SettingsViewModel = { devTools: false, theme: "system" };
-export const DEV_SETTINGS: SettingsViewModel = { devTools: true, theme: "system" };
+export const SETTINGS: SettingsViewModel = { devTools: false, devBackend: false, theme: "system" };
+/** Both developer switches on. */
+export const DEV_SETTINGS: SettingsViewModel = { devTools: true, devBackend: true, theme: "system" };
 
 /** The stand-in for a running widget: named after the widget. */
 export const fakeWidget =

@@ -1,7 +1,7 @@
 /** Derivations the views share. Pure functions of the view model; nothing here holds state. */
 import type { MainViewModel, RoomId, WidgetKey } from "../appViewModel";
 import type { RoomSummary } from "../session";
-import { describesWidget, resolveWidget, widgetKey, type ResolvedWidget, type StateEvent } from "../widgetStateEvent";
+import { describesWidget, localWidgetKey, resolveWidget, widgetKey, type ResolvedWidget, type StateEvent } from "../widgetStateEvent";
 
 /** Where legacy widgets are loaded through; the compat wrapper this host serves itself by default (`?wrapper=` overrides). */
 export const wrapperUrl = () =>
@@ -15,20 +15,31 @@ export interface RoomWidget {
   event: StateEvent;
   widget?: ResolvedWidget;
   problem?: string;
+  /** A local widget ("Add widget", only in this host): `key` is its `localWidgetKey`. */
+  local?: true;
 }
 
-/** The widgets a room offers, from its widget state events. */
-export function roomWidgets(room: Pick<RoomSummary, "widgetEvents"> | undefined): RoomWidget[] {
-  return (room?.widgetEvents ?? []).filter(describesWidget).map((event) => {
-    const key = widgetKey(event);
+/**
+ * The widgets a room offers: its widget state events, then its local widgets
+ * (`AccountDataViewModel.localWidgets` of the room). Every event goes through `resolveWidget`, so
+ * a stored local widget with a URL that cannot be embedded is listed disabled like a room widget.
+ */
+export function roomWidgets(room: Pick<RoomSummary, "widgetEvents"> | undefined, local: StateEvent[] = []): RoomWidget[] {
+  const listed = (event: StateEvent, isLocal: boolean): RoomWidget => {
+    const key = isLocal ? localWidgetKey(event) : widgetKey(event);
     const name = typeof event.content.name === "string" && event.content.name ? event.content.name : event.state_key;
+    const mark = isLocal ? { local: true as const } : {};
     try {
-      return { key, name, event, widget: resolveWidget(event, wrapperUrl()) };
+      return { key, name, event, widget: resolveWidget(event, wrapperUrl()), ...mark };
     } catch (e) {
-      return { key, name, event, problem: e instanceof Error ? e.message : String(e) };
+      return { key, name, event, problem: e instanceof Error ? e.message : String(e), ...mark };
     }
-  });
+  };
+  return [...(room?.widgetEvents ?? []).filter(describesWidget).map((e) => listed(e, false)), ...local.filter(describesWidget).map((e) => listed(e, true))];
 }
+
+/** The local widgets of a room of the active account. */
+export const localWidgetsOf = (m: MainViewModel, roomId: RoomId): StateEvent[] => m.data.localWidgets[roomId] ?? [];
 
 /** The rooms of the active account, or an empty list while they load. */
 export const readyRooms = (m: MainViewModel): RoomSummary[] => (m.data.rooms.status === "ready" ? m.data.rooms.value : []);

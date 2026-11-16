@@ -74,21 +74,38 @@ test.describe("SidePanel", () => {
     await expect(handle).toHaveAttribute("aria-valuenow", "324");
   });
 
-  test("settings: the dev tools are on and cannot be turned off while the DevBackend is active", async ({ host }) => {
-    await host.button("Settings").click();
+  test("settings: two independent switches; the DevBackend's is locked while it is active, dev tools can be turned off there", async ({ host }) => {
+    await host.populate("two-rooms", { sidePanel: "settings", settings: { theme: "dark" }, open: [{ room: LAB, widgets: [NEW_WIDGET] }] });
     const settings = host.page.getByTestId("settings-view");
-    const toggle = settings.getByRole("switch", { name: "Enable dev tools" });
-    await expect(toggle).toBeChecked();
-    await expect(toggle).toBeDisabled();
-    await expect(settings.getByText("Dev tools cannot be turned off while the DevBackend is active")).toBeVisible();
-    await expect(settings.getByRole("listitem")).toHaveText([/DevBackend button in the left bar/, /Widget dev tools/, /Copy to DevBackend/]);
+    const devTools = settings.getByRole("switch", { name: "Enable dev tools" });
+    const devBackend = settings.getByRole("switch", { name: "Enable the DevBackend" });
+    await expect(devTools).toBeChecked();
+    await expect(devTools).toBeEnabled();
+    await expect(devBackend).toBeChecked();
+    await expect(devBackend).toBeDisabled();
+    await expect(settings.getByText("The DevBackend cannot be turned off while it is active")).toBeVisible();
+    await expect(settings.getByRole("listitem")).toHaveText([/Widget dev tools/, /Add widget/, /DevBackend button in the left bar/, /Copy to DevBackend/]);
     await host.leaf("sidepanel/settings-on");
 
     // Not even by an intent: the DevBackend button stays.
-    await host.dispatch({ type: "settings/set", settings: { devTools: false } });
-    await expect(toggle).toBeChecked();
+    await host.dispatch({ type: "settings/set", settings: { devBackend: false } });
+    await expect(devBackend).toBeChecked();
     await expect(host.button("DevBackend panel")).toBeVisible();
-    expect((await host.state()).settings.devTools).toBe(true);
+    expect((await host.state()).settings.devBackend).toBe(true);
+
+    // Dev tools off: the ⋯ button of the widget tab is gone; the DevBackend stays (fence, badge, button).
+    await expect(host.button("Dev tools of New test widget")).toHaveCount(1);
+    await devTools.click();
+    await expect(devTools).not.toBeChecked();
+    await expect(host.button("Dev tools of New test widget")).toHaveCount(0);
+    await expect(settings.getByRole("listitem")).toHaveText([/DevBackend button in the left bar/, /Copy to DevBackend/]);
+    await expect(host.app).toHaveClass(/fence/);
+    await expect(host.leftBar.getByText("DevBackend", { exact: true })).toBeVisible();
+    await expect(host.button("DevBackend panel")).toBeVisible();
+    await host.leaf("sidepanel/settings-devbackend");
+
+    await devTools.click();
+    await expect(host.button("Dev tools of New test widget")).toHaveCount(1);
   });
 
   test("settings: the theme switch changes the theme of the app; System follows the browser", async ({ host }) => {

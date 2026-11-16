@@ -14,7 +14,7 @@
  *
  * ```
  * AppViewModel
- * ├─ settings                      Settings (dev tools, theme), per browser
+ * ├─ settings                      Settings (dev tools, DevBackend, theme), per browser
  * └─ screen
  *    ├─ restoring | login
  *    └─ main                       MainViewModel
@@ -29,7 +29,8 @@
  *       │  │                           (RoomOverview) + Tabs (widgets, the RoomTimeline)
  *       │  ├─ pip                      PictureInPicturePanel: stacking, position, box size
  *       │  └─ devTools[widgetId]       dock and panels of each widget's WidgetDevToolBar
- *       ├─ data                        what the active account knows: rooms, recent widgets and rooms
+ *       ├─ data                        what the active account knows: rooms, local widgets, recent widgets and rooms
+ *       ├─ widgetWrite?                "Add widget" to the room: being sent, or why the room refused it
  *       ├─ widgets[widgetId]           runtime state of every running widget (one iframe each):
  *       │                              load state, always on screen, the capability / OpenID prompts
  *       └─ modal, toasts
@@ -53,13 +54,16 @@
  * `SessionProvider` and `InMemoryBackend` cannot provide yet.
  */
 import type { RoomSummary, VerificationEmoji } from "./session";
-import type { ResolvedWidget } from "./widgetStateEvent";
+import type { ResolvedWidget, StateEvent } from "./widgetStateEvent";
 
 export type AccountId = string;
 export type RoomId = string;
 export type PanelId = string;
 export type TabId = string;
-/** `widgetKey()` of the widget's state event: identifies a widget within a room. */
+/**
+ * Identifies a widget within a room: `widgetKey()` of its state event, `localWidgetKey()` (`local:`
+ * before it) for a local widget, so a local widget never shares a key with a room widget.
+ */
 export type WidgetKey = string;
 /**
  * One running widget (one iframe + one `WidgetHostDriver`). A widget runs at most once per
@@ -82,7 +86,7 @@ export interface AppViewModel {
 export type ScreenViewModel =
   /** Looking for stored logins. */
   | { kind: "restoring" }
-  /** No account at all. leaf app/login. Skipping the login activates the DevBackend and enables the dev tools. */
+  /** No account at all. leaf app/login. Skipping the login activates the DevBackend and enables dev tools and the DevBackend. */
   | { kind: "login"; login: LoginViewModel }
   | { kind: "main"; main: MainViewModel };
 
@@ -95,19 +99,25 @@ export interface LoginViewModel {
   error?: string;
 }
 
-/** Settings are per browser, not per account: they decide which tools exist at all. leaves sidepanel/settings-* */
+/**
+ * Settings are per browser, not per account: they decide which tools exist at all. The two
+ * developer switches are independent. leaves sidepanel/settings-off, settings-on, settings-devbackend
+ */
 export interface SettingsViewModel {
-  /**
-   * Off: no dev tool is visible anywhere (DevBackend button, ⋯ button of widget tabs,
-   * WidgetDevToolBar, "copy to DevBackend"). It cannot be turned off while the DevBackend is active.
-   */
+  /** Off: no widget dev tool is visible (⋯ button of widget tabs, WidgetDevToolBar, "Add widget" and editing local widgets in the RoomOverview). Local widgets are still listed and run. */
   devTools: boolean;
+  /**
+   * Off: the DevBackend cannot be reached (LeftBar button, the DevBackend account, "Copy to
+   * DevBackend"). It cannot be turned off while the DevBackend is active. Stored settings without it
+   * take the value of `devTools`.
+   */
+  devBackend: boolean;
   /** "system" follows `prefers-color-scheme`. */
   theme: "system" | "light" | "dark";
 }
 
 export interface MainViewModel {
-  /** All logged-in accounts, plus the DevBackend account while dev tools are enabled. */
+  /** All logged-in accounts, plus the DevBackend account while the DevBackend is enabled. */
   accounts: AccountViewModel[];
   activeAccountId: AccountId;
   /** Set while "Add account" is in progress. */
@@ -128,6 +138,13 @@ export interface MainViewModel {
   data: AccountDataViewModel;
   /** Runtime state of the active account's running widgets. Not persisted. */
   widgets: Record<WidgetInstanceId, WidgetInstanceViewModel>;
+  /**
+   * The last "Add widget" that writes to a room (`room/addWidget` with target "room"), while it is
+   * sent and once the room refused it. Removed when the room took it, by the next `room/addWidget`
+   * and by `room/dismissWidgetWrite`. The "Add widget" form of that room shows it. Not persisted.
+   * leaf overview/add-widget-refused
+   */
+  widgetWrite?: WidgetWriteViewModel;
   modal?: ModalViewModel;
   toasts: ToastViewModel[];
 }
@@ -178,13 +195,22 @@ export type VerificationViewModel =
 
 /** What the session of the active account knows. Views derive room lists, the RoomPicker and the widget lists of the RoomOverview from it. */
 export interface AccountDataViewModel {
-  /** `LiveSession.rooms()`. The widgets of a room are its `widgetEvents`. */
+  /** `LiveSession.rooms()`. The widgets of a room are its `widgetEvents`, then its `localWidgets`. */
   rooms: Loadable<RoomSummary[]>;
+  /**
+   * Widgets that exist only in this host, per room, as their state event would describe them
+   * ("Add widget", only in this host); never sent. Keyed by `localWidgetKey()`. Persisted per
+   * Matrix account and deleted on logout; the DevBackend's are kept in memory only. leaf overview/devtools
+   */
+  localWidgets: Record<RoomId, StateEvent[]>;
   /** The last opened widgets, newest first. Persisted per Matrix account; the DevBackend's are kept in memory only. */
   recentWidgets: RecentWidget[];
   /** The last rooms opened in a room panel (by a pick, or by opening one of its widgets), newest first. Kept like `recentWidgets`. */
   recentRooms: RecentRoom[];
 }
+
+/** "Add widget" to the room: the state event is being sent, or the room refused it (`error`, e.g. no permission). The form keeps its draft. */
+export type WidgetWriteViewModel = { roomId: RoomId; widgetKey: WidgetKey; state: "sending" } | { roomId: RoomId; widgetKey: WidgetKey; state: "failed"; error: string };
 
 export interface RecentWidget {
   roomId: RoomId;
@@ -523,9 +549,9 @@ export type AppIntent =
   // app
   | { type: "login/continue"; homeserver: string } // looks the homeserver up, then OAuth or password
   | { type: "login/withPassword"; username: string; password: string }
-  | { type: "login/skip" } // straight into the DevBackend, enables dev tools
+  | { type: "login/skip" } // straight into the DevBackend, enables dev tools and the DevBackend
   | { type: "login/cancel" } // only while adding a second account
-  | { type: "settings/set"; settings: Partial<SettingsViewModel> }
+  | { type: "settings/set"; settings: Partial<SettingsViewModel> } // `devBackend` stays on while the DevBackend is active
   | { type: "modal/open"; modal: ModalViewModel }
   | { type: "modal/close" }
   | { type: "toast/dismiss"; id: string }
@@ -587,7 +613,10 @@ export type AppIntent =
   | { type: "pip/resize"; boxSize: PipViewModel["boxSize"] }
   | { type: "pip/setStacking"; stacking: PipViewModel["stacking"] }
   // RoomOverview, RoomTimeline and DevBackendView
-  | { type: "room/copyToDevBackend"; roomId: RoomId; lastEvents: number }
+  | { type: "room/addWidget"; roomId: RoomId; event: StateEvent; target: "local" | "room"; confirmed?: boolean } // "Add widget" of the RoomOverview; does not open it. "local": a local widget; one with the same key is replaced (editing): a changed URL (of a legacy widget also its `data`) forgets its remembered capabilities and reloads it if it runs. "room": sends the state event (`widgetWrite`), only once the room's widgets are known; confirmed if it replaces a widget of the room
+  | { type: "room/removeLocalWidget"; roomId: RoomId; widgetKey: WidgetKey; confirmed?: boolean } // confirmed; stops the widget, closes its tab and forgets its remembered capabilities
+  | { type: "room/dismissWidgetWrite" } // the "Add widget" form was closed: forgets a refusal (`widgetWrite`)
+  | { type: "room/copyToDevBackend"; roomId: RoomId; lastEvents: number } // only while the DevBackend is enabled; local widgets are not copied
   | { type: "room/loadOlderEvents"; roomId: RoomId } // "Load older events" of the RoomTimeline, once it shows every loaded event: the session loads up to OLDER_EVENTS_PER_LOAD older ones (from its store or the homeserver); a failure is a toast
   | { type: "mock/selectRoom"; roomId: RoomId }
   | { type: "mock/addRoom" }

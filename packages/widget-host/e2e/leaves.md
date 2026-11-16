@@ -16,12 +16,12 @@ Every leaf of `design/index.html` (`design/src/leaves.mjs`), with the test in wh
 | `app/narrow` | `shell.spec.ts` › narrow window (the AccountView is the DevBackend one) |
 | `sidepanel/closed` | `sidepanel.spec.ts` › the LeftBar buttons show one view at a time |
 | `roomsarea/shifted` | `sidepanel.spec.ts` › the open panel shifts the RoomsArea |
-| `sidepanel/settings-on` | `sidepanel.spec.ts` › settings: the dev tools are on and cannot be turned off |
+| `sidepanel/settings-on`, `sidepanel/settings-devbackend` | `sidepanel.spec.ts` › settings: two independent switches (`settings-on` with the lock of the active DevBackend; the unlocked switch needs a Matrix account: story `sidepanel-settingsview--both-on`) |
 | `sidepanel/rooms`, `sidepanel/rooms-app` | `sidepanel.spec.ts` › Room list: a pick opens in the panel showing the room, else in the focused picker, else in a new panel |
 | `sidepanel/account-dev` | `sidepanel.spec.ts` › account: the DevBackend is the account |
 | `complete/workspace`, `complete/devbackend`, `complete/light` | `sidepanel.spec.ts` › complete views |
 | `sidepanel/verify-start`, `sidepanel/verify-failed`, `sidepanel/verify-done`, `sidepanel/verify-waiting`, `sidepanel/verify-emoji`, `sidepanel/verify-confirming`, `sidepanel/verify-recovery-key`, `sidepanel/verify-recovery-checking`, `sidepanel/verify-recovery-wrong` | **not reachable**: they need a Matrix account whose device is not verified (the DevBackend's device is). The flows are tested on a faked session in `test/deviceVerification.test.ts`. Stories: `sidepanel-deviceverification--start`, `--failed`, `--done`, `sidepanel-emojiverification--waiting`, `--compare`, `--confirming`, `sidepanel-recoverykeyform--entering`, `--checking`, `--refused` |
-| `app/default`, `leftbar/expanded`, `leftbar/devtools`, `sidepanel/settings-off`, `sidepanel/account-one`, `sidepanel/account-several` | **not reachable**: they need a Matrix account (DevBackend inactive). Stories: `app-appshell--default`, `app-leftbar--expanded`, `app-leftbar--dev-tools`, `sidepanel-settingsview--dev-tools-off`, `sidepanel-accountview--one-account`, `--several-accounts` |
+| `app/default`, `leftbar/expanded`, `leftbar/devtools`, `sidepanel/settings-off`, `sidepanel/account-one`, `sidepanel/account-several` | **not reachable**: they need a Matrix account (DevBackend inactive). Stories: `app-appshell--default`, `app-leftbar--expanded`, `app-leftbar--dev-backend-enabled`, `sidepanel-settingsview--both-off`, `sidepanel-accountview--one-account`, `--several-accounts` |
 
 ## Rooms, tabs, overview
 
@@ -43,7 +43,10 @@ Every leaf of `design/index.html` (`design/src/leaves.mjs`), with the test in wh
 | `timeline/events` | `timeline.spec.ts` › 250 events: the newest 200 are shown, … (the mocked room's events are messages, not one of every kind: `test/eventText.test.ts` checks the words for those of the leaf, story `rooms-roomtimeline--events`) |
 | `timeline/loading`, `timeline/error` | **not reachable**: the DevBackend's timeline is there at once and never fails (stories `rooms-roomtimeline--loading`, `--load-error`) |
 | `overview/plain` | `overview.spec.ts` › a room opens on its overview |
-| `overview/devtools` | **partly**: `overview.spec.ts` › with dev tools enabled a DevBackend room still has no "Copy to DevBackend" card (a widget open in this panel offers "Jump to tab"). The card needs a Matrix room (story `rooms-roomoverview--dev-tools`) |
+| `overview/devtools` | **partly**: `overview.spec.ts` › with dev tools enabled: "Add widget" and the local widgets (a widget open in this panel offers "Jump to tab", a seeded local widget). The DevBackend card needs a Matrix room (story `rooms-roomoverview--dev-tools`) |
+| `overview/add-widget` | `overview.spec.ts` › Add widget, only in this host |
+| `overview/add-widget-json` | `overview.spec.ts` › Add widget, Paste JSON (a pasted state event as Element's room state explorer shows it) |
+| `overview/add-widget-refused` | `overview.spec.ts` › Add widget, to the room ("fail sends" of the DevBackend stands for the room's refusal; a real `M_FORBIDDEN` needs a Matrix room) |
 
 ## DevBackendView
 

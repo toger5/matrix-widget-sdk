@@ -41,6 +41,10 @@ export const WIDGET_EVENTS = {
 /** `widgetKey()` of a fixture widget. */
 export const wk = (key: keyof typeof WIDGET_EVENTS) => `m.widget/${key}`;
 
+/** A local widget ("Add widget", only in this host): a widget in development, as `WIDGETS.proto` of the mockups. Its key is `LOCAL_WIDGET_KEY`. */
+export const LOCAL_WIDGET: StateEvent = { type: "m.widget", state_key: "proto", content: { name: "Poll prototype", url: "http://localhost:5180/", uses_widget_api: true } };
+export const LOCAL_WIDGET_KEY = "local:m.widget/proto";
+
 export const ROOMS = {
   design: { id: "!hGtVzqNmPa:example.org", name: "Design crit", memberCount: 12, widgetEvents: [WIDGET_EVENTS.call, WIDGET_EVENTS.board, WIDGET_EVENTS.poll, WIDGET_EVENTS.notes] },
   platform: { id: "!kLpQwErTyU:example.org", name: "Platform team", memberCount: 31, widgetEvents: [WIDGET_EVENTS.poll, WIDGET_EVENTS.timer] },
@@ -153,6 +157,7 @@ export function mainVm(o: Partial<MainViewModel> = {}): MainViewModel {
       rooms: { status: "ready", value: [ROOMS.design, ROOMS.platform, ROOMS.family, ROOMS.rtc] },
       recentWidgets: recentWidgets(["design", "call"], ["design", "board"], ["platform", "poll"], ["family", "notes"]),
       recentRooms: recentRooms("design", "platform", "rtc", "family"),
+      localWidgets: {},
     },
     widgets: Object.fromEntries(widgets.map((w) => [w.id, w])),
     toasts: [],
@@ -177,13 +182,14 @@ export function devMainVm(o: Partial<MainViewModel> = {}): MainViewModel {
       behavior: { autoApproveCapabilities: true, autoApproveOpenId: false, rememberCapabilities: false },
     },
     workspaces: { ada: workspace([]), [ACCOUNTS.dev.id]: workspace([roomPanel("lab", [widgetTab("lab", "call"), widgetTab("lab", "notes")])]) },
-    data: { rooms: { status: "ready", value: [ROOMS.lab, ROOMS.empty] }, recentWidgets: recentWidgets(["lab", "call"]), recentRooms: recentRooms("lab") },
+    data: { rooms: { status: "ready", value: [ROOMS.lab, ROOMS.empty] }, recentWidgets: recentWidgets(["lab", "call"]), recentRooms: recentRooms("lab"), localWidgets: {} },
     widgets: Object.fromEntries(widgets.map((w) => [w.id, w])),
     ...o,
   });
 }
 
-export const appVm = (main: MainViewModel = mainVm(), devTools = false): AppViewModel => ({ settings: { devTools, theme: "system" }, screen: { kind: "main", main } });
+/** `devTools` and `devBackend`: the two developer switches of the Settings. */
+export const appVm = (main: MainViewModel = mainVm(), devTools = false, devBackend = devTools): AppViewModel => ({ settings: { devTools, devBackend, theme: "system" }, screen: { kind: "main", main } });
 
 const X = "org.matrix.mscXXXX.";
 /**

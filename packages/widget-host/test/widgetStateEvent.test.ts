@@ -2,7 +2,7 @@
 import { describe, expect, it } from "vitest";
 
 import { roomWidgets } from "../src/views/helpers";
-import { resolveWidget, widgetUrlProblem, type StateEvent } from "../src/widgetStateEvent";
+import { localWidgetKey, resolveWidget, widgetKey, widgetUrlProblem, type StateEvent } from "../src/widgetStateEvent";
 
 const WRAPPER = "http://localhost:5173/widget_compatibility_wrapper/";
 const newWidget = (url: string): StateEvent => ({ type: "m.widget", state_key: "w", content: { name: "W", url, uses_widget_api: true } });
@@ -70,10 +70,35 @@ describe("resolveWidget", () => {
   });
 });
 
+describe("localWidgetKey", () => {
+  it("is the widget key with `local:` before it, so it never equals a room widget's key", () => {
+    const event = newWidget("https://example.org/");
+    expect(localWidgetKey(event)).toBe("local:m.widget/w");
+    expect(localWidgetKey(event)).not.toBe(widgetKey(event));
+    expect(localWidgetKey(legacyWidget("https://example.org/"))).toBe("local:im.vector.modular.widgets/w");
+  });
+});
+
 describe("roomWidgets", () => {
   it("lists a refused widget with the problem (disabled in the room overview) and nothing to run", () => {
     const [refused] = roomWidgets({ widgetEvents: [legacyWidget("javascript:top.__pwned=1//")] });
     expect(refused).toMatchObject({ key: "im.vector.modular.widgets/w", name: "W", problem: "javascript: URLs are not allowed, only http: and https:" });
     expect(refused.widget).toBeUndefined();
+  });
+
+  it("lists the local widgets after the room's, marked and keyed apart, each checked like a room widget", () => {
+    const room = newWidget("https://room.example.org/");
+    const local = [newWidget("https://local.example.org/"), legacyWidget("javascript:top.__pwned=1//"), { type: "m.widget", state_key: "gone", content: {} }];
+    const widgets = roomWidgets({ widgetEvents: [room] }, local);
+    expect(widgets.map((w) => [w.key, w.local ?? false])).toEqual([
+      ["m.widget/w", false],
+      ["local:m.widget/w", true],
+      ["local:im.vector.modular.widgets/w", true],
+    ]);
+    expect(widgets[1].widget?.url).toBe("https://local.example.org/");
+    expect(widgets[2]).toMatchObject({ problem: "javascript: URLs are not allowed, only http: and https:", local: true });
+    expect(widgets[2].widget).toBeUndefined();
+    // A room without its widgets loaded yet still lists the local ones.
+    expect(roomWidgets(undefined, [local[0]]).map((w) => w.key)).toEqual(["local:m.widget/w"]);
   });
 });

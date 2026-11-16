@@ -47,8 +47,8 @@ Verify a key before relying on it (`grep -rn STORAGE_PREFIX src/matrix_session`)
 | js crypto store | IndexedDB, prefix `widget-host-js-<accountId>` (`cryptoDatabasePrefix`); the `legacy` login keeps the SDK default (`matrix-js-sdk`) |
 | rust login | `localStorage` `widget_host_rust_session_v2:<storeId>` (session, store passphrase, store id = account id); old key `widget_host_rust_session_v1` |
 | rust stores | IndexedDB `widget-host-store-<storeId>` plus `::matrix-sdk-state`, `::matrix-sdk-crypto`, `::matrix-sdk-crypto-meta`, `::event_cache`, `::media` (`STORE_SUFFIXES`), encrypted with the passphrase; `deleteStore` removes them on logout |
-| approved capabilities | `localStorage` `widget_host_capabilities_v1 <userId> <roomId> <widgetKey>` (`src/lib/capabilityStore.ts`); cleared on logout |
-| UI layout | `localStorage` `widget_host_ui_v1` (`src/app/persistence.ts`) |
+| approved capabilities | `localStorage` `widget_host_capabilities_v1 <userId> <roomId> <widgetKey>` (`src/lib/capabilityStore.ts`; a local widget's key is `local:<type>/<state key>`); cleared on logout, one widget's when a local widget is removed or its URL (of a legacy widget also its `data`) changes |
+| UI layout | `localStorage` `widget_host_ui_v1` (`src/app/persistence.ts`): settings, layout, recents and the local widgets ("Add widget", only in this host) per account; an account's entries go with its logout |
 
 Tokens refreshed by an SDK are written back (`onTokenRefresh` in js, the `ClientSessionDelegate`
 in rust), else a reload restores stale ones. A login is stored only once it completes.

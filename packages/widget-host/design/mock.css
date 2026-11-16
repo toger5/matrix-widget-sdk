@@ -283,10 +283,10 @@ mark { background: var(--highlight-soft); color: var(--highlight); border-radius
 .verify-emoji span { font-size: 26px; line-height: 1.15; }
 .verify-emoji.dim { opacity: 0.45; }
 .verify-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-.verify-err { display: flex; gap: 8px; padding: 8px 10px; border-radius: var(--r-2); background: color-mix(in srgb, var(--danger) 12%, transparent); color: var(--danger); font-size: 12px; }
-.verify-err .ico { flex: none; margin-top: 1px; }
-.verify-err > span { display: grid; gap: 2px; min-width: 0; }
-.verify-err small { color: var(--text); font-size: 12px; }
+.verify-err, .form-err { display: flex; gap: 8px; padding: 8px 10px; border-radius: var(--r-2); background: color-mix(in srgb, var(--danger) 12%, transparent); color: var(--danger); font-size: 12px; }
+.verify-err .ico, .form-err .ico { flex: none; margin-top: 1px; }
+.verify-err > span, .form-err > span { display: grid; gap: 2px; min-width: 0; }
+.verify-err small, .form-err small { color: var(--text); font-size: 12px; }
 
 .set-row { display: flex; align-items: center; gap: 12px; }
 .set-row > div { display: grid; gap: 2px; flex: 1; }
@@ -295,6 +295,9 @@ mark { background: var(--highlight-soft); color: var(--highlight); border-radius
 .set-list { display: grid; gap: 8px; padding: 10px 12px; border-radius: var(--r-3); background: var(--surface-2); color: var(--text-muted); font-size: 12px; }
 .set-list li { display: flex; gap: 8px; align-items: center; }
 .set-list b { color: var(--text); font-weight: 500; }
+/* The DevBackend switch while the DevBackend is active. */
+.sidebox .toggle:disabled { opacity: 0.6; cursor: not-allowed; }
+.set-locked { display: flex; align-items: center; gap: 6px; }
 
 .room-pick { width: 100%; height: 100%; display: flex; align-items: center; gap: 10px; margin-left: -6px; padding: 0 8px 0 6px; border-radius: var(--r-3); }
 .room-pick .end { margin-left: auto; color: var(--text-muted); }
@@ -418,6 +421,16 @@ mark { background: var(--highlight-soft); color: var(--highlight); border-radius
 .card.devcard { border: 1px dashed var(--dev); background: var(--dev-soft); }
 .card.devcard h3 { color: var(--dev); }
 .card .link { align-self: start; font-size: 12px; }
+/* A card title with a button at its end: "Add widget" of the Widgets card. */
+.card-h { display: flex; align-items: center; gap: 8px; }
+.card-h h3 { flex: 1; }
+/* "Add widget": the form at the top of the widget list. */
+.card .form { background: var(--surface); border: 1px solid var(--border); margin-bottom: 6px; }
+.card .form .seg { justify-self: start; }
+/* A local widget: its row-open part opens it; edit and remove are buttons of their own. */
+.row.local { padding: 0 4px 0 0; }
+.row-open { flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; padding: 5px 6px; border-radius: var(--r-3); }
+.row.local .row-acts { gap: 2px; }
 
 /* The RoomTimeline: newest at the bottom, so its content sits at the bottom of the body. */
 .tl { flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column; padding: 16px 24px 12px; }

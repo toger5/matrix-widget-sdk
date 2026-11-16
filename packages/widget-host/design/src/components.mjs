@@ -13,8 +13,8 @@ export const ibtn = (ico, title, cls = "", size = 16) =>
 export const btn = (label, o = {}) =>
   `<button class="btn ${o.kind ?? ""} ${o.sm ? "sm" : ""} ${o.block ? "block" : ""}"${o.title ? ` title="${esc(o.title)}"` : ""}>${o.ico ? icon(o.ico, 14) : ""}<span>${label}</span>${o.end ? icon(o.end, 14, "end") : ""}</button>`;
 
-export const toggle = (on, label) =>
-  `<button class="toggle ${on ? "on" : ""}" role="switch" aria-checked="${on}" aria-label="${esc(label)}"><i></i></button>`;
+export const toggle = (on, label, disabled = false) =>
+  `<button class="toggle ${on ? "on" : ""}" role="switch" aria-checked="${on}" aria-label="${esc(label)}"${disabled ? " disabled" : ""}><i></i></button>`;
 
 const field = (label, value, o = {}) =>
   `<label class="field ${o.cls ?? ""}"><span class="field-l">${label}</span><span class="input ${o.mono ? "mono" : ""} ${o.select ? "select" : ""}">${value}${o.select ? icon("chevDown", 14) : ""}</span></label>`;
@@ -73,22 +73,25 @@ export function widget(kind, { compact = false } = {}) {
 /** The account icon while the DevBackend is active: the DevBackend icon. */
 const devAv = (size) => `<span class="av dev-av" style="--s:${size}px" aria-hidden="true">${icon("cone", Math.round(size * 0.55))}</span>`;
 
-/** tooltip: draw the tooltip of the active DevBackend button (the hover state). */
-export function leftBar({ devTools = false, devBackend = false, active = null, tooltip = false } = {}) {
+/**
+ * devBackend: the DevBackend is enabled in the Settings (its button is shown). devActive: the
+ * DevBackend is active. tooltip: draw the tooltip of the active DevBackend button (the hover state).
+ */
+export function leftBar({ devBackend = false, devActive = false, active = null, tooltip = false } = {}) {
   const b = (ico, title, key, cls = "") =>
     `<button class="lb-btn ${active === key ? "on" : ""} ${cls}" title="${esc(title)}" aria-label="${esc(title)}"${active === key ? ' aria-pressed="true"' : ""}>${icon(ico, 18)}</button>`;
   // While the DevBackend is active the button opens and closes the DevBackendView; it does not leave.
-  const devTitle = devBackend ? "DevBackend panel" : "Activate the DevBackend";
-  const devBtn = `<span class="lb-wrap">${b("cone", devTitle, "devbackend", devBackend ? "dev-on" : "")}${tooltip ? `<span class="tooltip" role="tooltip">${devTitle}</span>` : ""}</span>`;
+  const devTitle = devActive ? "DevBackend panel" : "Activate the DevBackend";
+  const devBtn = `<span class="lb-wrap">${b("cone", devTitle, "devbackend", devActive ? "dev-on" : "")}${tooltip ? `<span class="tooltip" role="tooltip">${devTitle}</span>` : ""}</span>`;
   return `<nav class="leftbar" aria-label="App">
     <button class="lb-logo" title="About this app" aria-label="About this app">${logo()}</button>
     ${b("plus", "New room panel (Alt+N) · with the same room: Alt+Shift+N", "new")}
     ${b("list", "Room list", "rooms")}
-    ${devTools ? devBtn : ""}
-    ${devBackend ? `<span class="lb-badge" title="Widgets only see the DevBackend">DevBackend</span>` : ""}
+    ${devBackend ? devBtn : ""}
+    ${devActive ? `<span class="lb-badge" title="Widgets only see the DevBackend">DevBackend</span>` : ""}
     <span class="sp"></span>
     ${b("settings", "Settings", "settings")}
-    <button class="lb-avatar ${active === "account" ? "on" : ""}" title="Account" aria-label="Account${devBackend ? ": DevBackend" : ""}">${devBackend ? devAv(26) : userAv("ada", 26)}</button>
+    <button class="lb-avatar ${active === "account" ? "on" : ""}" title="Account" aria-label="Account${devActive ? ": DevBackend" : ""}">${devActive ? devAv(26) : userAv("ada", 26)}</button>
     ${b("panelLeft", "Collapse the bar", "collapse")}
   </nav>`;
 }
@@ -180,17 +183,23 @@ export function accountView({ mode = "one", verify } = {}) {
   return sideBox(sideTitle("Account"), body, "acc");
 }
 
-export function settingsView({ devTools = false } = {}) {
+/**
+ * The Settings. Two independent developer switches; what a switch enables is listed under it while
+ * it is on. devTools, devBackend: the switches. locked: the DevBackend is active, so its switch
+ * cannot be turned off.
+ */
+export function settingsView({ devTools = false, devBackend = devTools, locked = false } = {}) {
+  const list = (items) => `<ul class="set-list on">${items.map(([ico, b, rest]) => `<li>${icon(ico, 14)}<span><b>${b}</b> ${rest}</span></li>`).join("")}</ul>`;
   const body = `<h4 class="side-h">Appearance</h4>
     <div class="set-row"><div><b>Theme</b><small>Follows the system unless you choose one.</small></div></div>
     <div class="seg" role="radiogroup" aria-label="Theme"><span class="on" role="radio" aria-checked="true">System</span><span role="radio" aria-checked="false">Light</span><span role="radio" aria-checked="false">Dark</span></div>
     <h4 class="side-h">Developer</h4>
-    <div class="set-row"><div><b>Enable dev tools</b><small>Tools to inspect and mock what a widget sees.</small></div>${toggle(devTools, "Enable dev tools")}</div>
-    ${
-      devTools
-        ? `<ul class="set-list on"><li>${icon("cone", 14)}<span><b>DevBackend</b> button in the left bar</span></li><li>${icon("dots", 14)}<span><b>Widget dev tools</b> via the ⋯ button of a widget tab</span></li><li>${icon("copy", 14)}<span><b>Copy to DevBackend</b> in the room overview</span></li></ul>`
-        : `<p class="hint">While this is off, no dev tool is shown anywhere in the app.</p>`
-    }`;
+    <div class="set-row"><div><b>Enable dev tools</b><small>Inspect what a widget sees, and add your own widgets to a room.</small></div>${toggle(devTools, "Enable dev tools")}</div>
+    ${devTools ? list([["dots", "Widget dev tools", "via the ⋯ button of a widget tab"], ["plus", "Add widget", "in the room overview"]]) : ""}
+    <div class="set-row"><div><b>Enable the DevBackend</b><small>Mocked rooms in memory, without a homeserver.</small></div>${toggle(devBackend, "Enable the DevBackend", locked)}</div>
+    ${locked ? `<p class="hint set-locked">${icon("lock", 13)}The DevBackend cannot be turned off while it is active</p>` : ""}
+    ${devBackend ? list([["cone", "DevBackend", "button in the left bar"], ["copy", "Copy to DevBackend", "in the room overview"]]) : ""}
+    ${devTools || devBackend ? "" : `<p class="hint">While both are off, no dev tool is shown anywhere in the app.</p>`}`;
   return sideBox(sideTitle("Settings"), body);
 }
 
@@ -225,12 +234,22 @@ const stateTree = (editing) => {
 const formChips = (forms, activeForm, label) =>
   `<div class="chips" role="tablist" aria-label="${label}">${forms.map((f) => `<span class="chip ${f === activeForm ? "on" : ""}" role="tab" aria-selected="${f === activeForm}">${f}</span>`).join("")}</div>`;
 
+/**
+ * The fields of the widget form, prefilled with the test widget and the first free ID: "send state"
+ * of the DevBackendView and "Add widget" of the RoomOverview.
+ */
+const widgetFields = (id) =>
+  `${field("Event type", "m.widget", { mono: true, select: true })}${field("Widget ID", id, { mono: true })}${field("Name", "New test widget")}${field("URL", "http://localhost:5175/new/", { mono: true })}<div class="inline-row">${toggle(true, "Uses the widget API")}<span>Uses the widget API</span></div>`;
+/** The fields of the Element Call form; shared like `widgetFields`. */
+const elementCallFields = () =>
+  `${field("Element Call URL", "https://call.element.io/room", { mono: true })}${field("Intent", "start_call", { mono: true, select: true })}${field("Widget ID", "element-call", { mono: true })}<p class="hint">A legacy <span class="mono">m.call</span> widget, as Element Web describes its call. The compat wrapper fills in the user, device, room, language and theme.</p>`;
+
 const STATE_FORMS = ["Widget", "Element Call", "Raw JSON"];
 /** form: one of STATE_FORMS */
 const sendStateForm = (form) => {
   const body = {
-    Widget: `${field("Event type", "m.widget", { mono: true, select: true })}${field("Widget ID", "widget-2", { mono: true })}${field("Name", "New test widget")}${field("URL", "http://localhost:5175/new/", { mono: true })}<div class="inline-row">${toggle(true, "Uses the widget API")}<span>Uses the widget API</span></div>`,
-    "Element Call": `${field("Element Call URL", "https://call.element.io/room", { mono: true })}${field("Intent", "start_call", { mono: true, select: true })}${field("Widget ID", "element-call", { mono: true })}<p class="hint">A legacy <span class="mono">m.call</span> widget, as Element Web describes its call. The compat wrapper fills in the user, device, room, language and theme.</p>`,
+    Widget: widgetFields("widget-2"),
+    "Element Call": elementCallFields(),
     "Raw JSON": `${field("Type", "m.room.topic", { mono: true })}${field("State key", "<span class='ph'>empty</span>", { mono: true })}<pre class="code edit">${json({ topic: "Mocked room for the call widget." })}</pre>`,
   }[form];
   return `${sub("Send state")}${formChips(STATE_FORMS, form, "State form")}<div class="form">${body}${delayRow(false)}</div>`;
@@ -401,16 +420,18 @@ const timelineTab = (t, altW, room) => {
  * active tab and the body is the RoomOverview. It has no close button. Its name is the room name;
  * the counts are visible text with tooltips.
  */
-export const roomTab = (room, selected) => {
+/** local: the number of local widgets, counted with the room's widgets. */
+export const roomTab = (room, selected, local = 0) => {
   const r = ROOMS[room];
-  return `<button class="room-chip ${selected ? "active" : ""}" role="tab" aria-selected="${selected}" tabindex="${selected ? 0 : -1}" aria-label="${r.name}" title="${r.name} · open the room overview">${roomAv(room, 24)}<span class="room-name">${r.name}</span><span class="room-counts"><span title="${r.widgets} widgets">${icon("grid", 12)}${r.widgets}</span><span title="${r.members} members">${icon("users", 12)}${r.members}</span></span></button>`;
+  const widgets = r.widgets + local;
+  return `<button class="room-chip ${selected ? "active" : ""}" role="tab" aria-selected="${selected}" tabindex="${selected ? 0 : -1}" aria-label="${r.name}" title="${r.name} · open the room overview">${roomAv(room, 24)}<span class="room-name">${r.name}</span><span class="room-counts"><span title="${widgets} widgets">${icon("grid", 12)}${widgets}</span><span title="${r.members} members">${icon("users", 12)}${r.members}</span></span></button>`;
 };
 
 /**
  * A room panel: header (room name tab + widget tabs) and a full-bleed body. The room name is
  * selected while no widget tab is active. The tablist wrapper is `display: contents`, so the
  * header lays out its children as one row; only the widget tabs (`.tabs`) scroll.
- * o: { room?: key, tabs?: [], body, devTools?, overflow?: bool, menu?: html,
+ * o: { room?: key, tabs?: [], body, devTools?, local?: number of local widgets, overflow?: bool, menu?: html,
  *      fs?: fullscreen (no "+" and no tab of a single widget, unless hover is set), hover?: bool }
  */
 export function roomPanel(o) {
@@ -421,7 +442,7 @@ export function roomPanel(o) {
   // Alt+W closes the shown tab while the panel has a tab, else the panel.
   const altWClosesTab = tabs.length > 0;
   const widgetTabs = showTabs ? `<span class="rp-div"></span><div class="tabs ${o.overflow ? "overflowing" : ""}">${tabs.map((t) => tab(t, o.devTools, altWClosesTab, o.room)).join("")}</div>` : "";
-  const tabList = o.room ? `<div class="rp-tabs" role="tablist" aria-label="Tabs of ${ROOMS[o.room].name}">${roomTab(o.room, roomSelected)}${widgetTabs}</div>` : "";
+  const tabList = o.room ? `<div class="rp-tabs" role="tablist" aria-label="Tabs of ${ROOMS[o.room].name}">${roomTab(o.room, roomSelected, o.local)}${widgetTabs}</div>` : "";
   const close = `<button class="ibtn " title="Close panel${altWClosesTab ? "" : " (Alt+W)"}" aria-label="Close panel">${icon("x", 16)}</button>`;
   // The + selects the room name, whose RoomOverview opens widgets.
   const head = o.room
@@ -527,35 +548,83 @@ const ROOM_MEMBERS = { empty: [["Alice", "@alice:dev.local", 40, "Admin"]] };
  * One widget of the RoomOverview's list. where: "here" | "other" (it has a tab in this room panel
  * or in another one) | undefined. An open widget is grayed out and offers "jump to tab"; from
  * another panel also "move widget here". The names are the ones of the tests.
+ * local: a local widget (only in this host): marked "Local", with its own remove button and, with
+ * dev tools enabled (`devTools`), an edit button. So the row itself cannot be the button: its
+ * `row-open` part opens it.
  */
-const overviewWidget = (k, where) => {
+const overviewWidget = (k, where, { local = false, devTools = false } = {}) => {
   const w = WIDGETS[k];
-  if (!where) return `<button class="row sm" aria-label="Open ${w.name}" title="Open ${w.name} in a new tab">${wico(k, 26)}<span class="row-main"><b>${w.name}</b><small>${w.host}</small></span>${icon("arrowUpRight", 14, "end")}</button>`;
+  const mark = local ? '<span class="pill">Local</span>' : "";
+  const localActs = local ? `${devTools ? ibtn("edit", `Edit ${w.name}`, "xs") : ""}${ibtn("trash", `Remove ${w.name}`, "xs")}` : "";
+  const open = `aria-label="Open ${w.name}" title="Open ${w.name} in a new tab">${wico(k, 26)}<span class="row-main"><b>${w.name}</b><small>${mark}${w.host}</small></span>${icon("arrowUpRight", 14, "end")}`;
+  if (!where) return local ? `<div class="row sm local"><button class="row-open" ${open}</button><span class="row-acts">${localActs}</span></div>` : `<button class="row sm" ${open}</button>`;
   const move = where === "other" ? `<button class="btn sm" title="Closes its tab in the other room panel and opens it here. The widget keeps running." aria-label="Move ${w.name} here">${icon("arrowLeft", 14)}<span>Move widget here</span></button>` : "";
-  return `<div class="row sm opened">${wico(k, 26)}<span class="row-main"><b>${w.name}</b><small>${where === "other" ? "open in the other panel" : "open in this panel"}</small></span><span class="row-acts"><button class="btn sm primary" aria-label="Jump to the tab of ${w.name}">${icon("goToTab", 14)}<span>Jump to tab</span></button>${move}</span></div>`;
+  return `<div class="row sm opened${local ? " local" : ""}">${wico(k, 26)}<span class="row-main"><b>${w.name}</b><small>${mark}${where === "other" ? "open in the other panel" : "open in this panel"}</small></span><span class="row-acts"><button class="btn sm primary" aria-label="Jump to the tab of ${w.name}">${icon("goToTab", 14)}<span>Jump to tab</span></button>${move}${localActs}</span></div>`;
 };
+
+const ADD_FORMS = ["Widget", "Element Call", "Paste JSON"];
+/** A widget state event as Element's room state explorer shows it: more fields than the form uses. */
+const PASTED_EVENT = {
+  type: "im.vector.modular.widgets",
+  state_key: "etherpad_1763294567",
+  sender: "@ada:example.org",
+  content: { type: "m.etherpad", name: "Etherpad", url: "https://pad.example.org/p/design-crit?userId=$matrix_user_id", data: {} },
+  event_id: "$Wq3bH0kTzNcEw7aLrY2mPq",
+  origin_server_ts: 1763294567000,
+};
+
+/**
+ * "Add widget" of the RoomOverview: a form at the top of the widget list. form: one of ADD_FORMS.
+ * target: "local" (only in this host, the default) | "room" (the state event is sent as you).
+ * refused: the room refused it (the session's error); the draft stays.
+ * Editing a local widget (not drawn) is this form without the chips and "Add to": event type and
+ * widget ID read-only, "Save" instead of "Add widget".
+ */
+export function addWidgetForm({ form = "Widget", target = "local", refused = false } = {}) {
+  const body = {
+    Widget: widgetFields("widget-1"),
+    "Element Call": elementCallFields(),
+    "Paste JSON": `<pre class="code edit">${json(PASTED_EVENT)}</pre><p class="hint">A whole widget state event: its type, state key and content are used, other fields are ignored.</p>`,
+  }[form];
+  const targets = [
+    ["local", "Only in this host"],
+    ["room", "The room"],
+  ];
+  const seg = `<div class="seg sm" role="radiogroup" aria-label="Add to">${targets.map(([t, label]) => `<span class="${t === target ? "on" : ""}" role="radio" aria-checked="${t === target}">${label}</span>`).join("")}</div>`;
+  const hint = target === "local" ? "Only you see it, in this browser. Nothing is sent to the room." : "Sent to the room as a state event: everyone in it sees the widget. Changing the room's widgets needs permission.";
+  const error = refused
+    ? `<div class="form-err" role="alert">${icon("alert", 14)}<span>The room refused the widget<small>M_FORBIDDEN: You don't have permission to post that to the room. user_level (0) &lt; send_level (50)</small></span></div>`
+    : "";
+  return `<form class="form add-widget" aria-label="Add widget">${formChips(ADD_FORMS, form, "Widget form")}${body}<div class="field"><span class="field-l">Add to</span>${seg}</div><p class="hint">${hint}</p>${error}<div class="inline-row"><span class="sp"></span>${btn("Cancel", { sm: true })}${btn("Add widget", { kind: "primary", sm: true, ico: "plus" })}</div></form>`;
+}
 
 /**
  * The RoomOverview: what the room name tab shows, and where a room opens. The header offers the
  * RoomTimeline ("Show timeline" when the panel has its tab: `timeline`). The widget list comes
- * first, then encryption, members and (dev tools enabled) the dev card.
- * opened: { widgetKey: "here" | "other" }, see `overviewWidget`.
+ * first (dev tools enabled: with "Add widget"), then encryption, members and (DevBackend enabled)
+ * the DevBackend card.
+ * opened: { widgetKey: "here" | "other" }, see `overviewWidget`. local: the keys of the local
+ * widgets, listed after the room's. addWidget: the options of the open `addWidgetForm`, which
+ * replaces the "Add widget" button.
  */
-export function overviewBody({ room = "design", devTools = false, opened = {}, timeline = false } = {}) {
+export function overviewBody({ room = "design", devTools = false, devBackend = devTools, opened = {}, timeline = false, local = [], addWidget = null } = {}) {
   const r = ROOMS[room];
   const widgets = ROOM_WIDGETS[room] ?? ROOM_WIDGETS.design;
+  const title = `${icon("grid", 15)}Widgets <em>${widgets.length + local.length}</em>`;
+  const head = devTools ? `<div class="card-h"><h3>${title}</h3>${addWidget ? "" : btn("Add widget", { sm: true, ico: "plus", title: "Add a widget to this room" })}</div>` : `<h3>${title}</h3>`;
+  const rows = widgets.map((k) => overviewWidget(k, opened[k])).join("") + local.map((k) => overviewWidget(k, opened[k], { local: true, devTools })).join("");
   const members = ROOM_MEMBERS[room] ?? MEMBERS;
   return `<div class="ov"><div class="ov-in">
     <header class="ov-hero">${roomAv(room, 72)}<div><h1>${r.name}</h1><span class="mono muted">${r.id}</span>${r.topic ? `<p>${r.topic}</p>` : ""}</div>${
       timeline ? btn("Show timeline", { ico: "goToTab", title: "Show the timeline tab" }) : btn("Open timeline", { ico: "message", title: "Open the timeline of this room in a new tab" })
     }</header>
     <div class="ov-grid">
-      <section class="card span"><h3>${icon("grid", 15)}Widgets <em>${widgets.length}</em></h3><div class="ov-widgets">${widgets.map((k) => overviewWidget(k, opened[k])).join("") || `<p class="muted">This room has no widgets.</p>`}</div></section>
+      <section class="card span">${head}<div class="ov-widgets">${addWidget ? addWidgetForm(addWidget) : ""}${rows || `<p class="muted">This room has no widgets.</p>`}</div></section>
       <section class="card span"><h3>${icon("shield", 15)}Encryption</h3><p class="ok-text"><b>End-to-end encrypted</b></p><p class="muted">Messages and widget events in this room are encrypted. This device is verified.</p></section>
       <section class="card span"><h3>${icon("users", 15)}Members <em>${r.members}</em></h3><div class="ov-members">${members.map(([n, id, h, role]) => `<div class="member">${avatar({ name: n, hue: h, size: 30 })}<span class="row-main"><b>${n}</b><small>${id}</small></span>${role ? `<span class="pill">${role}</span>` : ""}</div>`).join("")}</div>${r.members > members.length ? `<button class="link">Show all ${r.members} members</button>` : ""}</section>
       ${
-        devTools
-          ? `<section class="card span devcard"><h3>${icon("cone", 15)}Dev tools</h3><div class="inline-row"><div><b>Copy to DevBackend</b><p class="muted">Copies the room state and the last events into a mocked room, to experiment with it offline.</p></div><span class="sp"></span><label class="field inline"><span class="field-l">Last events</span><span class="input mono narrow">50</span></label>${btn("Copy to DevBackend", { ico: "copy", kind: "dev" })}</div></section>`
+        devBackend
+          ? `<section class="card span devcard"><h3>${icon("cone", 15)}DevBackend</h3><div class="inline-row"><div><b>Copy to DevBackend</b><p class="muted">Copies the room state and the last events into a mocked room, to experiment with it offline.</p></div><span class="sp"></span><label class="field inline"><span class="field-l">Last events</span><span class="input mono narrow">50</span></label>${btn("Copy to DevBackend", { ico: "copy", kind: "dev" })}</div></section>`
           : ""
       }
     </div></div></div>`;
@@ -942,4 +1011,4 @@ export const loginPage = () =>
     ${field("Homeserver", "example.org")}${btn("Continue", { kind: "primary", block: true, end: "arrowRight" })}
     <p class="hint center">You sign in on your homeserver's own page. No password is entered here.</p>
     <div class="or"><span>or</span></div>
-    <button class="skip">${icon("cone", 18)}<span><b>Skip login and use the DevBackend</b><small>In-memory rooms, no account needed. Enables the dev tools.</small></span>${icon("arrowRight", 16, "end")}</button></div></div>`;
+    <button class="skip">${icon("cone", 18)}<span><b>Skip login and use the DevBackend</b><small>In-memory rooms, no account needed. Enables the dev tools and the DevBackend.</small></span>${icon("arrowRight", 16, "end")}</button></div></div>`;

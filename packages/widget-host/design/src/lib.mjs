@@ -111,6 +111,8 @@ export const WIDGETS = {
   timer: { name: "Timer", label: "TI", hue: 0, host: "timer.example.org" },
   retro: { name: "Retro board", label: "RB", hue: 95, host: "retro.example.org" },
   stream: { name: "Livestream", label: "LS", hue: 250, host: "stream.example.org" },
+  /** A local widget: added with "Add widget", only in this host (a widget in development). */
+  proto: { name: "Poll prototype", label: "PP", hue: 280, host: "localhost:5180" },
 };
 
 /** The 7 emoji of an emoji (SAS) verification, from the spec's list; the long names are the widest. */

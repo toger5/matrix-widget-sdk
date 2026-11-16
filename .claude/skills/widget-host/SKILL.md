@@ -124,16 +124,20 @@ their tests) is the `matrix-session` skill (`.claude/skills/matrix-session/SKILL
 ## DevBackend, seeds and the test hook
 
 - The DevBackend is an account (`DEV_ACCOUNT_ID`); activating it switches `activeAccountId`. Its
-  content lives in memory only, so its workspace is not persisted.
+  content lives in memory only, so its workspace (and its local widgets) are not persisted. It is
+  listed while `settings.devBackend` is on (`syncDevAccount`), which is independent of
+  `settings.devTools` (the widget dev tools and "Add widget", for any account).
 - One `InMemoryBackend` per mocked room. Account-scoped data (media, to-device, "fail sends", TURN, RTC
   transports) is mirrored across them in `devBackend.ts`. The backend has no change notification:
   the controller calls `refresh()` after every widget message, so keep `refresh()` cheap;
   `snapshot()` returns the same object until `refresh()` finds a change (`useSyncExternalStore`).
 - Seeds: `DevBackendSeed` (`src/matrix_session/memory/seed.ts`) is the content and is validated
   strictly: every object lists its known fields, an unknown field is an error. `HostSeed`
-  (`src/app/controller.ts`) adds the screen (`settings`, `open`, `sidePanel`, `behavior`,
+  (`src/app/controller.ts`) adds the local widgets (`localWidgets`, checked with
+  `validateWidgetEvent` of `seed.ts`) and the screen (`settings`, `open`, `sidePanel`, `behavior`,
   `leftBarCollapsed`, `notifyReadyTimeoutMs`); `populate()` hands only the content fields to the
-  DevBackend. `toSeed()` is the way back. Examples: `e2e/seeds/*.json`.
+  DevBackend and always turns `settings.devBackend` on. `toSeed()` is the way back (content only).
+  Examples: `e2e/seeds/*.json`.
 - `window.widgetHost` (`src/app/testHook.ts`): `populate`, `state`, `dispatch`, `widgets`,
   `messages`, `driverSnapshot`, `devTools`, `store`. Extend it when a test needs a fact that is not
   on screen; return plain JSON.

@@ -35,3 +35,8 @@ export function clearCapabilities(userId: string): void {
   const keys = Array.from({ length: localStorage.length }, (_, i) => localStorage.key(i));
   for (const key of keys) if (key?.startsWith(prefix)) localStorage.removeItem(key);
 }
+
+/** Forget what was approved for one widget (`capabilityStoreKey`): it was removed, or its URL changed. */
+export function forgetCapabilities(key: string): void {
+  localStorage.removeItem(key);
+}

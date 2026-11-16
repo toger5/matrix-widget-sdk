@@ -4,8 +4,8 @@ import { Avatar, DevAvatar, Icon, Logo, type IconName } from "../ui/atoms";
 
 export interface LeftBarProps {
   leftBar: LeftBarViewModel;
-  /** `settings.devTools`: shows the DevBackend button. */
-  devTools: boolean;
+  /** `settings.devBackend`: shows the DevBackend button. */
+  devBackend: boolean;
   devBackendActive: boolean;
   /** The open SidePanel view, to mark its button. */
   sidePanelView?: SidePanelViewModel["view"];
@@ -40,7 +40,7 @@ function LbButton({ icon, title, pressed, className = "", noTitle, onClick }: Lb
 }
 
 /** leaves leftbar/*. Renders nothing while collapsed (the AppShell shows the expand button and the toast). */
-export function LeftBar({ leftBar, devTools, devBackendActive, sidePanelView, account }: LeftBarProps) {
+export function LeftBar({ leftBar, devBackend, devBackendActive, sidePanelView, account }: LeftBarProps) {
   const dispatch = useDispatch();
   if (leftBar.collapsed) return null;
 
@@ -54,7 +54,7 @@ export function LeftBar({ leftBar, devTools, devBackendActive, sidePanelView, ac
       </button>
       <LbButton icon="plus" title="New room panel (Alt+N) · with the same room: Alt+Shift+N" onClick={() => dispatch({ type: "panel/new" })} />
       <LbButton icon="list" title="Room list" pressed={sidePanelView === "rooms"} onClick={() => dispatch({ type: "sidePanel/toggle", view: "rooms" })} />
-      {devTools && (
+      {devBackend && (
         <span className="lb-wrap">
           <LbButton
             icon="cone"

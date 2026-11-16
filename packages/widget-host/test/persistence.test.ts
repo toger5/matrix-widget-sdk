@@ -46,7 +46,7 @@ describe("loadPersisted", () => {
       },
     });
     const ui = loadPersisted();
-    expect(ui?.settings).toEqual({ devTools: true, theme: "dark" });
+    expect(ui?.settings).toEqual({ devTools: true, devBackend: true, theme: "dark" });
     expect(ui?.workspaces.ada.roomsArea.panels[0].content).toEqual({
       kind: "room",
       roomId: "!a:example.org",
@@ -86,5 +86,30 @@ describe("loadPersisted", () => {
   it("ignores stored workspaces that are not an object", () => {
     storeUi({ workspaces: [1, 2] });
     expect(loadPersisted()?.workspaces).toEqual({});
+  });
+
+  it("gives settings stored before the DevBackend switch the DevBackend of the dev tools, and keeps a stored one", () => {
+    storeUi({ settings: { devTools: false, theme: "light" } });
+    expect(loadPersisted()?.settings).toEqual({ devTools: false, devBackend: false, theme: "light" });
+    storeUi({ settings: { devTools: true } });
+    expect(loadPersisted()?.settings).toEqual({ devTools: true, devBackend: true, theme: "system" });
+    storeUi({ settings: { devTools: true, devBackend: false } });
+    expect(loadPersisted()?.settings.devBackend).toBe(false);
+    storeUi({ settings: { devTools: false, devBackend: true } });
+    expect(loadPersisted()?.settings).toEqual({ devTools: false, devBackend: true, theme: "system" });
+  });
+
+  it("keeps the local widgets per account and room, and drops malformed ones", () => {
+    const widget = { type: "m.widget", state_key: "w1", content: { name: "W", url: "https://w.example.org/" } };
+    storeUi({
+      localWidgets: {
+        ada: { "!a:x": [widget, null, { type: "m.widget", content: {} }, { type: "m.widget", state_key: "w2", content: "x" }, { ...widget, extra: 1 }], "!b:x": "broken" },
+        work: [widget],
+        old: "broken",
+      },
+    });
+    expect(loadPersisted()?.localWidgets).toEqual({ ada: { "!a:x": [widget, widget] } });
+    storeUi({});
+    expect(loadPersisted()?.localWidgets).toEqual({});
   });
 });

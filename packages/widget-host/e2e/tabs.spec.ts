@@ -175,18 +175,18 @@ test("the Timeline tab closes like a widget tab: ×, Delete and Alt+W; then Alt+
   await expect(host.panels).toHaveCount(0);
 });
 
-test("the dev tools button of a tab only exists while dev tools are enabled", async ({ host }) => {
-  // A seed can turn the dev tools off, also in the DevBackend.
+test("the dev tools button of a tab only exists while dev tools are enabled, also in the DevBackend", async ({ host }) => {
+  // A seed can turn the dev tools off; the DevBackend stays active and enabled.
   await host.populate("lab", { sidePanel: null, settings: { devTools: false }, open: [{ room: LAB, widgets: [NEW_WIDGET] }] });
   await expect(host.tab(/New test widget/)).toBeVisible();
   await expect(host.button("Dev tools of New test widget")).toHaveCount(0);
   await expect(host.button("Close New test widget")).toHaveCount(1);
+  await expect(host.app).toHaveClass(/fence/);
+  await expect(host.button("DevBackend panel")).toBeVisible();
+  expect((await host.state()).settings).toMatchObject({ devTools: false, devBackend: true });
 
-  // The settings intent cannot: while the DevBackend is active it forces them on.
-  await host.dispatch({ type: "settings/set", settings: { devTools: false } });
+  await host.dispatch({ type: "settings/set", settings: { devTools: true } });
   await expect(host.button("Dev tools of New test widget")).toHaveCount(1);
-  expect((await host.state()).settings.devTools).toBe(true);
-
   await host.button("Dev tools of New test widget").click();
   await expect(host.button("Dev tools of New test widget")).toHaveAttribute("aria-pressed", "true");
 });

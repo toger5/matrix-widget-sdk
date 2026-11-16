@@ -84,7 +84,7 @@ The DevBackend runtime (`src/matrix_session/memory/devBackend.ts`):
 | `overview-show-all-members` | `src/views/rooms/RoomOverview.tsx` | The mockup has a "Show all 12 members" link; there is no data and no intent for the full list | add an intent and a member list view / drop the link | A text line with the count |
 | `tile-widget-without-tab` | `src/views/rooms/RoomOverview.tsx` | A widget that runs without a tab (always on screen, its panel was closed) in the widget list of the RoomOverview | treat as "open in another panel" / own state | Both buttons, labelled "running without a tab" |
 | `panel-resize-intent-semantics` | `src/views/rooms/RoomsArea.tsx` | `panel/resize` carries one share | one share, the right neighbour gets the rest / an intent with both shares | One share (`resizePanel` in `src/app/layout.ts` gives the rest to the right neighbour). The double-click reset sends two intents, which is only exact for two panels |
-| `seed-dev-tools-off-in-devbackend` | `src/app/controller.ts` (`populate`) | A seed with `settings: { devTools: false }` is honoured although the settings toggle cannot turn dev tools off while the DevBackend is active. Then there is no fence, badge or DevBackend button | force dev tools on in `populate` / keep it as the tests' way to the "dev tools disabled" views | Kept; `overview/plain` and a tabs test rely on it |
+| `add-widget-room-write-done` | `src/views/rooms/AddWidgetForm.tsx` | When does "Add widget" to the room close? `widgetWrite` disappears when the send succeeded, and also when the replace confirmation was cancelled before anything was sent | (a) once the room lists the sent event (b) a `sent` state of `widgetWrite` | (a). With a Matrix account the form shows its buttons again between the send and the sync that brings the event back; if the room changes the event, it stays open until Cancel |
 | `widget-api-without-uses-widget-api` | `src/app/runtime/widgetRuntime.ts` | A widget with `uses_widget_api: false` that still speaks the widget API gets answers, including the capability prompt | ignore its messages / answer | Answered |
 
 ### WidgetView and dev tools
@@ -174,5 +174,8 @@ Login, sync, suspend/resume, device verification and the storage migration of bo
 - A widget may send `notify_ready` before its capabilities are answered, so it counts as ready while the permission prompt is shown.
 - In a narrow window the panel pager is partly hidden under the overlaying SidePanel.
 - The toast's 4 s auto-dismiss has no test (the tests do not sleep).
+- "Add widget": a draft the form refuses is shown in the same box as the room's refusal ("The widget cannot be added"); editing the draft takes it away. Opening the form forgets a refusal an earlier form of the room left. While the state event is sent the submit button says "Adding…".
+- Editing a local widget always shows the widget form (name, URL, uses the widget API), whichever form added it; the rest of its content is kept. A changed name does not reload a running local widget; a changed `uses_widget_api` reloads it without forgetting its capabilities.
+- Removing a local widget leaves its recents behind; the RoomPicker skips them like any widget that is gone.
 - `HostSeed.notifyReadyTimeoutMs` shortens the 15 s `notify_ready` timeout, for the tests of the failed state only.
 - The PiP surround listens to native pointer events: the slotted widget iframes are outside the React tree, so React's hover events never fired over a widget.

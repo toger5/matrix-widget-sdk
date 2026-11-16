@@ -4,7 +4,8 @@ import { useMemo, useState, type FormEvent } from "react";
 import type { DevBackendViewModel, MockedStateEvent, RoomId } from "../../appViewModel";
 import { useDispatch } from "../env";
 import { Button, Field, Icon, IconButton, Json } from "../ui/atoms";
-import { FormError, JsonArea, Sub, parseJsonObject, pretty } from "./parts";
+import { FormError, JsonArea, parseJsonObject, pretty } from "../ui/forms";
+import { Sub } from "./parts";
 import { SendStateForm } from "./SendStateForm";
 
 type Shortcut = "name" | "topic" | "member";

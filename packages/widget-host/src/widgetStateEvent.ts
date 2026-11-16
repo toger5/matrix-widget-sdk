@@ -25,6 +25,16 @@ export const describesWidget = (event: StateEvent) => typeof event.content.url =
 /** Identifies a widget within a room: two event types may use the same state key. */
 export const widgetKey = (event: Pick<StateEvent, "type" | "state_key">) => `${event.type}/${event.state_key}`;
 
+/** The prefix of `localWidgetKey`. */
+export const LOCAL_WIDGET_PREFIX = "local:";
+
+/**
+ * Identifies a local widget ("Add widget", only in this host) within a room: `local:` before its
+ * `widgetKey`. No `widgetKey` starts with it (it starts with one of `WIDGET_EVENT_TYPES`), so a
+ * local widget never shares its key (its instance id, its remembered capabilities) with a room widget.
+ */
+export const localWidgetKey = (event: Pick<StateEvent, "type" | "state_key">) => `${LOCAL_WIDGET_PREFIX}${widgetKey(event)}`;
+
 /**
  * Why a widget URL cannot be embedded, or `undefined` when it can: only absolute `http:` and
  * `https:` URLs. A `javascript:`, `data:`, `blob:`, `about:` or relative URL would run in, or

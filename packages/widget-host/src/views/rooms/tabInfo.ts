@@ -1,7 +1,7 @@
 /** What the tab bar, the "all tabs" menu and the tab panel need to know about a tab. Pure derivations. */
 import type { MainViewModel, PanelId, TabId, TabViewModel, WidgetKey } from "../../appViewModel";
 import type { RoomSummary } from "../../session";
-import { roomWidgets } from "../helpers";
+import { localWidgetsOf, roomWidgets } from "../helpers";
 
 /** An id that is safe in `id` / `aria-controls` (those are space separated lists). */
 export const domId = (...parts: string[]) => parts.join("-").replace(/[^\w-]/g, "_");
@@ -30,7 +30,7 @@ export function tabInfo(main: MainViewModel, room: RoomSummary | undefined, tab:
   const widget = main.widgets[tab.widgetId];
   // A tab can outlive its widget for a moment (the layout is restored before the widgets start).
   const key = widget?.widgetKey ?? (room && tab.widgetId.startsWith(`${room.id}|`) ? tab.widgetId.slice(room.id.length + 1) : tab.widgetId);
-  const name = widget?.widget.name ?? roomWidgets(room).find((w) => w.key === key)?.name ?? "Widget";
+  const name = widget?.widget.name ?? roomWidgets(room, room && localWidgetsOf(main, room.id)).find((w) => w.key === key)?.name ?? "Widget";
   const pinned = !!widget?.alwaysOnScreen;
   return { name, title: `${name}${pinned ? " · always on screen" : ""}`, closeLabel: `Close ${name}`, widgetKey: key, pinned, load: widget?.load.state };
 }

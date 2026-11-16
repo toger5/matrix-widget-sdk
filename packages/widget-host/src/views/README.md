@@ -24,6 +24,7 @@ The mockups are the specification. `design/src/components.mjs` has one function 
 
 - Port the markup of the mockup function 1:1 (same elements, same class names, same `aria-*`, same `title`s), replacing the fixture data with props. Do not restyle.
 - Atoms are in `src/views/ui/atoms.tsx`: `Icon`, `Logo`, `Avatar`, `DevAvatar`, `IconButton` (`ibtn`), `Button` (`btn`), `Toggle`, `Field`, `Json`.
+- Form pieces several views share: `src/views/ui/forms.tsx` (`FormChips`, `JsonArea`, `FormError`, `parseJsonObject`, `pretty`) and `src/views/forms/widgetForms.tsx` (the widget and Element Call forms of "Send state" and "Add widget").
 - New CSS goes to the end of `src/styles/app.css`, under a comment naming the view. Only tokens (`var(--…)`), no raw colors. Do not edit existing rules that other views use. Do not change `design/` while implementing a view: a mockup change is a design step (step 3 of [`.claude/agents/widget-host-ui.md`](../../../../.claude/agents/widget-host-ui.md)), and then the same rule changes in `mock.css` and `app.css`.
 - A running widget is shown with `<WidgetSlot widgetId>` (`src/views/ui/WidgetSlot.tsx`), never with an `<iframe>`.
 - Mock-only decoration (fake widget content `.w-*`, the `.stage` wrappers) is not ported.

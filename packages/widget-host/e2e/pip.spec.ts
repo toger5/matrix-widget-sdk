@@ -264,6 +264,13 @@ test("the dev tools of a widget stay open inside its PiP box, which can be enlar
   await surroundShown(host);
   await host.leaf("pip/enlarged-devtools");
 
+  // With dev tools disabled no box shows them or offers to close them.
+  await host.dispatch({ type: "settings/set", settings: { devTools: false } });
+  await expect(host.pip.getByRole("button", { name: "Close dev tools" })).toHaveCount(0);
+  await expect(first.getByRole("toolbar")).toHaveCount(0);
+  await host.dispatch({ type: "settings/set", settings: { devTools: true } });
+  await expect(host.pip.getByRole("button", { name: "Close dev tools" })).toHaveCount(1);
+
   await host.pip.getByRole("button", { name: "Close dev tools" }).click();
   await expect(first.getByRole("toolbar")).toHaveCount(0);
   await expect(host.pip.getByRole("button", { name: "Close dev tools" })).toHaveCount(0);

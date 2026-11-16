@@ -158,7 +158,7 @@ function MainScreen({ vm, main }: { vm: AppViewModel; main: MainViewModel }) {
   const pipItems: PipItem[] = pipWidgetIds(main, narrow).flatMap((widgetId) => {
     const widget = main.widgets[widgetId];
     if (!widget) return [];
-    return [{ widgetId, widgetName: widget.widget.name, roomName: roomOf(main, widget.roomId)?.name ?? widget.roomId, devToolsOpen: !!workspace?.devTools[widgetId]?.open }];
+    return [{ widgetId, widgetName: widget.widget.name, roomName: roomOf(main, widget.roomId)?.name ?? widget.roomId, devToolsOpen: settings.devTools && !!workspace?.devTools[widgetId]?.open }];
   });
 
   // Narrow window: only the focused panel is visible, the pager steps through the others.
@@ -171,7 +171,7 @@ function MainScreen({ vm, main }: { vm: AppViewModel; main: MainViewModel }) {
   return (
     <>
       <div className={`app ${fence ? "fence" : ""} ${narrow ? "narrow" : ""} ${fullscreen ? "fullscreen" : ""}`} data-testid="app" inert={main.addAccount ? true : undefined}>
-        {!collapsed && <LeftBar leftBar={main.leftBar} devTools={settings.devTools} devBackendActive={fence} sidePanelView={main.sidePanel.view} account={activeAccount(main)} />}
+        {!collapsed && <LeftBar leftBar={main.leftBar} devBackend={settings.devBackend} devBackendActive={fence} sidePanelView={main.sidePanel.view} account={activeAccount(main)} />}
         {narrow && main.sidePanel.view && <div className="scrim side-scrim" data-testid="side-scrim" onClick={() => dispatch({ type: "sidePanel/close" })} />}
         <SidePanel main={main} settings={settings} />
         <RoomsArea main={main} settings={settings} fullscreen={fullscreen} renderWidget={renderWidget} />

@@ -77,7 +77,7 @@ export function LoginView({ login, adding = false }: LoginViewProps) {
               <Icon name="cone" size={18} />
               <span>
                 <b>Skip login and use the DevBackend</b>
-                <small>In-memory rooms, no account needed. Enables the dev tools.</small>
+                <small>In-memory rooms, no account needed. Enables the dev tools and the DevBackend.</small>
               </span>
               <Icon name="arrowRight" size={16} className="end" />
             </button>

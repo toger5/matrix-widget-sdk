@@ -3,7 +3,7 @@ import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from
 import { activeWorkspace, type MainViewModel, type PanelId, type RoomId, type SettingsViewModel, type TabId, type TabViewModel } from "../../appViewModel";
 import type { RoomSummary } from "../../session";
 import { useDispatch } from "../env";
-import { roomWidgets } from "../helpers";
+import { localWidgetsOf, roomWidgets } from "../helpers";
 import { Avatar, Icon, initials } from "../ui/atoms";
 import { roomTabDomId, tabDomId, tabInfo, tabPanelDomId, type TabInfo } from "./tabInfo";
 
@@ -154,7 +154,7 @@ export function TabBar({ main, settings, panelId, roomId, room, roomName, tabs, 
   const tabStop = roomSelected || fullscreen ? undefined : activeTabId;
   // Alt+W closes the shown tab while the panel has a tab, else the panel (`hasTab`).
   const altWClosesTab = tabs.length > 0;
-  const widgetCount = roomWidgets(room).length;
+  const widgetCount = roomWidgets(room, localWidgetsOf(main, roomId)).length;
 
   return (
     <>

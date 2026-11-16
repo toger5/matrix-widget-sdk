@@ -7,7 +7,8 @@ import { useState, type FormEvent } from "react";
 import type { DevBackendSection, MockedRoomData, ToDeviceMessage, WidgetHostBehavior } from "../../appViewModel";
 import { useDispatch } from "../env";
 import { Button, Field, Json, Toggle } from "../ui/atoms";
-import { Acc, FormError, JsonArea, Sub, parseJsonObject, timeOf } from "./parts";
+import { FormError, JsonArea, parseJsonObject } from "../ui/forms";
+import { Acc, Sub, timeOf } from "./parts";
 import { ToolBox } from "./ToolBox";
 
 export function ClientBox({ openSections, heightShare, behavior, data }: { openSections: DevBackendSection[]; heightShare: number; behavior: WidgetHostBehavior; data: MockedRoomData }) {

@@ -5,6 +5,8 @@
  * rooms changed) into the view model. Views only see `store`, `dispatch` and the data hooks of
  * `AppRoot`.
  */
+import { BackendError } from "@matrix-widget-tools/widget-host-bindings";
+
 import {
   activeAccount,
   activeWorkspace,
@@ -32,14 +34,16 @@ import {
   type WidgetInstanceId,
   type WidgetInstanceViewModel,
   type WidgetKey,
+  type WidgetWriteViewModel,
   type WorkspaceLayout,
 } from "../appViewModel";
 import { EXAMPLE_LEGACY, EXAMPLE_NEW } from "../exampleWidgets";
-import { capabilityStoreKey, clearCapabilities } from "../lib/capabilityStore";
+import { capabilityStoreKey, clearCapabilities, forgetCapabilities } from "../lib/capabilityStore";
 import { DevBackend } from "../matrix_session/memory/devBackend";
-import type { DevBackendSeed } from "../matrix_session/memory/seed";
+import { validateWidgetEvent, type DevBackendSeed } from "../matrix_session/memory/seed";
 import { sessions, StoredLoginInvalidError, type LiveSession, type PendingLogin, type RoomBackend, type RoomSummary, type SessionProvider } from "../session";
-import { roomWidgets } from "../views/helpers";
+import { roomWidgets, wrapperUrl } from "../views/helpers";
+import { WIDGET_EVENT_TYPES, describesWidget, localWidgetKey, resolveWidget, widgetKey, widgetUrlProblem, type StateEvent } from "../widgetStateEvent";
 import {
   activateTab,
   addPanel,
@@ -76,6 +80,11 @@ const TOAST_MS = 4000;
 const VERIFICATION_STOPPED = "The DevBackend was activated, which stops the verification.";
 
 const errorText = (e: unknown) => (e instanceof Error ? e.message : String(e));
+/**
+ * The text of a failure of a `MatrixBackend` call: a uniffi error's `message` is only its type
+ * ("BackendError.Failed"), the reason (and the Matrix `errcode`, as in "M_FORBIDDEN: …") is inside.
+ */
+const backendErrorText = (e: unknown) => (BackendError.Failed.instanceOf(e) ? (e.inner.errcode ? `${e.inner.errcode}: ${e.inner.reason}` : e.inner.reason) : errorText(e));
 
 /**
  * The capability prompt after the driver asked its whole open question (again): what was not in
@@ -106,7 +115,10 @@ const defaultDevBackendVm = (): DevBackendViewModel => ({
  * DevBackend plus the screen to show on it. See `e2e/seeds/*.json`.
  */
 export interface HostSeed extends DevBackendSeed {
+  /** `devBackend` is always on (the DevBackend is active); `devTools` is on unless the seed turns it off. */
   settings?: Partial<SettingsViewModel>;
+  /** Local widgets ("Add widget", only in this host) of the mocked rooms: widget state events per room id. */
+  localWidgets?: Record<RoomId, StateEvent[]>;
   /**
    * Room panels to open, left to right. `widgets` are `widgetKey`s (`m.widget/<state key>`) or state
    * keys; each gets a tab, and the last one is shown. `timeline` adds the Timeline tab after them,
@@ -144,6 +156,8 @@ export class AppController {
   /** Per account, newest first; persisted for Matrix accounts. */
   private readonly recentWidgets: Record<AccountId, RecentWidget[]> = {};
   private readonly recentRooms: Record<AccountId, RecentRoom[]> = {};
+  /** Per account and room; persisted for Matrix accounts, the DevBackend's start again with each `populate`. */
+  private readonly localWidgets: Record<AccountId, Record<RoomId, StateEvent[]>> = {};
   private stopWatchingRooms: (() => void) | undefined;
   private pendingLogin: PendingLogin | undefined;
   private stopOAuth: (() => void) | undefined;
@@ -162,8 +176,9 @@ export class AppController {
     const persisted = this.persist ? loadPersisted() : undefined;
     Object.assign(this.recentWidgets, persisted?.recents);
     Object.assign(this.recentRooms, persisted?.recentRooms);
+    Object.assign(this.localWidgets, persisted?.localWidgets);
     this.persisted = persisted;
-    this.store = new Store<AppViewModel>({ settings: { devTools: false, theme: "system", ...persisted?.settings }, screen: { kind: "restoring" } });
+    this.store = new Store<AppViewModel>({ settings: { devTools: false, devBackend: false, theme: "system", ...persisted?.settings }, screen: { kind: "restoring" } });
     this.store.subscribe(() => this.queueSave());
     this.theme = this.resolvedTheme();
     // The OS scheme matters while the setting is "system". (The AppShell listens itself for the page's `data-theme`.)
@@ -244,6 +259,7 @@ export class AppController {
         workspaces,
         recents: Object.fromEntries(Object.entries(this.recentWidgets).filter(([id]) => id !== DEV_ACCOUNT_ID)),
         recentRooms: Object.fromEntries(Object.entries(this.recentRooms).filter(([id]) => id !== DEV_ACCOUNT_ID)),
+        localWidgets: Object.fromEntries(Object.entries(this.localWidgets).filter(([id]) => id !== DEV_ACCOUNT_ID)),
         lastAccountId: m && m.activeAccountId !== DEV_ACCOUNT_ID ? m.activeAccountId : (m?.returnAccountId ?? this.persisted?.lastAccountId),
       });
     }, 300);
@@ -283,7 +299,7 @@ export class AppController {
     await Promise.all(stored.map((s) => this.restore(s.accountId)));
   }
 
-  /** Switch to the main screen with these accounts (and the DevBackend account, if dev tools are on). */
+  /** Switch to the main screen with these accounts (and the DevBackend account, if the DevBackend is enabled). */
   private showMain(accounts: AccountViewModel[], activeAccountId: AccountId, extra: Partial<MainViewModel> = {}): void {
     const main: MainViewModel = {
       accounts,
@@ -300,14 +316,14 @@ export class AppController {
     this.syncDevAccount();
   }
 
-  /** The DevBackend account is listed exactly while dev tools are enabled. */
+  /** The DevBackend account is listed exactly while the DevBackend is enabled. */
   private syncDevAccount(): void {
-    const devTools = this.vm.settings.devTools;
+    const enabled = this.vm.settings.devBackend;
     this.setMain((m) => {
       const listed = m.accounts.some((a) => a.id === DEV_ACCOUNT_ID);
-      if (devTools === listed) return m;
+      if (enabled === listed) return m;
       const dev: AccountViewModel = { id: DEV_ACCOUNT_ID, kind: "devBackend", status: "live", userId: this.devBackend?.userId ?? "@alice:example.org", displayName: "DevBackend", homeserver: "in-memory" };
-      return { ...m, accounts: devTools ? [...m.accounts, dev] : m.accounts.filter((a) => a.id !== DEV_ACCOUNT_ID) };
+      return { ...m, accounts: enabled ? [...m.accounts, dev] : m.accounts.filter((a) => a.id !== DEV_ACCOUNT_ID) };
     });
   }
 
@@ -386,6 +402,7 @@ export class AppController {
     this.sessions.delete(accountId);
     delete this.recentWidgets[accountId];
     delete this.recentRooms[accountId];
+    delete this.localWidgets[accountId];
     const accounts = m.accounts.filter((a) => a.id !== accountId);
     const next = accounts.find((a) => a.kind === "matrix");
     if (!next && !(this.devActive && !wasActive)) {
@@ -433,12 +450,18 @@ export class AppController {
 
   /** `MainViewModel.data` of an account. */
   private accountData(accountId: AccountId, rooms: Loadable<RoomSummary[]>): AccountDataViewModel {
-    return { rooms, recentWidgets: this.recentWidgets[accountId] ?? [], recentRooms: this.recentRooms[accountId] ?? [] };
+    return { rooms, localWidgets: this.localWidgets[accountId] ?? {}, recentWidgets: this.recentWidgets[accountId] ?? [], recentRooms: this.recentRooms[accountId] ?? [] };
   }
 
   private rooms(): RoomSummary[] {
     const rooms = this.main?.data.rooms;
     return rooms?.status === "ready" ? rooms.value : [];
+  }
+
+  /** The widgets of a room of the active account: its own, then its local ones; none before the room is known (a Matrix account's list fills while it syncs). */
+  private widgetsOf(roomId: RoomId, rooms = this.rooms()) {
+    const room = rooms.find((r) => r.id === roomId);
+    return room ? roomWidgets(room, this.main?.data.localWidgets[roomId]) : [];
   }
 
   /**
@@ -451,7 +474,7 @@ export class AppController {
     const ws = this.workspace;
     if (!m || !ws || m.data.rooms.status !== "ready") return;
     const rooms = m.data.rooms.value;
-    const known = (roomId: RoomId, key: WidgetKey) => roomWidgets(rooms.find((r) => r.id === roomId)).some((w) => w.key === key && w.widget);
+    const known = (roomId: RoomId, key: WidgetKey) => this.widgetsOf(roomId, rooms).some((w) => w.key === key && w.widget);
     // The DevBackend's room list is complete at any time. A Matrix account's list fills while it syncs, so nothing is closed there.
     const complete = this.devActive;
 
@@ -505,7 +528,7 @@ export class AppController {
   private startWidget(roomId: RoomId, key: WidgetKey): boolean {
     const session = this.activeSession();
     const m = this.main;
-    const found = roomWidgets(this.rooms().find((r) => r.id === roomId)).find((w) => w.key === key);
+    const found = this.widgetsOf(roomId).find((w) => w.key === key);
     if (!session || !m || !found?.widget) return false;
     const widget = found.widget;
     const id = widgetInstanceId(roomId, key);
@@ -699,6 +722,142 @@ export class AppController {
     this.setWorkspace((w) => addPanel(w, { kind: "room", roomId: widget.roomId, tabs: [{ kind: "widget", id: tabId, widgetId: id }], activeTabId: tabId }).ws);
   }
 
+  /** Start a running widget again (a new generation), e.g. after its definition changed. */
+  private reloadWidget(id: WidgetInstanceId): void {
+    const widget = this.main?.widgets[id];
+    if (!widget) return;
+    const runtime = this.runtimes.get(id);
+    if (runtime) {
+      runtime.dispose();
+      this.runtimes.delete(id);
+      this.releaseBackend(widget.roomId);
+    }
+    void this.startWidget(widget.roomId, widget.widgetKey);
+  }
+
+  // -------------------------------------------------------------------------------------------
+  // "Add widget": local widgets, and widget state events sent to the room
+
+  /** The local widgets of a room of the active account. */
+  private localOf(roomId: RoomId): StateEvent[] {
+    return this.main?.data.localWidgets[roomId] ?? [];
+  }
+
+  /** Change the local widgets of a room of the active account (the map and `data`). */
+  private setLocalWidgets(roomId: RoomId, change: (events: StateEvent[]) => StateEvent[]): void {
+    const accountId = this.main?.activeAccountId;
+    if (!accountId) return;
+    const rooms = this.localWidgets[accountId] ?? {};
+    const { [roomId]: events = [], ...others } = rooms;
+    const changed = change(events);
+    this.localWidgets[accountId] = changed.length ? { ...others, [roomId]: changed } : others;
+    this.setMain((m) => (m.activeAccountId === accountId ? { ...m, data: this.accountData(accountId, m.data.rooms) } : m));
+  }
+
+  /** Forget what was approved for a widget of the active account (it was removed, or its URL changed). */
+  private forgetWidgetCapabilities(roomId: RoomId, key: WidgetKey): void {
+    const session = this.activeSession();
+    if (session) forgetCapabilities(capabilityStoreKey(session.userId, roomId, key));
+  }
+
+  /**
+   * `room/addWidget`: the forms check the event, but the intent can come from anywhere (the test
+   * hook), so it is checked again: a widget type with a URL the host would embed.
+   */
+  private addWidget(roomId: RoomId, event: StateEvent, target: "local" | "room", confirmed: boolean): void {
+    const problem = widgetEventProblem(event);
+    if (problem) throw new Error(`The widget cannot be added: ${problem}`);
+    // The next "Add widget" forgets a refusal.
+    this.setMain((m) => (m.widgetWrite ? { ...m, widgetWrite: undefined } : m));
+    if (target === "local") return this.putLocalWidget(roomId, event);
+
+    const room = this.rooms().find((r) => r.id === roomId);
+    if (!room) throw new Error(`The widget cannot be added: ${roomId} is not a room of this account`);
+    // Without the room's widgets (a Matrix account loads them after the room list) the replacement could not be confirmed.
+    if (!room.widgetEvents) throw new Error("The widget cannot be added to the room yet: its widgets are still loading");
+    const existing = room.widgetEvents.find((e) => e.type === event.type && e.state_key === event.state_key && describesWidget(e));
+    if (existing && !confirmed) {
+      const name = typeof existing.content.name === "string" && existing.content.name ? existing.content.name : existing.state_key;
+      return this.modal({
+        kind: "confirm",
+        title: `Replace ${name} in the room?`,
+        body: "The room already has a widget with this type and ID. Everyone in the room gets the new one instead.",
+        confirmLabel: "Replace the widget",
+        danger: true,
+        intent: { type: "room/addWidget", roomId, event, target, confirmed: true },
+      });
+    }
+    void this.sendWidgetToRoom(roomId, event);
+  }
+
+  /** A local widget: added, or (same key) replaced. A change of what it embeds forgets its approvals and reloads it if it runs. */
+  private putLocalWidget(roomId: RoomId, event: StateEvent): void {
+    const key = localWidgetKey(event);
+    const old = this.localOf(roomId).find((e) => localWidgetKey(e) === key);
+    this.setLocalWidgets(roomId, (events) => (old ? events.map((e) => (localWidgetKey(e) === key ? event : e)) : [...events, event]));
+    if (!old) return;
+    // What the host embeds: the URL, and for a legacy widget the wrapper URL, which also carries its `data` (the values of
+    // the URL's variables, which can name another origin) and `waitForIframeLoad`.
+    const embeds = (e: StateEvent) => {
+      try {
+        return resolveWidget(e, wrapperUrl()).url;
+      } catch {
+        return undefined;
+      }
+    };
+    const urlChanged = old.content.url !== event.content.url || embeds(old) !== embeds(event);
+    if (urlChanged) this.forgetWidgetCapabilities(roomId, key);
+    const id = widgetInstanceId(roomId, key);
+    const running = this.main?.widgets[id];
+    if (!running) return;
+    const resolved = resolveWidget(event, wrapperUrl());
+    if (urlChanged || resolved.url !== running.widget.url || resolved.usesWidgetApi !== running.widget.usesWidgetApi) return this.reloadWidget(id);
+    // Only the name changed: the running widget keeps going.
+    this.setWidget(id, (w) => ({ ...w, widget: resolved }));
+  }
+
+  /** Send the widget state event as the active account (`widgetWrite` follows it), then let the DevBackend see it. */
+  private async sendWidgetToRoom(roomId: RoomId, event: StateEvent): Promise<void> {
+    const session = this.activeSession();
+    if (!session) return;
+    const write: WidgetWriteViewModel = { roomId, widgetKey: widgetKey(event), state: "sending" };
+    this.setMain((m) => ({ ...m, widgetWrite: write }));
+    const backend = this.acquireBackend(session, roomId);
+    try {
+      await (await backend).sendStateEvent(roomId, event.type, event.state_key, event.content);
+      this.devBackend?.refresh();
+      if (this.main?.widgetWrite === write) this.setMain((m) => ({ ...m, widgetWrite: undefined }));
+    } catch (e) {
+      const error = backendErrorText(e);
+      // The form that sent it was closed: nobody shows the refusal there.
+      if (this.main?.widgetWrite === write) this.setMain((m) => ({ ...m, widgetWrite: { ...write, state: "failed", error } }));
+      else this.toast(`Adding the widget to the room failed: ${error}`);
+    } finally {
+      // An account switch disposed every backend meanwhile; a backend acquired after it is not ours to release.
+      if (this.backends.get(roomId)?.backend === backend) this.releaseBackend(roomId);
+    }
+  }
+
+  /** `room/removeLocalWidget`: asks first; stops the widget, closes its tab and forgets its approvals. */
+  private removeLocalWidget(roomId: RoomId, key: WidgetKey, confirmed: boolean): void {
+    const event = this.localOf(roomId).find((e) => localWidgetKey(e) === key);
+    if (!event) return;
+    if (!confirmed) {
+      const name = typeof event.content.name === "string" && event.content.name ? event.content.name : event.state_key;
+      return this.modal({
+        kind: "confirm",
+        title: `Remove ${name}?`,
+        body: "The local widget is removed from this host: it stops, its tab closes and what you approved for it is forgotten. The room is not changed.",
+        confirmLabel: "Remove the widget",
+        danger: true,
+        intent: { type: "room/removeLocalWidget", roomId, widgetKey: key, confirmed: true },
+      });
+    }
+    this.stopWidget(widgetInstanceId(roomId, key), true);
+    this.forgetWidgetCapabilities(roomId, key);
+    this.setLocalWidgets(roomId, (events) => events.filter((e) => localWidgetKey(e) !== key));
+  }
+
   // -------------------------------------------------------------------------------------------
   // Accounts and the DevBackend
 
@@ -732,6 +891,7 @@ export class AppController {
       ...mm,
       activeAccountId: target,
       widgets: {},
+      widgetWrite: undefined,
       modal: undefined,
       returnAccountId: toDev ? (from?.kind === "matrix" ? from.id : mm.returnAccountId) : mm.returnAccountId,
       sidePanel: toDev ? { ...mm.sidePanel, view: "devBackend" } : mm.sidePanel.view === "devBackend" ? { ...mm.sidePanel, view: undefined } : mm.sidePanel,
@@ -851,6 +1011,10 @@ export class AppController {
    * every panel closes, the mocked rooms are replaced. The fast path of the end-to-end tests.
    */
   async populate(seed: HostSeed): Promise<void> {
+    // Checked before anything is reset. A seeded room without an `id` gets a generated one, which a seed cannot name.
+    const localWidgets = localWidgetsOfSeed(seed.localWidgets);
+    const seededRoomIds = new Set(Array.isArray(seed.rooms) ? seed.rooms.map((r) => r?.id) : []);
+    for (const roomId of Object.keys(localWidgets)) if (!seededRoomIds.has(roomId)) throw new Error(`seed.localWidgets: unknown room ${roomId}`);
     this.stopOAuth?.();
     for (const verification of this.verifications.values()) verification.stop(VERIFICATION_STOPPED);
     if (this.main) this.stopAllWidgets();
@@ -866,12 +1030,13 @@ export class AppController {
     const dev = this.devBackend;
     const rooms = dev.rooms();
     const behavior = { ...DEFAULT_DEV_BEHAVIOR, ...seed.behavior };
-    // The DevBackend's recents live in memory only and start again with its content.
+    // The DevBackend's recents and local widgets live in memory only and start again with its content.
     delete this.recentWidgets[DEV_ACCOUNT_ID];
     delete this.recentRooms[DEV_ACCOUNT_ID];
+    this.localWidgets[DEV_ACCOUNT_ID] = localWidgets;
     const matrixAccounts = (this.main?.accounts ?? []).filter((a) => a.kind === "matrix");
-    // TODO-FINDING seed-dev-tools-off-in-devbackend - a seed with `settings: { devTools: false }` wins over the rule "dev tools cannot be turned off while the DevBackend is active" (`settings/set` enforces it). The result is a state no user can reach: the DevBackend account is not listed (`syncDevAccount`), so `devBackendActive` is false: no fence, no badge, no DevBackend button, although the DevBackend's rooms are shown. Options: force `devTools: true` here too, or keep it as the only way for tests to see the "dev tools disabled" views.
-    this.store.update((vm) => ({ ...vm, settings: { ...vm.settings, devTools: true, ...seed.settings } }));
+    // The DevBackend is active, so it is enabled; dev tools are on unless the seed turns them off.
+    this.store.update((vm) => ({ ...vm, settings: { ...vm.settings, devTools: true, ...seed.settings, devBackend: true } }));
     this.pushTheme(); // no widget runs now; only remembers the theme
     this.showMain(matrixAccounts, DEV_ACCOUNT_ID, {
       returnAccountId: matrixAccounts[0]?.id,
@@ -887,7 +1052,7 @@ export class AppController {
       if (!room) throw new Error(`seed.open: unknown room ${open.room}`);
       if (open.overview && open.active) throw new Error(`seed.open: room ${open.room} has both \`active\` and \`overview\`; the room name is a tab too`);
       const keyOf = (name: string) => {
-        const found = roomWidgets(room).find((w) => w.key === name || w.event.state_key === name);
+        const found = roomWidgets(room, localWidgets[room.id]).find((w) => w.key === name || w.event.state_key === name);
         if (!found) throw new Error(`seed.open: room ${open.room} has no widget ${name}`);
         return found.key;
       };
@@ -935,7 +1100,7 @@ export class AppController {
           await this.loggedIn(await this.pendingLogin.withPassword(intent.username, intent.password));
         });
       case "login/skip":
-        // "It allows skipping the login, which immediately ends up in the DevBackend (and enables dev tools)."
+        // "It allows skipping the login, which immediately ends up in the DevBackend (and enables dev tools and the DevBackend)."
         return void this.populate({ demoMedia: true }).then(() => (this.persist = false));
       case "login/cancel":
         this.stopOAuth?.();
@@ -943,9 +1108,9 @@ export class AppController {
         this.pendingLogin = undefined;
         return this.setMain((m) => ({ ...m, addAccount: undefined }));
       case "settings/set": {
-        // Dev tools cannot be turned off while the DevBackend is active.
+        // The DevBackend cannot be turned off while it is active.
         const settings = { ...this.vm.settings, ...intent.settings };
-        if (this.devActive) settings.devTools = true;
+        if (this.devActive) settings.devBackend = true;
         this.store.update((vm) => ({ ...vm, settings }));
         this.pushTheme();
         return this.syncDevAccount();
@@ -1051,17 +1216,8 @@ export class AppController {
         return this.closeTab(intent.panelId, intent.tabId);
 
       // widgets
-      case "widget/reload": {
-        const widget = this.main?.widgets[intent.widgetId];
-        if (!widget) return;
-        const runtime = this.runtimes.get(intent.widgetId);
-        if (runtime) {
-          runtime.dispose();
-          this.runtimes.delete(intent.widgetId);
-          this.releaseBackend(widget.roomId);
-        }
-        return void this.startWidget(widget.roomId, widget.widgetKey);
-      }
+      case "widget/reload":
+        return this.reloadWidget(intent.widgetId);
       case "widget/answerCapabilities": {
         const prompt = this.main?.widgets[intent.widgetId]?.prompts.capabilities;
         // "Approve" is blocked for a moment after the card appeared or a request added to it; the view shows it, this enforces it. "Deny all" is never blocked.
@@ -1129,10 +1285,17 @@ export class AppController {
         return this.setWorkspace((ws) => ({ ...ws, pip: { ...ws.pip, stacking: intent.stacking } }));
 
       // RoomOverview and DevBackendView
+      case "room/addWidget":
+        return this.addWidget(intent.roomId, intent.event, intent.target, intent.confirmed === true);
+      case "room/removeLocalWidget":
+        return this.removeLocalWidget(intent.roomId, intent.widgetKey, intent.confirmed === true);
+      case "room/dismissWidgetWrite":
+        return this.setMain((m) => (m.widgetWrite ? { ...m, widgetWrite: undefined } : m));
       case "room/copyToDevBackend": {
         const session = this.activeSession();
         const accountId = this.main?.activeAccountId;
-        if (!session || !accountId) return;
+        // "Copy to DevBackend" exists only while the DevBackend is enabled.
+        if (!session || !accountId || !this.vm.settings.devBackend) return;
         return void (async () => {
           try {
             const exported = await session.exportRoom(intent.roomId, intent.lastEvents);
@@ -1219,6 +1382,27 @@ export class AppController {
       () => this.toast("Copying failed: the browser did not allow access to the clipboard"),
     );
   }
+}
+
+/** Why a state event cannot be a widget of "Add widget", or `undefined`: a widget type with a URL the host embeds. */
+function widgetEventProblem(event: StateEvent): string | undefined {
+  if (!WIDGET_EVENT_TYPES.includes(event.type)) return `${event.type} is not a widget state event type`;
+  if (!event.state_key) return "the widget ID (state key) is missing";
+  if (typeof event.content.url !== "string") return "the content has no url";
+  return widgetUrlProblem(event.content.url);
+}
+
+/** `HostSeed.localWidgets`, checked like the widgets of the DevBackend's seed. */
+function localWidgetsOfSeed(value: unknown): Record<RoomId, StateEvent[]> {
+  if (value === undefined) return {};
+  if (typeof value !== "object" || value === null || Array.isArray(value)) throw new Error("Invalid seed: seed.localWidgets: expected an object of room ids to widget state events");
+  return Object.fromEntries(
+    Object.entries(value).map(([roomId, events]) => {
+      const path = `seed.localWidgets[${JSON.stringify(roomId)}]`;
+      if (!Array.isArray(events)) throw new Error(`Invalid seed: ${path}: expected an array of widget state events`);
+      return [roomId, events.map((e, i) => validateWidgetEvent(e, `${path}[${i}]`))];
+    }),
+  );
 }
 
 /** The seed the URL parameters of the old in-memory mode describe: one room with the two test widgets, plus `event`. */
