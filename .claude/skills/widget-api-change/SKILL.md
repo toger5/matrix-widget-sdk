@@ -41,6 +41,9 @@ Do not reopen these without asking Timo.
   faces the inner iframe keep matrix-widget-api's names.
 - **Backend method names** follow matrix-rust-rtc (`rtc_livekit_get_token`, ...), not the action
   names. Do not rename them to match an action.
+- **Spec changes go with the code.** A change to something MSC4411 or MSC4412 defines, or an
+  action meant for a new MSC, comes with a file in `spec/patch/` in the same change. See
+  `spec/patch/README.md` and the `widget-mscs` skill.
 
 ## 1. The action itself (Rust, `crates/widget-actions`)
 
@@ -170,6 +173,7 @@ action name. Only if the action's body carries a credential, add its name to `SE
 | what | where |
 |---|---|
 | The naming scheme, both action tables, renamed actions, migration table, examples | `docs/spec-appendix/capability-naming-proposal.md` |
+| Changes to MSC text, new MSC drafts | `spec/patch/` (see its README) |
 | Action inventory (both directions), "Capability strings" table, decisions, "raised, not built" | `docs/parity.md` |
 | Action table, capability notes, JS and Rust examples, "Not (yet) covered" | `README.md` |
 | Crate READMEs | `crates/widget-actions/README.md`, `crates/widget-base-sdk/README.md`, `crates/widget-host-driver/README.md` |

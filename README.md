@@ -344,6 +344,8 @@ npm run bindings && npm run build --workspaces --if-present   # ubrn bindings + 
 `InMemoryBackend` and walks through the full lifecycle (capabilities → notify_ready → send →
 receive → read → state update). It is the best place to see the whole protocol in motion.
 
+Proposed changes to MSC4411/MSC4412 and drafts of new MSCs live in [`spec/patch`](spec/patch/README.md).
+
 ## Not (yet) covered
 
 * **`screenshot`** (host → widget, `m.capability.screenshot`): **intentionally not supported**
