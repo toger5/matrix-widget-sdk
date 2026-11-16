@@ -40,8 +40,8 @@ See the leftmost bar in the `reference_image`. It contains:
 
 - An app icon in the top left corner. It opens a modal explaining what this app is.
 - A + button, equivalent to Ctrl+N (new room panel).
-- A room list button. Placeholder: it does nothing for now, the room list is reachable through a new, empty room panel.
-- A DevBackend button (only if dev tools are enabled). It activates the [DevBackend](#devbackend). While the DevBackend is active, pressing it again leaves the DevBackend (tooltip on hover: "Leave DevBackend"). All the view state will be cached however. pressing it again "reverts the leave entirely (same rooms/widgets open) widgets reload however"
+- A room list button. It opens the [Room list](#room-list).
+- A DevBackend button (only if dev tools are enabled). It activates the [DevBackend](#devbackend). While the DevBackend is active, it opens and closes the DevBackendView (tooltip: "DevBackend panel").
 - A settings button. It opens [Settings](#settings).
 - The user avatar. It opens the [AccountView](#accountview). While the DevBackend is active, it is the DevBackend icon.
 - A collapse button.
@@ -50,7 +50,7 @@ Collapsing the bar shows a toast: "Press Esc to show the expand button". Pressin
 
 ## SidePanel
 
-One panel next to the LeftBar, positioned and styled like the "Core product" panel in the `reference_image`. It hosts one of DevBackendView, AccountView or Settings. When it opens, the RoomsArea is shifted to the side.
+One panel next to the LeftBar, positioned and styled like the "Core product" panel in the `reference_image`. It hosts one of AccountView, Settings, the Room list or, while the [DevBackend](#devbackend) is active, the [DevBackendView](#devbackendview) (the tools to create and edit its mocked rooms). When it opens, the RoomsArea is shifted to the side.
 
 ### AccountView
 
@@ -69,27 +69,29 @@ In DevBackend mode the account icon is the DevBackend icon, and the view shows t
 
 ### Settings
 
-Current settings:
-
 - Enable dev tools. If enabled, all dev tool options are visible; if not, they are fully hidden:
   - the DevBackend button in the LeftBar
   - the WidgetDevToolBar (and the overflow button that opens it) in the tabs
 
-### DevBackendView
+### Room list
 
-The tools to create and edit the mocked rooms of the DevBackend. It is only shown while the [DevBackend](#devbackend) is active. See the full section: [DevBackendView](#devbackendview-1).
+The [room picker](#room-picker), titled "Rooms". A pick opens in the room panel that shows the room, else in the focused empty room panel, else in a new room panel next to the focused one. In a narrow window the SidePanel closes after a pick.
 
 ## RoomsArea
 
 The RoomsArea is the main area of the logged-in view. It allows opening multiple room panels next to each other.
 
-- A room panel is empty by default: it shows a list of the last opened widgets with their associated rooms. A "show all rooms" toggle switches to the full room list with a room search bar.
-  - The empty disign uses a similar style than the "Overview" section of `reference_image`
-    - no title however
-    - tiles for the recent rooms similar to the `reference_image` (but a bit mroe spaceing + centered)
 - By default there is one panel per room.
-- Ctrl+N opens a new panel on the right with the list of recents, Ctrl+Shift+N one showing the same room.
+- Ctrl+N opens a new panel on the right with the [room picker](#room-picker) (a pick turns it into that room), Ctrl+Shift+N one showing the same room.
 - Ctrl+W closes the shown widget tab of the focused panel, and a panel without a widget tab.
+
+### Room picker
+
+No title. From top to bottom, a group without entries is left out:
+
+- Recent widgets: tiles of the last 4 opened widgets (name and room). Pressing one opens the widget as a tab of its room. A widget that is open in a tab is marked "open"; pressing it jumps to that tab.
+- Recent rooms: tiles of the last 4 rooms opened in a room panel (number of widgets and members). Pressing one opens the room on its RoomOverview.
+- All rooms: a search field and the list of all rooms. When the field gets the focus or a query, it scrolls to the top, so the matches show right under it; the tiles stay. Enter opens the first match, Escape clears the search.
 
 ## RoomView
 
@@ -187,12 +189,8 @@ The DevBackend is a custom in-memory backend. It is implemented as a separate ac
 - The app renders the construction-fence background (see [Design](#design)).
 - The SidePanel opens with the DevBackendView.
 - The RoomsArea keeps the same design, but only shows the rooms that were created in the DevBackendView or copied over from a RoomOverview.
-- There are three ways to leave it:
-  - switching to an account in the AccountView
-  - the "Leave DevBackend" text button at the bottom of the DevBackendView
-- Pressing the devBackend button in the left bar DOES not leave (this might be in conflict with toher parts here. update them. This is a last minitue decision and this statement here wins)
-  - it closes the devBackend side bar
-  - the leave button below the devpanel is enough
+- It is left by switching to an account in the AccountView or with the "Leave DevBackend" text button at the bottom of the DevBackendView, not with the LeftBar button. Leaving restores the panels of the account; their widgets reload.
+
 ## DevBackendView
 
 One of the [SidePanel](#sidepanel) views. It has one page per mocked room. The rooms are not rendered as tabs but as a dropdown next to the room name and ID (where "Core product" is in the `reference_image`). The last entry of the dropdown is a + button to add a room.
@@ -253,7 +251,7 @@ The mockups needed to review the full design. Each leaf is one state to draw. Do
   - Narrow window: SidePanel overlays, one room panel
 - LeftBar
   - Expanded, dev tools disabled
-  - Expanded, dev tools enabled (DevBackend button), DevBackend inactive / active / active and hovered ("Leave DevBackend" tooltip)
+  - Expanded, dev tools enabled (DevBackend button), DevBackend inactive / active / active and hovered ("DevBackend panel" tooltip)
   - Collapsed with toast
   - Collapsed, expand icon revealed (after Esc)
 - SidePanel
@@ -267,6 +265,7 @@ The mockups needed to review the full design. Each leaf is one state to draw. Do
       - Recovery key: entering it / checking it / refused
   - Settings
     - Dev tools disabled / enabled
+  - Room list: the room picker / next to the room panels (LeftBar button pressed)
   - DevBackendView
     - No rooms yet
     - Room dropdown open (rooms + add room)
@@ -289,10 +288,11 @@ The mockups needed to review the full design. Each leaf is one state to draw. Do
     - One room panel
     - Several room panels next to each other
     - Shifted by an open SidePanel
-  - Room panel (empty)
-    - List of recent widgets
-    - No recents yet
-    - All rooms, with search bar
+  - Room panel (empty): the room picker
+    - Recent widgets (one of them open in a tab), recent rooms, all rooms
+    - No recents yet: all rooms only
+    - Searching: scrolled to the search field, the matches below
+    - No rooms
   - RoomView (1)
     - Tab bar
       - Room name selected, no widget tab (name, number of widgets and users)

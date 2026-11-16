@@ -56,6 +56,33 @@ describe("loadPersisted", () => {
     expect(ui?.workspaces.broken.roomsArea.panels).toEqual([]);
   });
 
+  it("derives the recent rooms of an account that has none stored from its recent widgets, newest first", () => {
+    const widget = (roomId: string, lastOpened: number) => ({ roomId, widgetKey: "m.widget/w", lastOpened });
+    storeUi({
+      recents: { ada: [widget("!a:x", 30), widget("!b:x", 20), widget("!a:x", 10)], work: [widget("!c:x", 5)] },
+      recentRooms: { work: [{ roomId: "!d:x", lastOpened: 50 }] },
+    });
+    const ui = loadPersisted();
+    expect(ui?.recentRooms).toEqual({
+      ada: [
+        { roomId: "!a:x", lastOpened: 30 },
+        { roomId: "!b:x", lastOpened: 20 },
+      ],
+      work: [{ roomId: "!d:x", lastOpened: 50 }],
+    });
+    expect(ui?.recents.ada).toHaveLength(3);
+  });
+
+  it("drops malformed recents: an account whose value is not a list, entries with missing or wrongly typed fields", () => {
+    storeUi({
+      recents: { ada: [null, "x", { roomId: "!a:x", lastOpened: 1 }, { roomId: "!a:x", widgetKey: "m.widget/w", lastOpened: "1" }, { roomId: "!b:x", widgetKey: "m.widget/w", lastOpened: 2 }], work: "broken" },
+      recentRooms: { ada: [{ roomId: 5, lastOpened: 1 }, { roomId: "!c:x", lastOpened: 3 }], old: { roomId: "!d:x" } },
+    });
+    const ui = loadPersisted();
+    expect(ui?.recents).toEqual({ ada: [{ roomId: "!b:x", widgetKey: "m.widget/w", lastOpened: 2 }] });
+    expect(ui?.recentRooms).toEqual({ ada: [{ roomId: "!c:x", lastOpened: 3 }] });
+  });
+
   it("ignores stored workspaces that are not an object", () => {
     storeUi({ workspaces: [1, 2] });
     expect(loadPersisted()?.workspaces).toEqual({});

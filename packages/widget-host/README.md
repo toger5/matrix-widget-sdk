@@ -31,7 +31,8 @@ The app is built as MVVM from the design in [`appDesign.md`](appDesign.md) (mock
 
 ## Logged in
 
-Enter a homeserver, log in, pick a room, open one of its widgets. Widgets come from `m.widget`,
+Enter a homeserver, log in, pick a room (in an empty room panel or the Room list of the left bar,
+under the recently opened widgets and rooms), open one of its widgets. Widgets come from `m.widget`,
 `org.matrix.msc4411.widget` and `im.vector.modular.widgets` state; the list follows the room
 state. If the account has cross-signing and this device is not verified, the AccountView offers
 to verify it ("Verify this device"): by comparing emoji with another device of the account (the

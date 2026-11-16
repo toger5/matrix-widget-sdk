@@ -42,7 +42,7 @@ test.describe("LeftBar while the DevBackend is active", () => {
     await expect(host.button("Leave DevBackend")).toHaveCount(0);
   });
 
-  test("the + button and Alt+N open a new room panel, Alt+W closes it unless a text field has the focus; the room list button is a placeholder", async ({ host }) => {
+  test("the + button and Alt+N open a new room panel, Alt+W closes it unless a text field has the focus", async ({ host }) => {
     await host.button(/^New room panel/).click();
     await expect(host.panels).toHaveCount(2);
     await host.page.keyboard.press("Alt+KeyN");
@@ -52,7 +52,6 @@ test.describe("LeftBar while the DevBackend is active", () => {
     const picker = host.page.locator('[data-testid="room-panel"][data-focused="true"]');
     await expect(picker).toHaveAccessibleName("Room panel: choose a room");
     await expect(picker.getByRole("button", { name: "Close panel" })).toHaveAttribute("title", "Close panel (Alt+W)");
-    await picker.getByRole("switch", { name: "Show all rooms" }).click();
     const search = picker.getByRole("searchbox", { name: "Search rooms" });
     await search.click();
     await host.page.keyboard.press("Alt+KeyW");
@@ -64,11 +63,6 @@ test.describe("LeftBar while the DevBackend is active", () => {
     await expect(host.panels).toHaveCount(3);
     await host.page.keyboard.press("Alt+KeyW");
     await expect(host.panels).toHaveCount(2);
-
-    const before = await host.state();
-    await expect(host.button(/^Room list/)).toHaveAttribute("aria-disabled", "true");
-    await host.button(/^Room list/).click({ force: true });
-    expect(await host.state()).toEqual(before);
   });
 });
 

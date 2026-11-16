@@ -3,7 +3,6 @@
 
 import {
   accountView,
-  allRoomsBody,
   app,
   confirmModal,
   devBackendView,
@@ -11,8 +10,9 @@ import {
   leftBar,
   loginPage,
   overviewBody,
+  pickerBody,
   pip,
-  recentsBody,
+  roomListView,
   roomPanel,
   settingsView,
   tabMenu,
@@ -138,7 +138,7 @@ export const LEAVES = [
   { id: "leftbar/expanded", section: "LeftBar", group: "", title: "Expanded, dev tools disabled", w: 68, h: 620, html: stage(leftBar()) },
   { id: "leftbar/devtools", section: "LeftBar", group: "", title: "Dev tools enabled, DevBackend inactive", w: 68, h: 620, html: stage(leftBar({ devTools: true })) },
   { id: "leftbar/devbackend", section: "LeftBar", group: "", title: "Dev tools enabled, DevBackend active", w: 68, h: 620, note: "The account icon is the DevBackend icon.", html: stage(leftBar({ devTools: true, devBackend: true, active: "devbackend" }), "fence") },
-  { id: "leftbar/devbackend-hover", section: "LeftBar", group: "", title: "DevBackend active, button hovered: pressing it again leaves", w: 230, h: 620, html: stage(leftBar({ devTools: true, devBackend: true, active: "devbackend", tooltip: true }), "fence") },
+  { id: "leftbar/devbackend-hover", section: "LeftBar", group: "", title: "DevBackend active, button hovered: it opens and closes the DevBackend panel", w: 230, h: 620, html: stage(leftBar({ devTools: true, devBackend: true, active: "devbackend", tooltip: true }), "fence") },
   { id: "leftbar/collapsed-toast", section: "LeftBar", group: "", title: "Collapsed with toast", w: 900, h: 480, html: app({ panels: [designCall({ overflow: true }), platformPoll()], toast: TOAST }) },
   {
     id: "leftbar/collapsed-expand", section: "LeftBar", group: "", title: "Collapsed, expand icon revealed (after Esc)", w: 900, h: 480,
@@ -162,6 +162,12 @@ export const LEAVES = [
   { id: "sidepanel/verify-done", section: "SidePanel", group: VERIFY, title: "Verified, until “Done”", w: 348, h: 700, note: "The details below already say “This device is verified”.", html: side(accountView({ verify: "done" })) },
   { id: "sidepanel/settings-off", section: "SidePanel", group: "Settings", title: "Dev tools disabled", w: 348, h: 420, html: side(settingsView({ devTools: false })) },
   { id: "sidepanel/settings-on", section: "SidePanel", group: "Settings", title: "Dev tools enabled", w: 348, h: 420, html: side(settingsView({ devTools: true })) },
+  { id: "sidepanel/rooms", section: "SidePanel", group: "Room list", title: "The room picker in the SidePanel", w: 348, h: 760, note: "The same content as an empty room panel; the tiles wrap to two columns. The body scrolls.", html: side(roomListView()) },
+  {
+    id: "sidepanel/rooms-app", section: "SidePanel", group: "Room list", title: "Next to the room panels: LeftBar button pressed, RoomsArea shifted", ...FULL,
+    note: "A pick opens in the room panel that shows the room (Design crit, Platform team), else in the focused empty room panel, else in a new room panel next to the focused one. In a narrow window the SidePanel closes after a pick.",
+    html: app({ leftBar: { active: "rooms" }, side: roomListView(), panels: [designCall({ overflow: true }), platformPoll()] }),
+  },
   { id: "devbackend/none", section: "SidePanel", group: "DevBackendView", title: "No rooms yet", w: 348, h: 520, html: side(devBackendView({ state: "none" }), true) },
   { id: "devbackend/dropdown", section: "SidePanel", group: "DevBackendView", title: "Room dropdown open (rooms + add room)", w: 348, h: 520, html: side(devBackendView({ state: "dropdown" }), true) },
   { id: "devbackend/state", section: "SidePanel", group: "DevBackendView › Room page", title: "State: shortcuts, send state with the widget form, state explorer", w: 348, h: 1150, html: side(devBackendView({ state: "state" }), true) },
@@ -201,14 +207,23 @@ export const LEAVES = [
 
   // ---- RoomsArea --------------------------------------------------------------------------
   { id: "roomsarea/one", section: "RoomsArea", group: "Layout", title: "One room panel", ...FULL, html: app({ leftBar: {}, panels: [roomPanel({ room: "design", tabs: [wt("call"), wt("board", { active: true })], body: widgetView({ kind: "board" }) })] }) },
-  { id: "roomsarea/several", section: "RoomsArea", group: "Layout", title: "Several room panels next to each other", ...FULL, html: app({ leftBar: {}, panels: [designCall({ overflow: true }), platformPoll(), roomPanel({ body: recentsBody() })] }) },
+  { id: "roomsarea/several", section: "RoomsArea", group: "Layout", title: "Several room panels next to each other", ...FULL, html: app({ leftBar: {}, panels: [designCall({ overflow: true }), platformPoll(), roomPanel({ body: pickerBody() })] }) },
   { id: "roomsarea/shifted", section: "RoomsArea", group: "Layout", title: "Shifted by an open SidePanel", ...FULL, html: app({ leftBar: { active: "settings" }, side: settingsView({ devTools: false }), panels: [designCall({ overflow: true }), platformPoll()] }) },
 
-  { id: "panel/recents", section: "RoomsArea", group: "Room panel (empty)", title: "List of recent widgets", w: 760, h: 520, html: solo(roomPanel({ body: recentsBody() })) },
-  { id: "panel/no-recents", section: "RoomsArea", group: "Room panel (empty)", title: "No recents yet", w: 760, h: 520, html: solo(roomPanel({ body: recentsBody({ state: "empty" }) })) },
-  { id: "panel/loading", section: "RoomsArea", group: "Room panel (empty)", title: "Loading (extra: every list has a loading state)", w: 760, h: 520, html: solo(roomPanel({ body: recentsBody({ state: "loading" }) })) },
-  { id: "panel/error", section: "RoomsArea", group: "Room panel (empty)", title: "Error (extra: every list has an error state)", w: 760, h: 520, html: solo(roomPanel({ body: recentsBody({ state: "error" }) })) },
-  { id: "panel/all-rooms", section: "RoomsArea", group: "Room panel (empty)", title: "All rooms, with search bar", w: 760, h: 520, html: solo(roomPanel({ body: allRoomsBody() })) },
+  {
+    id: "panel/recents", section: "RoomsArea", group: "Room panel (empty): the room picker", title: "Recent widgets (one open in a tab), recent rooms, all rooms", w: 760, h: 520,
+    note: "Element Call has a tab in another room panel: it is marked “open”, and pressing it jumps to that tab. The body scrolls.",
+    html: solo(roomPanel({ body: pickerBody() })),
+  },
+  { id: "panel/no-recents", section: "RoomsArea", group: "Room panel (empty): the room picker", title: "No recents yet: all rooms only", w: 760, h: 520, html: solo(roomPanel({ body: pickerBody({ state: "no-recents" }) })) },
+  {
+    id: "panel/search", section: "RoomsArea", group: "Room panel (empty): the room picker", title: "Searching: scrolled to the search field, the matches below", w: 760, h: 520,
+    note: "The field scrolled to the top when it got the focus; the recent groups are above it, out of view. The first match (highlighted) is what Enter opens; Escape clears the search.",
+    html: solo(roomPanel({ body: pickerBody({ state: "search" }) })),
+  },
+  { id: "panel/no-rooms", section: "RoomsArea", group: "Room panel (empty): the room picker", title: "No rooms (no search field)", w: 760, h: 520, html: solo(roomPanel({ body: pickerBody({ state: "no-rooms" }) })) },
+  { id: "panel/loading", section: "RoomsArea", group: "Room panel (empty): the room picker", title: "Loading (extra: every list has a loading state)", w: 760, h: 520, html: solo(roomPanel({ body: pickerBody({ state: "loading" }) })) },
+  { id: "panel/error", section: "RoomsArea", group: "Room panel (empty): the room picker", title: "Error (extra: every list has an error state)", w: 760, h: 520, html: solo(roomPanel({ body: pickerBody({ state: "error" }) })) },
 
   {
     id: "roomview/header", section: "RoomsArea", group: "RoomView (1) › Tab bar", title: "Room name selected, no widget tab (name, number of widgets and users)", w: 640, h: 72,

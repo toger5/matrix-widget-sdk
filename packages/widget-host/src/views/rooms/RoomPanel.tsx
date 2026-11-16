@@ -72,7 +72,7 @@ export function RoomPanel({ main, settings, panel, focused, fullscreen = false, 
             {close}
           </header>
           <div className="rp-body">
-            <RoomPicker main={main} panelId={panel.id} picker={content} />
+            <RoomPicker main={main} panelId={panel.id} />
           </div>
         </>
       )}

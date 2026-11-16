@@ -76,13 +76,14 @@ const devAv = (size) => `<span class="av dev-av" style="--s:${size}px" aria-hidd
 /** tooltip: draw the tooltip of the active DevBackend button (the hover state). */
 export function leftBar({ devTools = false, devBackend = false, active = null, tooltip = false } = {}) {
   const b = (ico, title, key, cls = "") =>
-    `<button class="lb-btn ${active === key ? "on" : ""} ${cls}" title="${esc(title)}" aria-label="${esc(title)}"${active === key ? ' aria-pressed="true"' : ""}${cls === "placeholder" ? ' aria-disabled="true"' : ""}>${icon(ico, 18)}</button>`;
-  // Pressing the DevBackend button again leaves the DevBackend.
-  const devBtn = `<span class="lb-wrap">${b("cone", devBackend ? "Leave DevBackend" : "Activate the DevBackend", "devbackend", devBackend ? "dev-on" : "")}${tooltip ? '<span class="tooltip" role="tooltip">Leave DevBackend</span>' : ""}</span>`;
+    `<button class="lb-btn ${active === key ? "on" : ""} ${cls}" title="${esc(title)}" aria-label="${esc(title)}"${active === key ? ' aria-pressed="true"' : ""}>${icon(ico, 18)}</button>`;
+  // While the DevBackend is active the button opens and closes the DevBackendView; it does not leave.
+  const devTitle = devBackend ? "DevBackend panel" : "Activate the DevBackend";
+  const devBtn = `<span class="lb-wrap">${b("cone", devTitle, "devbackend", devBackend ? "dev-on" : "")}${tooltip ? `<span class="tooltip" role="tooltip">${devTitle}</span>` : ""}</span>`;
   return `<nav class="leftbar" aria-label="App">
     <button class="lb-logo" title="About this app" aria-label="About this app">${logo()}</button>
     ${b("plus", "New room panel (Alt+N) · with the same room: Alt+Shift+N", "new")}
-    ${b("list", "Room list (coming soon: use a new panel)", "rooms", "placeholder")}
+    ${b("list", "Room list", "rooms")}
     ${devTools ? devBtn : ""}
     ${devBackend ? `<span class="lb-badge" title="Widgets only see the DevBackend">DevBackend</span>` : ""}
     <span class="sp"></span>
@@ -423,49 +424,82 @@ export const tabMenu = (tabs, style = "") =>
     .map((t) => `<div class="dd-row ${t.active ? "on" : ""}" role="menuitem">${wico(t.widget, 18)}<span><b>${WIDGETS[t.widget].name}</b></span>${t.pinned ? icon("pin", 12) : ""}${t.active ? icon("check", 14, "end") : ""}</div>`)
     .join("")}</div>`;
 
-// --- Bodies of an empty room panel (no room chosen yet) ---
+// --- The room picker: the body of an empty room panel, and the Room list of the SidePanel ---
 
-const pickerTop = (all) =>
-  `<div class="picker-top"><span class="sp"></span><label class="switch-row"><span>Show all rooms</span>${toggle(all, "Show all rooms")}</label></div>`;
+/** The rooms of the picker's list, in list order: four of ROOMS plus some that only the list shows. */
+const PICKER_ROOMS = [
+  { name: "Book club", id: "!bOoKcLuBxY:example.org", hue: 300, widgets: 0, members: 9 },
+  ROOMS.design,
+  ROOMS.family,
+  { name: "Holiday planning", id: "!hOlIdAyPl:example.org", hue: 30, widgets: 1, members: 5 },
+  { name: "Infra on-call", id: "!iNfRaOnCa:example.org", hue: 10, widgets: 2, members: 14 },
+  ROOMS.rtc,
+  ROOMS.platform,
+  { name: "Playwright flakes", id: "!pLaYwRiGh:example.org", hue: 175, widgets: 1, members: 6 },
+  { name: "Release train", id: "!rElEaSeTr:example.org", hue: 230, widgets: 2, members: 27 },
+];
+const PICKER_ROOM_COUNT = 42;
+
+/** A tile of "Recent widgets" or "Recent rooms": icon, name and one line below. The whole tile is the button. */
+const pickerTile = (av, name, sub, label) =>
+  `<li><button class="ptile" title="${esc(label)}" aria-label="${esc(label)}">${av}<span class="ptile-t"><b>${name}</b><small>${sub}</small></span></button></li>`;
+
+/** One group of the picker. The ids are fixed here; the app makes them unique (two pickers can be on screen). */
+const pickerGroup = (id, title, inner, count) =>
+  `<section class="pick-sec" aria-labelledby="${id}"><h2 class="side-h" id="${id}">${title}${count === undefined ? "" : ` <em class="count">${count}</em>`}</h2>${inner}</section>`;
+
+/** A room of the list; `name` may carry the <mark> of the search. */
+const pickerRow = (room, name = room.name) =>
+  `<button class="row">${avatar({ name: room.name, hue: room.hue, size: 34, square: true })}<span class="row-main"><b>${name}</b><small class="mono">${room.id}</small></span><span class="row-meta">${icon("grid", 12)}${room.widgets} ${icon("users", 12)}${room.members}</span>${icon("chevRight", 14, "end")}</button>`;
+
+/** How far the search state is scrolled: the "All rooms" group at the top of the scroll area (it depends on the heights in mock.css). */
+const SEARCH_SCROLL = 222;
 
 /**
- * The empty room panel: no title, centered tiles of the recent widgets (like the tiles of the
- * reference image). state: "ready" | "empty" | "loading" | "error"
+ * The room picker, no title: the groups "Recent widgets" and "Recent rooms" (tiles, a group without
+ * entries is left out), then "All rooms" (search field and list). The body scrolls; the same markup
+ * is the body of an empty room panel and of the Room list in the SidePanel.
+ * state: "ready" | "no-recents" | "search" (query "pla", scrolled to the search field) | "no-rooms" | "loading" | "error"
  */
-export function recentsBody({ state = "ready" } = {}) {
-  const wrap = (inner) => `<div class="picker center"><div class="picker-in wide">${pickerTop(false)}${inner}</div></div>`;
-  if (state === "empty")
-    return wrap(`<div class="empty">${icon("clock", 28)}<b>No recent widgets yet</b><p>Widgets you open show up here, so you can get back to them in one click.</p>${btn("Show all rooms", { kind: "primary" })}</div>`);
+export function pickerBody({ state = "ready" } = {}) {
+  const wrap = (inner, style = "") => `<div class="picker"><div class="picker-in" style="${style}">${inner}</div></div>`;
   if (state === "loading")
-    return wrap(`<div class="rtiles" role="status" aria-label="Loading your recent widgets">${'<div class="rtile skeleton"><i></i><i></i><i></i></div>'.repeat(6)}</div>`);
+    return wrap(`<div class="pick-sec" role="status" aria-label="Loading your rooms"><ul class="ptiles">${'<li class="ptile skeleton"><i></i><span><i></i><i></i></span></li>'.repeat(4)}</ul><div class="rows">${'<div class="row skeleton"><i></i><span><i></i><i></i></span></div>'.repeat(5)}</div></div>`);
   if (state === "error")
     return wrap(`<div class="empty" role="alert">${icon("alert", 28, "danger")}<b>Your rooms could not be loaded</b><p>The homeserver did not answer (example.org, timeout after 30 s). Widgets that are already open keep running.</p>${btn("Try again", { kind: "primary", ico: "refresh" })}</div>`);
-  const rows = [
-    ["call", "design", "2 min ago"],
-    ["board", "design", "1 h ago"],
-    ["poll", "platform", "yesterday"],
-    ["call", "rtc", "Tuesday"],
-    ["notes", "family", "3 Nov"],
-    ["board", "rtc", "28 Oct"],
-  ];
-  return wrap(`<div class="rtiles">${rows
-    .map(([w, r, t]) => `<button class="rtile" title="Open ${WIDGETS[w].name} in ${ROOMS[r].name}"><span class="rtile-h">${roomAv(r, 16)}<span>${ROOMS[r].name}</span></span><span class="rtile-m">${wico(w, 36)}<b>${WIDGETS[w].name}</b></span><span class="rtile-f"><span>${t}</span><span class="btn sm">Open</span></span></button>`)
-    .join("")}</div>`);
+  if (state === "no-rooms") return wrap(`<div class="empty">${icon("hash", 28)}<b>No rooms</b><p>This account has not joined a room yet.</p></div>`);
+
+  // Element Call has a tab (in another panel): marked "open", pressing it jumps there.
+  const widgets = [
+    ["call", "design", true],
+    ["board", "design"],
+    ["poll", "platform"],
+    ["notes", "family"],
+  ]
+    .map(([w, r, open]) => {
+      const [wn, rn] = [WIDGETS[w].name, ROOMS[r].name];
+      return pickerTile(wico(w, 32), wn, `<span>${rn}</span>${open ? '<span class="pill">open</span>' : ""}`, open ? `Jump to the tab of ${wn} in ${rn}` : `Open ${wn} in ${rn}`);
+    })
+    .join("");
+  const rooms = ["design", "platform", "rtc", "family"]
+    .map((r) => pickerTile(roomAv(r, 32), ROOMS[r].name, `${icon("grid", 12)}${ROOMS[r].widgets} ${icon("users", 12)}${ROOMS[r].members}`, `Open ${ROOMS[r].name}`))
+    .join("");
+  const recents = state === "no-recents" ? "" : pickerGroup("pick-widgets", "Recent widgets", `<ul class="ptiles">${widgets}</ul>`) + pickerGroup("pick-rooms", "Recent rooms", `<ul class="ptiles">${rooms}</ul>`);
+
+  const search = state === "search";
+  const field = search
+    ? `<label class="input search">${icon("search", 14)}<span>pla</span><span class="caret"></span><span class="sp"></span><kbd title="Escape clears the search">Esc</kbd></label>`
+    : `<label class="input search">${icon("search", 14)}<span class="ph">Search rooms</span></label>`;
+  const marked = (name) => name.replace(/pla/i, (m) => `<mark>${m}</mark>`);
+  const list = search ? PICKER_ROOMS.filter((r) => /pla/i.test(r.name)).map((r) => pickerRow(r, marked(r.name))) : PICKER_ROOMS.map((r) => pickerRow(r));
+  // The status line is always there (a live region); it has text only while searching.
+  const status = `<p class="hint center" role="status">${search ? `${list.length} of ${PICKER_ROOM_COUNT} rooms match “pla”` : ""}</p>`;
+  const all = pickerGroup("pick-all", "All rooms", `${field}<div class="rows ${search ? "filtered" : ""}">${list.join("")}</div>${status}`, PICKER_ROOM_COUNT);
+  return wrap(recents + all, search ? `margin-top:-${SEARCH_SCROLL}px` : "");
 }
 
-export function allRoomsBody() {
-  const rooms = [
-    ["platform", "<mark>Pla</mark>tform team"],
-    ["rtc", "MatrixRTC <mark>pla</mark>yground"],
-    ["family", "Holiday <mark>pla</mark>nning"],
-  ];
-  return `<div class="picker"><div class="picker-in">${pickerTop(true)}<span class="input search">${icon("search", 14)}<span>pla</span><span class="caret"></span><span class="sp"></span><kbd>Esc</kbd></span><div class="rows">${rooms
-    .map(([r, name]) => {
-      const room = ROOMS[r];
-      return `<button class="row">${roomAv(r, 34)}<span class="row-main"><b>${name}</b><small class="mono">${room.id}</small></span><span class="row-meta">${icon("grid", 12)}${room.widgets} ${icon("users", 12)}${room.members}</span>${icon("chevRight", 14, "end")}</button>`;
-    })
-    .join("")}</div><p class="hint center">3 of 42 rooms match “pla”</p></div></div>`;
-}
+/** The Room list of the SidePanel: the room picker in a side box. */
+export const roomListView = ({ state = "ready" } = {}) => sideBox(sideTitle("Rooms", `${PICKER_ROOM_COUNT} rooms`), pickerBody({ state }), "rooms");
 
 // --- Bodies of a room panel with a room ---
 

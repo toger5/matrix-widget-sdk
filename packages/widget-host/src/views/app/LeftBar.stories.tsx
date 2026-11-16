@@ -19,5 +19,5 @@ type Story = StoryObj<typeof LeftBar>;
 
 export const Expanded: Story = {}; // leaf leftbar/expanded
 export const DevTools: Story = { args: { devTools: true, sidePanelView: "settings" } }; // leaf leftbar/devtools (plus the Settings open)
-// leaves leftbar/devbackend, leftbar/devbackend-hover (hover or focus the cone: the tooltip is "DevBackend panel", not "Leave DevBackend")
+// leaves leftbar/devbackend, leftbar/devbackend-hover (hover or focus the cone for the tooltip)
 export const DevBackendActive: Story = { args: { devTools: true, devBackendActive: true, sidePanelView: "devBackend", account: ACCOUNTS.dev } };

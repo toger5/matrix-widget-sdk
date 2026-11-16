@@ -32,7 +32,6 @@ function LbButton({ icon, title, pressed, className = "", noTitle, onClick }: Lb
       title={noTitle ? undefined : title}
       aria-label={title}
       aria-pressed={pressed}
-      aria-disabled={className.includes("placeholder") ? true : undefined}
       onClick={onClick}
     >
       <Icon name={icon} size={18} />
@@ -45,9 +44,7 @@ export function LeftBar({ leftBar, devTools, devBackendActive, sidePanelView, ac
   const dispatch = useDispatch();
   if (leftBar.collapsed) return null;
 
-  // Decided after the mockups: while the DevBackend is active the button does not leave it, it
-  // opens and closes the DevBackendView. Leaving is the text button at the bottom of that view.
-  // TODO-FINDING leftbar-devbackend-tooltip-outdated - appDesign.md (LeftBar), designFeedback.md ("Decided": Leaving the DevBackend) and the leaves leftbar/devbackend(-hover) still say that pressing the button again leaves the DevBackend (tooltip "Leave DevBackend").
+  // While the DevBackend is active the button opens and closes the DevBackendView; leaving is the text button at the bottom of that view.
   const devTitle = devBackendActive ? "DevBackend panel" : "Activate the DevBackend";
 
   return (
@@ -56,8 +53,7 @@ export function LeftBar({ leftBar, devTools, devBackendActive, sidePanelView, ac
         <Logo />
       </button>
       <LbButton icon="plus" title="New room panel (Alt+N) · with the same room: Alt+Shift+N" onClick={() => dispatch({ type: "panel/new" })} />
-      {/* A placeholder (appDesign.md): it does nothing; the room list is reachable through a new, empty room panel. */}
-      <LbButton icon="list" title="Room list (coming soon: use a new panel)" className="placeholder" />
+      <LbButton icon="list" title="Room list" pressed={sidePanelView === "rooms"} onClick={() => dispatch({ type: "sidePanel/toggle", view: "rooms" })} />
       {devTools && (
         <span className="lb-wrap">
           <LbButton

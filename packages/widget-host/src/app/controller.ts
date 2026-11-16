@@ -10,14 +10,18 @@ import {
   activeWorkspace,
   loggableIntent,
   widgetInstanceId,
+  type AccountDataViewModel,
   type AccountId,
   type AccountViewModel,
   type AppIntent,
   type AppViewModel,
   type DevBackendViewModel,
+  type Loadable,
   type LoginViewModel,
   type MainViewModel,
   type ModalViewModel,
+  type PanelId,
+  type RecentRoom,
   type RecentWidget,
   type RoomId,
   type SettingsViewModel,
@@ -48,6 +52,7 @@ import {
   resizeDevTools,
   resizePanel,
   roomOfPanel,
+  roomTarget,
   toggleDevToolPanel,
   updateDevTools,
   updatePanel,
@@ -60,6 +65,7 @@ import { Store } from "./store";
 
 /** The id of the DevBackend account. */
 export const DEV_ACCOUNT_ID: AccountId = "devBackend";
+/** Recent widgets and recent rooms kept per account (the RoomPicker shows `RECENT_TILES` of each). */
 const MAX_RECENTS = 12;
 const TOAST_MS = 4000;
 /** Why a running device verification ended when the DevBackend became active. */
@@ -93,7 +99,7 @@ export interface HostSeed extends DevBackendSeed {
    */
   open?: { room: RoomId; widgets?: string[]; active?: string; overview?: boolean }[];
   /** The SidePanel view; `null` closes it. Default: the DevBackendView, like after activating the DevBackend. */
-  sidePanel?: "devBackend" | "settings" | "account" | null;
+  sidePanel?: "devBackend" | "settings" | "account" | "rooms" | null;
   /** WidgetHostBehavior of the DevBackend (all mocked rooms). "Fail sends" is the content field `failSends`. */
   behavior?: Partial<WidgetHostBehavior>;
   leftBarCollapsed?: boolean;
@@ -119,7 +125,9 @@ export class AppController {
   private readonly runtimes = new Map<WidgetInstanceId, WidgetRuntime>();
   /** Room backends of the active account, shared by the widgets of a room and released with the last one. */
   private readonly backends = new Map<RoomId, { backend: Promise<RoomBackend>; refs: number }>();
-  private readonly recents: Record<AccountId, RecentWidget[]> = {};
+  /** Per account, newest first; persisted for Matrix accounts. */
+  private readonly recentWidgets: Record<AccountId, RecentWidget[]> = {};
+  private readonly recentRooms: Record<AccountId, RecentRoom[]> = {};
   private stopWatchingRooms: (() => void) | undefined;
   private pendingLogin: PendingLogin | undefined;
   private stopOAuth: (() => void) | undefined;
@@ -136,7 +144,8 @@ export class AppController {
     this.provider = options.provider ?? sessions;
     this.persist = options.persist !== false;
     const persisted = this.persist ? loadPersisted() : undefined;
-    Object.assign(this.recents, persisted?.recents);
+    Object.assign(this.recentWidgets, persisted?.recents);
+    Object.assign(this.recentRooms, persisted?.recentRooms);
     this.persisted = persisted;
     this.store = new Store<AppViewModel>({ settings: { devTools: false, theme: "system", ...persisted?.settings }, screen: { kind: "restoring" } });
     this.store.subscribe(() => this.queueSave());
@@ -217,7 +226,8 @@ export class AppController {
         leftBarCollapsed: m?.leftBar.collapsed ?? this.persisted?.leftBarCollapsed ?? false,
         sidePanelWidth: m?.sidePanel.width ?? this.persisted?.sidePanelWidth ?? 324,
         workspaces,
-        recents: Object.fromEntries(Object.entries(this.recents).filter(([id]) => id !== DEV_ACCOUNT_ID)),
+        recents: Object.fromEntries(Object.entries(this.recentWidgets).filter(([id]) => id !== DEV_ACCOUNT_ID)),
+        recentRooms: Object.fromEntries(Object.entries(this.recentRooms).filter(([id]) => id !== DEV_ACCOUNT_ID)),
         lastAccountId: m && m.activeAccountId !== DEV_ACCOUNT_ID ? m.activeAccountId : (m?.returnAccountId ?? this.persisted?.lastAccountId),
       });
     }, 300);
@@ -265,7 +275,7 @@ export class AppController {
       leftBar: { collapsed: this.persisted?.leftBarCollapsed ?? false, expandButtonVisible: false },
       sidePanel: { width: this.persisted?.sidePanelWidth ?? 324 },
       workspaces: { ...this.persisted?.workspaces, [activeAccountId]: this.persisted?.workspaces?.[activeAccountId] ?? emptyWorkspace() },
-      data: { rooms: { status: "loading" }, recents: this.recents[activeAccountId] ?? [] },
+      data: this.accountData(activeAccountId, { status: "loading" }),
       widgets: {},
       toasts: [],
       ...extra,
@@ -358,7 +368,8 @@ export class AppController {
     if (wasActive) this.stopAllWidgets();
     this.dropVerification(accountId);
     this.sessions.delete(accountId);
-    delete this.recents[accountId];
+    delete this.recentWidgets[accountId];
+    delete this.recentRooms[accountId];
     const accounts = m.accounts.filter((a) => a.id !== accountId);
     const next = accounts.find((a) => a.kind === "matrix");
     if (!next && !(this.devActive && !wasActive)) {
@@ -385,7 +396,7 @@ export class AppController {
     const session = this.activeSession();
     const accountId = this.main?.activeAccountId;
     if (!session || !accountId) {
-      this.setMain((m) => ({ ...m, data: { rooms: { status: "loading" }, recents: this.recents[m.activeAccountId] ?? [] } }));
+      this.setMain((m) => ({ ...m, data: this.accountData(m.activeAccountId, { status: "loading" }) }));
       return;
     }
     const read = () => {
@@ -397,11 +408,16 @@ export class AppController {
         this.setMain((m) => ({ ...m, data: { ...m.data, rooms: { status: "error", error: errorText(e) } } }));
         return;
       }
-      this.setMain((m) => ({ ...m, data: { rooms: { status: "ready", value: rooms }, recents: this.recents[accountId] ?? [] } }));
+      this.setMain((m) => ({ ...m, data: this.accountData(accountId, { status: "ready", value: rooms }) }));
       this.reconcile();
     };
     this.stopWatchingRooms = session.onRoomsChanged(read);
     read();
+  }
+
+  /** `MainViewModel.data` of an account. */
+  private accountData(accountId: AccountId, rooms: Loadable<RoomSummary[]>): AccountDataViewModel {
+    return { rooms, recentWidgets: this.recentWidgets[accountId] ?? [], recentRooms: this.recentRooms[accountId] ?? [] };
   }
 
   private rooms(): RoomSummary[] {
@@ -573,12 +589,14 @@ export class AppController {
     for (const runtime of this.runtimes.values()) runtime.updateTheme(theme);
   }
 
-  private addRecent(roomId: RoomId, widgetKey: WidgetKey): void {
+  /** A room panel opened the room, with this widget as a new tab: both become the newest recents. */
+  private addRecent(roomId: RoomId, widgetKey?: WidgetKey): void {
     const accountId = this.main?.activeAccountId;
     if (!accountId) return;
-    const recents = [{ roomId, widgetKey, lastOpened: Date.now() }, ...(this.recents[accountId] ?? []).filter((r) => r.roomId !== roomId || r.widgetKey !== widgetKey)].slice(0, MAX_RECENTS);
-    this.recents[accountId] = recents;
-    this.setMain((m) => ({ ...m, data: { ...m.data, recents } }));
+    const lastOpened = Date.now();
+    if (widgetKey !== undefined) this.recentWidgets[accountId] = [{ roomId, widgetKey, lastOpened }, ...(this.recentWidgets[accountId] ?? []).filter((r) => r.roomId !== roomId || r.widgetKey !== widgetKey)].slice(0, MAX_RECENTS);
+    this.recentRooms[accountId] = [{ roomId, lastOpened }, ...(this.recentRooms[accountId] ?? []).filter((r) => r.roomId !== roomId)].slice(0, MAX_RECENTS);
+    this.setMain((m) => (m.activeAccountId === accountId ? { ...m, data: this.accountData(accountId, m.data.rooms) } : m));
   }
 
   // -------------------------------------------------------------------------------------------
@@ -614,6 +632,42 @@ export class AppController {
     const room = this.workspace && roomOfPanel(this.workspace, panelId);
     for (const tab of room?.tabs ?? []) this.closeTab(panelId, tab.id);
     this.setWorkspace((ws) => removePanel(ws, panelId));
+  }
+
+  /**
+   * A pick in the RoomPicker of a panel: the panel shows the room (on its RoomOverview, or with the
+   * widget as a new tab). A widget that has a tab already is jumped to, and the panel stays as it is.
+   */
+  private openRoomIn(panelId: PanelId, roomId: RoomId, widgetKey?: WidgetKey): void {
+    const ws = this.workspace;
+    if (!ws || !panelOf(ws, panelId)) return;
+    const tab = widgetKey !== undefined ? findWidgetTab(ws, widgetInstanceId(roomId, widgetKey)) : undefined;
+    if (tab) return this.setWorkspace((w) => activateTab(w, tab.panelId, tab.tabId));
+    const old = roomOfPanel(ws, panelId);
+    if (old && old.roomId !== roomId) for (const t of old.tabs) this.closeTab(panelId, t.id);
+    if (old?.roomId !== roomId) this.setWorkspace((w) => focusPanel(updatePanel(w, panelId, (p) => ({ ...p, content: { kind: "room", roomId, tabs: [] } })), panelId));
+    this.addRecent(roomId);
+    if (widgetKey !== undefined) this.openWidget(panelId, widgetKey);
+  }
+
+  /** A pick in the Room list of the SidePanel, in the panel `roomTarget` chooses. */
+  private openRoom(roomId: RoomId, widgetKey?: WidgetKey): void {
+    const ws = this.workspace ?? emptyWorkspace();
+    const target = roomTarget(ws, roomId);
+    if (target.in === "picker") return this.openRoomIn(target.panelId, roomId, widgetKey);
+    let panelId = target.in === "room" ? target.panelId : "";
+    if (target.in === "new") {
+      this.setWorkspace((w) => {
+        const added = addPanel(w, { kind: "room", roomId, tabs: [] }, target.after);
+        panelId = added.panelId;
+        return added.ws;
+      });
+    } else if (widgetKey === undefined) {
+      this.setWorkspace((w) => activateTab(w, panelId, undefined));
+    }
+    // A widget that has a tab already is jumped to (`openWidget`); that is no new recent room.
+    if (widgetKey === undefined || !findWidgetTab(ws, widgetInstanceId(roomId, widgetKey))) this.addRecent(roomId);
+    if (widgetKey !== undefined) this.openWidget(panelId, widgetKey);
   }
 
   private jumpToWidget(id: WidgetInstanceId): void {
@@ -666,7 +720,7 @@ export class AppController {
       devBackend: toDev ? (mm.devBackend ?? defaultDevBackendVm()) : mm.devBackend,
       workspaces: { ...mm.workspaces, [target]: mm.workspaces[target] ?? emptyWorkspace() },
       accounts: mm.accounts.map((a) => (a.kind === "matrix" && (a.status === "live" || a.status === "suspended") ? { ...a, status: toDev ? "suspended" : "live" } : a)),
-      data: { rooms: { status: "loading" }, recents: this.recents[target] ?? [] },
+      data: this.accountData(target, { status: "loading" }),
     }));
     // A verification needs the homeserver: it ends before the sessions are suspended.
     // TODO-FINDING verification-cancel-on-suspend - the cancel is sent by the session in the background and is likely refused by the suspension that follows at once (js: the FetchGate); the other device then sees the verification time out. Options: wait for the cancel (with a time limit) before suspending, or accept the timeout.
@@ -794,6 +848,9 @@ export class AppController {
     const dev = this.devBackend;
     const rooms = dev.rooms();
     const behavior = { ...DEFAULT_DEV_BEHAVIOR, ...seed.behavior };
+    // The DevBackend's recents live in memory only and start again with its content.
+    delete this.recentWidgets[DEV_ACCOUNT_ID];
+    delete this.recentRooms[DEV_ACCOUNT_ID];
     const matrixAccounts = (this.main?.accounts ?? []).filter((a) => a.kind === "matrix");
     // TODO-FINDING seed-dev-tools-off-in-devbackend - a seed with `settings: { devTools: false }` wins over the rule "dev tools cannot be turned off while the DevBackend is active" (`settings/set` enforces it). The result is a state no user can reach: the DevBackend account is not listed (`syncDevAccount`), so `devBackendActive` is false: no fence, no badge, no DevBackend button, although the DevBackend's rooms are shown. Options: force `devTools: true` here too, or keep it as the only way for tests to see the "dev tools disabled" views.
     this.store.update((vm) => ({ ...vm, settings: { ...vm.settings, devTools: true, ...seed.settings } }));
@@ -804,9 +861,8 @@ export class AppController {
       sidePanel: { width: 324, view: seed.sidePanel === null ? undefined : (seed.sidePanel ?? "devBackend") },
       devBackend: { ...defaultDevBackendVm(), selectedRoomId: dev.roomIds()[0], behavior }, // the first room of the dropdown (seed order), not of the sorted room list
       workspaces: { [DEV_ACCOUNT_ID]: emptyWorkspace() },
-      data: { rooms: { status: "ready", value: rooms }, recents: [] },
+      data: this.accountData(DEV_ACCOUNT_ID, { status: "ready", value: rooms }),
     });
-    delete this.recents[DEV_ACCOUNT_ID];
     this.watchRooms();
     for (const open of seed.open ?? []) {
       const room = rooms.find((r) => r.id === open.room);
@@ -823,6 +879,7 @@ export class AppController {
         panelId = added.panelId;
         return added.ws;
       });
+      this.addRecent(room.id);
       for (const name of open.widgets ?? []) this.openWidget(panelId, keyOf(name));
       if (open.overview) this.dispatch({ type: "tab/showOverview", panelId });
       if (open.active) {
@@ -940,7 +997,7 @@ export class AppController {
       case "panel/new": {
         const ws = this.workspace;
         const same = intent.sameRoomAs && ws ? roomOfPanel(ws, intent.sameRoomAs) : undefined;
-        return this.setWorkspace((w) => addPanel(w, same ? { kind: "room", roomId: same.roomId, tabs: [] } : { kind: "picker", mode: "recents" }, intent.sameRoomAs ?? w.roomsArea.focusedPanelId).ws);
+        return this.setWorkspace((w) => addPanel(w, same ? { kind: "room", roomId: same.roomId, tabs: [] } : { kind: "picker" }, intent.sameRoomAs ?? w.roomsArea.focusedPanelId).ws);
       }
       case "panel/close":
         return this.closePanel(intent.panelId);
@@ -948,15 +1005,10 @@ export class AppController {
         return this.setWorkspace((ws) => focusPanel(ws, intent.panelId));
       case "panel/resize":
         return this.setWorkspace((ws) => resizePanel(ws, intent.panelId, intent.widthShare));
-      case "picker/setMode":
-        return this.setWorkspace((ws) => updatePanel(ws, intent.panelId, (p) => (p.content.kind === "picker" ? { ...p, content: { kind: "picker", mode: intent.mode } } : p)));
-      case "panel/openRoom": {
-        const old = this.workspace && roomOfPanel(this.workspace, intent.panelId);
-        if (old && old.roomId !== intent.roomId) for (const tab of old.tabs) this.closeTab(intent.panelId, tab.id);
-        if (old?.roomId !== intent.roomId) this.setWorkspace((ws) => focusPanel(updatePanel(ws, intent.panelId, (p) => ({ ...p, content: { kind: "room", roomId: intent.roomId, tabs: [] } })), intent.panelId));
-        if (intent.widgetKey) this.openWidget(intent.panelId, intent.widgetKey);
-        return;
-      }
+      case "panel/openRoom":
+        return this.openRoomIn(intent.panelId, intent.roomId, intent.widgetKey);
+      case "room/open":
+        return this.openRoom(intent.roomId, intent.widgetKey);
 
       // tabs
       case "tab/showOverview":

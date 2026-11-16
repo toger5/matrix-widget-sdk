@@ -14,8 +14,7 @@ grep -rn "TODO-FINDING <name>" src     # one finding
 
 Not decisions, but statements in the documents that turned out wrong or outdated. The documents were not edited.
 
-- appDesign.md "LeftBar" (DevBackend button), designFeedback.md "Decided" (Leaving the DevBackend) and the leaves `leftbar/devbackend-hover`, `app/devbackend`: superseded by the last-minute note in appDesign.md "DevBackend" (the button does not leave). See `leftbar-devbackend-tooltip-outdated`.
-- `src/appViewModel.ts` was changed for those notes: `devBackend/toggle` no longer leaves, `devBackend/leave` and `canLeaveDevBackend` are new, `widget/close` asks for confirmation, `WidgetInstanceViewModel.generation` is new, and the views added `picker/reloadRooms` and `devTools/copyMessage`.
+- `src/appViewModel.ts` was changed for the decision that the LeftBar's DevBackend button does not leave: `devBackend/toggle` no longer leaves, `devBackend/leave` and `canLeaveDevBackend` are new, `widget/close` asks for confirmation, `WidgetInstanceViewModel.generation` is new, and the views added `picker/reloadRooms` and `devTools/copyMessage`.
 
 ## Controversial
 
@@ -36,7 +35,6 @@ Not decisions, but statements in the documents that turned out wrong or outdated
 | --- | --- | --- | --- | --- |
 | `login-password-step` | `src/views/app/LoginView.tsx` | The mockup says "No password is entered here"; password login is not designed | (a) separate step (b) inline fields; and what to show if a server offers OAuth and a password | (b): the fields appear once the homeserver offers a password; editing the homeserver goes back to "Continue" |
 | `add-account-overlay` | `src/views/app/AppShell.tsx` | "Add account" while logged in is not drawn | (a) full-page overlay (b) modal (c) in the SidePanel | (a), the app behind it is `inert` |
-| `leftbar-devbackend-tooltip-outdated` | `src/views/app/LeftBar.tsx` | The last-minute decision (the button does not leave) contradicts appDesign.md "LeftBar", designFeedback.md "Decided" and the leaves `leftbar/devbackend-hover`, `app/devbackend` | update the documents and the leaves | Implemented per the decision: the button opens and closes the DevBackendView, tooltip "DevBackend panel" |
 | `toast-dismiss-button` | `AppShell.tsx` | The mockup toast has no dismiss control and no timeout | (a) × button (b) timeout only | Both: × and 4 s |
 | `confirm-modal-icon` | `src/views/app/Modal.tsx` | `ModalViewModel` has no icon; the mockup shows the cone | (a) icon in the view model (b) derive | (b): alert if `danger`, else the cone; a dangerous confirm focuses Cancel |
 | `floating-dev-badge-covers-header` | `src/views/app/AppShell.tsx` | The floating DevBackend badge (LeftBar collapsed) sits on top of the room panel header, as in the mockup | move it to a corner / leave it | Left there; presses go through it |
@@ -161,9 +159,9 @@ Login, sync, suspend/resume, device verification and the storage migration of bo
 - In fullscreen the room name is the tab stop of the tab list (not the shown widget tab, which is hidden until the header has the focus).
 - `tab-reorder-not-implemented`: `tab/move` exists but no view lets you drag a tab.
 - `widget-avatar-initials`: a widget has no avatar source, so its icon is its initials.
-- `room-view-without-room`, `picker-loading-all-rooms`, `overview-encryption-unknown`: texts for states the mockups do not have.
+- `room-view-without-room`, `overview-encryption-unknown`: texts for states the mockups do not have.
 - `panel-focus-from-widget`: a press inside a widget iframe does not reach the host; the app root focuses the widget's panel when the iframe takes the focus (`src/app/AppRoot.tsx`).
-- A recent tile for a widget that already runs jumps to its tab and leaves the new panel showing the room overview.
+- Room picker: once the search field had the focus, the "All rooms" group keeps the height of the scroll area (empty space under a short list), so a press on a row that takes the focus from the field does not move the row away. Without recents above it, the field is at the top already and nothing scrolls. A pick that only jumps to a widget's tab changes no recents.
 - Alt+N inserts the new panel to the right of the focused panel, not at the far right (appDesign.md: "a new panel on the right").
 - The DevBackendView's timeline list and its count include state events (the lab seed shows "12 events" for 3 messages).
 - `populate` does not reset view-local drafts (send forms, filters, the delayed toggle).
@@ -172,7 +170,6 @@ Login, sync, suspend/resume, device verification and the storage migration of bo
 - The sender of the send forms is a text input with suggestions; the mockup has a select with an avatar.
 - A widget may send `notify_ready` before its capabilities are answered, so it counts as ready while the permission prompt is shown.
 - In a narrow window the panel pager is partly hidden under the overlaying SidePanel.
-- The room list button of the LeftBar is a disabled placeholder.
 - The toast's 4 s auto-dismiss has no test (the tests do not sleep).
 - `HostSeed.notifyReadyTimeoutMs` shortens the 15 s `notify_ready` timeout, for the tests of the failed state only.
 - The PiP surround listens to native pointer events: the slotted widget iframes are outside the React tree, so React's hover events never fired over a widget.

@@ -4,6 +4,7 @@ import { activeAccount, canLeaveDevBackend, type MainViewModel, type SettingsVie
 import { DevBackendView } from "../devbackend/DevBackendView";
 import { useDispatch, useViewEnv } from "../env";
 import { AccountView } from "./AccountView";
+import { RoomListView } from "./RoomListView";
 import { SettingsView } from "./SettingsView";
 
 export interface SidePanelProps {
@@ -74,7 +75,7 @@ function ResizeHandle({ width }: { width: number }) {
   );
 }
 
-/** The column next to the LeftBar: AccountView, SettingsView or DevBackendView by `main.sidePanel.view`; nothing while closed. leaves sidepanel/* */
+/** The column next to the LeftBar: AccountView, SettingsView, the Room list or DevBackendView by `main.sidePanel.view`; nothing while closed. leaves sidepanel/* */
 export function SidePanel({ main, settings }: SidePanelProps) {
   const { narrow } = useViewEnv();
   const { view } = main.sidePanel;
@@ -86,6 +87,7 @@ export function SidePanel({ main, settings }: SidePanelProps) {
     <div className="sidecol" style={{ width }} data-testid="sidepanel" data-view={view}>
       {view === "account" && <AccountView accounts={main.accounts} activeAccountId={main.activeAccountId} />}
       {view === "settings" && <SettingsView settings={settings} devBackendActive={activeAccount(main)?.kind === "devBackend"} />}
+      {view === "rooms" && <RoomListView main={main} />}
       {view === "devBackend" && main.devBackend && <DevBackendView devBackend={main.devBackend} canLeave={canLeaveDevBackend(main)} />}
       {/* TODO-FINDING narrow-side-panel-width - in a narrow window the panel overlays and has no resize handle; it keeps the persisted width, capped to the window by CSS. */}
       {!narrow && <ResizeHandle width={width} />}

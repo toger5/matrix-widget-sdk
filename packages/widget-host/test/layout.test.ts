@@ -8,18 +8,21 @@ import {
   DEFAULT_DEV_TOOLS,
   emptyWorkspace,
   findWidgetTab,
+  focusPanel,
   putTab,
   removePanel,
   removeTab,
   resizeDevTools,
   resizePanel,
   roomOfPanel,
+  roomTarget,
   toggleDevToolPanel,
   upgradeWorkspace,
   workspaceWidgetIds,
 } from "../src/app/layout";
 
 const room = (roomId: string) => ({ kind: "room" as const, roomId, tabs: [] });
+const picker = { kind: "picker" as const };
 
 describe("layout", () => {
   it("adds panels on the right of a panel and focuses them", () => {
@@ -86,6 +89,7 @@ describe("layout", () => {
             },
           },
           { id: "p2", widthShare: 1, content: { kind: "room", roomId: "!b", tabs: [{ kind: "widget", id: "t4", widgetId: "!b|w" }, { kind: "new", id: "t5" }], activeTabId: "t4" } },
+          // the picker's `mode` of older layouts is dropped
           { id: "p3", widthShare: 1, content: { kind: "picker", mode: "allRooms" } },
         ],
         focusedPanelId: "p2",
@@ -97,7 +101,7 @@ describe("layout", () => {
     expect(ws.roomsArea.panels.map((p) => p.content)).toEqual([
       { kind: "room", roomId: "!a", tabs: [{ kind: "widget", id: "t1", widgetId: "!a|w" }], activeTabId: undefined },
       { kind: "room", roomId: "!b", tabs: [{ kind: "widget", id: "t4", widgetId: "!b|w" }], activeTabId: "t4" },
-      { kind: "picker", mode: "allRooms" },
+      { kind: "picker" },
     ]);
     expect(ws.roomsArea.panels[0].widthShare).toBe(1.5);
     expect(ws.roomsArea.focusedPanelId).toBe("p2");
@@ -130,7 +134,7 @@ describe("layout", () => {
       roomsArea: {
         panels: [
           { id: "p1", widthShare: 1, content: { kind: "room", roomId: "!a", tabs: [tab("t1", "!a|w"), tab("t2", "!b|w"), tab("t1", "!a|v")], activeTabId: "t2" } },
-          { id: "p1", widthShare: 1, content: { kind: "picker", mode: "recents" } },
+          { id: "p1", widthShare: 1, content: { kind: "picker" } },
           { id: "p2", widthShare: 1, content: { kind: "room", roomId: "!a", tabs: [tab("t3", "!a|w"), tab("t4", "!a|v")], activeTabId: "t4" } },
         ],
         focusedPanelId: "p1",
@@ -141,6 +145,20 @@ describe("layout", () => {
       { id: "p2", widthShare: 1, content: { kind: "room", roomId: "!a", tabs: [tab("t4", "!a|v")], activeTabId: "t4" } },
     ]);
     expect(workspaceWidgetIds(ws)).toEqual(["!a|w", "!a|v"]);
+  });
+
+  it("a pick of the Room list opens in the panel showing the room (focused first), else in the focused picker, else in a new panel right of the focused one", () => {
+    const a = addPanel(emptyWorkspace(), room("!a"));
+    const p = addPanel(a.ws, picker);
+    const b = addPanel(p.ws, room("!b"));
+    const a2 = addPanel(b.ws, room("!a"));
+    // !a is shown twice: the focused one wins, else the first from the left
+    expect(roomTarget(a2.ws, "!a")).toEqual({ in: "room", panelId: a2.panelId });
+    expect(roomTarget(focusPanel(a2.ws, b.panelId), "!a")).toEqual({ in: "room", panelId: a.panelId });
+    // a room no panel shows: the focused picker, else a new panel next to the focused one
+    expect(roomTarget(focusPanel(a2.ws, p.panelId), "!c")).toEqual({ in: "picker", panelId: p.panelId });
+    expect(roomTarget(a2.ws, "!c")).toEqual({ in: "new", after: a2.panelId });
+    expect(roomTarget(emptyWorkspace(), "!c")).toEqual({ in: "new", after: undefined });
   });
 
   it("resizes a panel against its right neighbour", () => {

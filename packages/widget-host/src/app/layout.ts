@@ -8,6 +8,7 @@ import {
   sideDock,
   type DevToolPanel,
   type PanelId,
+  type RoomId,
   type RoomPanelViewModel,
   type RoomViewModel,
   type TabId,
@@ -121,6 +122,22 @@ export function workspaceWidgetIds(ws: WorkspaceLayout): WidgetInstanceId[] {
   return ws.roomsArea.panels.flatMap((p) => (p.content.kind === "room" ? p.content.tabs.flatMap((t) => (t.kind === "widget" ? [t.widgetId] : [])) : []));
 }
 
+/** Where a pick of the Room list opens a room: a panel that shows it, the focused picker panel, or a new panel after `after`. */
+export type RoomTarget = { in: "room"; panelId: PanelId } | { in: "picker"; panelId: PanelId } | { in: "new"; after?: PanelId };
+
+/**
+ * Where a pick of the Room list (SidePanel) opens a room: the panel that shows the room (the focused
+ * one first), else the focused panel if it is a picker, else a new panel right of the focused one.
+ */
+export function roomTarget(ws: WorkspaceLayout, roomId: RoomId): RoomTarget {
+  const { panels, focusedPanelId } = ws.roomsArea;
+  const focused = panels.find((p) => p.id === focusedPanelId);
+  const showing = [focused, ...panels].find((p) => p?.content.kind === "room" && p.content.roomId === roomId);
+  if (showing) return { in: "room", panelId: showing.id };
+  if (focused?.content.kind === "picker") return { in: "picker", panelId: focused.id };
+  return { in: "new", after: focused?.id };
+}
+
 /** Resize a panel against its right neighbour: together they keep their share. */
 export function resizePanel(ws: WorkspaceLayout, panelId: PanelId, widthShare: number): WorkspaceLayout {
   const { panels } = ws.roomsArea;
@@ -190,7 +207,8 @@ function upgradePanel(value: unknown, seen: SeenIds): RoomPanelViewModel | undef
   const content = value.content;
   if (content.kind === "picker") {
     seen.panels.add(value.id);
-    return { id: value.id, widthShare, content: { kind: "picker", mode: content.mode === "allRooms" ? "allRooms" : "recents" } };
+    // Older layouts also stored the picker's `mode` (recents / all rooms).
+    return { id: value.id, widthShare, content: { kind: "picker" } };
   }
   if (content.kind !== "room" || typeof content.roomId !== "string") return undefined;
   seen.panels.add(value.id);

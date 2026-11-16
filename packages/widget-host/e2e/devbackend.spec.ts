@@ -4,7 +4,7 @@ import { expect, LAB, NEW_WIDGET, test, widgetId } from "./host";
 const NEW = widgetId(LAB, NEW_WIDGET);
 const STANDUP = "!standup:dev.local";
 
-test("no rooms yet: the RoomsArea is empty, “Create a room” adds and selects the first room", async ({ host }) => {
+test("no rooms yet: the RoomsArea is empty, a new room panel has no room to offer; “Create a room” adds and selects the first room", async ({ host }) => {
   await host.populate("empty");
   const view = host.page.getByTestId("devbackend-view");
   await expect(view.getByText("No mocked rooms yet")).toBeVisible();
@@ -13,11 +13,19 @@ test("no rooms yet: the RoomsArea is empty, “Create a room” adds and selects
   await host.leaf("devbackend/none");
   await host.leaf("app/devbackend-empty");
 
+  await host.leftBar.getByRole("button", { name: /New room panel/ }).click();
+  const picker = host.panels.getByTestId("room-picker");
+  await expect(picker.getByText("This account has not joined a room yet.")).toBeVisible();
+  await expect(picker.getByRole("searchbox")).toHaveCount(0);
+  await host.leaf("panel/no-rooms");
+
   await view.getByRole("button", { name: "Create a room" }).click();
   await expect(view).toHaveAttribute("data-room-id", /^!room1:/);
   await expect(view.getByRole("button", { name: /^State \d/ })).toBeVisible();
   const rooms = (await host.main()).data.rooms;
   expect(rooms.status === "ready" && rooms.value.map((r) => r.id)).toEqual([await view.getAttribute("data-room-id")]);
+  // the picker lists it
+  await expect(picker.locator("button.row")).toHaveAttribute("data-room-id", (await view.getAttribute("data-room-id"))!);
 });
 
 test("room dropdown: select a room, add a room and open it in a new room panel", async ({ host }) => {
@@ -44,8 +52,7 @@ test("room dropdown: select a room, add a room and open it in a new room panel",
   await expect(rooms.getByRole("option")).toHaveCount(3);
   await host.page.keyboard.press("Escape");
   await host.leftBar.getByRole("button", { name: /New room panel/ }).click();
-  await host.panels.getByRole("button", { name: "Show all rooms" }).click();
-  await host.panels.locator(`[data-room-id="${added}"]`).click();
+  await host.panels.locator(`button.row[data-room-id="${added}"]`).click();
   await expect(host.panels).toHaveAttribute("data-room-id", added);
 });
 

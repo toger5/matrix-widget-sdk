@@ -34,6 +34,9 @@ export const Default: Story = { args: { vm: appVm() } }; // leaf app/default
 
 export const DevBackendActive: Story = { args: { vm: appVm(devMainVm(), true) } }; // leaf app/devbackend
 
+// leaf sidepanel/rooms-app: the Room list next to the room panels, the LeftBar button pressed
+export const RoomList: Story = { args: { vm: appVm(twoRooms({ sidePanel: { view: "rooms", width: 324 } })) } };
+
 // leaf leftbar/collapsed-toast (900 x 480)
 export const CollapsedToast: Story = {
   args: { vm: appVm(twoRooms({ leftBar: { collapsed: true, expandButtonVisible: false }, toasts: [{ id: "collapsed", text: "Press Esc to show the expand button" }] })) },

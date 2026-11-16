@@ -22,14 +22,14 @@
  *       │                              each Matrix account with its device verification
  *       ├─ addAccount?                 the login form while a second account is added
  *       ├─ leftBar                     LeftBar
- *       ├─ sidePanel                   SidePanel: AccountView | Settings | DevBackendView
+ *       ├─ sidePanel                   SidePanel: AccountView | Settings | Room list (RoomPicker) | DevBackendView
  *       ├─ devBackend?                 UI state of the DevBackendView
  *       ├─ workspaces[accountId]       WorkspaceLayout: persisted, one per account
  *       │  ├─ roomsArea                RoomsArea → RoomPanel → RoomPicker | RoomView → room name
  *       │  │                           (RoomOverview) + widget Tabs
  *       │  ├─ pip                      PictureInPicturePanel: stacking, position, box size
  *       │  └─ devTools[widgetId]       dock and panels of each widget's WidgetDevToolBar
- *       ├─ data                        what the active account knows: rooms, recents
+ *       ├─ data                        what the active account knows: rooms, recent widgets and rooms
  *       ├─ widgets[widgetId]           runtime state of every running widget (one iframe each)
  *       └─ modal, toasts
  * ```
@@ -175,12 +175,14 @@ export type VerificationViewModel =
   /** This device was verified; shown until "Done". leaf sidepanel/verify-done */
   | { step: "done" };
 
-/** What the session of the active account knows. Views derive room lists and the widget lists of the RoomOverview from it. */
+/** What the session of the active account knows. Views derive room lists, the RoomPicker and the widget lists of the RoomOverview from it. */
 export interface AccountDataViewModel {
   /** `LiveSession.rooms()`. The widgets of a room are its `widgetEvents`. */
   rooms: Loadable<RoomSummary[]>;
-  /** The last opened widgets, newest first (persisted per account). */
-  recents: RecentWidget[];
+  /** The last opened widgets, newest first. Persisted per Matrix account; the DevBackend's are kept in memory only. */
+  recentWidgets: RecentWidget[];
+  /** The last rooms opened in a room panel (by a pick, or by opening one of its widgets), newest first. Kept like `recentWidgets`. */
+  recentRooms: RecentRoom[];
 }
 
 export interface RecentWidget {
@@ -188,6 +190,14 @@ export interface RecentWidget {
   widgetKey: WidgetKey;
   lastOpened: number;
 }
+
+export interface RecentRoom {
+  roomId: RoomId;
+  lastOpened: number;
+}
+
+/** Tiles per group ("Recent widgets", "Recent rooms") of the RoomPicker. More recents are stored. leaves panel/recents, sidepanel/rooms */
+export const RECENT_TILES = 4;
 
 export type ModalViewModel =
   /** leaf app/info-modal */
@@ -213,8 +223,11 @@ export interface LeftBarViewModel {
 
 /** leaves sidepanel/*, devbackend/* */
 export interface SidePanelViewModel {
-  /** `undefined`: closed. "devBackend" is only possible while the DevBackend account is active. */
-  view?: "account" | "settings" | "devBackend";
+  /**
+   * `undefined`: closed. "rooms": the Room list, the RoomPicker of the SidePanel (leaves
+   * sidepanel/rooms, sidepanel/rooms-app). "devBackend" is only possible while the DevBackend account is active.
+   */
+  view?: "account" | "settings" | "rooms" | "devBackend";
   /** Persisted. In a narrow window the panel overlays the RoomsArea instead of shifting it. */
   width: number;
 }
@@ -285,10 +298,12 @@ export interface RoomPanelViewModel {
   content: RoomPickerViewModel | RoomViewModel;
 }
 
-/** A panel without a room: tiles of the recent widgets, or the room list. leaves panel/* */
+/**
+ * A panel without a room: the RoomPicker (recent widgets, recent rooms, all rooms with search; the
+ * search text is view state). leaves panel/recents, panel/no-recents, panel/search, panel/no-rooms, panel/loading, panel/error
+ */
 export interface RoomPickerViewModel {
   kind: "picker";
-  mode: "recents" | "allRooms";
 }
 
 /**
@@ -494,9 +509,9 @@ export type AppIntent =
   | { type: "panel/close"; panelId: PanelId } // its ×, and Alt+W in a panel without a tab; closes its tabs (see tab/close: always-on-screen widgets keep running in the PiP panel)
   | { type: "panel/focus"; panelId: PanelId }
   | { type: "panel/resize"; panelId: PanelId; widthShare: number }
-  | { type: "picker/setMode"; panelId: PanelId; mode: RoomPickerViewModel["mode"] }
-  | { type: "panel/openRoom"; panelId: PanelId; roomId: RoomId; widgetKey?: WidgetKey } // without a widget: the room opens on its RoomOverview
-  | { type: "picker/reloadRooms" } // "Try again" of the room picker's error state (`data.rooms.status === "error"`, leaf panel/error): asks the session for the rooms again
+  | { type: "panel/openRoom"; panelId: PanelId; roomId: RoomId; widgetKey?: WidgetKey } // a pick in the RoomPicker of that panel: the panel becomes the room, on its RoomOverview or with the widget as a new tab. A widget that has a tab already: jumps to it, the panel stays the picker
+  | { type: "room/open"; roomId: RoomId; widgetKey?: WidgetKey } // a pick in the Room list of the SidePanel: like panel/openRoom, in the panel that shows the room (focused; a room selects its room name), else the focused picker panel, else a new panel right of the focused one
+  | { type: "picker/reloadRooms" } // "Try again" of the RoomPicker's error state (`data.rooms.status === "error"`, leaf panel/error): asks the session for the rooms again
   // tabs
   | { type: "tab/showOverview"; panelId: PanelId } // the room name tab and the + button of the tab bar: selects the room name, the body shows the RoomOverview; the tab left behind may enter the PiP panel
   | { type: "tab/openWidget"; panelId: PanelId; widgetKey: WidgetKey } // a widget of the RoomOverview: a new tab at the end; already running: jumps to its tab

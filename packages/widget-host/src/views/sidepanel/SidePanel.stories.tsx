@@ -46,6 +46,9 @@ export const SettingsWide: Story = { args: { settings, main: mainVm({ sidePanel:
 // leaf sidepanel/closed: nothing is rendered
 export const Closed: Story = { args: { settings, main: mainVm() } };
 
+// leaf sidepanel/rooms: the Room list (the recents of `mainVm`; Element Call has a tab)
+export const RoomList: Story = { args: { settings, main: mainVm({ sidePanel: { view: "rooms", width: 324 } }) } };
+
 // narrow window: the panel overlays, no resize handle
 export const NarrowOverlay: Story = {
   args: { settings, main: mainVm({ accounts: several, sidePanel: { view: "account", width: 324 } }) },

@@ -1,7 +1,8 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 
 import type { MainViewModel } from "../../appViewModel";
-import { ROOMS, mainVm, pickerPanel, wk } from "../fixtures";
+import type { RoomSummary } from "../../session";
+import { ROOMS, WIDGET_EVENTS, mainVm, pickerPanel, roomPanel, widgetTab, workspace } from "../fixtures";
 import { RoomPicker } from "./RoomPicker";
 import { SoloPanel } from "./storyFrame";
 
@@ -10,38 +11,49 @@ const meta: Meta<typeof RoomPicker> = { title: "Rooms/RoomPicker", component: Ro
 export default meta;
 type Story = StoryObj<typeof RoomPicker>;
 
-const story = (main: MainViewModel, mode: "recents" | "allRooms" = "recents"): Story => ({ render: () => <SoloPanel main={main} panel={pickerPanel(mode)} /> });
+const story = (main: MainViewModel): Story => ({ render: () => <SoloPanel main={main} panel={pickerPanel()} /> });
 
-const now = Date.now();
-const recent = (room: keyof typeof ROOMS, widget: Parameters<typeof wk>[0], minutesAgo: number) => ({ roomId: ROOMS[room].id, widgetKey: wk(widget), lastOpened: now - minutesAgo * 60_000 });
-const base = mainVm();
+/** The rooms of the mockup's list (`PICKER_ROOMS`): the fixture rooms plus some only the list shows. */
+const extra = (id: string, name: string, memberCount: number, widgets: (keyof typeof WIDGET_EVENTS)[]): RoomSummary => ({ id: `!${id}:example.org`, name, memberCount, widgetEvents: widgets.map((w) => WIDGET_EVENTS[w]) });
+const LIST: RoomSummary[] = [
+  extra("bOoKcLuBxY", "Book club", 9, []),
+  ROOMS.design,
+  ROOMS.family,
+  extra("hOlIdAyPl", "Holiday planning", 5, ["timer"]),
+  extra("iNfRaOnCa", "Infra on-call", 14, ["timer", "stream"]),
+  ROOMS.rtc,
+  ROOMS.platform,
+  extra("pLaYwRiGh", "Playwright flakes", 6, ["retro"]),
+  extra("rElEaSeTr", "Release train", 27, ["retro", "stream"]),
+];
+
+// The recents of `mainVm` (Element Call, Whiteboard, Standup poll, Meeting notes; Design crit, Platform team, MatrixRTC, Family). Element Call has a tab in another panel.
+const ready = (o: Partial<MainViewModel["data"]> = {}) =>
+  mainVm({
+    workspaces: { ada: workspace([roomPanel("design", [widgetTab("design", "call")]), pickerPanel()]) },
+    data: { ...mainVm().data, rooms: { status: "ready", value: LIST }, ...o },
+  });
 
 // leaf panel/recents
-export const Recents = story(
-  mainVm({
-    data: {
-      rooms: base.data.rooms,
-      recents: [recent("design", "call", 2), recent("design", "board", 60), recent("platform", "poll", 26 * 60), recent("rtc", "call", 4 * 24 * 60), recent("family", "notes", 13 * 24 * 60), recent("rtc", "board", 19 * 24 * 60)],
-    },
-  }),
-);
+export const Recents = story(ready());
 
 // leaf panel/no-recents
-export const NoRecents = story(mainVm({ data: { rooms: base.data.rooms, recents: [] } }));
+export const NoRecents = story(ready({ recentWidgets: [], recentRooms: [] }));
 
-// leaf panel/all-rooms: the search field filters the list and marks the match (the story types "m")
-export const AllRooms: Story = {
-  ...story(base, "allRooms"),
+// leaf panel/search: the search field has the focus and the query "pla", so it scrolled to the top
+export const Search: Story = {
+  ...story(ready()),
   play: async ({ canvasElement }) => {
     const input = canvasElement.querySelector<HTMLInputElement>('input[type="search"]');
     if (!input) return;
-    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(input, "m");
+    input.focus();
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(input, "pla");
     input.dispatchEvent(new Event("input", { bubbles: true }));
   },
 };
 
 // leaf panel/loading
-export const Loading = story(mainVm({ data: { rooms: { status: "loading" }, recents: base.data.recents } }));
+export const Loading = story(ready({ rooms: { status: "loading" } }));
 
 // leaf panel/error
-export const LoadError = story(mainVm({ data: { rooms: { status: "error", error: "The homeserver did not answer (example.org, timeout after 30 s)." }, recents: [] } }));
+export const LoadError = story(ready({ rooms: { status: "error", error: "The homeserver did not answer (example.org, timeout after 30 s)." }, recentWidgets: [], recentRooms: [] }));

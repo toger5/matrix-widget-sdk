@@ -13,20 +13,30 @@ test("a new panel shows the picker: no recents, all rooms with search, then the 
 
   await host.leftBar.getByRole("button", { name: /New room panel/ }).click();
   await expect(host.panels).toHaveCount(1);
-  const picker = host.page.getByTestId("room-picker");
-  await expect(picker.getByText("No recent widgets yet")).toBeVisible();
-  await host.leaf("panel/no-recents");
-
-  await picker.getByRole("switch", { name: "Show all rooms" }).click();
+  const picker = host.panels.getByTestId("room-picker");
+  // No recents yet: only "All rooms", with the list right away.
+  await expect(picker.getByRole("heading")).toHaveText(["All rooms 2"]);
   const rows = picker.locator("button.row");
   await expect(rows).toHaveCount(2);
-  await host.leaf("panel/all-rooms");
+  await host.leaf("panel/no-recents");
 
-  await picker.getByRole("searchbox", { name: "Search rooms" }).fill("stand");
+  const search = picker.getByRole("searchbox", { name: "Search rooms" });
+  await search.fill("nothing");
+  await expect(rows).toHaveCount(0);
+  await expect(picker.getByRole("status")).toHaveText("No room matches “nothing”");
+  // Nothing is above the field: it is at the top already, nothing scrolled.
+  expect(await picker.evaluate((el) => el.scrollTop)).toBe(0);
+  await search.press("Escape");
+  await expect(search).toHaveValue("");
+  await expect(rows).toHaveCount(2);
+  await expect(picker.getByRole("status")).toHaveText("");
+
+  await search.fill("stand");
   await expect(rows).toHaveCount(1);
   await expect(picker.getByRole("status")).toHaveText("1 of 2 rooms match “stand”");
 
-  await rows.first().click();
+  // Enter opens the first match.
+  await search.press("Enter");
   await expect(host.panels.first()).toHaveAttribute("data-room-id", STANDUP);
   // The room opens on its room name tab, the only tab: the body is the room overview.
   const roomTab = host.page.getByRole("tab", { name: "Standup", exact: true });
@@ -46,24 +56,60 @@ test("a new panel shows the picker: no recents, all rooms with search, then the 
   expect(Object.keys((await host.main()).widgets)).toEqual([NOTES]);
 });
 
-test("Alt+N opens a panel with the recent widgets; a recent opens its room and the widget", async ({ host }) => {
+test("Alt+N opens a panel with the recent widgets and rooms: the search scrolls past the tiles, an open widget is jumped to, a recent opens its room and the widget, a room tile its overview", async ({ host }) => {
   await host.populate("two-rooms", { sidePanel: null, behavior: { autoApproveCapabilities: true }, open: [{ room: STANDUP, widgets: ["notes"] }] });
-
-  // Closing the panel closes its tabs: the widget stops.
-  await host.button("Close panel").click();
-  await expect(host.panels).toHaveCount(0);
-  await expect.poll(async () => Object.keys((await host.main()).widgets)).toEqual([]);
+  await host.ready(NOTES);
 
   await host.page.keyboard.press("Alt+KeyN");
-  await expect(host.panels).toHaveCount(1);
-  const recent = host.button("Open Standup notes in Standup");
-  await expect(recent).toBeVisible();
+  await expect(host.panels).toHaveCount(2);
+  const picker = host.panels.getByTestId("room-picker");
+  await expect(picker.getByRole("heading")).toHaveText(["Recent widgets", "Recent rooms", "All rooms 2"]);
+  // The widget has a tab in the first panel: marked "open", pressing it jumps there and the picker stays.
+  const jump = picker.getByRole("button", { name: "Jump to the tab of Standup notes in Standup" });
+  await expect(jump).toContainText("open");
+  const roomTiles = picker.getByRole("region", { name: "Recent rooms" }).getByRole("button");
+  await expect(roomTiles).toHaveCount(1);
+  await expect(roomTiles).toHaveAccessibleName("Open Standup");
   await host.leaf("panel/recents");
 
-  await recent.click();
+  // The search field scrolls to the top when it gets the focus: the tiles go out of view (they stay), the matches show right under it.
+  const search = picker.getByRole("searchbox", { name: "Search rooms" });
+  await search.focus();
+  await expect(picker.getByRole("heading", { name: "Recent widgets" })).not.toBeInViewport();
+  const top = async (l: import("@playwright/test").Locator) => (await l.boundingBox())!.y;
+  expect((await top(picker.getByRole("heading", { name: /^All rooms/ }))) - (await top(picker))).toBeLessThan(12);
+  await search.fill("stand");
+  await expect(picker.locator("button.row")).toHaveCount(1);
+  await expect(search).toBeInViewport();
+  await host.leaf("panel/search");
+  await search.press("Escape");
+
+  await jump.click();
+  await expect(host.panels.first()).toHaveAttribute("data-focused", "true");
+  await expect(host.tab(/Standup notes/)).toHaveAttribute("aria-selected", "true");
+  await expect(host.panels.nth(1)).toHaveAccessibleName("Room panel: choose a room");
+
+  // Closing the panel closes its tabs: the widget stops, and its tile opens it again.
+  await host.panels.first().getByRole("button", { name: "Close panel" }).click();
+  await expect(host.panels).toHaveCount(1);
+  await expect.poll(async () => Object.keys((await host.main()).widgets)).toEqual([]);
+  await picker.getByRole("button", { name: "Open Standup notes in Standup" }).click();
   await expect(host.panels.first()).toHaveAttribute("data-room-id", STANDUP);
   await expect(host.tab(/Standup notes/)).toHaveAttribute("aria-selected", "true");
   await host.ready(NOTES);
+
+  // A room tile opens the room on its overview: a second view of the room.
+  await host.page.keyboard.press("Alt+KeyN");
+  await host.panels.nth(1).getByRole("button", { name: "Open Standup", exact: true }).click();
+  await expect(host.panels.nth(1)).toHaveAttribute("data-room-id", STANDUP);
+  await expect(host.panels.nth(1).getByRole("tab", { name: "Standup", exact: true })).toHaveAttribute("aria-selected", "true");
+  expect(Object.keys((await host.main()).widgets)).toEqual([NOTES]);
+
+  // A recent widget whose URL is refused now (widgetUrlProblem) is left out; its room stays a recent room.
+  await host.dispatch({ type: "mock/sendState", roomId: STANDUP, event: { type: "m.widget", stateKey: "notes", content: { name: "Standup notes", url: "javascript:alert(1)", uses_widget_api: true } } });
+  await host.page.keyboard.press("Alt+KeyN");
+  await expect(host.panels.nth(2).getByTestId("room-picker").getByRole("heading")).toHaveText(["Recent rooms", "All rooms 2"]);
+  expect((await host.main()).data.recentWidgets.map((r) => r.widgetKey)).toEqual(["m.widget/notes"]);
 });
 
 test("two panels with different rooms: the separator resizes them, double click resets, a panel closes with its widgets", async ({ host }) => {

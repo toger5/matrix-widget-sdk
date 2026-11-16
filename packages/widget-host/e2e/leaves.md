@@ -8,7 +8,7 @@ Every leaf of `design/index.html` (`design/src/leaves.mjs`), with the test in wh
 | --- | --- |
 | `app/login`, `app/devbackend-empty` | `shell.spec.ts` › a fresh browser without a stored login (a second browser context; "Skip login" leads into the DevBackend) |
 | `app/devbackend`, `leftbar/devbackend` | `shell.spec.ts` › the DevBackend is signalled by the fence |
-| `leftbar/devbackend-hover` | `shell.spec.ts` › the DevBackend button only opens and closes the panel. The tooltip is "DevBackend panel", not the leaf's "Leave DevBackend" (later decision) |
+| `leftbar/devbackend-hover` | `shell.spec.ts` › the DevBackend button only opens and closes the panel |
 | `leftbar/collapsed-toast`, `leftbar/collapsed-expand`, `app/devbackend-collapsed` | `shell.spec.ts` › collapse → toast → Escape |
 | `app/fullscreen`, `app/fullscreen-hover` | `shell.spec.ts` › with exactly one widget tab; also `rooms.spec.ts` |
 | `app/info-modal` | `shell.spec.ts` › the app info modal closes |
@@ -17,6 +17,7 @@ Every leaf of `design/index.html` (`design/src/leaves.mjs`), with the test in wh
 | `sidepanel/closed` | `sidepanel.spec.ts` › the LeftBar buttons show one view at a time |
 | `roomsarea/shifted` | `sidepanel.spec.ts` › the open panel shifts the RoomsArea |
 | `sidepanel/settings-on` | `sidepanel.spec.ts` › settings: the dev tools are on and cannot be turned off |
+| `sidepanel/rooms`, `sidepanel/rooms-app` | `sidepanel.spec.ts` › Room list: a pick opens in the panel showing the room, else in the focused picker, else in a new panel |
 | `sidepanel/account-dev` | `sidepanel.spec.ts` › account: the DevBackend is the account |
 | `complete/workspace`, `complete/devbackend`, `complete/light` | `sidepanel.spec.ts` › complete views |
 | `sidepanel/verify-start`, `sidepanel/verify-failed`, `sidepanel/verify-done`, `sidepanel/verify-waiting`, `sidepanel/verify-emoji`, `sidepanel/verify-confirming`, `sidepanel/verify-recovery-key`, `sidepanel/verify-recovery-checking`, `sidepanel/verify-recovery-wrong` | **not reachable**: they need a Matrix account whose device is not verified (the DevBackend's device is). The flows are tested on a faked session in `test/deviceVerification.test.ts`. Stories: `sidepanel-deviceverification--start`, `--failed`, `--done`, `sidepanel-emojiverification--waiting`, `--compare`, `--confirming`, `sidepanel-recoverykeyform--entering`, `--checking`, `--refused` |
@@ -29,8 +30,9 @@ Every leaf of `design/index.html` (`design/src/leaves.mjs`), with the test in wh
 | `roomsarea/one` | `rooms.spec.ts` › Alt+Shift+N opens the same room in a second panel |
 | `roomsarea/several`, `roomview2/different` | `rooms.spec.ts` › two panels with different rooms: the separator resizes them |
 | `roomview2/same` | `widgetMove.spec.ts` › move widget here |
-| `panel/no-recents`, `panel/all-rooms`, `roomview/header` | `rooms.spec.ts` › a new panel shows the picker: no recents, all rooms with search, then the room overview |
-| `panel/recents` | `rooms.spec.ts` › Alt+N opens a panel with the recent widgets |
+| `panel/no-recents`, `roomview/header` | `rooms.spec.ts` › a new panel shows the picker: no recents, all rooms with search, then the room overview |
+| `panel/recents`, `panel/search` | `rooms.spec.ts` › Alt+N opens a panel with the recent widgets and rooms: the search scrolls past the tiles, … |
+| `panel/no-rooms` | `devbackend.spec.ts` › no rooms yet: … a new room panel has no room to offer |
 | `panel/loading` | **not reachable**: the DevBackend's room list is always ready (story `rooms-roompicker--loading`) |
 | `panel/error` | **not reachable**: `DevBackend.rooms()` never fails (story `rooms-roompicker--load-error`) |
 | `app/fullscreen`, `app/fullscreen-hover` | `rooms.spec.ts` › fullscreen: LeftBar collapsed and one shown widget tab |
@@ -46,7 +48,7 @@ Every leaf of `design/index.html` (`design/src/leaves.mjs`), with the test in wh
 
 | Leaf | Reached by |
 | --- | --- |
-| `devbackend/none`, `app/devbackend-empty` | `devbackend.spec.ts` › no rooms yet: the RoomsArea is empty, "Create a room" adds and selects the first room |
+| `devbackend/none`, `app/devbackend-empty` | `devbackend.spec.ts` › no rooms yet: the RoomsArea is empty, a new room panel has no room to offer; "Create a room" adds and selects the first room |
 | `devbackend/dropdown` | `devbackend.spec.ts` › room dropdown: select a room, add a room and open it in a new room panel |
 | `devbackend/behavior` | `devbackend.spec.ts` › widget host behavior: the same for every room; without auto-approve the widget asks for permissions |
 | `devbackend/todevice` | `devbackend.spec.ts` › to-device: a message sent from the view reaches the widget, one sent by the widget is listed |

@@ -190,7 +190,6 @@ mark { background: var(--highlight-soft); color: var(--highlight); border-radius
 .lb-logo { width: 36px; height: 36px; display: grid; place-items: center; border-radius: var(--r-3); margin-bottom: 6px; }
 .lb-btn { width: 34px; height: 34px; display: grid; place-items: center; border-radius: var(--r-3); color: var(--text-muted); border: 1px solid transparent; }
 .lb-btn.on { background: var(--surface-2); border-color: var(--border); color: var(--text); }
-.lb-btn.placeholder { opacity: 0.72; }
 .lb-btn.dev-on { background: var(--dev-soft); border-color: var(--dev); color: var(--dev); }
 .lb-badge { writing-mode: vertical-rl; transform: rotate(180deg); font-size: 10.5px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: var(--dev); background: var(--surface); border: 1px solid var(--dev); padding: 8px 3px; border-radius: var(--r-2); }
 .lb-avatar { width: 34px; height: 34px; display: grid; place-items: center; border-radius: 50%; border: 2px solid transparent; }
@@ -376,17 +375,18 @@ mark { background: var(--highlight-soft); color: var(--highlight); border-radius
 .tab-add { margin-left: 2px; }
 .tab-menu { right: 44px; top: 42px; }
 
-.picker { flex: 1; overflow: hidden; display: flex; justify-content: center; padding: 40px 24px; }
-.picker-in { width: 100%; max-width: 520px; display: flex; flex-direction: column; gap: 14px; }
-.picker-top { display: flex; align-items: center; justify-content: space-between; }
-.picker h2 { font-size: 17px; font-weight: 600; }
-.switch-row { display: inline-flex; align-items: center; gap: 8px; color: var(--text-muted); }
+.picker { flex: 1; overflow: hidden; display: flex; align-items: flex-start; justify-content: center; padding: 24px; }
+.picker-in { width: 100%; max-width: 680px; display: flex; flex-direction: column; gap: 22px; }
+.sidebox.rooms .side-body { padding: 0; }
+.side-body > .picker { padding: 14px; }
+.pick-sec { display: flex; flex-direction: column; gap: 8px; }
+.pick-sec > .side-h { margin-top: 0; }
 .picker .input.search { min-height: 36px; }
 .rows { display: grid; gap: 4px; }
 .row { width: 100%; display: flex; align-items: center; gap: 12px; padding: 8px 10px; border-radius: var(--r-3); border: 1px solid transparent; }
-.row:first-child, .row.match { background: var(--surface-2); border-color: var(--border); }
+/* the first match of a search: what Enter opens */
+.rows.filtered > .row:first-child { background: var(--surface-2); border-color: var(--border); }
 .row.sm { padding: 5px 6px; gap: 10px; }
-.row.sm:first-child { background: none; border-color: transparent; }
 .row-main { display: grid; flex: 1; min-width: 0; gap: 1px; }
 .row-main b { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .row-main small { color: var(--text-muted); font-size: 11.5px; display: flex; align-items: center; gap: 5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -655,21 +655,20 @@ mark { background: var(--highlight-soft); color: var(--highlight); border-radius
 }
 @container dtp (max-width: 360px) { .stat-grid { grid-template-columns: 1fr 1fr; } }
 
-/* --- empty room panel: untitled, centered tiles of the recent widgets ------------------------- */
-.picker.center { align-items: center; }
-.picker-in.wide { max-width: 680px; }
-.picker.center .picker-top { margin-bottom: 4px; }
-.rtiles { display: grid; grid-template-columns: repeat(auto-fit, 208px); justify-content: center; gap: 16px; }
-.rtile { height: 128px; display: flex; flex-direction: column; gap: 12px; padding: 12px 14px; border-radius: var(--r-4); border: 1px solid var(--border); background: var(--surface-2); }
-.rtile-h { display: flex; align-items: center; gap: 6px; color: var(--text-muted); font-size: 12px; min-width: 0; }
-.rtile-h span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.rtile-m { display: flex; align-items: center; gap: 10px; font-size: 14px; }
-.rtile-m b { font-weight: 600; }
-.rtile-f { margin-top: auto; display: flex; align-items: center; justify-content: space-between; color: var(--text-muted); font-size: 11.5px; }
-.rtile.skeleton i { display: block; height: 10px; border-radius: 5px; background: var(--surface-3); }
-.rtile.skeleton i:nth-child(1) { width: 45%; }
-.rtile.skeleton i:nth-child(2) { width: 75%; height: 22px; }
-.rtile.skeleton i:nth-child(3) { width: 30%; margin-top: auto; }
+/* --- room picker: tiles of the recent widgets and rooms (2 columns in the SidePanel and narrow panels) --- */
+.ptiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(136px, 1fr)); gap: 8px; }
+.ptile { width: 100%; height: 58px; display: flex; align-items: center; gap: 10px; padding: 0 10px; border-radius: var(--r-3); border: 1px solid var(--border); background: var(--surface-2); }
+.ptile-t { display: grid; gap: 2px; flex: 1; min-width: 0; }
+.ptile-t b { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ptile-t small { display: flex; align-items: center; gap: 4px; min-width: 0; color: var(--text-muted); font-size: 11.5px; white-space: nowrap; }
+.ptile-t small > span:not(.pill) { overflow: hidden; text-overflow: ellipsis; }
+.ptile-t .pill { margin-left: auto; height: 16px; padding: 0 6px; }
+.ptile.skeleton i, .row.skeleton i { display: block; height: 9px; border-radius: 5px; background: var(--surface-3); }
+.ptile.skeleton > i { width: 32px; height: 32px; border-radius: var(--r-2); flex: none; }
+.row.skeleton > i { width: 34px; height: 34px; border-radius: var(--r-2); flex: none; }
+.ptile.skeleton > span, .row.skeleton > span { display: grid; gap: 7px; flex: 1; }
+.ptile.skeleton > span > i:first-child, .row.skeleton > span > i:first-child { width: 70%; }
+.ptile.skeleton > span > i:last-child, .row.skeleton > span > i:last-child { width: 40%; }
 
 .area-empty { flex: 1; display: grid; place-content: center; justify-items: center; gap: 8px; text-align: center; color: var(--text-muted); border-radius: var(--r-4); border: 1px dashed var(--border-strong); background: color-mix(in srgb, var(--surface) 80%, transparent); }
 .area-empty b { color: var(--text); font-size: 15px; }
@@ -888,7 +887,7 @@ mark { background: var(--highlight-soft); color: var(--highlight); border-radius
 .rp-sep:focus-visible { outline-offset: -1px; }
 
 /* Bodies scroll when the real content does not fit (the mockups only clip). */
-.rp-body > .ov, .rp-body > .picker { overflow-y: auto; }
+.rp-body > .ov, .rp-body > .picker, .side-body > .picker { overflow-y: auto; }
 
 /* Tabs: ⋯ and × of an inactive tab lie over the end of its label and appear on hover and keyboard focus. */
 .tab:not(.active) .tab-btn:not(.on) { position: absolute; top: 2px; right: 3px; background: var(--surface-2); opacity: 0; pointer-events: none; box-shadow: -6px 0 5px var(--surface-2); }
@@ -913,15 +912,20 @@ mark { background: var(--highlight-soft); color: var(--highlight); border-radius
 /* Fullscreen: the tab bar, the + and the close button appear while the header is hovered or has the focus inside. */
 .rp-head.fs:not(:hover):not(:focus-within) :is(.rp-div, .tabs, .tab-add, .tab-all, .rp-close) { display: none; }
 
-/* Room picker: a real search input inside the `.input.search` box. */
+/* Room picker: the search field scrolls to the top of the picker (RoomPicker), 8px below its edge
+   (less than the gap of the groups, so no tile peeks in). For that, once the field had the focus,
+   the "All rooms" group is as high as the scroll area at least: its content box (100cqh) plus the
+   picker's top padding (24px; 14px in the SidePanel) minus those 8px. */
+.picker { container: picker / size; }
+.pick-sec.searching { min-height: calc(100cqh + 16px); scroll-margin-top: 8px; }
+.side-body > .picker .pick-sec.searching { min-height: calc(100cqh + 6px); }
+/* a real search input inside the `.input.search` box */
 .picker .input.search { cursor: text; }
 .picker .input.search input { flex: 1; min-width: 0; height: 26px; padding: 0; border: 0; outline: 0; background: none; color: inherit; font: inherit; appearance: none; }
 .picker .input.search input::-webkit-search-cancel-button { display: none; }
 .picker .input.search input::placeholder { color: var(--text-faint); }
 .picker .input.search:focus-within { outline: 2px solid var(--focus); outline-offset: 2px; }
-.rtile:hover, button.row:not([aria-disabled="true"]):hover { border-color: var(--border-strong); }
-/* without a filter no row is "the first match" */
-.rows:not(.filtered) > .row:first-child:not(:hover) { background: none; border-color: transparent; }
+.ptile:hover, button.row:not([aria-disabled="true"]):hover { border-color: var(--border-strong); }
 
 /* Room overview: the number input of "last events", rows that cannot be opened. */
 .devcard input.input { font: inherit; color: inherit; font-family: var(--font-mono); font-size: 11.5px; }

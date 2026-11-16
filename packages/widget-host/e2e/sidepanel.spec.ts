@@ -140,6 +140,56 @@ test.describe("SidePanel", () => {
   });
 });
 
+test("Room list: a pick opens in the panel showing the room, else in the focused picker, else in a new panel; an open widget is jumped to; a narrow window closes the list", async ({ host }) => {
+  await host.populate("two-rooms", { sidePanel: "rooms", behavior: { autoApproveCapabilities: true }, open: [{ room: LAB, widgets: [NEW_WIDGET] }] });
+  await host.ready(NEW);
+  const list = host.page.getByTestId("room-list-view");
+  await expect(host.sidePanel).toHaveAttribute("data-view", "rooms");
+  await expect(host.button("Room list")).toHaveAttribute("aria-pressed", "true");
+  await expect(list.locator(".side-title")).toHaveText("Rooms2 rooms");
+  await expect(list.getByRole("heading")).toHaveText(["Recent widgets", "Recent rooms", "All rooms 2"]);
+  const jump = list.getByRole("button", { name: "Jump to the tab of New test widget in Widget lab" });
+  await expect(jump).toContainText("open");
+  await host.leaf("sidepanel/rooms");
+  await host.leaf("sidepanel/rooms-app");
+
+  // A room no panel shows: a new panel right of the focused one, on the RoomOverview. The list stays open (wide window).
+  await list.locator(`button.row[data-room-id="${STANDUP}"]`).click();
+  await expect(host.panels).toHaveCount(2);
+  await expect(host.panels.nth(1)).toHaveAttribute("data-room-id", STANDUP);
+  await expect(host.panels.nth(1)).toHaveAttribute("data-focused", "true");
+  await expect(host.panels.nth(1).getByRole("tab", { name: "Standup", exact: true })).toHaveAttribute("aria-selected", "true");
+  await expect(host.sidePanel).toHaveAttribute("data-view", "rooms");
+  // The pick is the newest recent room.
+  const recentRooms = list.getByRole("region", { name: "Recent rooms" }).getByRole("button");
+  await expect.poll(() => recentRooms.evaluateAll((tiles) => tiles.map((t) => t.getAttribute("data-room-id")))).toEqual([STANDUP, LAB]);
+
+  // A room a panel shows: that panel, on its room name; the widget keeps its tab.
+  await list.getByRole("button", { name: "Open Widget lab", exact: true }).click();
+  await expect(host.panels).toHaveCount(2);
+  await expect(host.panels.first()).toHaveAttribute("data-focused", "true");
+  await expect(host.panels.first().getByRole("tab", { name: "Widget lab", exact: true })).toHaveAttribute("aria-selected", "true");
+  // An open widget: its tab.
+  await jump.click();
+  await expect(host.tab(/New test widget/)).toHaveAttribute("aria-selected", "true");
+  expect(Object.keys((await host.main()).widgets)).toEqual([NEW]);
+
+  // The focused panel is a picker: it becomes the room.
+  await host.panels.nth(1).getByRole("button", { name: "Close panel" }).click();
+  await host.leftBar.getByRole("button", { name: /New room panel/ }).click();
+  await expect(host.panels.nth(1)).toHaveAccessibleName("Room panel: choose a room");
+  await list.locator(`button.row[data-room-id="${STANDUP}"]`).click();
+  await expect(host.panels).toHaveCount(2);
+  await expect(host.panels.nth(1)).toHaveAttribute("data-room-id", STANDUP);
+
+  // In a narrow window the SidePanel lies over the room panel: it closes after a pick.
+  await host.page.setViewportSize({ width: 820, height: 800 });
+  await expect(host.app).toHaveClass(/narrow/);
+  await list.getByRole("button", { name: "Open Widget lab", exact: true }).click();
+  await expect(host.sidePanel).toHaveCount(0);
+  await expect(host.panels).toHaveAttribute("data-room-id", LAB);
+});
+
 test.describe("complete views", () => {
   // The size of the "complete" mockups.
   test.beforeEach(({ host }) => host.page.setViewportSize({ width: 1440, height: 900 }));

@@ -9,6 +9,8 @@ import {
   type AppViewModel,
   type MainViewModel,
   type MockedRoomData,
+  type RecentRoom,
+  type RecentWidget,
   type RoomPanelViewModel,
   type TabId,
   type TabViewModel,
@@ -112,7 +114,7 @@ export const widgetTab = (room: RoomKey, widget: WidgetName): TabViewModel => ({
 export function roomPanel(room: RoomKey, tabs: TabViewModel[], activeTabId: TabId | null = tabs[0]?.id ?? null, id = `panel-${room}`): RoomPanelViewModel {
   return { id, widthShare: 1, content: { kind: "room", roomId: ROOMS[room].id, tabs, activeTabId: activeTabId ?? undefined } };
 }
-export const pickerPanel = (mode: "recents" | "allRooms" = "recents", id = "panel-picker"): RoomPanelViewModel => ({ id, widthShare: 1, content: { kind: "picker", mode } });
+export const pickerPanel = (id = "panel-picker"): RoomPanelViewModel => ({ id, widthShare: 1, content: { kind: "picker" } });
 
 export const devToolsLayout = (o: Partial<WidgetDevToolsLayout> = {}): WidgetDevToolsLayout => ({
   open: true,
@@ -131,6 +133,11 @@ export function workspace(panels: RoomPanelViewModel[], o: Partial<WorkspaceLayo
   };
 }
 
+/** Recent widgets (`[room, widget]`) and rooms, newest first, as in the room picker of the mockups (`pickerBody`). */
+export const recentWidgets = (...widgets: [RoomKey, WidgetName][]): RecentWidget[] =>
+  widgets.map(([room, widget], i) => ({ roomId: ROOMS[room].id, widgetKey: wk(widget), lastOpened: 1_763_300_000_000 - i * 3_600_000 }));
+export const recentRooms = (...rooms: RoomKey[]): RecentRoom[] => rooms.map((room, i) => ({ roomId: ROOMS[room].id, lastOpened: 1_763_300_000_000 - i * 3_600_000 }));
+
 /** The default screen (leaf app/default): one account, "Design crit" with the call widget open. */
 export function mainVm(o: Partial<MainViewModel> = {}): MainViewModel {
   const widgets = [widgetVm("design", "call"), widgetVm("design", "board")];
@@ -142,12 +149,8 @@ export function mainVm(o: Partial<MainViewModel> = {}): MainViewModel {
     workspaces: { ada: workspace([roomPanel("design", [widgetTab("design", "call"), widgetTab("design", "board")])]) },
     data: {
       rooms: { status: "ready", value: [ROOMS.design, ROOMS.platform, ROOMS.family, ROOMS.rtc] },
-      recents: [
-        { roomId: ROOMS.design.id, widgetKey: wk("call"), lastOpened: 1_763_300_000_000 },
-        { roomId: ROOMS.platform.id, widgetKey: wk("poll"), lastOpened: 1_763_200_000_000 },
-        { roomId: ROOMS.design.id, widgetKey: wk("board"), lastOpened: 1_763_100_000_000 },
-        { roomId: ROOMS.family.id, widgetKey: wk("notes"), lastOpened: 1_763_000_000_000 },
-      ],
+      recentWidgets: recentWidgets(["design", "call"], ["design", "board"], ["platform", "poll"], ["family", "notes"]),
+      recentRooms: recentRooms("design", "platform", "rtc", "family"),
     },
     widgets: Object.fromEntries(widgets.map((w) => [w.id, w])),
     toasts: [],
@@ -172,7 +175,7 @@ export function devMainVm(o: Partial<MainViewModel> = {}): MainViewModel {
       behavior: { autoApproveCapabilities: true, autoApproveOpenId: false, rememberCapabilities: false },
     },
     workspaces: { ada: workspace([]), [ACCOUNTS.dev.id]: workspace([roomPanel("lab", [widgetTab("lab", "call"), widgetTab("lab", "notes")])]) },
-    data: { rooms: { status: "ready", value: [ROOMS.lab, ROOMS.empty] }, recents: [{ roomId: ROOMS.lab.id, widgetKey: wk("call"), lastOpened: 1_763_300_000_000 }] },
+    data: { rooms: { status: "ready", value: [ROOMS.lab, ROOMS.empty] }, recentWidgets: recentWidgets(["lab", "call"]), recentRooms: recentRooms("lab") },
     widgets: Object.fromEntries(widgets.map((w) => [w.id, w])),
     ...o,
   });
