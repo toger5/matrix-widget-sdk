@@ -14,3 +14,9 @@ packages/widget-host-bindings/rust_modules/
 # ubrn output (packages/matrix-sdk-uniffi-js)
 packages/matrix-sdk-uniffi-js/src/generated/
 packages/matrix-sdk-uniffi-js/rust_modules/
+storybook-static/
+test-results/
+playwright-report/
+leaf-screenshots/
+
+session_archive/
