@@ -56,11 +56,11 @@ export const hostCapability = (rest: string): string => `host:${namespaceOf(rest
 /**
  * Capabilities the wrapper always requests for a legacy widget.
  *
- * In the legacy api these actions need no capability: the widget may always ask for an OpenID
- * token (the user is asked), and the host always sends theme, language and visibility changes.
+ * In the legacy api these actions need no capability: the host always sends theme, language and
+ * visibility changes. (A legacy widget could also always ask for an OpenID token. That capability
+ * is granted for one token at a time, so the bridge requests it when the widget asks for a token.)
  */
 export const IMPLICIT_CAPABILITIES: readonly string[] = [
-  widgetCapability("get_openid"),
   hostCapability("update_theme"),
   hostCapability("update_language"),
   hostCapability("update_visibility"),

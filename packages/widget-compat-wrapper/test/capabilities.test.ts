@@ -124,7 +124,9 @@ describe("expandLegacyCapability", () => {
 
 describe("capabilitiesToRequest", () => {
   it("always includes what the legacy api allowed without a capability", () => {
-    expect(IMPLICIT_CAPABILITIES).toEqual(["widget:org.matrix.mscXXXX.get_openid", "host:org.matrix.mscXXXX.update_theme", "host:org.matrix.mscXXXX.update_language", "host:org.matrix.mscXXXX.update_visibility"]);
+    expect(IMPLICIT_CAPABILITIES).toEqual(["host:org.matrix.mscXXXX.update_theme", "host:org.matrix.mscXXXX.update_language", "host:org.matrix.mscXXXX.update_visibility"]);
+    // The OpenID capability is granted for one token at a time: the bridge requests it per token.
+    expect(capabilitiesToRequest([])).not.toContain("widget:org.matrix.mscXXXX.get_openid");
     expect(capabilitiesToRequest([])).toEqual(IMPLICIT_CAPABILITIES);
   });
 

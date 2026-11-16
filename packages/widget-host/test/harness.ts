@@ -31,7 +31,6 @@ export function behindDriver(backend: matrixBackend.MatrixBackend) {
     sendToWidget: (json) => void sent.push(JSON.parse(json)),
     onCapabilitiesRequested: (requested) => queueMicrotask(() => driver.approveCapabilities(requested)),
     onReady: () => {},
-    onOpenidRequested: () => {},
     navigate: () => {},
     setAlwaysOnScreen: (value) => value,
     clientId: () => "vitest",

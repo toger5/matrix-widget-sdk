@@ -139,7 +139,7 @@ table depends on the direction, because `send_event` and `send_to_device` are le
 | widget → host | `org.matrix.msc2974.request_capabilities` | `org.matrix.msc4412.request_capabilities` |
 | widget → host | `send_event` | `…send_event` |
 | widget → host | `send_to_device` | `…send_to_device` |
-| widget → host | `get_openid` | `…get_openid` |
+| widget → host | `get_openid` | `…get_openid`, sent by the wrapper itself (see [OpenID](#openid-get_openid-and-openid_credentials)) |
 | widget → host | `watch_turn_servers` / `unwatch_turn_servers` | `…watch_turn_servers` / `…unwatch_turn_servers` |
 | widget → host | `set_always_on_screen` | `…set_always_on_screen` |
 | widget → host | `org.matrix.msc3973.user_directory_search` | `org.matrix.msc3973.search_user_directory` |
@@ -148,7 +148,6 @@ table depends on the direction, because `send_event` and `send_to_device` are le
 | host → widget | `notify_capabilities` | `org.matrix.msc4412.update_capabilities` (body rewritten, see below) |
 | host → widget | `send_event` | `…forward_event` |
 | host → widget | `send_to_device` | `…forward_to_device` |
-| host → widget | `openid_credentials` | `…forward_openid_credentials` |
 | host → widget | `update_state` | `…update_state` |
 | host → widget | `update_turn_servers` | `…update_turn_servers` |
 | host → widget | `theme_change` | `…update_theme` |
@@ -198,10 +197,13 @@ with: `org.matrix.msc2876.` (`read_events`), `org.matrix.msc3869.` (`read_relati
 `org.matrix.mscXXXX.` for everything else. A host that answers in the stable spelling
 (`widget:m.navigate`) is understood as well.
 
-- **Always requested**, whatever the widget asks for: `widget:…get_openid`, `host:…update_theme`,
+- **Always requested**, whatever the widget asks for: `host:…update_theme`,
   `host:…update_language`, `host:…update_visibility`. The legacy api has no capability for these;
   a legacy host simply allows them. A host that wants the legacy behaviour grants them without a
   prompt (`setAutoApproved`).
+- **`widget:…get_openid` is requested per token**, when the widget asks for one (see
+  [OpenID](#openid-get_openid-and-openid_credentials)), not up front: a host grants it for one
+  token at a time.
 - **`timeline:<room>` is never granted.** One widget, one room: nothing reaches another room. A
   request that names the widget's own room works without it.
 - **`update_capabilities { allowed }` becomes `notify_capabilities { requested, approved }`** for
@@ -213,6 +215,26 @@ with: `org.matrix.msc2876.` (`read_events`), `org.matrix.msc3869.` (`read_relati
   **not** approved. The host still holds the partial grant, so the parts that were approved work.
 
 ![How the envelope changed](../../docs/diagrams/03-wire-format-changes.svg)
+
+### OpenID: `get_openid` and `openid_credentials`
+
+A legacy widget may always ask for an OpenID token, and a legacy host asked the user per token
+(MSC1960). An MSC4412 host hands a token out only while the widget holds `widget:…get_openid`,
+which it grants for one token at a time
+([`spec/patch/new/openid-capability.md`](../../spec/patch/new/openid-capability.md)); there is no
+host action for a late answer. The wrapper (`src/bridge.ts`) plays the legacy host:
+
+- While the host's last `update_capabilities` allowed `widget:…get_openid`, the widget's
+  `get_openid` is sent to the host as `…get_openid`, and the token comes back to the widget as
+  `{ state: "allowed", ...token }`. If the host answers `missing_capability` (the grant ended
+  before the request arrived), the wrapper goes on as below.
+- Otherwise the widget gets `{ state: "request" }` at once, and the wrapper requests
+  `widget:…get_openid` (once for every request that waits). The host's first
+  `update_capabilities` after it acknowledged that request is the answer: granted, the wrapper
+  asks for one token and sends every waiting request `openid_credentials { state: "allowed",
+  original_request_id, ...token }`; refused (or no token), `openid_credentials { state:
+  "blocked", original_request_id }`. A host that takes capabilities away in between is read as a
+  refusal.
 
 ### File payloads: Blob → base64
 

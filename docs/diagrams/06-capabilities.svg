@@ -79,7 +79,7 @@
   <text x="806" y="310" class="m">update_capabilities { allowed }</text>
   <text x="806" y="332" class="b">and if the set grew: <tspan font-family="ui-monospace, Menlo, monospace" font-size="12">resubscribe()</tspan> (see 4)</text>
 
-  <text x="30" y="370" class="s">Asking again later runs the same round. Only the host can take capabilities away: revoke_capabilities → update_capabilities with the shorter list. Never requested ⇒ never granted.</text>
+  <text x="30" y="370" class="s">Asking again later runs the same round. Only the host takes capabilities away: revoke_capabilities or a single use → update_capabilities with the shorter list. Never requested ⇒ never granted.</text>
 
   <!-- ================= gates ================= -->
   <text x="30" y="412" class="h2">3 · How a request is gated</text>
@@ -94,12 +94,13 @@
   <text x="46" y="518" class="m">update_capabilities</text>
   <text x="46" y="540" class="s">the MSC4412 core actions: they work</text>
   <text x="46" y="556" class="s">before any capability exists</text>
-  <text x="46" y="584" class="s">replies need none either, including</text>
-  <text x="46" y="600" class="m">forward_openid_credentials</text>
-  <text x="46" y="616" class="s">(covered by widget:…get_openid)</text>
-  <text x="46" y="644" class="s">get_openid still asks the user per</text>
-  <text x="46" y="660" class="s">request: on_openid_requested</text>
-  <text x="46" y="676" class="s">→ resolve_openid (or auto-approved)</text>
+  <text x="46" y="584" class="s">replies need none either: they are</text>
+  <text x="46" y="600" class="s">part of the action they answer</text>
+  <text x="46" y="628" class="bb">Single use</text>
+  <text x="46" y="648" class="m">set_single_use([GetOpenId])</text>
+  <text x="46" y="666" class="s">the request that passes the check</text>
+  <text x="46" y="682" class="s">uses it up; update_capabilities</text>
+  <text x="46" y="698" class="s">without it follows the reply</text>
 
   <!-- card B -->
   <rect x="315" y="426" width="270" height="290" rx="10" fill="#f9fafb" stroke="#9ca3af"/>
@@ -108,7 +109,7 @@
   <text x="331" y="478" class="m">approved.has(&amp;Capability::X)</text>
   <text x="331" y="498" class="m">widget:…navigate</text>
   <text x="331" y="513" class="m">widget:…set_always_on_screen</text>
-  <text x="331" y="528" class="m">widget:…get_openid</text>
+  <text x="331" y="528" class="m">widget:…get_openid  (single use)</text>
   <text x="331" y="543" class="m">widget:…get_rtc_transports</text>
   <text x="331" y="558" class="m">widget:…search_user_directory</text>
   <text x="331" y="573" class="m">widget:…get_media_config</text>

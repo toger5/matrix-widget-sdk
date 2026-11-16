@@ -34,7 +34,7 @@
  *       ├─ data                        what the active account knows: rooms, local widgets, recent widgets and rooms
  *       ├─ widgetWrite?                "Add widget" to the room: being sent, or why the room refused it
  *       ├─ widgets[widgetId]           runtime state of every running widget (one iframe each):
- *       │                              load state, always on screen, the capability / OpenID prompts
+ *       │                              load state, always on screen, the capability prompt
  *       └─ modal, toasts
  * ```
  *
@@ -343,8 +343,8 @@ export type DevBackendTool = "client" | "media";
  * leaf devbackend/behavior
  */
 export interface WidgetHostBehavior {
+  /** Every capability, also the single-use `get_openid`: every OpenID token is handed out without asking. */
   autoApproveCapabilities: boolean;
-  autoApproveOpenId: boolean;
   /** `false`: every start of a widget asks again (what the in-memory mode does today). */
   rememberCapabilities: boolean;
 }
@@ -463,14 +463,14 @@ export interface WidgetInstanceViewModel {
    * shown in the PictureInPicturePanel, whenever its tab is not shown. leaf tabs/pinned
    */
   alwaysOnScreen: boolean;
-  /** Questions of the widget that wait for the user. Both can be pending at once. leaves widgetview/prompt* */
-  prompts: { capabilities?: CapabilityPromptViewModel; openId?: true };
+  /** Questions of the widget that wait for the user. An OpenID token is a capability (`get_openid`), granted for one use. leaves widgetview/prompt* */
+  prompts: { capabilities?: CapabilityPromptViewModel };
 }
 
 /**
  * The open capability question of a widget: one card, however many requests it answers. The view
  * sorts the capabilities into sections and writes the summary from them.
- * leaves widgetview/prompt, widgetview/prompt-long, widgetview/prompt-merged
+ * leaves widgetview/prompt, widgetview/prompt-long, widgetview/prompt-merged, widgetview/prompt-openid
  */
 export interface CapabilityPromptViewModel {
   /**
@@ -487,6 +487,11 @@ export interface CapabilityPromptViewModel {
    * "Unknown to this app".
    */
   unknown: string[];
+  /**
+   * Of `requested`, those the host grants for one use (the driver's `single_use`: `get_openid`).
+   * Their row offers "Once" (the default) or "Always". leaf widgetview/prompt-openid
+   */
+  singleUse: string[];
   /**
    * When the card appeared or a request last added to it (`Date.now()`; a request that adds nothing
    * to decide does not count). "Approve" is blocked until `approveBlockedUntil`.
@@ -690,8 +695,7 @@ export type AppIntent =
   | { type: "tab/close"; panelId: PanelId; tabId: TabId } // Alt+W while a tab is shown; a widget tab stops its widget, unless it is always on screen: then it keeps running in the PiP panel (assumption, see designFeedback.md). The last tab returns the room view to its RoomOverview
   // widgets
   | { type: "widget/reload"; widgetId: WidgetInstanceId } // "Retry" of a failed widget and the reload button of its dev tool bar: stops it and starts it again (new iframe and driver, the current URL of its state event); its dev tools data starts empty
-  | { type: "widget/answerCapabilities"; widgetId: WidgetInstanceId; approved: string[] } // "Approve N selected" / "Deny all" (`approved: []`) of the capability prompt: answers every request it holds; an approval before `approveBlockedUntil` is ignored
-  | { type: "widget/answerOpenId"; widgetId: WidgetInstanceId; allow: boolean }
+  | { type: "widget/answerCapabilities"; widgetId: WidgetInstanceId; approved: string[]; always?: string[] } // "Approve N selected" / "Deny all" (`approved: []`) of the capability prompt: answers every request it holds; an approval before `approveBlockedUntil` is ignored. `always`: the one-use capabilities of `approved` chosen "Always", granted whenever the widget asks (remembered with the others, else while the widget runs)
   | { type: "widget/jumpToTab"; widgetId: WidgetInstanceId } // activates its tab, which takes it out of the PiP panel; opens the room panel again if it was closed
   | { type: "widget/close"; widgetId: WidgetInstanceId; confirmed?: boolean } // the close button in the PiP panel: stops (kills) the widget and closes its tab. The way to stop an always-on-screen widget. Asks first (confirm modal), because the widget still wants to stay on screen; the modal sends it again with `confirmed`
   // widget dev tools
@@ -751,8 +755,11 @@ export interface WidgetDevToolsData {
   messages: WidgetMessage[];
   /** leaves devtools/stats, devtools/stats-direction */
   stats: WidgetStats;
-  /** leaf devtools/driver. From `DriverSnapshot`; "denied" needs the driver to report it. */
-  capabilities: { approved: string[]; autoApproved: string[]; denied: string[] };
+  /**
+   * leaf devtools/driver. From `DriverSnapshot`; "denied" needs the driver to report it. `singleUse`:
+   * what the driver grants for one use (`DriverSnapshot.singleUse`); an approved one is marked "once".
+   */
+  capabilities: { approved: string[]; autoApproved: string[]; denied: string[]; singleUse: string[] };
   /** The widget's own console, forwarded by the widget SDK / compat wrapper. leaf devtools/console */
   console: { level: "log" | "info" | "warn" | "error"; timestamp: number; text: string }[];
 }

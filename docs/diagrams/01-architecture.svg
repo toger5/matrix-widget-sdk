@@ -81,12 +81,12 @@
   <rect x="1022" y="165" width="110" height="22" rx="11" fill="#ea580c"/>
   <text x="1077" y="180" class="badge" text-anchor="middle">you implement</text>
   <text x="575" y="202" class="m">send_to_widget · on_capabilities_requested · on_ready</text>
-  <text x="575" y="220" class="m">on_openid_requested · navigate · set_always_on_screen</text>
+  <text x="575" y="220" class="m">navigate · set_always_on_screen</text>
   <text x="575" y="238" class="m">client_id · client_theme · client_language   (→ get_client_context)</text>
 
   <line x1="600" y1="257" x2="600" y2="301" stroke="#374151" stroke-width="1.5" marker-end="url(#arr)"/>
   <text x="610" y="276" class="s">handle_message_from_widget(json)</text>
-  <text x="610" y="292" class="s">approve_ / revoke_capabilities · resolve_openid · update_*</text>
+  <text x="610" y="292" class="s">approve_ / revoke_capabilities · set_single_use · update_*</text>
   <line x1="1110" y1="301" x2="1110" y2="257" stroke="#374151" stroke-width="1.5" marker-end="url(#arr)"/>
   <text x="1100" y="276" class="s" text-anchor="end">send_to_widget(json)</text>
   <text x="1100" y="292" class="s" text-anchor="end">on_* callbacks</text>

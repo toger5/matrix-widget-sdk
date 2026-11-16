@@ -2,7 +2,7 @@
 // (or a complete screen) is a composition of these, like the real app will be a composition of
 // React components driven by the AppViewModel (src/appViewModel.ts).
 
-import { ACCOUNTS, CAP_LABELS, CAP_REQUESTS, CAP_RISKS, CAP_SECTIONS, CAP_UNKNOWN, MEMBERS, OPENID_PHRASE, ROOMS, SAS_EMOJI, WIDGETS, avatar, esc, icon, logo } from "./lib.mjs";
+import { ACCOUNTS, CAP_LABELS, CAP_ONE_USE, CAP_REQUESTS, CAP_RISKS, CAP_SECTIONS, CAP_UNKNOWN, MEMBERS, OPENID_PHRASE, ROOMS, SAS_EMOJI, WIDGETS, avatar, esc, icon, logo } from "./lib.mjs";
 
 // ---------------------------------------------------------------------------------------------
 // Atoms
@@ -322,7 +322,6 @@ const accountTimelineSection = () => {
 
 const behaviorSection = () =>
   `<div class="set-row"><div><b>Auto-approve capabilities</b><small>Grant everything a widget asks for, without the prompt.</small></div>${toggle(true, "Auto-approve capabilities")}</div>
-   <div class="set-row"><div><b>Auto-approve OpenID tokens</b><small>Answer get_openid without asking.</small></div>${toggle(false, "Auto-approve OpenID tokens")}</div>
    <div class="set-row"><div><b>Remember capabilities</b><small>Off: a widget asks again every time it starts.</small></div>${toggle(false, "Remember capabilities")}</div>
    <div class="set-row"><div><b>Fail sends</b><small>Every send from a widget is answered with an error.</small></div>${toggle(false, "Fail sends")}</div>`;
 
@@ -893,10 +892,13 @@ function driverPanel() {
     "widget:org.matrix.mscXXXX.read_events.timeline:m.room.message",
     "widget:org.matrix.mscXXXX.send_event.timeline:m.room.message",
     "widget:org.matrix.mscXXXX.send_event.delayed",
+    "widget:org.matrix.mscXXXX.get_openid",
     "host:org.matrix.mscXXXX.update_theme",
   ];
+  // A one-use capability (the driver's single_use) is gone once the widget used it.
+  const once = (c) => (CAP_ONE_USE.includes(capKind(c).key) ? '<span class="pill" title="Granted for one use: the widget asks again for the next one">once</span>' : "");
   return `<div class="driver"><div class="dt-sub"><span>Approved capabilities <em>${caps.length}</em></span>${btn("Revoke all", { sm: true })}</div>
-    <div class="caps">${caps.map((c) => `<div class="cap"><span class="cap-side ${c.startsWith("host") ? "host" : ""}">${c.split(":")[0]}</span><span class="cap-n">${c.slice(c.indexOf(":") + 1)}</span>${ibtn("x", "Revoke this capability", "xs")}</div>`).join("")}
+    <div class="caps">${caps.map((c) => `<div class="cap"><span class="cap-side ${c.startsWith("host") ? "host" : ""}">${c.split(":")[0]}</span><span class="cap-n">${c.slice(c.indexOf(":") + 1)}</span>${once(c)}${ibtn("x", "Revoke this capability", "xs")}</div>`).join("")}
       <div class="cap denied"><span class="cap-side">widget</span><span class="cap-n">org.matrix.mscXXXX.send_to_device:org.example.ping</span><span class="pill">denied</span>${btn("Approve", { sm: true })}</div></div>
     <div class="cap-add"><span class="input mono sm"><span class="ph">widget:org.matrix.mscXXXX.…</span></span>${btn("Add", { sm: true, ico: "plus" })}</div>
     <div class="dt-sub"><span>Mock a host action</span><span class="pill">TODO: more actions</span></div>
@@ -970,15 +972,27 @@ function capKind(capability) {
 const checkbox = (state, label) =>
   `<button class="check ${state === true ? "on" : state === "mixed" ? "on mixed" : ""}" role="checkbox" aria-checked="${state}" aria-label="${esc(label)}">${state === true ? icon("check", 12) : state === "mixed" ? icon("minus", 12) : ""}</button>`;
 const risk = (text) => `<span class="pc-risk" role="img" aria-label="${text}" title="${text}">${icon("alert", 13)}</span>`;
+/**
+ * "Once" / "Always" of a capability the host grants for one use; disabled while its row is unchecked.
+ * It sits inside the row's <label>: a click on its radios does not reach the label (they are
+ * interactive content), and the app cancels a click on the group around them, so it never toggles the row.
+ */
+const lifetime = (name, enabled, always) =>
+  `<span class="seg sm pc-life" role="radiogroup" aria-label="${esc(name)}: once or always"${enabled ? "" : ' aria-disabled="true"'}>${[
+    ["Once", !always, "For the next use only: the widget asks again after it"],
+    ["Always", always, "Whenever the widget asks, without asking you"],
+  ]
+    .map(([l, on, t]) => `<span class="${on ? "on" : ""}" role="radio" aria-checked="${on}" title="${t}">${l}</span>`)
+    .join("")}</span>`;
 const sentence = (parts) => (parts.length < 2 ? parts.join("") : `${parts.slice(0, -1).join(", ")} and ${parts.at(-1)}`);
 
 /**
  * The capability prompt (permission card): summary, sections, the approve delay.
- * o: { kind: widget key, list: "short" | "long", merged: a second request joined the short list
- *      (two "New" rows, "Approve" blocked), unchecked: capabilities the user unchecked,
- *      atEnd: the sections are scrolled to their end }
+ * o: { kind: widget key, list: "short" | "long" | "openid", merged: a second request joined the short list
+ *      (two "New" rows), blocked: "Approve" is blocked (with merged by default), unchecked: capabilities the
+ *      user unchecked, always: one-use capabilities set to "Always", atEnd: the sections are scrolled to their end }
  */
-export function capabilityPrompt({ kind = "call", list = "short", merged = false, unchecked = [], atEnd = false } = {}) {
+export function capabilityPrompt({ kind = "call", list = "short", merged = false, blocked = merged, unchecked = [], always = [], atEnd = false } = {}) {
   const name = WIDGETS[kind].name;
   const requested = [...CAP_REQUESTS[list], ...(merged ? CAP_REQUESTS.more : [])];
   const added = merged ? CAP_REQUESTS.more : [];
@@ -1001,15 +1015,16 @@ export function capabilityPrompt({ kind = "call", list = "short", merged = false
     const label = CAP_LABELS[key]?.(data);
     const isNew = added.includes(c);
     const head = label ? `<span class="pc-l"><b>${esc(label)}</b>${CAP_RISKS[key] ? risk(CAP_RISKS[key]) : ""}${isNew ? '<em class="pill new">New</em>' : ""}</span>` : isNew ? '<span class="pc-l"><em class="pill new">New</em></span>' : "";
-    return `<label class="perm ${isNew ? "new" : ""}">${checkbox(on(c), label ? `${label} (${c})` : c)}<span>${head}<small class="mono">${esc(c)}</small></span></label>`;
+    const life = CAP_ONE_USE.includes(key) ? lifetime(label ?? c, on(c), always.includes(c)) : "";
+    return `<label class="perm ${isNew ? "new" : ""}">${checkbox(on(c), label ? `${label} (${c})` : c)}<span>${head}<small class="mono">${esc(c)}</small>${life}</span></label>`;
   };
   const section = (s) => {
     const n = s.caps.filter(on).length;
     const all = n === s.caps.length ? true : n === 0 ? false : "mixed";
     return `<div class="pc-sec" role="group" aria-labelledby="pc-${s.id}"><div class="pc-sh">${checkbox(all, `All in ${s.title}`)}<b id="pc-${s.id}">${s.title}</b>${s.risky ? risk("Has risky permissions") : ""}<small>${n} of ${s.caps.length}</small></div>${s.id === "other" ? '<p class="pc-note">This app does not act on these.</p>' : ""}${s.caps.map(row).join("")}</div>`;
   };
-  const status = merged ? `<p class="pc-status" role="status" id="perm-wait">${icon("clock", 14)}<span>${added.length} permissions were added. You can approve in <b>3 s</b>.</span></p>` : "";
-  const approve = `<button class="btn primary pc-approve"${merged ? ' aria-disabled="true" aria-describedby="perm-wait" style="--wait:80%"' : ""}><span>Approve ${selected} selected</span></button>`;
+  const status = blocked ? `<p class="pc-status" role="status" id="perm-wait">${icon("clock", 14)}<span>${added.length ? `${added.length} permissions were added. ` : ""}You can approve in <b>3 s</b>.</span></p>` : "";
+  const approve = `<button class="btn primary pc-approve"${blocked ? ' aria-disabled="true" aria-describedby="perm-wait" style="--wait:80%"' : ""}><span>Approve ${selected} selected</span></button>`;
   return `<div class="prompt-card caps" role="group" aria-labelledby="perm-t" aria-describedby="perm-s">
     <div class="pc-head">${wico(kind, 32)}<div><b id="perm-t">${name} asks for permissions</b><p class="pc-sum" id="perm-s">${name} wants to ${sentence(phrases)}.</p></div></div>
     ${

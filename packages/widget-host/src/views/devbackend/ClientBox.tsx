@@ -29,7 +29,6 @@ export function ClientBox({ openSections, heightShare, behavior, data }: { openS
 
 const BEHAVIORS: { key: keyof WidgetHostBehavior; label: string; hint: string }[] = [
   { key: "autoApproveCapabilities", label: "Auto-approve capabilities", hint: "Grant everything a widget asks for, without the prompt." },
-  { key: "autoApproveOpenId", label: "Auto-approve OpenID tokens", hint: "Answer get_openid without asking." },
   { key: "rememberCapabilities", label: "Remember capabilities", hint: "Off: a widget asks again every time it starts." },
 ];
 

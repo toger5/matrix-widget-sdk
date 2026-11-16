@@ -231,7 +231,6 @@ describe("steady state forwarding", () => {
 
   it.each([
     [`${X}forward_to_device`, "send_to_device"],
-    [`${X}forward_openid_credentials`, "openid_credentials"],
     [`${X}update_theme`, "theme_change"],
     [`${X}update_language`, "language_change"],
     [`${X}update_visibility`, "visibility"],
@@ -251,7 +250,6 @@ describe("steady state forwarding", () => {
     ["org.matrix.msc4533.rtc_livekit_delegate_delayed_leave", "org.matrix.msc4533.delegate_rtc_livekit_delayed_leave"],
     ["send_event", `${X}send_event`],
     ["send_to_device", `${X}send_to_device`],
-    ["get_openid", `${X}get_openid`],
     ["watch_turn_servers", `${X}watch_turn_servers`],
     ["unwatch_turn_servers", `${X}unwatch_turn_servers`],
     ["set_always_on_screen", `${X}set_always_on_screen`],
@@ -398,6 +396,128 @@ describe("capability translation", () => {
     expect(negotiated("nope" as unknown as string[]).requested).toEqual(IMPLICIT_CAPABILITIES);
     const { s } = negotiated([SEND]);
     expect(notified(s, "nope" as unknown as string[]).approved).toEqual([]);
+  });
+});
+
+describe("OpenID", () => {
+  const GET_OPENID = `${X}get_openid`;
+  const CAPABILITY = W("get_openid");
+  const TOKEN = { access_token: "tok", token_type: "Bearer", matrix_server_name: "hs.example", expires_in: 3600 };
+  /** A booted bridge whose host allowed `allowed` last. */
+  function running(allowed: string[] = []) {
+    const s = setup(true);
+    boot(s);
+    s.bridge.onHostMessage(fromHost(UPDATE, "u0", { allowed: [...CONTEXT_CAPABILITIES, ...allowed] }));
+    s.take(s.toHost);
+    s.take(s.toWidget);
+    return s;
+  }
+  const credentials = (s: S) => s.take(s.toWidget).filter((m) => m.action === "openid_credentials").map((m) => m.data);
+
+  it("answers at once with the token while the capability is held", () => {
+    const s = running([CAPABILITY]);
+    const request = fromWidget("get_openid", "o1");
+    s.bridge.onWidgetMessage(request);
+    const [get] = s.take(s.toHost);
+    expect(get).toEqual({ source: "widget", request_id: "own-4", action: GET_OPENID, request: {} });
+    expect(s.toWidget).toEqual([]);
+    s.bridge.onHostMessage(hostResponse(get, TOKEN));
+    expect(s.take(s.toWidget)).toEqual([{ ...request, response: { state: "allowed", ...TOKEN } }]);
+  });
+
+  it("without it: answers `request`, requests the capability once and sends every waiting request the token", () => {
+    const s = running();
+    s.bridge.onWidgetMessage(fromWidget("get_openid", "o1"));
+    s.bridge.onWidgetMessage(fromWidget("get_openid", "o2"));
+    expect(s.take(s.toWidget).map((m) => [m.requestId, m.response])).toEqual([["o1", { state: "request" }], ["o2", { state: "request" }]]);
+    const [request] = s.take(s.toHost);
+    expect(request).toMatchObject({ source: "widget", action: REQUEST, request: { capabilities: [CAPABILITY] } });
+    expect(s.toHost).toEqual([]);
+
+    // An update before the ack answers an earlier request, not this one.
+    s.bridge.onHostMessage(fromHost(UPDATE, "u1", { allowed: CONTEXT_CAPABILITIES }));
+    expect(s.take(s.toWidget).map((m) => m.action)).toEqual(["notify_capabilities"]);
+    expect(s.toHost).toEqual([]);
+    s.bridge.onHostMessage(hostResponse(request, {}));
+    // The answer: the widget still sees the update, then the bridge fetches one token for both.
+    s.bridge.onHostMessage(fromHost(UPDATE, "u2", { allowed: [...CONTEXT_CAPABILITIES, "widget:m.get_openid"] }));
+    expect(s.take(s.toWidget).map((m) => m.action)).toEqual(["notify_capabilities"]);
+    const [get] = s.take(s.toHost);
+    expect(get).toMatchObject({ action: GET_OPENID, request: {} });
+    // A request while the token is on its way waits for it too.
+    s.bridge.onWidgetMessage(fromWidget("get_openid", "o3"));
+    expect(s.take(s.toWidget)[0].response).toEqual({ state: "request" });
+    expect(s.toHost).toEqual([]);
+    s.bridge.onHostMessage(hostResponse(get, TOKEN));
+    const sent = s.take(s.toWidget);
+    expect(sent.map((m) => [m.api, m.action, m.data])).toEqual(
+      ["o1", "o2", "o3"].map((id) => ["toWidget", "openid_credentials", { state: "allowed", original_request_id: id, ...TOKEN }]),
+    );
+    // The widget's acks stay with the bridge.
+    for (const m of sent) s.bridge.onWidgetMessage({ ...m, response: {} });
+    expect(s.toHost).toEqual([]);
+  });
+
+  it("tells every waiting request `blocked` when the host refuses the capability or has no token", () => {
+    const s = running();
+    s.bridge.onWidgetMessage(fromWidget("get_openid", "o1"));
+    const [request] = s.take(s.toHost);
+    s.bridge.onHostMessage(hostResponse(request, {}));
+    s.bridge.onHostMessage(fromHost(UPDATE, "u1", { allowed: CONTEXT_CAPABILITIES }));
+    expect(credentials(s)).toEqual([{ state: "blocked", original_request_id: "o1" }]);
+
+    // Granted, but the token request fails.
+    s.bridge.onWidgetMessage(fromWidget("get_openid", "o2"));
+    const [again] = s.take(s.toHost);
+    expect(again.action).toBe(REQUEST);
+    s.bridge.onHostMessage(hostResponse(again, {}));
+    s.bridge.onHostMessage(fromHost(UPDATE, "u2", { allowed: [...CONTEXT_CAPABILITIES, CAPABILITY] }));
+    const [get] = s.take(s.toHost);
+    s.bridge.onHostMessage(hostResponse(get, { error: { code: "org.matrix.msc4412.unknown", message: "Failed to get an OpenID token: offline" } }));
+    expect(credentials(s)).toEqual([{ state: "blocked", original_request_id: "o2" }]);
+  });
+
+  it("asks for the capability when the host says it ended before the request arrived", () => {
+    const s = running([CAPABILITY]);
+    s.bridge.onWidgetMessage(fromWidget("get_openid", "o1"));
+    const [get] = s.take(s.toHost);
+    s.bridge.onHostMessage(hostResponse(get, { error: { code: "org.matrix.msc4412.missing_capability", message: `Missing capability: ${CAPABILITY}` } }));
+    expect(s.take(s.toWidget)[0].response).toEqual({ state: "request" });
+    expect(s.take(s.toHost)[0]).toMatchObject({ action: REQUEST, request: { capabilities: [CAPABILITY] } });
+  });
+
+  it("hands one grant to one of two requests sent at once; the other asks again", () => {
+    const s = running([CAPABILITY]);
+    const first = fromWidget("get_openid", "o1");
+    s.bridge.onWidgetMessage(first);
+    s.bridge.onWidgetMessage(fromWidget("get_openid", "o2"));
+    // The bridge has not heard of the use yet: both go to the host, which refuses the second.
+    const [get1, get2] = s.take(s.toHost);
+    expect([get1.action, get2.action]).toEqual([GET_OPENID, GET_OPENID]);
+    s.bridge.onHostMessage(hostResponse(get2, { error: { code: "org.matrix.msc4412.missing_capability", message: `Missing capability: ${CAPABILITY}` } }));
+    s.bridge.onHostMessage(hostResponse(get1, TOKEN));
+    s.bridge.onHostMessage(fromHost(UPDATE, "u1", { allowed: CONTEXT_CAPABILITIES }));
+    expect(s.take(s.toWidget).map((m) => [m.requestId, m.response ?? m.action])).toEqual([
+      ["o2", { state: "request" }],
+      ["o1", { state: "allowed", ...TOKEN }],
+      ["u1", "notify_capabilities"],
+    ]);
+    // The second is asked about on its own: the update before the ack is not the answer.
+    const [request, ...rest] = s.take(s.toHost);
+    expect(request).toMatchObject({ action: REQUEST, request: { capabilities: [CAPABILITY] } });
+    expect(rest).toEqual([]);
+    s.bridge.onHostMessage(hostResponse(request, {}));
+    s.bridge.onHostMessage(fromHost(UPDATE, "u2", { allowed: CONTEXT_CAPABILITIES }));
+    expect(credentials(s)).toEqual([{ state: "blocked", original_request_id: "o2" }]);
+  });
+
+  it("passes other errors of the direct answer on", () => {
+    const s = running([CAPABILITY]);
+    const request = fromWidget("get_openid", "o1");
+    s.bridge.onWidgetMessage(request);
+    const error = { error: { code: "org.matrix.msc4412.unknown", message: "offline" } };
+    s.bridge.onHostMessage(hostResponse(s.take(s.toHost)[0], error));
+    expect(s.take(s.toWidget)).toEqual([{ ...request, response: error }]);
   });
 });
 

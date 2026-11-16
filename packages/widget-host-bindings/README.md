@@ -65,13 +65,13 @@ const platform: WidgetHostPlatform = {
   sendToWidget: (json) => iframe.contentWindow!.postMessage(JSON.parse(json), widgetOrigin),
   onCapabilitiesRequested: (requested) => queueMicrotask(() => driver.approveCapabilities(requested)),
   onReady: () => (iframe.hidden = false),
-  onOpenidRequested: () => queueMicrotask(() => driver.resolveOpenid(true)),   // or prompt first
   navigate: (uri) => { location.href = uri; },
   setAlwaysOnScreen: (value) => value,
   clientId: () => "io.example.client", clientTheme: () => "light", clientLanguage: () => "en",
 };
 const backend = new InMemoryBackend("!room:example.org", "@alice:example.org");
 const driver = new WidgetHostDriver(backend.asBackend(), platform);
+// `get_openid` is granted for one token at a time by default; `driver.setSingleUse([])` keeps every grant.
 
 window.addEventListener("message", (ev) => {
   if (ev.source === iframe.contentWindow) driver.handleMessageFromWidget(JSON.stringify(ev.data));

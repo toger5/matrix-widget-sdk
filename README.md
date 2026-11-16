@@ -108,8 +108,7 @@ Actions implemented here:
 | `…update_state` | host | `{ state: [...] }` the current permitted state, on approval and after changes | `host:…update_state:<type>[#<key>]` |
 | `…send_to_device` | widget | `{ type, encrypted, messages: { user_id: { device_id: content } } }` | `widget:…send_to_device:<type>` |
 | `…forward_to_device` | host | `{ type, sender, content, encrypted }` from the backend's to-device subscription | `host:…forward_to_device:<type>` |
-| `…get_openid` | widget | `{}` → `{ state: allowed \| blocked \| request, ...token }`; `request` means the user is being asked (`WidgetHostPlatform::on_openid_requested`, then `driver.resolve_openid`) | `widget:…get_openid` (the user may still be asked) |
-| `…forward_openid_credentials` | host | `{ state, original_request_id, ...token }` after the user decided | none (the late reply to `get_openid`) |
+| `…get_openid` | widget | `{}` → `{ access_token, token_type, matrix_server_name, expires_in }` (the OpenID token, at once) | `widget:…get_openid`, granted for one token: the request uses it up, `update_capabilities` follows without it (`driver.set_single_use`) |
 | `…watch_turn_servers` / `…unwatch_turn_servers` | widget | start / stop `update_turn_servers` pushes | `host:…update_turn_servers` |
 | `…update_turn_servers` | host | `{ uris, username, password }` from the backend's TURN subscription | `host:…update_turn_servers` |
 | `org.matrix.msc4515.get_rtc_transports` | widget | `{}` → `{ rtc_transports: [...] }` | `widget:…get_rtc_transports` |
@@ -209,7 +208,6 @@ impl WidgetHostPlatform for Platform {
     fn send_to_widget(&self, json: String) { /* iframe.postMessage(JSON.parse(json), widgetOrigin) */ }
     fn on_capabilities_requested(&self, requested: Vec<Capability>) { /* prompt (the whole open question), then driver.approve_capabilities(..) */ }
     fn on_ready(&self) { /* hide the loading state */ }
-    fn on_openid_requested(&self) { /* prompt user, then driver.resolve_openid(allowed).await */ }
     fn navigate(&self, uri: String) -> Result<(), PlatformError> { /* open the matrix.to link */ Ok(()) }
     fn set_always_on_screen(&self, value: bool) -> bool { value }
     // reported to widgets through `get_client_context`
@@ -222,6 +220,9 @@ let backend: Arc<dyn MatrixBackend> = Arc::new(MyRustSdkBackend::new(room));
 let driver = WidgetHostDriver::new(backend, Arc::new(Platform { .. }));
 // granted without a prompt, e.g. for a legacy widget behind the compat wrapper:
 driver.set_auto_approved(vec![Capability::GetMatrixContext, Capability::GetClientContext]);
+// granted for one use each (the default; `vec![]` keeps every grant). A time limit is your timer
+// plus `driver.revoke_capabilities(..)`.
+driver.set_single_use(vec![Capability::GetOpenId]);
 
 // from the iframe's message handler:
 driver.handle_message_from_widget(json).await?;
@@ -247,7 +248,6 @@ const driver = new WidgetHostDriver(new InMemoryBackend(roomId, userId).asBacken
   sendToWidget: (json) => iframe.contentWindow.postMessage(JSON.parse(json), widgetOrigin),
   onCapabilitiesRequested: (caps) => queueMicrotask(() => driver.approveCapabilities(caps)),
   onReady: () => (iframe.hidden = false),
-  onOpenidRequested: () => queueMicrotask(() => driver.resolveOpenid(true)),
   navigate: (uri) => { location.href = uri; },
   setAlwaysOnScreen: (value) => value,
   clientId: () => "io.example.client", clientTheme: () => "light", clientLanguage: () => "en",
@@ -298,7 +298,7 @@ Levels mean the same everywhere:
 |---|---|
 | `error` | a bug in this SDK |
 | `warn` | something was dropped or refused: a rejected message, a missing capability, a failed backend call, a request that timed out, a callback that threw |
-| `info` | the lifecycle: ready, capabilities requested / approved / revoked, OpenID decisions |
+| `info` | the lifecycle: ready, capabilities requested / approved / revoked / used up |
 | `debug` | one line per message in either direction: action, kind and request id, never the body |
 | `trace` | the message bodies as JSON. Bodies that carry credentials (OpenID and LiveKit tokens, TURN passwords) are replaced by `"<redacted>"` |
 

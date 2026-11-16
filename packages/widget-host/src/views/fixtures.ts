@@ -173,7 +173,7 @@ export const roomToolsVm = (o: Partial<RoomToolsViewModel> = {}): RoomToolsViewM
   sendForm: "message",
   stateForm: "widget",
   tools: { open: null, heightShare: 0.5 },
-  behavior: { autoApproveCapabilities: true, autoApproveOpenId: false, rememberCapabilities: false },
+  behavior: { autoApproveCapabilities: true, rememberCapabilities: false },
   scheduled: {},
   ...o,
 });
@@ -226,9 +226,10 @@ export const DEV_TOOLS_DATA: WidgetDevToolsData = {
     characters: CHARACTERS,
   },
   capabilities: {
-    approved: [`widget:${X}get_matrix_context`, `widget:${X}send_event.timeline:m.room.message`, `host:${X}forward_event.timeline:m.room.message`],
+    approved: [`widget:${X}get_matrix_context`, `widget:${X}get_openid`, `widget:${X}send_event.timeline:m.room.message`, `host:${X}forward_event.timeline:m.room.message`],
     autoApproved: [`widget:${X}get_client_context`],
     denied: [`widget:${X}send_to_device:org.example.ping`],
+    singleUse: [`widget:${X}get_openid`],
   },
   console: [
     { level: "log", timestamp: 1_763_300_000_600, text: "widget api ready" },

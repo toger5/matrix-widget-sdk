@@ -17,8 +17,10 @@ const SHORT = [
   `widget:${X}send_to_device:org.example.ping`,
   `widget:${X}get_matrix_context`,
 ];
+/** The capability the host grants for one use (the driver's `single_use`). */
+const OPENID = `widget:${X}get_openid`;
 /** A second request while the short one is open. */
-const MORE = [`widget:${X}send_event.state:m.room.topic`, `widget:${X}get_openid`];
+const MORE = [`widget:${X}send_event.state:m.room.topic`, OPENID];
 /** The MSC4412 test widget's capabilities (packages/test-widgets/new/capabilities.ts) plus one this app does not know. */
 const UNKNOWN = "widget:org.example.custom.share_screen";
 const LONG = [
@@ -63,6 +65,7 @@ const capabilities = (requested: string[], o: { added?: string[]; unknown?: stri
   requested,
   added: o.added ?? [],
   unknown: o.unknown ?? [],
+  singleUse: requested.filter((c) => c === OPENID),
   lastRequestAt: o.blocked ? Number.MAX_SAFE_INTEGER / 2 : 0,
 });
 
@@ -105,9 +108,9 @@ export const Loading: Story = { args: { widget: widgetVm("design", "call", { loa
 /** leaf widgetview/failed */
 export const Failed: Story = { args: { widget: widgetVm("design", "call", { load: { state: "failed", error: "The widget did not answer within 15 seconds." } }) } };
 
-/** leaf widgetview/prompt (an OpenID request waits behind it) */
+/** leaf widgetview/prompt */
 export const CapabilityPrompt: Story = {
-  args: { widget: widgetVm("design", "call", { load: { state: "loading" }, prompts: { capabilities: capabilities(SHORT), openId: true } }) },
+  args: { widget: widgetVm("design", "call", { load: { state: "loading" }, prompts: { capabilities: capabilities(SHORT) } }) },
 };
 
 /** leaf widgetview/prompt-long: one row of "This app" unchecked, scrolled to the end */
@@ -128,14 +131,21 @@ export const CapabilityPromptMerged: Story = {
   },
 };
 
-/** No leaf: the OpenID card, and the compact strip of a PiP box (224×140). */
-export const OpenIdPromptAndCompact: Story = {
+/**
+ * leaf widgetview/prompt-openid: one OpenID capability, "Once", "Approve" blocked. Variants through
+ * the args: `initialAlways: [OPENID]` (set to "Always"), `initialUnchecked: [OPENID]` (the choice disabled).
+ */
+export const CapabilityPromptOpenId: Story = {
+  args: { widget: widgetVm("design", "call", { prompts: { capabilities: capabilities([OPENID], { blocked: true }) } }), initialAlways: [], initialUnchecked: [] },
+  // The card reads the initial choices once: a changed arg starts it again.
+  render: (args) => <WidgetView key={JSON.stringify([args.initialAlways, args.initialUnchecked])} {...args} />,
+};
+
+/** No leaf: the compact strip of a PiP box (224×140). */
+export const CompactPrompt: Story = {
   render: (args) => (
-    <>
-      <WidgetView {...args} widget={widgetVm("design", "call", { prompts: { openId: true } })} />
-      <div style={{ width: 224, height: 140, flex: "none", display: "flex", alignSelf: "center", margin: 16 }}>
-        <WidgetView {...args} compact widget={widgetVm("design", "board", { prompts: { capabilities: capabilities([`widget:${X}get_matrix_context`]) } })} />
-      </div>
-    </>
+    <div style={{ width: 224, height: 140, flex: "none", display: "flex", alignSelf: "center", margin: 16 }}>
+      <WidgetView {...args} compact widget={widgetVm("design", "board", { prompts: { capabilities: capabilities([`widget:${X}get_matrix_context`]) } })} />
+    </div>
   ),
 };

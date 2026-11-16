@@ -34,6 +34,10 @@ await api.notifyReady();                                           // host shows
 
 await api.sendEvent("m.room.message", { msgtype: "m.text", body: "hi" });
 const history = await api.readEvents("m.room.message", 20);
+
+// An OpenID token: the host grants `widget:…get_openid` for one token at a time, so this requests
+// the capability when needed (the user is usually asked) and rejects when it is refused.
+const { access_token, matrix_server_name } = await api.requestOpenIdToken();
 ```
 
 To own the transport (e.g. in tests), use `new WidgetApi((json) => …)` and feed incoming

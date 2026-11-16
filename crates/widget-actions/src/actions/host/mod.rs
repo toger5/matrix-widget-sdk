@@ -5,12 +5,11 @@ use serde::{Deserialize, Serialize};
 
 use super::{expect, parse_tagged, split_tagged};
 use crate::{
-    ActionError, ForwardOpenIdCredentialsRequest, JsonValue, MatrixEvent, Source, ToDeviceEvent, TurnServer,
-    UpdateCapabilitiesRequest, UpdateLanguageRequest, UpdateStateRequest, UpdateVisibilityRequest, WireMessage,
+    ActionError, JsonValue, MatrixEvent, Source, ToDeviceEvent, TurnServer, UpdateCapabilitiesRequest,
+    UpdateLanguageRequest, UpdateStateRequest, UpdateVisibilityRequest, WireMessage,
 };
 
 pub(crate) mod forward_event;
-pub(crate) mod forward_openid_credentials;
 pub(crate) mod forward_to_device;
 pub(crate) mod update_capabilities;
 pub(crate) mod update_language;
@@ -42,9 +41,6 @@ pub enum HostRequest {
         #[serde(rename = "request")]
         message: ToDeviceEvent,
     },
-    /// The late outcome of a `get_openid` (MSC1960); covered by `widget:…get_openid`.
-    #[serde(rename = "org.matrix.mscXXXX.forward_openid_credentials", alias = "m.forward_openid_credentials")]
-    ForwardOpenIdCredentials { request: ForwardOpenIdCredentialsRequest },
     /// TURN credentials for a widget that is watching them (MSC3846). Needs `host:…update_turn_servers`.
     #[serde(rename = "org.matrix.mscXXXX.update_turn_servers", alias = "m.update_turn_servers")]
     UpdateTurnServers {
@@ -83,8 +79,6 @@ pub enum HostResponse {
     UpdateState,
     #[serde(rename = "org.matrix.mscXXXX.forward_to_device", alias = "m.forward_to_device")]
     ForwardToDevice,
-    #[serde(rename = "org.matrix.mscXXXX.forward_openid_credentials", alias = "m.forward_openid_credentials")]
-    ForwardOpenIdCredentials,
     #[serde(rename = "org.matrix.mscXXXX.update_turn_servers", alias = "m.update_turn_servers")]
     UpdateTurnServers,
     #[serde(rename = "org.matrix.mscXXXX.update_theme", alias = "m.update_theme")]
@@ -163,7 +157,6 @@ mod tests {
             ("send_event", "org.matrix.mscXXXX.forward_event"),
             ("forward_event", "m.forward_event"),
             ("send_to_device", "org.matrix.mscXXXX.forward_to_device"),
-            ("openid_credentials", "org.matrix.mscXXXX.forward_openid_credentials"),
             ("theme_change", "org.matrix.mscXXXX.update_theme"),
             ("language_change", "org.matrix.mscXXXX.update_language"),
             ("visibility", "org.matrix.mscXXXX.update_visibility"),
@@ -180,6 +173,18 @@ mod tests {
             };
             assert_eq!(response(old), Ok(HostResponse::Unknown), "{old}");
             assert_ne!(response(new), Ok(HostResponse::Unknown), "{new}");
+        }
+    }
+
+    /// Removed actions are unknown under every name. `forward_openid_credentials` was the late
+    /// answer to a `get_openid` the user had to be asked about; the user now grants the
+    /// `get_openid` capability instead, and `get_openid` always answers at once.
+    #[test]
+    fn removed_actions_are_unknown() {
+        for action in ["org.matrix.mscXXXX.forward_openid_credentials", "m.forward_openid_credentials"] {
+            let wire = WireMessage::request(Source::Host, action, "r", json!({"state": "allowed"}));
+            assert_eq!(HostRequest::from_wire(&wire), Ok(HostRequest::Unknown), "{action}");
+            assert_eq!(HostResponse::from_wire(&wire.ack()), Ok(HostResponse::Unknown), "{action}");
         }
     }
 }

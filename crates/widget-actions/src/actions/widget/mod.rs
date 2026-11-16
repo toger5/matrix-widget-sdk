@@ -24,12 +24,12 @@ use serde::{Deserialize, Serialize};
 use super::{expect, parse_tagged, split_tagged};
 use crate::{
     ActionError, DelegateRtcLivekitDelayedLeaveRequest, DownloadFileRequest, DownloadFileResponse,
-    GetClientContextResponse, GetMatrixContextResponse, GetOpenIdResponse, GetRtcLivekitTokenRequest,
-    GetRtcLivekitTokenResponse, MediaConfigResponse, NavigateRequest, ReadEventsRequest, ReadEventsResponse,
-    ReadRelationsRequest, ReadRelationsResponse, ReadRoomAccountDataRequest, ReadRoomAccountDataResponse,
-    RequestCapabilitiesRequest, RtcTransportsResponse, SearchUserDirectoryRequest, SearchUserDirectoryResponse,
-    SendEventRequest, SendEventResponse, SendToDeviceRequest, SetAlwaysOnScreenRequest, SetAlwaysOnScreenResponse,
-    Source, UpdateDelayedEventRequest, UploadFileRequest, UploadFileResponse, WireMessage,
+    GetClientContextResponse, GetMatrixContextResponse, GetRtcLivekitTokenRequest, GetRtcLivekitTokenResponse,
+    MediaConfigResponse, NavigateRequest, OpenIdToken, ReadEventsRequest, ReadEventsResponse, ReadRelationsRequest,
+    ReadRelationsResponse, ReadRoomAccountDataRequest, ReadRoomAccountDataResponse, RequestCapabilitiesRequest,
+    RtcTransportsResponse, SearchUserDirectoryRequest, SearchUserDirectoryResponse, SendEventRequest,
+    SendEventResponse, SendToDeviceRequest, SetAlwaysOnScreenRequest, SetAlwaysOnScreenResponse, Source,
+    UpdateDelayedEventRequest, UploadFileRequest, UploadFileResponse, WireMessage,
 };
 
 pub(crate) mod download_file;
@@ -80,7 +80,7 @@ pub enum WidgetRequest {
     /// Cancel / restart / fire a delayed event. Requires `widget:…update_delayed_event`.
     #[serde(rename = "org.matrix.msc4157.update_delayed_event", alias = "m.update_delayed_event")]
     UpdateDelayedEvent { request: UpdateDelayedEventRequest },
-    /// Ask for an OpenID token (MSC1960). Requires `widget:…get_openid`; the user may still be asked.
+    /// Ask for an OpenID token (MSC1960). Requires `widget:…get_openid`, usually granted for one use.
     #[serde(rename = "org.matrix.mscXXXX.get_openid", alias = "m.get_openid")]
     GetOpenId,
     /// Start receiving TURN credentials (`update_turn_servers`). Requires `host:…update_turn_servers`.
@@ -158,8 +158,9 @@ pub enum WidgetResponse {
     /// `{}`
     #[serde(rename = "org.matrix.msc4157.update_delayed_event", alias = "m.update_delayed_event")]
     UpdateDelayedEvent,
+    /// The token, the body of `/openid/request_token`.
     #[serde(rename = "org.matrix.mscXXXX.get_openid", alias = "m.get_openid")]
-    GetOpenId { response: GetOpenIdResponse },
+    GetOpenId { response: OpenIdToken },
     /// `{}`
     #[serde(rename = "org.matrix.mscXXXX.watch_turn_servers", alias = "m.watch_turn_servers")]
     WatchTurnServers,

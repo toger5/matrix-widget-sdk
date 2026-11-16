@@ -24,10 +24,10 @@ export interface WidgetRuntimeEvents {
   failed(error: string): void;
   /**
    * The open capability question of the widget, whole: every request since the last answer joins
-   * it (`undefined`: it was answered). `unknown`: those of `requested` the driver does not know.
+   * it (`undefined`: it was answered). `unknown`: those of `requested` the driver does not know;
+   * `singleUse`: those it grants for one use.
    */
-  capabilitiesRequested(question: { requested: string[]; unknown: string[] } | undefined): void;
-  openIdRequested(pending: boolean): void;
+  capabilitiesRequested(question: { requested: string[]; unknown: string[]; singleUse: string[] } | undefined): void;
   alwaysOnScreen(value: boolean): void;
   /** A message was handled: the backend may have changed (the DevBackend has no change notification). */
   activity(): void;
@@ -37,11 +37,10 @@ export interface WidgetRuntimeOptions {
   id: WidgetInstanceId;
   widget: ResolvedWidget;
   backend: MatrixBackend;
-  /** Where approved capabilities are remembered (`capabilityStoreKey`); `undefined`: the widget is asked every time. */
+  /** Where approved capabilities are remembered (`capabilityStoreKey`); `undefined`: the widget is asked at every start. */
   capabilityKey?: string;
-  /** Read whenever the widget asks, so a changed setting applies to a running widget. */
+  /** Read whenever the widget asks, so a changed setting applies to a running widget. Covers the one-use `get_openid` too: every token is granted without a prompt. */
   autoApproveCapabilities: () => boolean;
-  autoApproveOpenId: () => boolean;
   /** `get_client_context`'s theme. */
   theme: () => "light" | "dark";
   /** How long the widget has for `notify_ready`. Default: `NOTIFY_READY_TIMEOUT_MS`; scripted runs shorten it (`HostSeed.notifyReadyTimeoutMs`). */
@@ -67,7 +66,7 @@ const isError = (response: unknown) => typeof response === "object" && response 
 const emptyData = (): WidgetDevToolsData => ({
   messages: [],
   stats: { actionsFromWidget: 0, actionsToWidget: 0, eventsSharedWithWidget: 0, eventsSentFromWidget: 0, charactersTotal: { toWidget: 0, fromWidget: 0 }, characters: [] },
-  capabilities: { approved: [], autoApproved: [], denied: [] },
+  capabilities: { approved: [], autoApproved: [], denied: [], singleUse: [] },
   console: [],
 });
 
@@ -86,6 +85,12 @@ export class WidgetRuntime {
   private flushQueued = false;
   private denied = new Set<string>();
   private autoApproved: string[] = [];
+  /**
+   * Without a store (no `capabilityKey`): what is granted without a prompt while the widget runs,
+   * besides what a legacy widget gets anyway ("Always" of a one-use capability, "Add" of the
+   * driver panel). With a store, the store holds it.
+   */
+  private keptWhileRunning: string[] = [];
   /**
    * The open question as the driver last asked it (`onCapabilitiesRequested`), set at once, before
    * the prompt can show it. Empty once it is answered.
@@ -114,12 +119,14 @@ export class WidgetRuntime {
         this.asked = requested;
         later(() => {
           if (options.autoApproveCapabilities()) this.answerCapabilities(requested, requested);
-          else events.capabilitiesRequested({ requested, unknown: requested.filter((c) => !capabilityIsKnown(c)) });
+          else {
+            const { singleUse } = this.driver.snapshot();
+            events.capabilitiesRequested({ requested, unknown: requested.filter((c) => !capabilityIsKnown(c)), singleUse: requested.filter((c) => singleUse.includes(c)) });
+          }
           this.refreshCapabilities();
         });
       },
       onReady: () => later(() => events.ready()),
-      onOpenidRequested: () => later(() => events.openIdRequested(true)),
       navigate: (uri) => {
         // TODO-FINDING navigate-confirm-is-synchronous - the driver's `navigate` callback must answer synchronously (an error is passed to the widget), so the confirmation is a blocking `window.confirm` and not the app's modal. Options: an async platform callback in the driver (widget-api-change), or always answer "ok" and ask afterwards.
         if (!window.confirm(`The widget wants to open:\n${uri}`)) throw new Error("the user refused to navigate");
@@ -136,8 +143,7 @@ export class WidgetRuntime {
     };
 
     this.driver = new WidgetHostDriver(backend, platform);
-    this.remember(options.capabilityKey ? loadCapabilities(options.capabilityKey) : []);
-    this.driver.setOpenidAutoApproved(options.autoApproveOpenId());
+    this.remember(this.preApproved());
     this.refreshCapabilities();
 
     const onMessage = (ev: MessageEvent) => {
@@ -185,13 +191,14 @@ export class WidgetRuntime {
 
   /**
    * Answer the open capability question with the approved subset and remember what the widget
-   * holds after it. `shown`: what the user was asked about. An approval is refused while the
+   * holds after it. `shown`: what the user was asked about. `always`: the one-use capabilities of
+   * `approved` that are granted again whenever the widget asks. An approval is refused while the
    * driver has asked about something that was not shown: a request that arrived just before the
    * click, whose prompt update is still on its way. (Only what the driver asked counts: a
    * capability that a revoke or a shorter auto-approved list put back into its question was never
    * asked about, is not granted by this answer, and must not block it.)
    */
-  answerCapabilities(approved: string[], shown: string[] = approved): void {
+  answerCapabilities(approved: string[], shown: string[] = approved, always: string[] = []): void {
     const unseen = this.asked.filter((c) => !shown.includes(c));
     if (approved.length > 0 && unseen.length > 0) {
       this.log("warn", `approval refused: the widget asked for ${unseen.length} more ${unseen.length === 1 ? "capability" : "capabilities"} that the prompt did not show yet`);
@@ -202,42 +209,38 @@ export class WidgetRuntime {
     for (const cap of [...shown, ...unseen]) if (approved.includes(cap)) this.denied.delete(cap);
     else this.denied.add(cap);
     // Added to what is remembered: a widget that asks for less this time keeps its earlier grants.
-    const remembered = this.options.capabilityKey ? loadCapabilities(this.options.capabilityKey) : [];
-    this.remember([...new Set([...remembered, ...this.driver.snapshot().approved])]);
+    // A one-use capability (`get_openid`) only if the user chose "Always": remembered, it is granted
+    // again for every use without asking. Without a store only those are kept, while the widget runs.
+    const { approved: held, singleUse } = this.driver.snapshot();
+    const kept = this.options.capabilityKey ? held.filter((cap) => !singleUse.includes(cap)) : [];
+    this.remember([...this.preApproved(), ...kept, ...always.filter((cap) => approved.includes(cap) && singleUse.includes(cap))]);
     this.options.events.capabilitiesRequested(undefined);
     this.refreshCapabilities();
     this.options.events.activity();
   }
 
-  answerOpenId(allow: boolean): void {
-    this.options.events.openIdRequested(false);
-    void this.driver.resolveOpenid(allow).catch((e: unknown) => this.log("error", String(e)));
-  }
-
-  setOpenIdAutoApproved(on: boolean): void {
-    this.driver.setOpenidAutoApproved(on);
-  }
-
-  /** Take capabilities away; the widget gets `update_capabilities` with the reduced list, and they are forgotten. */
+  /**
+   * Take capabilities away; the widget gets `update_capabilities` with the reduced list, and they are
+   * forgotten. "all": also what is granted without a prompt but not held now (a used up "Always").
+   */
   revoke(capabilities: string[] | "all"): void {
     const approved = this.driver.snapshot().approved;
-    const revoked = capabilities === "all" ? approved : capabilities;
+    const revoked = capabilities === "all" ? [...new Set([...approved, ...this.preApproved()])] : capabilities;
     this.driver.revokeCapabilities(revoked);
-    const remembered = this.options.capabilityKey ? loadCapabilities(this.options.capabilityKey) : [];
-    this.remember(remembered.filter((cap) => !revoked.includes(cap)));
+    this.remember(this.preApproved().filter((cap) => !revoked.includes(cap)));
     this.log("info", `revoked ${revoked.length} ${revoked.length === 1 ? "capability" : "capabilities"}`);
     this.refreshCapabilities();
   }
 
   /**
-   * "Add" in the driver panel.
+   * "Add" in the driver panel. For a single-use capability that means "always": granted again,
+   * without a prompt, each time the widget requests it.
    *
    * TODO-FINDING driver-grant-capability - the driver can only grant what a pending request contains (`approve_capabilities`), so a capability cannot be handed to a running widget. "Add" therefore pre-approves: the capability joins the auto-approved set and is granted without a prompt the next time the widget asks for it. A real grant needs a new driver method (widget-api-change checklist), and the protocol question whether a host may grant what was not requested.
    */
   grant(capability: string): void {
-    const remembered = this.options.capabilityKey ? loadCapabilities(this.options.capabilityKey) : this.autoApproved;
     this.denied.delete(capability);
-    this.remember([...new Set([...remembered, capability])], true);
+    this.remember([...this.preApproved(), capability]);
     this.log("info", `pre-approved ${capability}: granted without a prompt the next time the widget asks`);
     this.refreshCapabilities();
   }
@@ -273,26 +276,34 @@ export class WidgetRuntime {
     this.driver.uniffiDestroy();
   }
 
+  /** What is granted without a prompt besides the legacy capabilities: the store, or without one what is kept while the widget runs. */
+  private preApproved(): string[] {
+    return this.options.capabilityKey ? loadCapabilities(this.options.capabilityKey) : this.keptWhileRunning;
+  }
+
   /**
-   * Remember `capabilities` for this widget and have the driver grant them, and what a legacy
-   * widget gets anyway, without a prompt from now on. `keepInMemory`: also without a store key.
+   * Remember `capabilities` for this widget (in the store, or without one while it runs) and have
+   * the driver grant them, and what a legacy widget gets anyway, without a prompt from now on.
    */
-  private remember(capabilities: string[], keepInMemory = false): void {
+  private remember(capabilities: string[]): void {
     const { capabilityKey, widget } = this.options;
-    if (capabilityKey) saveCapabilities(capabilityKey, capabilities);
+    const unique = [...new Set(capabilities)];
+    if (capabilityKey) saveCapabilities(capabilityKey, unique);
+    else this.keptWhileRunning = unique;
     // What a legacy client gave a widget without asking; the compat wrapper requests these as capabilities.
-    this.autoApproved = [...(widget.legacy ? LEGACY_AUTO_APPROVED : []), ...(capabilityKey || keepInMemory ? capabilities : [])];
+    this.autoApproved = [...new Set([...(widget.legacy ? LEGACY_AUTO_APPROVED : []), ...unique])];
     this.driver.setAutoApproved(this.autoApproved);
   }
 
   private refreshCapabilities(): void {
-    const approved = this.driver.snapshot().approved;
+    const { approved, singleUse } = this.driver.snapshot();
     const old = this.data.capabilities;
     const next = {
       approved: [...approved].sort(),
       autoApproved: [...this.autoApproved].sort(),
       // TODO-FINDING driver-denied-list - `DriverSnapshot` has no denied list; this is what this host denied itself since the widget started, minus what was granted later.
       denied: [...this.denied].filter((cap) => !approved.includes(cap)).sort(),
+      singleUse: [...singleUse].sort(),
     };
     if (JSON.stringify(old) === JSON.stringify(next)) return;
     this.data = { ...this.data, capabilities: next };

@@ -26,15 +26,11 @@ type Message = { source: string; action: string; request_id: string; request?: u
 
 function setup() {
   const sent: Message[] = [];
-  const platform: hostDriver.WidgetHostPlatform & { openidAsked: number; navigated: string[] } = {
-    openidAsked: 0,
+  const platform: hostDriver.WidgetHostPlatform & { navigated: string[] } = {
     navigated: [],
     sendToWidget: (json) => void sent.push(JSON.parse(json)),
     onCapabilitiesRequested: (requested) => queueMicrotask(() => driver.approveCapabilities(requested)),
     onReady: () => {},
-    onOpenidRequested() {
-      this.openidAsked += 1;
-    },
     navigate(uri) {
       this.navigated.push(uri);
     },
@@ -160,8 +156,11 @@ describe("WidgetHostDriver through the JS bindings", () => {
     expect((denied.error as { message: string }).message).toBe("Missing capability: widget:org.matrix.mscXXXX.send_event.timeline:m.room.message");
   });
 
-  it("runs the two-phase OpenID flow and the client pushes", async () => {
-    const { platform, driver, ask, drain } = setup();
+  it("hands out an OpenID token for one use, and the client pushes", async () => {
+    const { driver, ask, drain } = setup();
+    const GET_OPENID = `widget:${X}get_openid`;
+    const PUSHES = [`host:${X}update_theme`, `host:${X}update_language`, `host:${X}update_visibility`];
+    const allowedOf = (messages: Message[]) => messages.filter((m) => m.action === `${CORE}update_capabilities`).map((m) => (m.request as { allowed: string[] }).allowed);
     // The host sends nothing before the widget's first action.
     driver.updateTheme({ name: "dark" });
     expect(drain()).toEqual([]);
@@ -169,24 +168,26 @@ describe("WidgetHostDriver through the JS bindings", () => {
     expect(((await ask(`${X}get_openid`)).error as { message: string }).message).toContain("get_openid");
     driver.updateTheme({ name: "dark" });
     expect(drain().filter((m) => m.source === "host")).toEqual([]);
-    await ask(`${CORE}request_capabilities`, { capabilities: ["widget:org.matrix.mscXXXX.get_openid", "host:org.matrix.mscXXXX.update_theme", "host:org.matrix.mscXXXX.update_language", "host:org.matrix.mscXXXX.update_visibility"] });
+    expect(driver.snapshot().singleUse).toEqual([GET_OPENID]);
+    await ask(`${CORE}request_capabilities`, { capabilities: [GET_OPENID, ...PUSHES] });
     await new Promise((r) => setTimeout(r, 0));
     drain();
 
-    const pending = await ask(`${X}get_openid`);
-    expect(pending).toEqual({ state: "request" });
-    expect(platform.openidAsked).toBe(1);
-    drain();
-    await driver.resolveOpenid(true);
-    const creds = drain().find((m) => m.action === `${X}forward_openid_credentials`)?.request as Record<string, unknown>;
-    expect(creds.state).toBe("allowed");
-    expect(creds.original_request_id).toBe("req-3");
-    expect(creds.matrix_server_name).toBe("matrix.example.org");
+    // The token at once (the body of /openid/request_token), then the update without the capability.
+    const token = await ask(`${X}get_openid`);
+    expect(Object.keys(token).sort()).toEqual(["access_token", "expires_in", "matrix_server_name", "token_type"]);
+    expect(token.matrix_server_name).toBe("matrix.example.org");
+    expect(allowedOf(drain())).toEqual([PUSHES]);
+    expect(((await ask(`${X}get_openid`)).error as { code: string }).code).toBe(`${CORE}missing_capability`);
 
-    driver.setOpenidAutoApproved(true);
-    expect((await ask(`${X}get_openid`)).state).toBe("allowed");
-    expect(platform.openidAsked).toBe(1);
+    // Without single use the grant stays.
+    driver.setSingleUse([]);
+    await ask(`${CORE}request_capabilities`, { capabilities: [GET_OPENID] });
+    await new Promise((r) => setTimeout(r, 0));
     drain();
+    expect((await ask(`${X}get_openid`)).access_token).not.toBe((await ask(`${X}get_openid`)).access_token);
+    expect(allowedOf(drain())).toEqual([]);
+    expect(driver.snapshot().approved).toEqual([...PUSHES, GET_OPENID]);
 
     driver.updateTheme({ name: "dark" });
     driver.updateLanguage("de");

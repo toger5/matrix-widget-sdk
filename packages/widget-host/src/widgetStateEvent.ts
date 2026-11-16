@@ -56,13 +56,13 @@ export const localWidgetKey = (event: Pick<StateEvent, "type" | "state_key">) =>
 
 /**
  * Capabilities granted to a legacy widget (behind the compat wrapper) without a prompt, because a
- * legacy client did not ask for them either: the facts it put into the widget URL, the theme,
- * language and visibility updates, and asking for an OpenID token (which still asks per request).
+ * legacy client did not ask for them either: the facts it put into the widget URL, and the theme,
+ * language and visibility updates. Not `get_openid`: a legacy client asked the user per token, and
+ * the single-use capability is how this host asks (the wrapper requests it per token).
  */
 export const LEGACY_AUTO_APPROVED = [
   "widget:org.matrix.mscXXXX.get_matrix_context",
   "widget:org.matrix.mscXXXX.get_client_context",
-  "widget:org.matrix.mscXXXX.get_openid",
   "host:org.matrix.mscXXXX.update_theme",
   "host:org.matrix.mscXXXX.update_language",
   "host:org.matrix.mscXXXX.update_visibility",

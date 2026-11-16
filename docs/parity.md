@@ -28,8 +28,8 @@ capabilities follow MSC4412 and
   have no MSC of their own yet use the placeholder `org.matrix.mscXXXX`: `send_event`,
   `send_to_device`, `get_openid`, `watch_turn_servers`, `unwatch_turn_servers`,
   `set_always_on_screen`, `get_matrix_context`, `get_client_context` and every host action
-  (`forward_event`, `update_state`, `forward_to_device`, `forward_openid_credentials`,
-  `update_turn_servers`, `update_theme`, `update_language`, `update_visibility`).
+  (`forward_event`, `update_state`, `forward_to_device`, `update_turn_servers`, `update_theme`,
+  `update_language`, `update_visibility`).
 * **Capabilities** are `source:action[.modifier][:data]`, one per action, where `action` is the
   wire name of the action, namespace included (`widget:org.matrix.msc2876.read_events.state:<type>`,
   `widget:org.matrix.mscXXXX.send_event.timeline:<type>`). The stable spelling
@@ -86,7 +86,7 @@ here" column, or `m`). Every wire name also has the stable alias `m.<name>`.
 | `org.matrix.msc2876.read_events` | `org.matrix.msc2876.read_events` | `widget:…read_events.timeline:<type>[#msgtype]` / `widget:…read_events.state:<type>[#key]` | ✅ (+ 🔨 `msgtype`, `since`, `room_ids`) | `backend.read_room_events` / `read_room_state` |
 | `org.matrix.msc3869.read_relations` | `org.matrix.msc3869.read_relations` | results filtered by `widget:…read_relations:<type>[#msgtype]` | 🔨 | `backend.relations` |
 | `send_to_device` (MSC3819) | `org.matrix.mscXXXX.send_to_device` | `widget:…send_to_device:<type>` | 🔨 | `backend.send_to_device_message` |
-| `get_openid` (MSC1960) | `org.matrix.mscXXXX.get_openid` | `widget:…get_openid` (plus the user prompt) | 🔨 two-phase, see §5 | `platform.on_openid_requested`, `backend.openid_token` |
+| `get_openid` (MSC1960) | `org.matrix.mscXXXX.get_openid` | `widget:…get_openid`, single use by default | 🔨 the token at once, no `state`; see §5 | `backend.openid_token`, `driver.set_single_use` |
 | `watch_turn_servers` / `unwatch_turn_servers` (MSC3846) | `org.matrix.mscXXXX.watch_turn_servers` / `org.matrix.mscXXXX.unwatch_turn_servers` | `host:…update_turn_servers` | 🔨 | `backend.subscribe_turn_servers` |
 | `org.matrix.msc4515.get_rtc_transports` | `org.matrix.msc4515.get_rtc_transports` | `widget:…get_rtc_transports` | 🔨 | `backend.rtc_transports` |
 | `org.matrix.msc3973.user_directory_search` | `org.matrix.msc3973.search_user_directory` | `widget:…search_user_directory` | 🔨 | `backend.search_user_directory` |
@@ -112,7 +112,7 @@ here" column, or `m`). Every wire name also has the stable alias `m.<name>`.
 | `send_event` | `org.matrix.mscXXXX.forward_event` | `host:…forward_event.timeline:<type>[#msgtype]` / `host:…forward_event.state:<type>[#key]` | ✅ | `RoomSink::on_timeline_events` |
 | `update_state` (MSC2762 update_state) | `org.matrix.mscXXXX.update_state` | `host:…update_state:<type>[#key]` | ✅ | `RoomSink::on_state_events` |
 | `send_to_device` | `org.matrix.mscXXXX.forward_to_device` | `host:…forward_to_device:<type>` | 🔨 | `ToDeviceSink::on_to_device_message` |
-| `openid_credentials` | `org.matrix.mscXXXX.forward_openid_credentials` | none (the late reply to `get_openid`) | 🔨 | `driver.resolve_openid` |
+| `openid_credentials` | – | – | ➖ removed: `get_openid` answers at once; the compat wrapper sends it to legacy widgets itself (§5) | – |
 | `update_turn_servers` | `org.matrix.mscXXXX.update_turn_servers` | `host:…update_turn_servers` | 🔨 | `TurnServerSink::on_turn_server` |
 | `theme_change` (MSC2873) | `org.matrix.mscXXXX.update_theme` | `host:…update_theme` | 🔨 | `driver.update_theme` |
 | `language_change` | `org.matrix.mscXXXX.update_language` | `host:…update_language` | 🔨 | `driver.update_language` |
@@ -137,7 +137,7 @@ nothing; that includes every matrix-widget-api capability string.
 | `widget:…read_relations:<type>[#msgtype]` | `ReadRelations` | `org.matrix.msc2762.receive.event:<type>` |
 | `widget:…read_room_account_data:<type>` | `ReadRoomAccountData` | `com.beeper.capabilities.receive.room_account_data:<type>` |
 | `widget:…send_to_device:<type>` | `SendToDevice` | `org.matrix.msc3819.send.to_device:<type>` |
-| `widget:…get_openid` | `GetOpenId` | none (always requested by the wrapper) |
+| `widget:…get_openid` | `GetOpenId` | none (requested by the wrapper per token, §5) |
 | `widget:…get_rtc_transports` | `GetRtcTransports` | `org.matrix.msc4515.rtc_transports` |
 | `widget:…search_user_directory` | `SearchUserDirectory` | `org.matrix.msc3973.user_directory_search` |
 | `widget:…get_media_config` | `GetMediaConfig` | `org.matrix.msc4039.upload_file` |
@@ -244,17 +244,31 @@ the method here has the same name and parameter order, so one adapter per Matrix
 
 ## 5. OpenID flow
 
-`get_openid` needs the `widget:…get_openid` capability and then has a user-consent step, so it is
-split like capabilities are:
+MSC1960 asks the user per token outside the capabilities: `get_openid` answers
+`{ state: "request" }`, and `openid_credentials` follows once the user decided. Here OpenID is a
+capability like any other ([`spec/patch/new/openid-capability.md`](../spec/patch/new/openid-capability.md)),
+granted for one token at a time ([`spec/patch/msc4412/capability-lifetimes.md`](../spec/patch/msc4412/capability-lifetimes.md)):
 
-* the driver calls `platform.on_openid_requested()` and answers the widget with
-  `{ state: "request" }`;
-* the platform decides and calls `driver.resolve_openid(allowed)` (async); on `true` the driver
-  fetches `backend.openid_token()` and sends `forward_openid_credentials { state: "allowed", original_request_id, ...token }`,
-  on `false` or on a backend error it sends `state: "blocked"`;
-* `driver.set_openid_auto_approved(true)` skips the prompt: the token is fetched inside the
-  request and returned as `{ state: "allowed", ... }` directly (legacy `OpenIDRequestState.Allowed`
-  in phase one).
+* the user's consent is the capability prompt: the widget requests `widget:…get_openid`, the
+  platform approves it like any other capability (`on_capabilities_requested`,
+  `approve_capabilities`);
+* while the widget holds it, `get_openid` returns the token at once, the body of
+  `/openid/request_token` (`OpenIdToken`, no `state`); without it, `missing_capability`;
+* the driver grants it for one use (`driver.set_single_use`, default `[GetOpenId]`): the request
+  that passes the check uses it up, whatever its result, and the driver sends
+  `update_capabilities` without it after the reply;
+* auto-approved (`driver.set_auto_approved`), it is granted again per request without asking: the
+  host's "always". The widget host does not remember a single-use approval otherwise, and its
+  capability store (version 2) dropped the `get_openid` that version 1 held for every widget;
+* a time limit is the platform's timer plus `driver.revoke_capabilities`; the driver has no clock;
+* the widget SDK's `request_openid_token` requests the capability when the widget does not hold
+  it, takes the next `update_capabilities` after the ack as the answer, then asks for the token
+  (`OpenIdBlocked` when refused); calls in between share the result;
+* legacy widgets: the compat wrapper no longer requests `get_openid` up front. It answers the
+  legacy `get_openid` itself: `state: "allowed"` with the token while it holds the capability,
+  else `state: "request"`, a request for the capability, and `openid_credentials` (`allowed` or
+  `blocked`) for every waiting request once the host decided. The widget host no longer grants
+  `get_openid` to legacy widgets without asking.
 
 ## 6. Not built, and why
 

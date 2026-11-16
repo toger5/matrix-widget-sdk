@@ -176,8 +176,7 @@ impl WireMessage {
     /// The body of the actions that carry credentials (OpenID tokens, LiveKit tokens, TURN
     /// passwords) is replaced by `"<redacted>"`, so that a log never contains a secret.
     pub fn to_log_json(&self) -> String {
-        const SECRET_ACTIONS: [&str; 4] =
-            ["get_openid", "forward_openid_credentials", "get_rtc_livekit_token", "update_turn_servers"];
+        const SECRET_ACTIONS: [&str; 3] = ["get_openid", "get_rtc_livekit_token", "update_turn_servers"];
         let name = self.action.rsplit('.').next().unwrap_or_default();
         if !SECRET_ACTIONS.contains(&name) {
             return self.to_json();
@@ -393,7 +392,7 @@ mod tests {
         assert_eq!(plain.to_log_json(), plain.to_json());
 
         let request = WireMessage::request(Source::Widget, "org.matrix.mscXXXX.get_openid", "2", json!({}));
-        let token = request.response_to(json!({"state": "allowed", "access_token": "secret"}));
+        let token = request.response_to(json!({"access_token": "secret", "token_type": "Bearer"}));
         let logged = token.to_log_json();
         assert!(!logged.contains("secret"), "{logged}");
         assert!(logged.contains("get_openid") && logged.contains("<redacted>"), "{logged}");

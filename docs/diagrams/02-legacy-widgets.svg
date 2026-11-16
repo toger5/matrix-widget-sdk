@@ -142,12 +142,12 @@
   <text x="626" y="714" class="m">toWidget capabilities</text>
   <text x="626" y="730" class="m">  → request_capabilities</text>
   <text x="626" y="746" class="s">      legacy names expanded, plus the</text>
-  <text x="626" y="760" class="s">      implicit get_openid, update_theme, …</text>
+  <text x="626" y="760" class="s">      implicit update_theme, …</text>
   <text x="626" y="776" class="m">  ← update_capabilities</text>
   <text x="626" y="792" class="s">      given to the widget as legacy</text>
   <text x="626" y="806" class="s">      notify_capabilities; no timeline:&lt;room&gt;</text>
-  <text x="626" y="828" class="m">supported_api_versions</text>
-  <text x="626" y="844" class="b">answered locally;</text>
+  <text x="626" y="828" class="m">supported_api_versions, get_openid</text>
+  <text x="626" y="844" class="b">answered by the wrapper;</text>
   <text x="626" y="862" class="m">notify_ready <tspan >sent once</tspan></text>
 
   <rect x="900" y="640" width="270" height="236" rx="10" fill="#ffffff" stroke="#059669"/>

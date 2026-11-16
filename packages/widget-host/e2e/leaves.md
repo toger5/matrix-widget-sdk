@@ -83,12 +83,13 @@ While the DevBackend is active they are the DevBackendView. "Leave DevBackend" i
 | `widgetview/prompt` | `widget.spec.ts` › capability prompt: a section's checkbox checks its rows; approving nothing is not offered |
 | `widgetview/prompt-long` | `widget.spec.ts` › capability prompt: deny all, then approve a subset (the test widget's 33 capabilities; it asks for none this app does not know) |
 | `widgetview/prompt-merged` | `widget.spec.ts` › a request while the prompt is open joins it (one "New" row; the leaf's progress bar is drawn full, the screenshot ends animations) |
+| `widgetview/prompt-openid` | `widget.spec.ts` › OpenID is a one-use capability (the prompt of the second token, "Once" by default; "Always" and the disabled choice: › OpenID "Always": every next token without the card) |
 | `devtools/one-panel`, `devtools/bar-top`, `devtools/bar-bottom`, `devtools/bar-left`, `devtools/bar-right` | `devtools.spec.ts` › the ⋯ button of the tab opens the bar with the messages panel; the bar docks top, bottom, left and right |
 | `devtools/bottom-panel` | `devtools.spec.ts` › the dev tools are resized with the separator: keyboard and drag |
 | `devtools/two-panels`, `devtools/three-panels`, `devtools/fourth-panel`, `devtools/side-panels` | `devtools.spec.ts` › panels open next to each other; the fourth closes the oldest; docked to a side they stack |
 | `devtools/messages` | `devtools.spec.ts` › messages panel |
 | `devtools/stats`, `devtools/stats-direction` | `devtools.spec.ts` › stats panel |
-| `devtools/driver` | `devtools.spec.ts` › driver panel: revoke one capability and all (confirm modal), add a capability |
+| `devtools/driver` | `devtools.spec.ts` › driver panel: revoke one capability and all (confirm modal), add a capability (the OpenID grant of the start is marked "once"; "Always" under auto-approved: `widget.spec.ts` › OpenID "Always": every next token without the card) |
 | `devtools/console` | `devtools.spec.ts` › console panel |
 | `pip/idle-1`, `pip/hover` | `widgetMove.spec.ts` › always on screen |
 | `pip/idle-4` | `pip.spec.ts` › four always-on-screen widgets |

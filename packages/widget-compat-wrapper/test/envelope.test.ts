@@ -66,7 +66,6 @@ describe("envelope translation", () => {
       ["notify_capabilities", "org.matrix.msc4412.update_capabilities"],
       ["send_event", "org.matrix.mscXXXX.forward_event"],
       ["send_to_device", "org.matrix.mscXXXX.forward_to_device"],
-      ["openid_credentials", "org.matrix.mscXXXX.forward_openid_credentials"],
       ["update_state", "org.matrix.mscXXXX.update_state"],
       ["update_turn_servers", "org.matrix.mscXXXX.update_turn_servers"],
       ["theme_change", "org.matrix.mscXXXX.update_theme"],
@@ -77,6 +76,8 @@ describe("envelope translation", () => {
       expect(toLegacyAction(next, "host")).toBe(legacy);
       expect(toNewAction(legacy, "host")).toBe(next);
     }
+    // The host has no action for the legacy `openid_credentials` any more: the bridge sends it itself.
+    expect(toNewAction("openid_credentials", "host")).toBe("openid_credentials");
   });
 
   it("renames by direction: send_event means sending for the widget and forwarding for the host", () => {

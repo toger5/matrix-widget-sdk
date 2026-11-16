@@ -50,6 +50,7 @@ export const UPDATE_CAPABILITIES_ACTION = `${MSC4412}.update_capabilities`;
 /** The base error codes of MSC4412. */
 export const ERROR_UNKNOWN = `${MSC4412}.unknown`;
 export const ERROR_INVALID_REQUEST = `${MSC4412}.invalid_request`;
+export const ERROR_MISSING_CAPABILITY = `${MSC4412}.missing_capability`;
 
 /**
  * Legacy action names that differ from the host's, per source (who sends the action).
@@ -83,7 +84,6 @@ const LEGACY_TO_NEW: Record<Source, Record<string, string>> = {
     notify_capabilities: UPDATE_CAPABILITIES_ACTION,
     send_event: `${PLACEHOLDER}.forward_event`,
     send_to_device: `${PLACEHOLDER}.forward_to_device`,
-    openid_credentials: `${PLACEHOLDER}.forward_openid_credentials`,
     update_state: `${PLACEHOLDER}.update_state`,
     update_turn_servers: `${PLACEHOLDER}.update_turn_servers`,
     theme_change: `${PLACEHOLDER}.update_theme`,

@@ -156,6 +156,8 @@ export const CAP_RISKS = {
   "widget:get_openid": "Proves your identity to other servers",
 };
 export const OPENID_PHRASE = "prove who you are to other servers";
+/** What the host grants for one use (the driver's `single_use`): its row offers "Once" / "Always". */
+export const CAP_ONE_USE = ["widget:get_openid"];
 
 const q = (type) => `“${type}”`;
 /** The label of each capability; `t` is the event type of its data. */
@@ -206,6 +208,8 @@ export const CAP_REQUESTS = {
   ],
   /** A second request while the short one is open. */
   more: [`widget:${X}.send_event.state:m.room.topic`, `widget:${X}.get_openid`],
+  /** A widget that wants an OpenID token. */
+  openid: [`widget:${X}.get_openid`],
   long: [
     `widget:${X}.send_event.timeline:m.room.message`,
     `widget:org.matrix.msc2876.read_events.timeline:m.room.message`,

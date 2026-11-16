@@ -506,8 +506,10 @@ impl WidgetApi {
         })
     }
 
-    /// Resolves with `{ access_token, token_type, matrix_server_name, expires_in }` once the host
-    /// (and the user) allowed it; rejects when blocked. (MSC1960)
+    /// Resolves with `{ access_token, token_type, matrix_server_name, expires_in }` (MSC1960).
+    /// Without `widget:…get_openid` it requests the capability first; the host usually asks the
+    /// user and grants it for this one token. Rejects when refused. Calls while one is in progress
+    /// share its token.
     #[wasm_bindgen(js_name = requestOpenIdToken)]
     pub fn request_openid_token(&self) -> Promise {
         promise(self.client.request_openid_token())

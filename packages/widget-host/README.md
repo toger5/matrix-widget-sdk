@@ -22,7 +22,7 @@ components yet.
 The app is built as MVVM from the design in [`appDesign.md`](appDesign.md) (mockups: `design/index.html`). How, and why the widget iframes live outside the UI tree, is in [`implementationPlan.md`](implementationPlan.md); open questions are in [`implementation_findings.md`](implementation_findings.md). A UI change is made in a fixed order (design document, view model, mockups, views with stories, app logic, tests), written down for agents in [`.claude/agents/widget-host-ui.md`](../../.claude/agents/widget-host-ui.md).
 
 - `src/appViewModel.ts` is the view model: one serialisable `AppViewModel`, the functions that derive from it, and `AppIntent`, the list of everything a user can ask for.
-- `src/app/` is the controller and the runtime. `controller.ts` holds the view model in a store, turns intents into changes and effects, and feeds runtime events back. `layout.ts` has the pure panel/tab transitions. `runtime/widgetRuntime.ts` is one running widget: its `WidgetHostDriver`, the message pump to its iframe, the capability and OpenID answers and the data of its dev tools. `AppRoot.tsx` connects both to the views and renders the widget iframes. `testHook.ts` is `window.widgetHost`.
+- `src/app/` is the controller and the runtime. `controller.ts` holds the view model in a store, turns intents into changes and effects, and feeds runtime events back. `layout.ts` has the pure panel/tab transitions. `runtime/widgetRuntime.ts` is one running widget: its `WidgetHostDriver`, the message pump to its iframe, the capability answers and the data of its dev tools. `AppRoot.tsx` connects both to the views and renders the widget iframes. `testHook.ts` is `window.widgetHost`.
 - `src/views/` holds the views, one folder per area (`app`, `sidepanel`, `devbackend`, `rooms`, `widget`, `pip`). A view renders a slice of the view model and sends intents; it imports no session, no bindings and nothing from `src/app`. Rules: [`src/views/README.md`](src/views/README.md). Each view has stories (`npm run storybook`).
 - `src/styles/app.css` is the stylesheet: a list, in cascade layers, of the design rules `design/css/*.css` (the same files style the mockups through `design/mock.css`) and the app-only rules next to the views (`src/views/<area>/*.css`). The rules for the files are in [`src/views/README.md`](src/views/README.md).
 - `src/session.ts` is what the app needs from a Matrix client, as interfaces (login, several stored logins, room list, the widget state events of a room, a backend per room, account and room details, a room's timeline, suspend/resume, device verification). Its `sessions` export picks the SDK and loads it lazily.
@@ -96,12 +96,20 @@ hands it to the driver of each widget of that room like any other `MatrixBackend
   For legacy widgets the host calls the driver's `setAutoApproved` with what a legacy client
   gave a widget without asking: the `get_matrix_context` and `get_client_context` capabilities the
   compat wrapper needs to template the URL (a legacy client handed the same facts over as URL
-  parameters), plus `get_openid` and the `update_theme` / `update_language` / `update_visibility`
+  parameters), plus the `update_theme` / `update_language` / `update_visibility`
   subscriptions the wrapper always requests. The driver grants those without consulting the host;
   the legacy widget's own capabilities are still prompted for, so a wrapped widget prompts once,
   like a new widget. The prompt lists the **new** capability names: the wrapper has already
   translated the legacy ones. The **Driver** panel lists the auto-approved set.
-  **auto-approve OpenID tokens** hands tokens out without the Allow / Block prompt.
+- **OpenID**: a token is the capability `get_openid`, asked for in the same prompt and granted for
+  one token: the widget's request uses it up, and the next token is asked about again (the test
+  widget's `get_openid` button requests it by itself; for a legacy widget the compat wrapper does).
+  Its row in the prompt has **Once** (the default) / **Always**: "Always" puts it in the
+  auto-approved set, so every next token is granted without the card; it is remembered with the
+  other approvals (else it lasts while the widget runs). The **Driver** panel marks a held one-use
+  grant "once". **Auto-approve capabilities** grants every token.
+  Remembered capabilities are stored per account, room and widget (`localStorage`,
+  `widget_host_capabilities_v2 …`); the entries of version 1 lose their `get_openid` on start.
 - **Dev tools** (the side panel, opened with the cone button of the left bar; shown while dev tools
   are enabled or the DevBackend is active; it never switches accounts): the State and Timeline of
   one room at a time, with a dropdown to switch rooms.
@@ -129,7 +137,7 @@ hands it to the driver of each widget of that room like any other `MatrixBackend
     sends are echoed back the same way. **Scheduled** lists the delayed events (MSC4157) with
     send now / restart / cancel; nothing fires by itself.
   - **Client Backend Tool** (below the room box, shared by all mocked rooms; one tool box is open
-    at a time): **Widget host behavior** (auto-approve capabilities, auto-approve OpenID tokens,
+    at a time): **Widget host behavior** (auto-approve capabilities, OpenID tokens included,
     remember capabilities, and **fail sends**: every `send_event` and `upload_file` from a widget
     fails with an error response) and **To-device messages** (MSC3819): send one to the widgets,
     and read what widgets sent.
@@ -169,7 +177,8 @@ hands it to the driver of each widget of that room like any other `MatrixBackend
   capabilities it has not been given before are prompted for. Logging out forgets them. In the
   DevBackend nothing is remembered unless "remember capabilities" is on.
 - **Revoke** (driver panel): the widget gets `update_capabilities` with the reduced list, and
-  what was remembered for it is forgotten.
+  what was remembered for it is forgotten ("Revoke all": also what is auto-approved without being
+  held now, such as a used up "Always").
 
 ### Configuration
 

@@ -74,12 +74,11 @@
   <text x="501" y="549" class="m">send_to_device · forward_to_device</text>
   <text x="501" y="565" class="s" style="font-size:10.5px">widget:…send_to_device:&lt;t&gt; · host:…forward_to_device:&lt;t&gt;</text>
   <rect x="857" y="554" width="36" height="16" rx="8" fill="#2563eb"/><text x="875" y="566" class="chip" text-anchor="middle" style="font-size:9.5px">H→W</text>
-  <rect x="817" y="508" width="36" height="16" rx="8" fill="#7c3aed"/><text x="835" y="520" class="chip" text-anchor="middle" style="font-size:9.5px">W→H</text>
-  <rect x="491" y="578" width="416" height="40" rx="6" fill="#ffffff" stroke="#d1d5db"/>
-  <text x="501" y="595" class="m">get_openid · forward_openid_credentials</text>
-  <text x="501" y="611" class="s">widget:…get_openid · the user still consents</text>
-  <rect x="857" y="600" width="36" height="16" rx="8" fill="#2563eb"/><text x="875" y="612" class="chip" text-anchor="middle" style="font-size:9.5px">H→W</text>
   <rect x="817" y="554" width="36" height="16" rx="8" fill="#7c3aed"/><text x="835" y="566" class="chip" text-anchor="middle" style="font-size:9.5px">W→H</text>
+  <rect x="491" y="578" width="416" height="40" rx="6" fill="#ffffff" stroke="#d1d5db"/>
+  <text x="501" y="595" class="m">get_openid</text>
+  <text x="501" y="611" class="s">widget:…get_openid · granted for one token at a time</text>
+  <rect x="857" y="600" width="36" height="16" rx="8" fill="#7c3aed"/><text x="875" y="612" class="chip" text-anchor="middle" style="font-size:9.5px">W→H</text>
   <rect x="942" y="164" width="416" height="40" rx="6" fill="#ffffff" stroke="#d1d5db"/>
   <text x="952" y="181" class="m">get_matrix_context</text>
   <text x="952" y="197" class="s">widget:…get_matrix_context · replaces URL templating</text>
@@ -165,4 +164,5 @@
   <text x="46" y="754" class="m">supported_api_versions</text><text x="226" y="754" class="s">→ no versions: namespaces + capabilities</text>
   <text x="520" y="754" class="m">toWidget capabilities</text><text x="690" y="754" class="s">→ widget-initiated request_capabilities</text>
   <text x="1010" y="754" class="m">URL $templates</text><text x="1125" y="754" class="s">→ get_matrix_context / get_client_context</text>
+  <text x="1400" y="754" class="m">openid_credentials</text><text x="1545" y="754" class="s">→ a get_openid grant per token</text>
 </svg>

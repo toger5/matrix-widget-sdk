@@ -8,7 +8,7 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { JsSdkBackend } from "../src/matrix_session/js/backend/jsSdkBackend";
 import { describeBackendContract } from "./backendContract";
-import { X, behindDriver, tick } from "./harness";
+import { CORE, X, behindDriver, tick } from "./harness";
 
 const ROOM = "!room:example.org";
 const USER = "@alice:example.org";
@@ -254,6 +254,42 @@ describe("JsSdkBackend behind the driver", () => {
       { uris: ["turn:first"], username: "u1", password: "p1" },
       { uris: ["turn:second"], username: "u2", password: "p2" },
     ]);
+  });
+
+  it("fetches one OpenID token per one-use grant, also for two requests in flight", async () => {
+    // The homeserver answers only when the test says so: both requests are in flight at once.
+    let answer: (token: unknown) => void = () => {};
+    let fetched = 0;
+    const getOpenIdToken = () => {
+      fetched += 1;
+      return new Promise((resolve) => (answer = resolve));
+    };
+    const { driver, grant, sent } = await setup({ getOpenIdToken });
+    const GET_OPENID = `widget:${X}get_openid`;
+    await grant([GET_OPENID, `widget:${X}get_matrix_context`]);
+    sent.splice(0);
+    const request = (id: string) => driver.handleMessageFromWidget(JSON.stringify({ source: "widget", request_id: id, action: `${X}get_openid`, request: {} }));
+    const replyTo = (id: string) => sent.find((m) => m.request_id === id && m.response !== undefined)?.response as Record<string, unknown> | undefined;
+
+    const first = request("o1");
+    await tick();
+    expect(fetched).toBe(1);
+    // The first request used the grant up when it passed the check, before the token exists.
+    expect(driver.snapshot().approved).toEqual([`widget:${X}get_matrix_context`]);
+    await request("o2");
+    await tick();
+    expect((replyTo("o2")?.error as { code: string }).code).toBe(`${CORE}missing_capability`);
+    expect(replyTo("o1")).toBeUndefined();
+    expect(fetched).toBe(1);
+
+    answer({ access_token: "tok", token_type: "Bearer", matrix_server_name: "example.org", expires_in: 3600 });
+    await first;
+    await tick();
+    expect(replyTo("o1")).toEqual({ access_token: "tok", token_type: "Bearer", matrix_server_name: "example.org", expires_in: 3600 });
+    // The update without the capability follows the token, and no other update was sent.
+    const order = sent.filter((m) => m.request_id === "o1" || m.action === `${CORE}update_capabilities`).map((m) => m.action);
+    expect(order).toEqual([`${X}get_openid`, `${CORE}update_capabilities`]);
+    expect(sent.find((m) => m.action === `${CORE}update_capabilities`)?.request).toEqual({ allowed: [`widget:${X}get_matrix_context`] });
   });
 
   it("stops listening to the client when it is disposed", async () => {

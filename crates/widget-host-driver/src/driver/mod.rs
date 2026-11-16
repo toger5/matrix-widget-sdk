@@ -9,8 +9,8 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex, MutexGuard, Weak};
 
 use widget_actions::{
-    Action, ActionError, Capability, ForwardOpenIdCredentialsRequest, HostRequest, JsonValue, MessageKind,
-    UpdateCapabilitiesRequest, UpdateLanguageRequest, UpdateVisibilityRequest, WidgetError, WireMessage,
+    Action, ActionError, Capability, CapabilitySet, HostRequest, JsonValue, MessageKind, UpdateCapabilitiesRequest,
+    UpdateLanguageRequest, UpdateVisibilityRequest, WidgetError, WireMessage,
 };
 use widget_matrix_backend::MatrixBackend;
 
@@ -35,16 +35,14 @@ pub struct DriverSnapshot {
     /// Capabilities the widget requested that wait for [`WidgetHostDriver::approve_capabilities`].
     /// Without those in `approved` and `auto_approved`, this is the open question. It can hold
     /// more than the platform was asked about: a pending capability that
-    /// [`WidgetHostDriver::revoke_capabilities`] or [`WidgetHostDriver::set_auto_approved`] took out
-    /// of those lists after the question was asked (it is granted only if the answer approves it).
+    /// [`WidgetHostDriver::revoke_capabilities`], [`WidgetHostDriver::set_auto_approved`] or a use
+    /// ([`WidgetHostDriver::set_single_use`]) took out of those lists after the question was asked
+    /// (it is granted only if the answer approves it).
     pub pending_requested: Vec<Capability>,
     /// Capabilities granted without asking the platform, see [`WidgetHostDriver::set_auto_approved`].
     pub auto_approved: Vec<Capability>,
-    /// Request ids of the `get_openid` requests that wait for [`WidgetHostDriver::resolve_openid`].
-    pub pending_openid_requests: Vec<String>,
-    /// Whether OpenID tokens are handed out without asking, see
-    /// [`WidgetHostDriver::set_openid_auto_approved`].
-    pub openid_auto_approved: bool,
+    /// Capabilities granted for one use only, see [`WidgetHostDriver::set_single_use`].
+    pub single_use: Vec<Capability>,
 }
 
 #[derive(Debug, Default)]
@@ -56,13 +54,26 @@ struct State {
     /// The capabilities of the open `request_capabilities`, if there is one.
     pending_requested: Option<Vec<Capability>>,
     auto_approved: Vec<Capability>,
-    pending_openid: Vec<String>,
-    openid_auto_approved: bool,
+    single_use: Vec<Capability>,
     /// Requests the driver sent to the widget that the widget has not acknowledged yet.
     awaiting_ack: HashMap<String, HostRequest>,
 }
 
 impl State {
+    /// A use of `capability` by a widget request: `None` if the widget does not hold it. A
+    /// single-use capability is taken away here, under the same lock as the check, so that two
+    /// requests cannot both use it; `Some(true)` says so.
+    fn use_capability(&mut self, capability: &Capability) -> Option<bool> {
+        if !self.approved.has(capability) {
+            return None;
+        }
+        let single_use = self.single_use.contains(capability);
+        if single_use {
+            self.approved.retain(|held| held != capability);
+        }
+        Some(single_use)
+    }
+
     /// The open question: the pending capabilities without those the widget holds already and
     /// those granted without asking. What [`WidgetHostPlatform::on_capabilities_requested`] gets
     /// when a request adds to it.
@@ -104,7 +115,7 @@ impl WidgetHostDriver {
         Arc::new_cyclic(|this| Self {
             backend,
             platform,
-            state: Mutex::new(State::default()),
+            state: Mutex::new(State { single_use: vec![Capability::GetOpenId], ..State::default() }),
             room_subscription: SubscriptionSlot::default(),
             to_device_subscription: SubscriptionSlot::default(),
             turn_subscription: SubscriptionSlot::default(),
@@ -218,41 +229,35 @@ impl WidgetHostDriver {
         self.resubscribe();
     }
 
-    /// Hand out OpenID tokens without asking the platform.
+    /// Set the capabilities that are granted for one use only. Default: `widget:…get_openid`.
     ///
-    /// `get_openid` is then answered at once with `state: allowed` and a token, or with
-    /// `state: blocked` if the backend fails. Off by default; affects only future requests.
-    pub fn set_openid_auto_approved(&self, auto_approved: bool) {
-        self.lock().openid_auto_approved = auto_approved;
-    }
-
-    /// Answer every `get_openid` reported through [`WidgetHostPlatform::on_openid_requested`].
+    /// A widget request that needs one of them as a whole (the rule of
+    /// `access::required_capability`: `get_openid`, `navigate`, `upload_file`, ...) uses it up. The
+    /// driver takes the capability away when the request passes the check, whatever the request's
+    /// result, and right after the reply sends `update_capabilities` with what the widget still
+    /// holds (the lifetimes proposed for MSC4412 in `spec/patch/msc4412/capability-lifetimes.md`).
+    /// For the next use the widget requests the capability again. It does not know in advance
+    /// that a grant is limited.
     ///
-    /// With `allowed`, the driver fetches one token from the backend. Each pending request then
-    /// gets `forward_openid_credentials`: `allowed` with the token, or `blocked` if refused or if the
-    /// backend failed. Does nothing if no request is pending.
-    pub async fn resolve_openid(&self, allowed: bool) {
-        let pending = std::mem::take(&mut self.lock().pending_openid);
-        if pending.is_empty() {
-            return;
+    /// * Not used up: host capabilities (`host:…`, the host's pushes; they are dropped from
+    ///   `capabilities`) and the capabilities a request is checked against by its body
+    ///   (`send_event.*`, `read_events.*`, ...).
+    /// * A single-use capability that is also auto-approved ([`set_auto_approved`](Self::set_auto_approved))
+    ///   is granted again, without asking, each time the widget requests it: that is how a client
+    ///   remembers "always" for it. Do not remember an approval of a single-use capability
+    ///   otherwise, or it stops being single use.
+    /// * The driver has no clock. To limit a grant in time, start a timer when the capability is
+    ///   approved and call [`revoke_capabilities`](Self::revoke_capabilities) when it fires.
+    ///
+    /// Replaces the previous list. A capability the widget holds already becomes single use too:
+    /// its next use ends it.
+    pub fn set_single_use(&self, capabilities: Vec<Capability>) {
+        let (widget, host): (Vec<_>, Vec<_>) =
+            capabilities.into_iter().partition(|c| !c.to_unstable_string().starts_with("host:"));
+        if !host.is_empty() {
+            log::warn!("ignored {} host capabilities for single use: a push does not use a capability up", host.len());
         }
-        log::info!("openid {} for {} pending request(s)", if allowed { "allowed" } else { "refused" }, pending.len());
-        let token = if allowed {
-            self.backend
-                .openid_token()
-                .await
-                .inspect_err(|e| log::warn!("the backend gave no openid token, answering `blocked`: {}", e.reason()))
-                .ok()
-        } else {
-            None
-        };
-        for original_request_id in pending {
-            let request = match &token {
-                Some(token) => ForwardOpenIdCredentialsRequest::allowed(original_request_id, token.clone()),
-                None => ForwardOpenIdCredentialsRequest::blocked(original_request_id),
-            };
-            self.send_request(HostRequest::ForwardOpenIdCredentials { request });
-        }
+        self.lock().single_use = widget;
     }
 
     /// Tell the widget that the client's theme changed (`update_theme`, MSC2873).
@@ -283,8 +288,7 @@ impl WidgetHostDriver {
             approved: s.approved.clone(),
             pending_requested: s.pending_requested.clone().unwrap_or_default(),
             auto_approved: s.auto_approved.clone(),
-            pending_openid_requests: s.pending_openid.clone(),
-            openid_auto_approved: s.openid_auto_approved,
+            single_use: s.single_use.clone(),
         }
     }
 }

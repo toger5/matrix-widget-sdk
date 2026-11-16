@@ -26,7 +26,6 @@ impl WidgetHostPlatform for Platform {
     fn send_to_widget(&self, json: String) { /* iframe.postMessage(json, widgetOrigin) */ }
     fn on_capabilities_requested(&self, requested: Vec<Capability>) { /* show (or update) the prompt */ }
     fn on_ready(&self) { /* hide the loading state */ }
-    fn on_openid_requested(&self) { /* prompt, then driver.resolve_openid(allowed) */ }
     // navigate, set_always_on_screen, client_id / client_theme / client_language
 }
 
@@ -56,6 +55,12 @@ client does not push events anywhere.
   (`docs/spec-appendix/capability-naming-proposal.md`); the wrapper translates the legacy ones.
 * Client pushes: `update_theme`, `update_language`, `update_visibility`. Each is sent only if
   the widget holds its `host:…` capability.
+* Limited grants: `set_single_use(capabilities)` (default: `widget:…get_openid`) makes a request
+  use its capability up. The driver takes it away when the request passes the check and sends
+  `update_capabilities` without it after the reply, so every OpenID token is a decision of the
+  user. Do not remember such an approval, unless the user chose "always": then pass it to
+  `set_auto_approved`, and it is granted again per request without asking. A time limit is a
+  timer of the client that calls `revoke_capabilities`.
 
 ## Which widgets a room has: the state event parser
 

@@ -30,9 +30,12 @@ pub trait WidgetHostPlatform: Send + Sync {
     /// approval for a few seconds after the question appeared or changed, so that the widget
     /// cannot change what the user approves just before the click.
     /// Clients should remember what was approved, so that the user is not asked again every time
-    /// the widget starts (pass it to [`WidgetHostDriver::set_auto_approved`]).
+    /// the widget starts (pass it to [`WidgetHostDriver::set_auto_approved`]), except a
+    /// single-use capability ([`WidgetHostDriver::set_single_use`], `get_openid` by default): it
+    /// is asked about for every use, unless the user chose to allow it always.
     ///
     /// [`WidgetHostDriver::set_auto_approved`]: crate::WidgetHostDriver::set_auto_approved
+    /// [`WidgetHostDriver::set_single_use`]: crate::WidgetHostDriver::set_single_use
     ///
     /// [`WidgetHostDriver::approve_capabilities`]: crate::WidgetHostDriver::approve_capabilities
     fn on_capabilities_requested(&self, requested: Vec<Capability>);
@@ -44,15 +47,6 @@ pub trait WidgetHostPlatform: Send + Sync {
     /// [`NOTIFY_READY_TIMEOUT_MS`](widget_actions::NOTIFY_READY_TIMEOUT_MS)), the client should
     /// show an error instead.
     fn on_ready(&self);
-
-    /// The widget asked for an OpenID token, and the driver told it that the user is being asked.
-    ///
-    /// Ask the user, then call [`WidgetHostDriver::resolve_openid`]. Not called while
-    /// [`WidgetHostDriver::set_openid_auto_approved`] is on.
-    ///
-    /// [`WidgetHostDriver::resolve_openid`]: crate::WidgetHostDriver::resolve_openid
-    /// [`WidgetHostDriver::set_openid_auto_approved`]: crate::WidgetHostDriver::set_openid_auto_approved
-    fn on_openid_requested(&self);
 
     /// Open `uri` (the `navigate` action). The driver has checked that it is a
     /// `https://matrix.to/#/` permalink. An error is passed on to the widget.

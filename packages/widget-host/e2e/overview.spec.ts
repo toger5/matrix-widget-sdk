@@ -48,10 +48,10 @@ const LOCAL: StateEvent = { type: "m.widget", state_key: "proto", content: { nam
 const LOCAL_KEY = "local:m.widget/proto";
 /** The state keys of the widget state events of the mocked room. */
 const roomWidgetKeys = async (host: Host) => ((await host.store(LAB)).state as { eventType: string; stateKey: string }[]).filter((e) => e.eventType === "m.widget").map((e) => e.stateKey);
-/** The keys of the remembered capabilities of the lab room (`widget_host_capabilities_v1 <user> <room> <widget>`). */
+/** The keys of the remembered capabilities of the lab room (`widget_host_capabilities_v2 <user> <room> <widget>`). */
 const rememberedKeys = (host: Host) =>
-  host.page.evaluate((room) => Object.keys(localStorage).flatMap((key) => (key.startsWith(`widget_host_capabilities_v1 @alice:dev.local ${room} `) ? [key.split(" ")[3]] : [])).sort(), LAB);
-const forgetRemembered = (host: Host) => host.page.evaluate(() => Object.keys(localStorage).forEach((key) => key.startsWith("widget_host_capabilities_v1 ") && localStorage.removeItem(key)));
+  host.page.evaluate((room) => Object.keys(localStorage).flatMap((key) => (key.startsWith(`widget_host_capabilities_v2 @alice:dev.local ${room} `) ? [key.split(" ")[3]] : [])).sort(), LAB);
+const forgetRemembered = (host: Host) => host.page.evaluate(() => Object.keys(localStorage).forEach((key) => key.startsWith("widget_host_capabilities_v2 ") && localStorage.removeItem(key)));
 
 test("with dev tools enabled: “Add widget” and the local widgets after the room's; a DevBackend room has no “Copy to DevBackend” card", async ({ host }) => {
   // A seed ends a panel on a widget tab (`active`) or on the room name (`overview`), not both.

@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, type CSSProperties, type KeyboardEvent, type ReactNode } from "react";
 
 import { approveBlockedUntil, CAPABILITY_APPROVE_DELAY_MS, type CapabilityPromptViewModel, type PanelId, type TabId, type WidgetDevToolsLayout, type WidgetInstanceViewModel } from "../../appViewModel";
 import { useDispatch } from "../env";
@@ -24,6 +24,8 @@ export interface WidgetViewProps {
   initialStatsSeries?: StatsSeries;
   /** Story only: the capabilities the permission card starts with unchecked. */
   initialUnchecked?: string[];
+  /** Story only: the one-use capabilities the permission card starts with set to "Always". */
+  initialAlways?: string[];
 }
 
 /**
@@ -33,21 +35,21 @@ export interface WidgetViewProps {
  * The slot is always rendered (the iframe must never lose its place); a state that the user has
  * to see or answer is a layer that covers it.
  */
-export function WidgetView({ widget, devTools, compact = false, tab, standIn, initialExpandedMessage, initialStatsSeries, initialUnchecked }: WidgetViewProps) {
+export function WidgetView({ widget, devTools, compact = false, tab, standIn, initialExpandedMessage, initialStatsSeries, initialUnchecked, initialAlways }: WidgetViewProps) {
   const dev = devTools?.open ? devTools : undefined;
   return (
     <div className={`wv dock-${dev?.dock ?? "none"}`} data-testid="widget-view" data-widget-id={widget.id}>
       {dev && <DevTools widget={widget} layout={dev} initialExpandedMessage={initialExpandedMessage} initialStatsSeries={initialStatsSeries} />}
       <div className="wv-widget">
         <WidgetSlot widgetId={widget.id}>{standIn}</WidgetSlot>
-        <WidgetState widget={widget} compact={compact} tab={tab} initialUnchecked={initialUnchecked} />
+        <WidgetState widget={widget} compact={compact} tab={tab} initialUnchecked={initialUnchecked} initialAlways={initialAlways} />
       </div>
     </div>
   );
 }
 
-/** What covers the widget: failed, a prompt (capabilities first, then OpenID) or loading. Nothing while it simply runs. */
-function WidgetState({ widget, compact, tab, initialUnchecked }: Pick<WidgetViewProps, "widget" | "compact" | "tab" | "initialUnchecked">) {
+/** What covers the widget: failed, the capability prompt or loading. Nothing while it simply runs. */
+function WidgetState({ widget, compact, tab, initialUnchecked, initialAlways }: Pick<WidgetViewProps, "widget" | "compact" | "tab" | "initialUnchecked" | "initialAlways">) {
   const dispatch = useDispatch();
   const widgetId = widget.id;
   const { name, url } = widget.widget;
@@ -86,12 +88,12 @@ function WidgetState({ widget, compact, tab, initialUnchecked }: Pick<WidgetView
     );
   }
 
-  if (prompts.capabilities || prompts.openId) {
+  if (prompts.capabilities) {
     if (compact) {
       return (
         <div className="wv-over compact" data-testid="widget-prompt">
           <div className="wv-state">
-            <b title={name}>{prompts.capabilities ? `${name} asks for permissions` : `${name} asks for an OpenID token`}</b>
+            <b title={name}>{name} asks for permissions</b>
             <Button sm kind="primary" onClick={() => dispatch({ type: "widget/jumpToTab", widgetId })}>
               Open to answer
             </Button>
@@ -99,19 +101,12 @@ function WidgetState({ widget, compact, tab, initialUnchecked }: Pick<WidgetView
         </div>
       );
     }
-    // TODO-FINDING two-prompts-order - both prompts can be pending at once; the cards are shown one after the other (capabilities, then OpenID), not stacked
     return (
       <div className="wv-over" data-testid="widget-prompt">
-        {prompts.capabilities ? (
-          <div className="wv-state wv-prompt">
-            {/* Keyed by the widget: a request that joins the open card keeps what the user unchecked. */}
-            <CapabilityPrompt key={widgetId} widget={widget} prompt={prompts.capabilities} initialUnchecked={initialUnchecked} />
-          </div>
-        ) : (
-          <div className="wv-state">
-            <OpenIdPrompt widget={widget} />
-          </div>
-        )}
+        <div className="wv-state wv-prompt">
+          {/* Keyed by the widget: a request that joins the open card keeps what the user unchecked or set to "Always". */}
+          <CapabilityPrompt key={widgetId} widget={widget} prompt={prompts.capabilities} initialUnchecked={initialUnchecked} initialAlways={initialAlways} />
+        </div>
       </div>
     );
   }
@@ -133,14 +128,15 @@ function WidgetState({ widget, compact, tab, initialUnchecked }: Pick<WidgetView
 /**
  * The permission card: a summary, the capabilities in sections (all checked at first) and
  * "Approve", which is blocked for a moment after the card appeared or a request added to it.
- * Capabilities that a later request added are marked "New". leaves widgetview/prompt,
- * widgetview/prompt-long, widgetview/prompt-merged
+ * Capabilities that a later request added are marked "New"; one the host grants for one use has
+ * "Once" / "Always". leaves widgetview/prompt, widgetview/prompt-long, widgetview/prompt-merged,
+ * widgetview/prompt-openid
  */
-function CapabilityPrompt({ widget, prompt, initialUnchecked = [] }: { widget: WidgetInstanceViewModel; prompt: CapabilityPromptViewModel; initialUnchecked?: string[] }) {
+function CapabilityPrompt({ widget, prompt, initialUnchecked = [], initialAlways = [] }: { widget: WidgetInstanceViewModel; prompt: CapabilityPromptViewModel; initialUnchecked?: string[]; initialAlways?: string[] }) {
   const dispatch = useDispatch();
   const id = useId();
   const approveRef = useRef<HTMLButtonElement>(null);
-  const { requested, added, unknown } = prompt;
+  const { requested, added, unknown, singleUse } = prompt;
   const name = widget.widget.name;
   // What the user unchecked: whatever joins later arrives checked, and earlier choices stay.
   const [unchecked, setUnchecked] = useState<ReadonlySet<string>>(() => new Set(initialUnchecked));
@@ -152,9 +148,19 @@ function CapabilityPrompt({ widget, prompt, initialUnchecked = [] }: { widget: W
       else next.add(capability);
       return next;
     });
+  // The one-use capabilities set to "Always"; "Once" is the default.
+  const [always, setAlways] = useState<ReadonlySet<string>>(() => new Set(initialAlways));
+  const setLifetime = (capability: string, value: boolean) =>
+    setAlways((old) => {
+      const next = new Set(old);
+      if (value) next.add(capability);
+      else next.delete(capability);
+      return next;
+    });
   const approved = requested.filter(on);
   const sections = capabilitySections(requested, unknown);
-  const answer = (capabilities: string[]) => dispatch({ type: "widget/answerCapabilities", widgetId: widget.id, approved: capabilities });
+  const answer = (capabilities: string[]) =>
+    dispatch({ type: "widget/answerCapabilities", widgetId: widget.id, approved: capabilities, always: capabilities.filter((c) => singleUse.includes(c) && always.has(c)) });
 
   const until = approveBlockedUntil(prompt);
   const left = useTimeLeft(until);
@@ -206,6 +212,7 @@ function CapabilityPrompt({ widget, prompt, initialUnchecked = [] }: { widget: W
                   isNew && <span className="pc-l">{pill}</span>
                 )}
                 <small className="mono">{capability}</small>
+                {singleUse.includes(capability) && <Lifetime name={label ?? capability} enabled={on(capability)} always={always.has(capability)} onChange={(value) => setLifetime(capability, value)} />}
               </span>
             </label>
           );
@@ -268,6 +275,38 @@ function Check({ checked, label, onToggle }: { checked: boolean | "mixed"; label
   );
 }
 
+const LIFETIMES = [
+  { always: false, label: "Once", title: "For the next use only: the widget asks again after it" },
+  { always: true, label: "Always", title: "Whenever the widget asks, without asking you" },
+] as const;
+
+/**
+ * "Once" / "Always" of a capability the host grants for one use: a radio group, disabled while its
+ * row is unchecked; the arrow keys move the selection. It is inside the row's <label>: a click on
+ * a radio does not reach the label (it is interactive content), and a click on the group around
+ * them is cancelled here, so it never toggles the row.
+ */
+function Lifetime({ name, enabled, always, onChange }: { name: string; enabled: boolean; always: boolean; onChange: (always: boolean) => void }) {
+  const onKeyDown = (e: KeyboardEvent<HTMLSpanElement>) => {
+    if (!["ArrowRight", "ArrowDown", "ArrowLeft", "ArrowUp"].includes(e.key)) return;
+    e.preventDefault();
+    onChange(!always);
+    e.currentTarget.querySelectorAll<HTMLElement>('[role="radio"]')[always ? 0 : 1]?.focus();
+  };
+  return (
+    <span className="seg sm pc-life" role="radiogroup" aria-label={`${name}: once or always`} aria-disabled={!enabled || undefined} onClick={(e) => e.preventDefault()} onKeyDown={onKeyDown}>
+      {LIFETIMES.map((o) => {
+        const on = o.always === always;
+        return (
+          <button key={o.label} type="button" className={on ? "on" : ""} role="radio" aria-checked={on} tabIndex={on ? 0 : -1} title={o.title} disabled={!enabled} onClick={() => onChange(o.always)}>
+            {o.label}
+          </button>
+        );
+      })}
+    </span>
+  );
+}
+
 /** The warning icon of a risky capability or section. */
 function Risk({ text }: { text: string }) {
   return (
@@ -287,25 +326,4 @@ function useTimeLeft(until: number): number {
     return () => clearTimeout(timer);
   });
   return left;
-}
-
-/** The OpenID card. Not in the mockups: it reuses the permission card. */
-function OpenIdPrompt({ widget }: { widget: WidgetInstanceViewModel }) {
-  const dispatch = useDispatch();
-  const titleId = useId();
-  const answer = (allow: boolean) => dispatch({ type: "widget/answerOpenId", widgetId: widget.id, allow });
-  return (
-    <div className="prompt-card" role="group" aria-labelledby={titleId} data-testid="openid-prompt">
-      <Avatar name={widget.widget.name} id={widget.widgetKey} size={40} square />
-      <b id={titleId}>{widget.widget.name} asks for your identity</b>
-      <span className="muted">This widget asks for an OpenID token, which proves your identity to the widget's server.</span>
-      <div className="inline-row">
-        <Button onClick={() => answer(false)}>Block</Button>
-        <span className="sp" />
-        <Button kind="primary" icon="key" onClick={() => answer(true)}>
-          Allow
-        </Button>
-      </div>
-    </div>
-  );
 }

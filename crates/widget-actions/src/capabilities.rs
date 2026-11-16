@@ -136,7 +136,7 @@ pub enum Capability {
     ReadRoomAccountData { event_type: String },
     /// `send_to_device` of messages of `event_type`.
     SendToDevice { event_type: String },
-    /// May call `get_openid` (the user may still be asked).
+    /// May call `get_openid`. A host usually grants it for one use: it ends with the token it gives.
     GetOpenId,
     /// May call `get_rtc_transports`.
     GetRtcTransports,

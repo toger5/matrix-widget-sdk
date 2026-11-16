@@ -1,17 +1,18 @@
 //! Answering the widget's requests.
 //!
 //! [`handle_request`](WidgetHostDriver::handle_request) first checks the request's capability
-//! (see [`access`]). A few requests must reply before their side effect and send their reply
-//! themselves. All others go through [`answer`](WidgetHostDriver::answer), which computes the
-//! response, and `handle_request` sends it.
+//! (see [`access`]) and uses it up if it is single use. A few requests must reply before their side
+//! effect and send their reply themselves. All others go through
+//! [`answer`](WidgetHostDriver::answer), which computes the response, and `handle_request` sends
+//! it. A used-up capability is announced after the reply.
 
 use widget_actions::{
     Base64File, Capability, CapabilitySet, DownloadFileRequest, DownloadFileResponse, GetClientContextResponse,
-    GetMatrixContextResponse, GetOpenIdResponse, GetRtcLivekitTokenResponse, ReadEventsRequest, ReadEventsResponse,
+    GetMatrixContextResponse, GetRtcLivekitTokenResponse, HostRequest, ReadEventsRequest, ReadEventsResponse,
     ReadRelationsRequest, ReadRelationsResponse, ReadRoomAccountDataRequest, ReadRoomAccountDataResponse,
     RtcTransportsResponse, SendEventRequest, SendEventResponse, SendToDeviceRequest, SetAlwaysOnScreenResponse,
-    UpdateDelayedEventAction, UpdateDelayedEventRequest, UploadFileRequest, UploadFileResponse, WidgetError,
-    WidgetRequest, WidgetResponse, WireMessage,
+    UpdateCapabilitiesRequest, UpdateDelayedEventAction, UpdateDelayedEventRequest, UploadFileRequest,
+    UploadFileResponse, WidgetError, WidgetRequest, WidgetResponse, WireMessage,
 };
 use widget_matrix_backend::{BackendError, MediaFile, ToDeviceMessage};
 
@@ -26,11 +27,18 @@ const MAX_READ_LIMIT: u32 = 1000;
 
 impl WidgetHostDriver {
     pub(super) async fn handle_request(&self, msg: WireMessage, request: WidgetRequest) {
+        let mut used_up = false;
         if let Some(capability) = access::required_capability(&request) {
-            if !self.approved().has(&capability) {
+            // A statement of its own: the lock must be released before anything is sent.
+            let used = self.lock().use_capability(&capability);
+            let Some(single_use) = used else {
                 log::warn!("{} ({}) refused: the widget does not hold {capability}", msg.action, msg.request_id);
                 return self.send(&msg.error_response_to(access::missing(&capability)));
+            };
+            if single_use {
+                log::info!("{} ({}) used up the single-use {capability}", msg.action, msg.request_id);
             }
+            used_up = single_use;
         }
         match request {
             // These reply first, so that the widget sees the reply before what the request causes.
@@ -41,7 +49,6 @@ impl WidgetHostDriver {
                 self.platform.on_ready();
             }
             WidgetRequest::RequestCapabilities { request } => self.request_capabilities(&msg, request.capabilities),
-            WidgetRequest::GetOpenId if !self.lock().openid_auto_approved => self.ask_for_openid(&msg),
             WidgetRequest::WatchTurnServers => self.watch_turn_servers(&msg),
             request => {
                 let reply = match self.answer(request, &msg.action).await {
@@ -53,6 +60,12 @@ impl WidgetHostDriver {
                 };
                 self.send(&reply);
             }
+        }
+        if used_up {
+            // After the reply that used it (`spec/patch/msc4412/capability-lifetimes.md`), with the
+            // list as it is now: the platform may have changed it while the request ran.
+            let allowed = self.approved();
+            self.send_request(HostRequest::UpdateCapabilities { request: UpdateCapabilitiesRequest { allowed } });
         }
     }
 
@@ -77,15 +90,8 @@ impl WidgetHostDriver {
                 self.update_delayed_event(request).await?;
                 W::UpdateDelayedEvent
             }
-            // Only reached when OpenID is auto-approved; otherwise `ask_for_openid` replies.
             R::GetOpenId => W::GetOpenId {
-                response: match backend.openid_token().await {
-                    Ok(token) => GetOpenIdResponse::allowed(token),
-                    Err(e) => {
-                        log::warn!("the backend gave no openid token, answering `blocked`: {}", e.reason());
-                        GetOpenIdResponse::blocked()
-                    }
-                },
+                response: backend.openid_token().await.map_err(backend_error("Failed to get an OpenID token"))?,
             },
             R::UnwatchTurnServers => {
                 self.turn_subscription.cancel();
@@ -210,15 +216,6 @@ impl WidgetHostDriver {
             Next::Ask(question) => self.platform.on_capabilities_requested(question),
             Next::Wait => {}
         }
-    }
-
-    /// `get_openid` without auto-approval: tell the widget that the user is being asked, then ask.
-    /// [`resolve_openid`](Self::resolve_openid) sends the outcome later.
-    fn ask_for_openid(&self, msg: &WireMessage) {
-        self.lock().pending_openid.push(msg.request_id.clone());
-        log::info!("the widget requests an openid token, asking the platform");
-        self.send(&WidgetResponse::GetOpenId { response: GetOpenIdResponse::pending() }.into_wire_reply(msg));
-        self.platform.on_openid_requested();
     }
 
     /// `send_event`: check every capability involved, then call the backend method for the kind

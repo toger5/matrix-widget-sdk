@@ -111,6 +111,14 @@ can request reaches beyond the room the user put it in.
 Requests that carry a `room_id` / `room_ids` field are only valid for the widget's own room. Today's
 `msc2762.timeline:<room_id>` capability has no equivalent and is never granted.
 
+### A grant can be limited, the string cannot
+
+A host may grant a capability for one use or for a period of time
+([`spec/patch/msc4412/capability-lifetimes.md`](../../spec/patch/msc4412/capability-lifetimes.md));
+`widget:m.get_openid` is granted for one token at a time. The capability string is the same either
+way: the limit is the host's policy, and the widget learns that a grant ended from
+`update_capabilities`. A `host` capability is never used up by the host's pushes.
+
 ## Renamed actions
 
 Rule 5 needs every action name to be a verb, and the host's `send_event` / `send_to_device` mean
@@ -122,7 +130,6 @@ compatibility wrapper translates them for legacy widgets.
 |---|---|---|
 | host → widget | `send_event` | `forward_event` |
 | host → widget | `send_to_device` | `forward_to_device` |
-| host → widget | `openid_credentials` | `forward_openid_credentials` |
 | host → widget | `theme_change` | `update_theme` |
 | host → widget | `language_change` | `update_language` |
 | host → widget | `visibility` | `update_visibility` |
@@ -155,9 +162,10 @@ capability exists:
 | `request_capabilities` (widget → host) | asks for capabilities in the first place |
 | `update_capabilities` (host → widget) | tells the widget which capabilities it holds (the full list, also when the host takes some away) |
 
-Replies are part of the action they answer and need nothing extra. That includes
-`forward_openid_credentials`, the late answer to `get_openid`, which is covered by
-`widget:m.get_openid`.
+Replies are part of the action they answer and need nothing extra. `get_openid` has no late
+answer: the user's consent is `widget:m.get_openid` itself, and the response is the token
+([`spec/patch/new/openid-capability.md`](../../spec/patch/new/openid-capability.md)). The legacy
+`openid_credentials` has no new name; the compatibility wrapper sends it to legacy widgets.
 
 ## Widget → host actions
 
@@ -173,7 +181,7 @@ Replies are part of the action they answer and need nothing extra. That includes
 | `read_relations` | `widget:m.read_relations:<type>[#<msgtype>]` | none; results filtered by `receive.event` (shared) |
 | `read_room_account_data` | `widget:m.read_room_account_data:<type>` | `com.beeper.capabilities.receive.room_account_data:<type>` |
 | `send_to_device` | `widget:m.send_to_device:<type>` | `msc3819.send.to_device:<type>` |
-| `get_openid` | `widget:m.get_openid` | none (the user is asked per request) |
+| `get_openid` | `widget:m.get_openid`, usually for one token | none (the user is asked per request) |
 | `get_rtc_transports` | `widget:m.get_rtc_transports` | `msc4515.rtc_transports` |
 | `search_user_directory` | `widget:m.search_user_directory` | `msc3973.user_directory_search` |
 | `get_media_config` | `widget:m.get_media_config` | `msc4039.upload_file` (shared) |
@@ -248,9 +256,11 @@ its whole expansion:
 | `turn_servers` | `host:m.update_turn_servers` |
 | any other | the one capability in the tables above |
 
-Theme, language and visibility updates and `get_openid` had no capability so far. The wrapper
-always requests `host:m.update_theme`, `host:m.update_language`, `host:m.update_visibility` and
-`widget:m.get_openid` on behalf of a legacy widget, to keep today's behaviour.
+Theme, language and visibility updates had no capability so far. The wrapper always requests
+`host:m.update_theme`, `host:m.update_language` and `host:m.update_visibility` on behalf of a
+legacy widget, to keep today's behaviour. `get_openid` had no capability either, but the user was
+asked per token: the wrapper requests `widget:m.get_openid` when the legacy widget asks for a token,
+and answers it in the legacy shape (`state`, then `openid_credentials`).
 
 The wrapper also translates the renamed actions: a legacy widget keeps sending and receiving the
 old action names, including the ones without a namespace. It turns the host's

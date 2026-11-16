@@ -271,7 +271,7 @@ pub trait MatrixBackend: Send + Sync {
     ) -> Result<RelationsChunk, BackendError>;
 
     /// A fresh OpenID token for the account (`POST /user/{userId}/openid/request_token`), for
-    /// a widget whose `get_openid` the user allowed.
+    /// a widget's `get_openid` (the widget holds `widget:…get_openid`, usually for this one token).
     async fn openid_token(&self) -> Result<OpenIdToken, BackendError>;
 
     /// The `rtc_transports` array of `GET /_matrix/client/v1/rtc/transports` (MSC4515), raw;

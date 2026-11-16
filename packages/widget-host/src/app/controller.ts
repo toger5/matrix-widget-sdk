@@ -97,15 +97,16 @@ const backendErrorText = (e: unknown) => (BackendError.Failed.instanceOf(e) ? (e
  * The capability prompt after the driver asked its whole open question (again): what was not in
  * the open prompt is "New" (and stays so until the answer), and "Approve" is blocked from `now`.
  */
-const joinCapabilityPrompt = (open: CapabilityPromptViewModel | undefined, question: { requested: string[]; unknown: string[] }, now: number): CapabilityPromptViewModel => ({
+const joinCapabilityPrompt = (open: CapabilityPromptViewModel | undefined, question: { requested: string[]; unknown: string[]; singleUse: string[] }, now: number): CapabilityPromptViewModel => ({
   requested: question.requested,
   unknown: question.unknown,
+  singleUse: question.singleUse,
   added: open ? question.requested.filter((c) => open.added.includes(c) || !open.requested.includes(c)) : [],
   lastRequestAt: now,
 });
 
 /** Matrix accounts: the user is asked, and the answer is remembered. */
-const MATRIX_BEHAVIOR: WidgetHostBehavior = { autoApproveCapabilities: false, autoApproveOpenId: false, rememberCapabilities: true };
+const MATRIX_BEHAVIOR: WidgetHostBehavior = { autoApproveCapabilities: false, rememberCapabilities: true };
 /** A delayed event scheduled from the Dev tools of a Matrix account leaves "Scheduled" this long after its delay has passed. */
 const SCHEDULED_SLACK_MS = 1000;
 /** The longest a `setTimeout` waits; a longer delay would fire at once. */
@@ -556,14 +557,12 @@ export class AppController {
           backend,
           capabilityKey: behavior().rememberCapabilities ? capabilityStoreKey(session.userId, roomId, key) : undefined,
           autoApproveCapabilities: () => behavior().autoApproveCapabilities,
-          autoApproveOpenId: () => behavior().autoApproveOpenId,
           theme: () => this.resolvedTheme(),
           notifyReadyTimeoutMs: this.notifyReadyTimeoutMs,
           events: {
             ready: () => this.setWidget(id, (w) => ({ ...w, load: { state: "ready" } })),
             failed: (error) => this.setWidget(id, (w) => (w.load.state === "ready" ? w : { ...w, load: { state: "failed", error } })),
             capabilitiesRequested: (question) => this.setWidget(id, (w) => ({ ...w, prompts: { ...w.prompts, capabilities: question && joinCapabilityPrompt(w.prompts.capabilities, question, Date.now()) } })),
-            openIdRequested: (pending) => this.setWidget(id, (w) => ({ ...w, prompts: { ...w.prompts, openId: pending ? true : undefined } })),
             alwaysOnScreen: (value) => this.setAlwaysOnScreen(id, value),
             activity: () => this.devBackend?.refresh(id),
           },
@@ -1356,10 +1355,8 @@ export class AppController {
         const prompt = this.main?.widgets[intent.widgetId]?.prompts.capabilities;
         // "Approve" is blocked for a moment after the card appeared or a request added to it; the view shows it, this enforces it. "Deny all" is never blocked.
         if (prompt && intent.approved.length > 0 && Date.now() < approveBlockedUntil(prompt)) return;
-        return this.runtimes.get(intent.widgetId)?.answerCapabilities(intent.approved, prompt?.requested);
+        return this.runtimes.get(intent.widgetId)?.answerCapabilities(intent.approved, prompt?.requested, intent.always);
       }
-      case "widget/answerOpenId":
-        return this.runtimes.get(intent.widgetId)?.answerOpenId(intent.allow);
       case "widget/jumpToTab":
         return this.jumpToWidget(intent.widgetId);
       case "widget/close": {
@@ -1476,13 +1473,8 @@ export class AppController {
         return dev?.clearRoom(intent.roomId);
       case "mock/sendToDevice":
         return void dev?.sendToDevice(intent.message);
-      case "mock/setBehavior": {
-        this.setRoomTools((t) => ({ ...t, behavior: { ...DEFAULT_DEV_BEHAVIOR, ...t.behavior, ...intent.behavior } }));
-        if (intent.behavior.autoApproveOpenId === undefined) return;
-        const { autoApproveOpenId } = this.behavior();
-        for (const runtime of this.runtimes.values()) runtime.setOpenIdAutoApproved(autoApproveOpenId);
-        return;
-      }
+      case "mock/setBehavior":
+        return this.setRoomTools((t) => ({ ...t, behavior: { ...DEFAULT_DEV_BEHAVIOR, ...t.behavior, ...intent.behavior } }));
       case "mock/setFailSends":
         return dev?.setFailSends(intent.on);
       case "mock/toggleTool":

@@ -78,12 +78,12 @@ A rename also means renaming the file, the variant and the body types, so the co
 
 | what | where |
 |---|---|
-| Which capability a widget request needs | `driver/access.rs` `required_capability` (exhaustive match: a new `WidgetRequest` variant does not compile without a rule) |
+| Which capability a widget request needs | `driver/access.rs` `required_capability` (exhaustive match: a new `WidgetRequest` variant does not compile without a rule); only such a capability can be single use (`set_single_use`, default `get_openid`; used up in `driver/requests.rs` `handle_request`) |
 | Which capability a host push needs | `driver/access.rs` `push_capability` (exhaustive over `HostRequest`) |
 | Checks that depend on the body (event type, state key, msgtype, room) | `driver/access.rs` `check_send_event`, `check_room(s)`, `may_read`, `may_read_relation`, `may_forward`, `may_update_state` |
 | Handling the request, calling the backend | `driver/requests.rs` `answer` and its helpers |
 | What the driver subscribes to and forwards | `driver/subscriptions.rs` `subjects_for`, `to_device_types_for`, `forward_*` |
-| Public methods (pushes, approval, OpenID) | `driver/mod.rs`; these are exported over UniFFI, see section 6 |
+| Public methods (pushes, approval, revocation, single-use capabilities) | `driver/mod.rs`; these are exported over UniFFI, see section 6 |
 | Platform callbacks | `platform.rs` (`WidgetHostPlatform`) |
 | The widget state event (MSC4411, `uses_widget_api` of MSC4412): which events are widgets, the URL check, the compat wrapper's URL (its query parameters are the wrapper's README) | `widget_event.rs` (`WidgetDefinition::parse` / `embed`), `widget_url.rs` (`widget_url_problem`; `embed_url_problem`: no page of the client's compat wrapper; table `tests/widget_urls.json`, which the host's `test/widgetStateEvent.test.ts` also compares with Node's URL parser and the compat wrapper's `test/url.test.ts` with its own check); used by the host through `packages/widget-host/src/lib/widgetEvents.ts` |
 | Tests | unit tests in `access.rs` and `subscriptions.rs`; end to end in `driver/tests.rs` (helpers `setup`, `feed`, `grant`, `grant_and_drain`, `send`, `event`) |
@@ -166,7 +166,7 @@ Ask for every change:
 
 | what | where |
 |---|---|
-| Driver calls, platform callbacks (`WidgetHostPlatform`), the message pump, capability and OpenID answers | `packages/widget-host/src/app/runtime/widgetRuntime.ts` |
+| Driver calls, platform callbacks (`WidgetHostPlatform`), the message pump, capability answers and what is remembered (never a single-use capability) | `packages/widget-host/src/app/runtime/widgetRuntime.ts`; the store and its migrations: `src/lib/capabilityStore.ts` |
 | Host pushes the dev tools send by hand (`update_theme`, `update_language`, `update_visibility`) | intent `devTools/mockHostAction` in `packages/widget-host/src/appViewModel.ts`, `WidgetRuntime.mockHostAction`, buttons in `packages/widget-host/src/views/widget/DriverPanel.tsx` |
 | Label, section and risk mark of a capability in the permission prompt | `LABELS`, `SECTIONS`, `RISKS` in `packages/widget-host/src/views/widget/format.ts` (keyed by action name without namespace), copied from `CAP_LABELS` & co. in `packages/widget-host/design/src/lib.mjs` (a design step); `test/capabilityFormat.test.ts` checks every capability of the test widget and compares both tables. What the driver does not know (`capabilityIsKnown`) goes to "Unknown to this app" |
 | Auto-approved capabilities of legacy widgets | `packages/widget-host/src/widgetStateEvent.ts` |

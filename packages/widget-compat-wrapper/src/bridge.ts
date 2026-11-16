@@ -24,15 +24,23 @@
  *    `update_capabilities { allowed }` becomes the legacy `notify_capabilities
  *    { requested, approved }`.
  * 4. **Files.** Legacy widgets send files as `Blob`; MSC4412 hosts expect base64 (files.ts).
+ * 5. **OpenID.** A legacy widget may always ask for a token (`get_openid`); the host hands one out
+ *    only while the widget holds `widget:…get_openid`, which it grants for one token at a time.
+ *    The bridge answers `get_openid` itself: while the capability is held it fetches the token at
+ *    once (`state: "allowed"`). Otherwise it answers `state: "request"`, requests the capability
+ *    once for every token request waiting, takes the host's next `update_capabilities` after the
+ *    ack as the answer, and sends each waiting request `openid_credentials` (`allowed` with the
+ *    token, or `blocked`). A host that takes capabilities away in between is read as a refusal.
  *
  * The class does no I/O. It is driven by `start`, `onIframeLoad`, `onWidgetMessage` and
  * `onHostMessage`, and sends through the callbacks in {@link BridgeOptions}.
  */
 import { CurrentApiVersions } from "matrix-widget-api";
 
-import { capabilitiesToRequest, collapseApproved, widgetCapability } from "./capabilities";
+import { capabilitiesToRequest, collapseApproved, normalizeCapability, widgetCapability } from "./capabilities";
 import {
   ERROR_INVALID_REQUEST,
+  ERROR_MISSING_CAPABILITY,
   errorBody,
   isErrorBody,
   isLegacyMessage,
@@ -61,6 +69,16 @@ export const MATRIX_CONTEXT_ACTION = `${PLACEHOLDER}.get_matrix_context`;
 export const CLIENT_CONTEXT_ACTION = `${PLACEHOLDER}.get_client_context`;
 /** The capabilities for the context actions. */
 export const CONTEXT_CAPABILITIES = [widgetCapability("get_matrix_context"), widgetCapability("get_client_context")];
+/** The legacy widget's `get_openid`, which the bridge answers itself (see the module comment). */
+const LEGACY_GET_OPENID = "get_openid";
+/** The host's name of it, and its capability. */
+export const GET_OPENID_ACTION = toNewAction(LEGACY_GET_OPENID, "widget");
+export const GET_OPENID_CAPABILITY = widgetCapability("get_openid");
+/** The legacy host -> widget action with the outcome of a `get_openid` answered `state: "request"`. */
+const LEGACY_OPENID_CREDENTIALS = "openid_credentials";
+
+/** The `code` of an error body, if it is one. */
+const errorCode = (body: unknown): unknown => (isErrorBody(body) ? (body as { error: { code?: unknown } }).error.code : undefined);
 
 const capabilitiesOf = (body: unknown): string[] => {
   const list = (body as { capabilities?: unknown } | undefined)?.capabilities;
@@ -113,6 +131,16 @@ export class CompatBridge {
   private legacyRequested: string[] = [];
   /** Every legacy capability the widget ever requested: the candidates for "approved". */
   private readonly legacyKnown = new Set<string>();
+  /** What the host's last `update_capabilities` allowed, normalised ({@link normalizeCapability}). */
+  private held = new Set<string>();
+  /** The widget's `get_openid` requests answered `state: "request"`: they get `openid_credentials`. */
+  private openIdWaiting: LegacyMessage[] = [];
+  /**
+   * Where the token for {@link openIdWaiting} stands: the capability was requested (`sent`), the
+   * host acknowledged that (`acked`: its next update is the answer), the token was requested
+   * (`fetching`).
+   */
+  private openIdStep: "none" | "sent" | "acked" | "fetching" = "none";
 
   constructor(private readonly o: BridgeOptions) {}
 
@@ -185,6 +213,8 @@ export class CompatBridge {
         );
       case "content_loaded":
         return this.onWidgetContentLoaded(m);
+      case LEGACY_GET_OPENID:
+        return this.onWidgetGetOpenId(m);
       case UPLOAD_FILE_ACTION:
         // The file has to be read first, so the request goes out asynchronously.
         uploadRequestToNew(m.data).then(
@@ -252,11 +282,13 @@ export class CompatBridge {
         return this.o.sendToHost(newResponse(m, error));
       }
       this.o.sendToHost(newResponse(m, {}));
+      this.rememberAllowed(m.request);
       return this.bootstrap();
     }
     this.fromHost.set(m.request_id, m);
     const request = m.action === UPDATE_CAPABILITIES_ACTION ? this.translateUpdate(m.request) : m.request;
     this.o.sendToWidget(newRequestToLegacy({ ...m, request }, this.o.widgetId));
+    if (m.action === UPDATE_CAPABILITIES_ACTION && this.openIdStep === "acked") this.onOpenIdCapabilityAnswered();
   }
 
   /** The widget answered: either one of the bridge's own requests, or a forwarded host request. */
@@ -301,11 +333,57 @@ export class CompatBridge {
    * capabilities away.
    */
   private translateUpdate(request: unknown): { requested: string[]; approved: string[] } {
+    this.rememberAllowed(request);
+    return { requested: this.legacyRequested, approved: collapseApproved([...this.legacyKnown], [...this.held]) };
+  }
+
+  /** Keep the `allowed` list of an `update_capabilities` body: what the widget holds from now on. */
+  private rememberAllowed(request: unknown): void {
     const allowed = (request as { allowed?: unknown } | undefined)?.allowed;
-    return {
-      requested: this.legacyRequested,
-      approved: collapseApproved([...this.legacyKnown], Array.isArray(allowed) ? allowed : []),
-    };
+    this.held = new Set((Array.isArray(allowed) ? allowed : []).filter((c): c is string => typeof c === "string").map(normalizeCapability));
+  }
+
+  // ---- OpenID --------------------------------------------------------------------------------
+
+  /** The widget's `get_openid`: the token at once while the capability is held, else `state: "request"` and the capability is requested. */
+  private onWidgetGetOpenId(m: LegacyMessage): void {
+    if (this.openIdWaiting.length > 0 || !this.held.has(GET_OPENID_CAPABILITY)) return this.waitForOpenId(m);
+    this.requestHost(GET_OPENID_ACTION, {}, (response) => {
+      // The grant ended before the request arrived (a use whose update was still on its way): ask.
+      if (errorCode(response) === ERROR_MISSING_CAPABILITY) return this.waitForOpenId(m);
+      this.o.sendToWidget(legacyResponse(m, isErrorBody(response) ? response : { state: "allowed", ...(response as object) }));
+    });
+  }
+
+  /** Answer `state: "request"` and request the capability, once for every waiting request. */
+  private waitForOpenId(m: LegacyMessage): void {
+    this.o.sendToWidget(legacyResponse(m, { state: "request" }));
+    this.openIdWaiting.push(m);
+    if (this.openIdStep !== "none") return;
+    this.openIdStep = "sent";
+    this.requestHost(REQUEST_CAPABILITIES_ACTION, { capabilities: [GET_OPENID_CAPABILITY] }, (response) => {
+      if (isErrorBody(response)) return this.finishOpenId(undefined);
+      this.openIdStep = "acked";
+    });
+  }
+
+  /** The host's first `update_capabilities` after it acknowledged the capability request. */
+  private onOpenIdCapabilityAnswered(): void {
+    if (!this.held.has(GET_OPENID_CAPABILITY)) return this.finishOpenId(undefined);
+    this.openIdStep = "fetching";
+    this.requestHost(GET_OPENID_ACTION, {}, (response) => this.finishOpenId(isErrorBody(response) ? undefined : (response as object)));
+  }
+
+  /** Every waiting `get_openid` gets `openid_credentials`: `allowed` with the token, or `blocked`. */
+  private finishOpenId(token: object | undefined): void {
+    const waiting = this.openIdWaiting;
+    this.openIdWaiting = [];
+    this.openIdStep = "none";
+    if (!token) log.warn(`no OpenID token for ${waiting.length} request(s) of the widget`);
+    for (const request of waiting) {
+      const data = token ? { state: "allowed", original_request_id: request.requestId, ...token } : { state: "blocked", original_request_id: request.requestId };
+      this.requestWidget(LEGACY_OPENID_CREDENTIALS, data, () => {});
+    }
   }
 
   // ---- the bridge's own requests -------------------------------------------------------------

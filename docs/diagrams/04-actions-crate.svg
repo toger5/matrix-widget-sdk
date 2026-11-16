@@ -111,7 +111,7 @@
   <text x="751" y="548" class="s">handled by widget-base-sdk (resolves the awaited call)</text>
   <text x="751" y="572" class="m">NotifyReady                      {}</text>
   <text x="751" y="588" class="m">SendEvent { response: SendEventResponse }</text>
-  <text x="751" y="604" class="m">GetOpenId { response: GetOpenIdResponse }</text>
+  <text x="751" y="604" class="m">GetOpenId { response: OpenIdToken }</text>
   <text x="751" y="620" class="m">… one per request + Unknown</text>
   <text x="751" y="640" class="s">"error": { code, message } ⇒ ActionError::ErrorResponse</text>
 
@@ -124,9 +124,9 @@
   <text x="411" y="744" class="s">handled by widget-base-sdk (callbacks)</text>
   <text x="411" y="768" class="m">UpdateCapabilities  ForwardEvent { event }</text>
   <text x="411" y="784" class="m">UpdateState  ForwardToDevice  UpdateTheme</text>
-  <text x="411" y="800" class="m">ForwardOpenIdCredentials  UpdateTurnServers</text>
+  <text x="411" y="800" class="m">UpdateTurnServers</text>
   <text x="411" y="816" class="m">UpdateLanguage  UpdateVisibility</text>
-  <text x="411" y="836" class="s">9 actions + Unknown, fed by sinks / platform</text>
+  <text x="411" y="836" class="s">8 actions + Unknown, fed by sinks / platform</text>
 
   <!-- HostResponse -->
   <rect x="735" y="660" width="420" height="186" rx="8" fill="#ffffff" stroke="#2563eb" stroke-width="1.5"/>

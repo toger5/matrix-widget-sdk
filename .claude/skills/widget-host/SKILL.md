@@ -61,7 +61,7 @@ grep -rlE '(from |import\()"(matrix-js-sdk|matrix-sdk-uniffi-js)' src | grep -vE
 - Intents that lose state carry `confirmed?: boolean`: the controller opens the confirm modal,
   which sends the intent again with `confirmed: true`.
 - The runtime reports back through `WidgetRuntimeEvents` (`ready`, `failed`,
-  `capabilitiesRequested`, `openIdRequested`, `alwaysOnScreen`, `activity`); the controller turns
+  `capabilitiesRequested`, `alwaysOnScreen`, `activity`); the controller turns
   them into view model changes. These are controller events, not intents.
 - High-frequency data is not in the view model: `WidgetRuntime.devTools` (a `Store` per widget),
   `DevBackend.subscribe` / `snapshot()`, `LiveSession.roomDetails` / `timeline` / `roomState`. Views read it with the hooks of

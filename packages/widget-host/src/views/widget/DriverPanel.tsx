@@ -39,7 +39,7 @@ function Cap({ capability, denied, children }: { capability: string; denied?: bo
 /** WidgetDevToolDriverPanel: the capabilities the driver holds, and buttons that mock a host action. leaf devtools/driver */
 export function DriverPanel({ widgetId, capabilities }: DriverPanelProps) {
   const dispatch = useDispatch();
-  const { approved, autoApproved, denied } = capabilities;
+  const { approved, autoApproved, denied, singleUse } = capabilities;
   const [draft, setDraft] = useState("");
   const [theme, setTheme] = useState<"dark" | "light">("dark");
   const [language, setLanguage] = useState("de");
@@ -70,6 +70,12 @@ export function DriverPanel({ widgetId, capabilities }: DriverPanelProps) {
         {approved.length === 0 && <p className="dt-empty">The widget holds no capability that you approved.</p>}
         {approved.map((c) => (
           <Cap key={c} capability={c}>
+            {/* A one-use capability is gone once the widget used it. */}
+            {singleUse.includes(c) && (
+              <span className="pill" title="Granted for one use: the widget asks again for the next one">
+                once
+              </span>
+            )}
             {revoke(c)}
           </Cap>
         ))}

@@ -140,6 +140,7 @@ A widget's request for capabilities covers its WidgetTab with a permission card 
 - The capabilities in sections, in this order: Read this room, Send as you, Change the room, Direct messages to devices, You and your account, Files, Calls, This app, Unknown to this app (with a note that the app does not act on them; approving them is not remembered).
 - A section header: a checkbox for all its rows (mixed if only some are checked), the title, "N of M" and a warning icon if a row is risky. A row: checkbox, label, the full capability string (wrapping) and a warning icon if it acts in your name, changes the room for everyone, is hidden from the room or proves your identity.
 - Everything is checked at first. Capabilities the widget holds already or gets without asking are not listed.
+- A capability the host grants for one use (an OpenID token: the widget asks again for the next one) has "Once" (default) / "Always" in its row, disabled while the row is unchecked. "Always" grants it whenever the widget asks, without the card: remembered when remembering is on, else while the widget runs.
 - The header and the buttons ("Deny all", "Approve N selected") stay in place; only the sections scroll.
 - A request that arrives while the card is open joins it: its capabilities are added checked and marked "New"; the choices made so far stay.
 - "Approve" is blocked for 3 s after the card appeared or a request added to it (a status line counts down). "Deny all" is never blocked.
@@ -174,7 +175,7 @@ A toolbar for a single widget, with information like the driver state (approved 
 
 An overview of the driver side:
 
-- approved capabilities (with a way to revoke them and to add more)
+- approved capabilities (with a way to revoke them and to add more); a one-use one is marked "once", one chosen "Always" is auto-approved
 - buttons to mock a driver action: update theme, update language, ... (just add a couple for now, with a TODO)
 
 ### WidgetDevToolConsolePanel
@@ -243,7 +244,7 @@ What is not per room is in tool boxes below the room box: the "Client Backend To
 
 - Below the room box each tool is a button. Pressing it turns it into the tool's box (resized by dragging between it and the room box); its minimise button turns it back. One tool box is open at a time.
 - Client Backend Tool, with collapsible sections like the room box:
-  - Widget host behavior, for all mocked rooms: auto-approve capabilities, auto-approve OpenID tokens, remember capabilities, fail sends (every send of a widget is answered with an error)
+  - Widget host behavior, for all mocked rooms: auto-approve capabilities (OpenID tokens too), remember capabilities, fail sends (every send of a widget is answered with an error)
   - To-device messages: sending and reading
 - Media Backend Tool: upload media, a list of all media (including media uploaded by widgets), and buttons to copy the MXC URI of each item. Its button shows the number of files.
 
@@ -333,7 +334,7 @@ The mockups needed to review the full design. Each leaf is one state to draw. Do
     - WidgetTab
       - WidgetView
         - Loading / failed to load
-        - Capability prompt: summary and sections / a long list, scrolled / a second request joined, "Approve" blocked
+        - Capability prompt: summary and sections / a long list, scrolled / a second request joined, "Approve" blocked / one OpenID capability, "Once", "Approve" blocked
         - Dev tools: no (full widget)
         - Dev tools: yes
           - Bar only, docked top / bottom / left / right

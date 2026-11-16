@@ -54,7 +54,6 @@ impl WidgetHostPlatform for HostSide {
     fn on_ready(&self) {
         *self.ready.lock().unwrap() = true;
     }
-    fn on_openid_requested(&self) {}
     fn navigate(&self, _uri: String) -> Result<(), PlatformError> {
         Ok(())
     }
@@ -226,5 +225,43 @@ fn file_upload_and_download() {
         let download = l.client.download_file(content_uri);
         l.pump().await;
         assert_eq!(download.await.unwrap(), file);
+    });
+}
+
+#[test]
+fn openid_tokens_need_one_grant_each() {
+    futures::executor::block_on(async {
+        let l = Loop::new();
+        let asked = || l.host_side.capability_requests.lock().unwrap().clone();
+
+        // The widget does not hold the capability: the client requests it, the host asks.
+        let first = l.client.request_openid_token();
+        l.pump().await;
+        assert_eq!(asked(), [vec![Capability::GetOpenId]]);
+        l.driver.approve_capabilities(vec![Capability::GetOpenId]);
+        l.pump().await;
+        let token = first.await.unwrap();
+        assert!(token.access_token.starts_with("openid-token-"));
+        // The use ended the grant, and both sides know it.
+        assert!(!l.client.has_capability(&Capability::GetOpenId));
+        assert!(l.driver.snapshot().approved.is_empty());
+
+        // The next token is asked about again; refused, there is none.
+        let second = l.client.request_openid_token();
+        l.pump().await;
+        assert_eq!(asked().len(), 2);
+        l.driver.approve_capabilities(vec![]);
+        l.pump().await;
+        assert_eq!(second.await, Err(widget_base_sdk::WidgetClientError::OpenIdBlocked));
+
+        // "Always": auto-approved, it is granted again per token without asking.
+        l.driver.set_auto_approved(vec![Capability::GetOpenId]);
+        let a = l.client.request_openid_token();
+        l.pump().await;
+        let b = l.client.request_openid_token();
+        l.pump().await;
+        assert_ne!(a.await.unwrap(), b.await.unwrap());
+        assert_eq!(asked().len(), 2);
+        assert!(l.driver.snapshot().approved.is_empty());
     });
 }

@@ -8,14 +8,14 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 // TODO consider splitting those into widget_actions::widget and widget_actions::host so that they are more explicit here.
 use widget_actions::{
-    ActionError, Base64File, Capability, DelegateRtcLivekitDelayedLeaveRequest, DownloadFileRequest,
-    ForwardOpenIdCredentialsRequest, GetClientContextResponse, GetMatrixContextResponse, GetRtcLivekitTokenRequest,
-    HostRequest, JsonValue, MatrixEvent, MediaConfigResponse, MessageKind, NavigateRequest, OpenIdState, OpenIdToken,
-    ReadEventsRequest, ReadRelationsRequest, ReadRelationsResponse, ReadRoomAccountDataRequest,
-    RequestCapabilitiesRequest, RoomAccountData, SearchUserDirectoryRequest, SearchUserDirectoryResponse,
-    SendEventRequest, SendEventResponse, SendToDeviceRequest, SetAlwaysOnScreenRequest, StateKeySelector,
-    ToDeviceEvent, TurnServer, UpdateDelayedEventAction, UpdateDelayedEventRequest, UploadFileRequest,
-    UploadFileResponse, WidgetError, WidgetRequest, WidgetResponse, WireMessage,
+    ActionError, Base64File, Capability, DelegateRtcLivekitDelayedLeaveRequest, DownloadFileRequest, ErrorKind,
+    GetClientContextResponse, GetMatrixContextResponse, GetRtcLivekitTokenRequest, HostRequest, JsonValue, MatrixEvent,
+    MediaConfigResponse, MessageKind, NavigateRequest, OpenIdToken, ReadEventsRequest, ReadRelationsRequest,
+    ReadRelationsResponse, ReadRoomAccountDataRequest, RequestCapabilitiesRequest, RoomAccountData,
+    SearchUserDirectoryRequest, SearchUserDirectoryResponse, SendEventRequest, SendEventResponse, SendToDeviceRequest,
+    SetAlwaysOnScreenRequest, StateKeySelector, ToDeviceEvent, TurnServer, UpdateDelayedEventAction,
+    UpdateDelayedEventRequest, UploadFileRequest, UploadFileResponse, WidgetError, WidgetRequest, WidgetResponse,
+    WireMessage,
 };
 
 use crate::WidgetClientError;
@@ -88,11 +88,32 @@ pub struct WidgetState {
 struct Inner {
     state: WidgetState,
     /// Requests waiting for their response, with the action for error messages.
-    pending: HashMap<String, (String, oneshot::Sender<Result<WireMessage, WidgetClientError>>)>,
+    pending: HashMap<String, (String, Waiter)>,
     /// Requests that timed out; their late responses are ignored.
     timed_out: HashSet<String>,
-    /// `get_openid` requests answered with `state: request`, waiting for `forward_openid_credentials`.
-    openid_waiters: HashMap<String, oneshot::Sender<ForwardOpenIdCredentialsRequest>>,
+    /// The [`WidgetClient::request_openid_token`] in progress.
+    openid: OpenIdFlow,
+}
+
+/// Who waits for the response to a request of the client.
+enum Waiter {
+    /// The future returned for the request.
+    Caller(oneshot::Sender<Result<WireMessage, WidgetClientError>>),
+    /// A step of [`WidgetClient::request_openid_token`]: the client goes on with it itself.
+    OpenId,
+}
+
+/// One OpenID token in progress, for every [`WidgetClient::request_openid_token`] call that
+/// arrives until it is there. It needs no future to drive it: the host's messages do.
+#[derive(Default)]
+struct OpenIdFlow {
+    /// The callers; all get the same result.
+    waiters: Vec<oneshot::Sender<Result<OpenIdToken, WidgetClientError>>>,
+    /// The host acknowledged the request for `widget:…get_openid`: its next `update_capabilities`
+    /// is the answer. (Updates before the ack answer earlier requests.)
+    awaiting_update: bool,
+    /// `widget:…get_openid` was requested in this flow. It is requested at most once per token.
+    requested: bool,
 }
 
 /// The widget side state machine. See the crate documentation.
@@ -143,6 +164,17 @@ impl WidgetClient {
         (msg.request_id, fut)
     }
 
+    /// Send `request` to the host; `waiter` gets the response. Returns the sent envelope.
+    fn send_with(&self, request: WidgetRequest, waiter: Waiter) -> WireMessage {
+        let id = (self.next_id)();
+        let msg = request.into_wire(id.clone());
+        self.inner.borrow_mut().pending.insert(id.clone(), (msg.action.clone(), waiter));
+        log_sent(&msg);
+        self.delegate.send_to_host(msg.to_json());
+        self.delegate.on_request_sent(&id);
+        msg
+    }
+
     /// Send `request` and take the expected response variant out of the reply with `pick`.
     /// Any other variant is a [`WidgetClientError::UnexpectedResponse`].
     fn call<T>(
@@ -160,13 +192,8 @@ impl WidgetClient {
         &self,
         request: WidgetRequest,
     ) -> (WireMessage, impl Future<Output = Result<WidgetResponse, WidgetClientError>> + 'static) {
-        let id = (self.next_id)();
         let (tx, rx) = oneshot::channel();
-        let msg = request.into_wire(id.clone());
-        self.inner.borrow_mut().pending.insert(id.clone(), (msg.action.clone(), tx));
-        log_sent(&msg);
-        self.delegate.send_to_host(msg.to_json());
-        self.delegate.on_request_sent(&id);
+        let msg = self.send_with(request, Waiter::Caller(tx));
         let fut = async move {
             let msg = rx.await.map_err(|_| WidgetClientError::Cancelled)??;
             match WidgetResponse::from_wire(&msg) {
@@ -183,42 +210,103 @@ impl WidgetClient {
     /// waiting. See [`WidgetDelegate::on_request_sent`].
     pub fn timeout_request(&self, request_id: &str) -> bool {
         let mut inner = self.inner.borrow_mut();
-        let Some((action, tx)) = inner.pending.remove(request_id) else {
+        let Some((action, waiter)) = inner.pending.remove(request_id) else {
             return false;
         };
         inner.timed_out.insert(request_id.to_owned());
+        drop(inner);
         log::warn!("{action} ({request_id}) timed out: the host did not answer");
-        let _ = tx.send(Err(WidgetClientError::Timeout { action }));
+        match waiter {
+            Waiter::Caller(tx) => {
+                let _ = tx.send(Err(WidgetClientError::Timeout { action }));
+            }
+            Waiter::OpenId => self.finish_openid(Err(WidgetClientError::Timeout { action })),
+        }
         true
     }
 
-    /// Ask the host for an OpenID token (MSC1960). Resolves with the token once the host (and
-    /// possibly the user) allowed it, which may take a while; fails with
-    /// [`WidgetClientError::OpenIdBlocked`] when refused.
+    /// Ask the host for an OpenID token (MSC1960) that proves the user's identity to a third
+    /// party.
+    ///
+    /// Needs `widget:…get_openid`. A host usually grants it for one token only, after asking the
+    /// user, and then takes it away again (`update_capabilities`). So this does everything: if the
+    /// widget does not hold the capability, it requests it and waits for the host's next
+    /// `update_capabilities`; granted, it asks for the token, refused, it fails with
+    /// [`WidgetClientError::OpenIdBlocked`]. Calls while one is in progress share its result: one
+    /// question to the user, one token.
+    ///
+    /// The next `update_capabilities` after the host acknowledged the request is taken as the
+    /// answer. If the host takes capabilities away in between, that reads as refused.
     pub fn request_openid_token(&self) -> impl Future<Output = Result<OpenIdToken, WidgetClientError>> + 'static {
-        let (id, fut) = self.request_with_id(WidgetRequest::GetOpenId);
         let (tx, rx) = oneshot::channel();
-        self.inner.borrow_mut().openid_waiters.insert(id.clone(), tx);
-        let inner: Weak<RefCell<Inner>> = Rc::downgrade(&self.inner);
-        async move {
-            let unexpected =
-                || WidgetClientError::UnexpectedResponse { action: "org.matrix.mscXXXX.get_openid".into() };
-            let response = pick!(GetOpenId { response } => response)(fut.await?).ok_or_else(unexpected)?;
-            if response.state != OpenIdState::PendingUserConfirmation {
-                if let Some(inner) = inner.upgrade() {
-                    inner.borrow_mut().openid_waiters.remove(&id);
-                }
-                return match response.state {
-                    OpenIdState::Allowed => response.token().ok_or_else(unexpected),
-                    _ => Err(WidgetClientError::OpenIdBlocked),
-                };
+        let first = {
+            let mut inner = self.inner.borrow_mut();
+            inner.openid.waiters.push(tx);
+            inner.openid.waiters.len() == 1
+        };
+        if first {
+            if self.has_capability(&Capability::GetOpenId) {
+                self.send_with(WidgetRequest::GetOpenId, Waiter::OpenId);
+            } else {
+                self.request_openid_capability();
             }
-            // Phase two: the host sends `forward_openid_credentials` once the user decided.
-            let credentials = rx.await.map_err(|_| WidgetClientError::Cancelled)?;
-            match credentials.state {
-                OpenIdState::Allowed => credentials.token().ok_or_else(unexpected),
-                _ => Err(WidgetClientError::OpenIdBlocked),
+        }
+        async move { rx.await.map_err(|_| WidgetClientError::Cancelled)? }
+    }
+
+    /// The OpenID flow requests `widget:…get_openid`; the answer is the next `update_capabilities`
+    /// after the ack.
+    fn request_openid_capability(&self) {
+        let capability = Capability::GetOpenId;
+        {
+            let mut inner = self.inner.borrow_mut();
+            inner.openid.requested = true;
+            if !inner.state.pending_requested.contains(&capability) {
+                inner.state.pending_requested.push(capability.clone());
             }
+        }
+        log::info!("requesting {capability} for an OpenID token");
+        let request = RequestCapabilitiesRequest { capabilities: vec![capability] };
+        self.send_with(WidgetRequest::RequestCapabilities { request }, Waiter::OpenId);
+    }
+
+    /// The host answered a request of the OpenID flow.
+    fn continue_openid(&self, msg: WireMessage) {
+        match WidgetResponse::from_wire(&msg) {
+            Ok(WidgetResponse::GetOpenId { response }) => self.finish_openid(Ok(response)),
+            // The capability request was acknowledged; the answer follows as `update_capabilities`.
+            Ok(WidgetResponse::RequestCapabilities) => self.inner.borrow_mut().openid.awaiting_update = true,
+            Ok(_) => self.finish_openid(Err(WidgetClientError::UnexpectedResponse { action: msg.action })),
+            // The grant ended before the request arrived (a use or a revoke whose update was still on
+            // its way): request the capability, once per token.
+            Err(ActionError::ErrorResponse { error })
+                if error.kind() == ErrorKind::MissingCapability && !self.inner.borrow().openid.requested =>
+            {
+                self.request_openid_capability()
+            }
+            Err(ActionError::ErrorResponse { error }) => self.finish_openid(Err(WidgetClientError::Host(error))),
+            Err(other) => self.finish_openid(Err(other.into())),
+        }
+    }
+
+    /// The host's `update_capabilities` that answers the OpenID flow's capability request.
+    fn openid_capability_answered(&self) {
+        if self.has_capability(&Capability::GetOpenId) {
+            self.send_with(WidgetRequest::GetOpenId, Waiter::OpenId);
+        } else {
+            self.finish_openid(Err(WidgetClientError::OpenIdBlocked));
+        }
+    }
+
+    /// End the OpenID flow: every caller gets `result`.
+    fn finish_openid(&self, result: Result<OpenIdToken, WidgetClientError>) {
+        let waiters = std::mem::take(&mut self.inner.borrow_mut().openid).waiters;
+        match &result {
+            Ok(_) => log::info!("got an OpenID token for {} call(s)", waiters.len()),
+            Err(error) => log::warn!("no OpenID token for {} call(s): {error}", waiters.len()),
+        }
+        for tx in waiters {
+            let _ = tx.send(result.clone());
         }
     }
 
@@ -552,9 +640,13 @@ impl WidgetClient {
             inner.pending.remove(&msg.request_id)
         };
         match sender {
-            Some((_, tx)) => {
+            Some((_, Waiter::Caller(tx))) => {
                 // The receiver may have been dropped; that is not an error.
                 let _ = tx.send(Ok(msg));
+                Ok(())
+            }
+            Some((_, Waiter::OpenId)) => {
+                self.continue_openid(msg);
                 Ok(())
             }
             None => Err(WidgetClientError::UnknownRequestId { request_id: msg.request_id }),
@@ -574,16 +666,20 @@ impl WidgetClient {
         };
         match request {
             HostRequest::UpdateCapabilities { request } => {
-                {
+                let answers_openid = {
                     // `allowed` is the full list: it replaces what the widget held, so the host
                     // can also take capabilities away.
                     let mut inner = self.inner.borrow_mut();
                     inner.state.pending_requested.clear();
                     inner.state.approved = request.allowed.clone();
-                }
+                    std::mem::take(&mut inner.openid.awaiting_update)
+                };
                 log::info!("the host updated the capabilities, the widget holds {}", request.allowed.len());
                 self.send(msg.ack());
                 self.delegate.on_capabilities_changed(request.allowed);
+                if answers_openid {
+                    self.openid_capability_answered();
+                }
             }
             HostRequest::ForwardEvent { event } => {
                 self.send(msg.ack());
@@ -612,13 +708,6 @@ impl WidgetClient {
             HostRequest::UpdateVisibility { request } => {
                 self.send(msg.ack());
                 self.delegate.on_visibility_change(request.visible);
-            }
-            HostRequest::ForwardOpenIdCredentials { request } => {
-                self.send(msg.ack());
-                let waiter = self.inner.borrow_mut().openid_waiters.remove(&request.original_request_id);
-                if let Some(tx) = waiter {
-                    let _ = tx.send(request);
-                }
             }
             HostRequest::Unknown => {
                 log::warn!("the host sent the unknown action {} ({})", msg.action, msg.request_id);
@@ -809,54 +898,134 @@ mod tests {
         assert_eq!(client.state().pending_requested, vec![Capability::Navigate, Capability::UploadFile]);
     }
 
-    #[test]
-    fn openid_phases() {
-        let (client, rec) = setup();
-        let token = OpenIdToken {
+    fn token() -> OpenIdToken {
+        OpenIdToken {
             access_token: "t".into(),
             token_type: "Bearer".into(),
             matrix_server_name: "x".into(),
             expires_in: 1,
-        };
-        // Allowed right away.
-        let fut = client.request_openid_token();
-        let sent = rec.drain();
-        assert_eq!(sent[0].action, "org.matrix.mscXXXX.get_openid");
-        client
-            .handle_message(
-                sent[0].response_to(json!({"state": "allowed", "access_token": "t", "token_type": "Bearer",
-                                           "matrix_server_name": "x", "expires_in": 1})),
-            )
-            .unwrap();
-        assert_eq!(block(fut).unwrap(), token);
-
-        // Blocked right away.
-        let fut = client.request_openid_token();
-        let sent = rec.drain();
-        client.handle_message(sent[0].response_to(json!({"state": "blocked"}))).unwrap();
-        assert_eq!(block(fut), Err(WidgetClientError::OpenIdBlocked));
-
-        // Pending, then credentials for that request id.
-        let fut = client.request_openid_token();
-        let sent = rec.drain();
-        let id = sent[0].request_id.clone();
-        client.handle_message(sent[0].response_to(json!({"state": "request"}))).unwrap();
-        let creds = HostRequest::ForwardOpenIdCredentials {
-            request: ForwardOpenIdCredentialsRequest::allowed(id, token.clone()),
         }
-        .into_wire("h");
-        client.handle_message(creds).unwrap();
-        assert_eq!(rec.drain()[0].response_body(), json!({}));
-        assert_eq!(block(fut).unwrap(), token);
+    }
 
-        // Credentials for an unknown request are acknowledged and ignored.
-        client
-            .handle_message(
-                HostRequest::ForwardOpenIdCredentials { request: ForwardOpenIdCredentialsRequest::blocked("nope") }
-                    .into_wire("h2"),
-            )
-            .unwrap();
-        assert_eq!(rec.drain()[0].response_body(), json!({}));
+    /// The host's reply with [`token`].
+    fn token_reply(request: &WireMessage) -> WireMessage {
+        request.response_to(
+            json!({"access_token": "t", "token_type": "Bearer", "matrix_server_name": "x", "expires_in": 1}),
+        )
+    }
+
+    fn update(allowed: Vec<Capability>, id: &str) -> WireMessage {
+        HostRequest::UpdateCapabilities { request: UpdateCapabilitiesRequest { allowed } }.into_wire(id)
+    }
+
+    const GET_OPENID: &str = "org.matrix.mscXXXX.get_openid";
+    const REQUEST_CAPABILITIES: &str = "org.matrix.msc4412.request_capabilities";
+
+    #[test]
+    fn openid_while_the_capability_is_held() {
+        let (client, rec) = setup();
+        client.handle_message(update(vec![Capability::GetOpenId], "h1")).unwrap();
+        rec.drain();
+        let fut = client.request_openid_token();
+        let sent = rec.drain();
+        assert_eq!(sent.len(), 1);
+        assert_eq!(sent[0].action, GET_OPENID);
+        client.handle_message(token_reply(&sent[0])).unwrap();
+        assert_eq!(block(fut).unwrap(), token());
+    }
+
+    #[test]
+    fn openid_requests_the_capability_when_needed() {
+        let (client, rec) = setup();
+        let mut calls = vec![client.request_openid_token(), client.request_openid_token()];
+        // One request for both calls.
+        let sent = rec.drain();
+        assert_eq!(sent.len(), 1);
+        assert_eq!(sent[0].action, REQUEST_CAPABILITIES);
+        assert_eq!(sent[0].request_body(), json!({"capabilities": ["widget:org.matrix.mscXXXX.get_openid"]}));
+        assert_eq!(client.state().pending_requested, vec![Capability::GetOpenId]);
+
+        // An update before the ack answers an earlier request, not this one.
+        client.handle_message(update(vec![], "h0")).unwrap();
+        assert_eq!(rec.drain().len(), 1);
+        client.handle_message(sent[0].ack()).unwrap();
+        client.handle_message(update(vec![Capability::GetOpenId], "h1")).unwrap();
+        let sent = rec.drain();
+        assert_eq!(
+            sent.iter().map(|m| m.action.as_str()).collect::<Vec<_>>(),
+            ["org.matrix.msc4412.update_capabilities", GET_OPENID]
+        );
+        // A call while the token is on its way gets it too.
+        calls.push(client.request_openid_token());
+        assert!(rec.drain().is_empty());
+        client.handle_message(token_reply(&sent[1])).unwrap();
+        for call in calls {
+            assert_eq!(block(call).unwrap(), token());
+        }
+
+        // The host ended the grant: the next call asks again, and a refusal is `OpenIdBlocked`.
+        client.handle_message(update(vec![], "h2")).unwrap();
+        rec.drain();
+        let fut = client.request_openid_token();
+        let sent = rec.drain();
+        assert_eq!(sent[0].action, REQUEST_CAPABILITIES);
+        client.handle_message(sent[0].ack()).unwrap();
+        client.handle_message(update(vec![Capability::Navigate], "h3")).unwrap();
+        assert_eq!(rec.drain().len(), 1);
+        assert_eq!(block(fut), Err(WidgetClientError::OpenIdBlocked));
+        assert!(client.has_capability(&Capability::Navigate));
+    }
+
+    #[test]
+    fn openid_with_a_grant_that_ended_meanwhile_asks_once() {
+        let (client, rec) = setup();
+        let missing =
+            |request: &WireMessage| request.error_response_to(WidgetError::missing_capability(&Capability::GetOpenId));
+        // The widget has not heard yet that its grant ended: the host refuses, the client asks.
+        client.handle_message(update(vec![Capability::GetOpenId], "h1")).unwrap();
+        rec.drain();
+        let fut = client.request_openid_token();
+        let sent = rec.drain();
+        assert_eq!(sent[0].action, GET_OPENID);
+        client.handle_message(missing(&sent[0])).unwrap();
+        let sent = rec.drain();
+        assert_eq!(sent[0].action, REQUEST_CAPABILITIES);
+        client.handle_message(sent[0].ack()).unwrap();
+        client.handle_message(update(vec![Capability::GetOpenId], "h2")).unwrap();
+        // Refused again after the grant: no loop, the host's error is the result.
+        let sent = rec.drain();
+        assert_eq!(sent[1].action, GET_OPENID);
+        client.handle_message(missing(&sent[1])).unwrap();
+        assert!(rec.drain().is_empty());
+        assert!(matches!(block(fut), Err(WidgetClientError::Host(e)) if e.kind() == ErrorKind::MissingCapability));
+    }
+
+    #[test]
+    fn openid_failures_reach_every_caller() {
+        let (client, rec) = setup();
+        // The host does not answer the capability request in time.
+        let (a, b) = (client.request_openid_token(), client.request_openid_token());
+        let id = rec.drain()[0].request_id.clone();
+        assert!(client.timeout_request(&id));
+        for call in [a, b] {
+            assert_eq!(block(call), Err(WidgetClientError::Timeout { action: REQUEST_CAPABILITIES.into() }));
+        }
+        // The backend fails.
+        client.handle_message(update(vec![Capability::GetOpenId], "h1")).unwrap();
+        rec.drain();
+        let fut = client.request_openid_token();
+        let sent = rec.drain();
+        client.handle_message(sent[0].error_response_to(WidgetError::new("no token"))).unwrap();
+        assert_eq!(block(fut), Err(WidgetClientError::Host(WidgetError::new("no token"))));
+        // The legacy shape is no token.
+        let fut = client.request_openid_token();
+        let sent = rec.drain();
+        client.handle_message(sent[0].response_to(json!({"state": "request"}))).unwrap();
+        assert!(matches!(block(fut), Err(WidgetClientError::Protocol(ActionError::InvalidBody { .. }))));
+        // Dropping the client cancels.
+        let fut = client.request_openid_token();
+        drop(client);
+        assert_eq!(block(fut), Err(WidgetClientError::Cancelled));
     }
 
     #[test]

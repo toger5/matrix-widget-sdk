@@ -24,6 +24,12 @@
 //! open question, so one answer decides all of them.
 //! [`WidgetHostDriver::revoke_capabilities`] takes capabilities away again.
 //!
+//! A grant can be limited. [`WidgetHostDriver::set_single_use`] names the capabilities a request
+//! uses up (`get_openid` by default, so every OpenID token is a decision of its own): the driver
+//! takes such a capability away when a request passes its check and sends `update_capabilities`
+//! after the reply. The driver has no clock; a time limit is a timer of the platform that calls
+//! `revoke_capabilities`.
+//!
 //! [`WidgetDefinition`] reads the widget state events of a room (MSC4411 `m.widget`, and the
 //! legacy `im.vector.modular.widgets`): [`WidgetDefinition::parse`] tells which events are widgets,
 //! [`WidgetDefinition::embed`] what a client loads for one, after the URL check

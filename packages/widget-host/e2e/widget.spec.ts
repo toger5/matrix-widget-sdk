@@ -1,4 +1,4 @@
-/** The WidgetView: loading, failed, the capability and OpenID prompts, and the widget API of both test widgets. leaves widgetview/* */
+/** The WidgetView: loading, failed, the capability prompt (OpenID included), and the widget API of both test widgets. leaves widgetview/* */
 import type { Locator } from "@playwright/test";
 
 import type { HostSeed } from "../src/app/controller";
@@ -9,6 +9,8 @@ const LEGACY = widgetId(LAB, LEGACY_WIDGET);
 const SEND_MESSAGE = "widget:org.matrix.mscXXXX.send_event.timeline:m.room.message";
 const SEND_TOPIC = "widget:org.matrix.mscXXXX.send_event.state:m.room.topic";
 const SEND_DELAYED = "widget:org.matrix.mscXXXX.send_event.delayed";
+/** The single-use capability: one OpenID token per grant. */
+const GET_OPENID = "widget:org.matrix.mscXXXX.get_openid";
 /** What leaf widgetview/prompt requests: four sections. */
 const SHORT = [
   "widget:org.matrix.msc2876.read_events.timeline:m.room.message",
@@ -36,6 +38,8 @@ const requestNext = (host: Host, id: string, capabilities: string[]) => host.fra
 /** The log of the test widget, newest first: "<label> → <result>" or "<label> failed <error>". */
 const widgetLog = (host: Host, id: string): Locator => host.frame(id).locator("#log");
 const approved = (host: Host, id: string) => host.page.evaluate((i) => window.widgetHost!.driverSnapshot(i)?.approved ?? [], id);
+/** "Once" / "Always" of the OpenID capability in the capability prompt. */
+const lifetime = (prompt: Locator): Locator => prompt.getByRole("radiogroup", { name: /\(OpenID\): once or always$/ });
 const messageBodies = async (host: Host) => (await host.store(LAB)).timeline.map((e) => (e.content as { body?: string }).body);
 
 test.beforeEach(async ({ host }) => {
@@ -235,7 +239,7 @@ test("a capability revoked while the prompt is open: the card is still answered,
   await expect.poll(() => approved(host, NEW)).toEqual([SEND_DELAYED]);
 });
 
-test("remembered capabilities: a widget that is opened again is not asked a second time", async ({ host }) => {
+test("remembered capabilities: a widget that is opened again is not asked a second time, except about the one-use OpenID capability", async ({ host }) => {
   const seed: Partial<HostSeed> = { sidePanel: null, behavior: { rememberCapabilities: true }, open: [{ room: LAB, widgets: [NEW_WIDGET] }] };
   await host.populate("lab", seed);
   const prompt = host.page.getByTestId("capability-prompt");
@@ -244,54 +248,227 @@ test("remembered capabilities: a widget that is opened again is not asked a seco
   await prompt.getByRole("button", { name: /^Approve \d+ selected$/ }).click();
   await expect.poll(async () => (await approved(host, NEW)).length).toBeGreaterThan(0);
   const granted = await approved(host, NEW);
+  // The test widget asks for an OpenID token at the start too; that grant is for one token, never remembered.
+  expect(granted).toContain(GET_OPENID);
+  const remembered = granted.filter((c) => c !== GET_OPENID);
+  const stored = () => host.page.evaluate(() => Object.keys(localStorage).flatMap((key) => (key.startsWith("widget_host_capabilities_v2 ") ? (JSON.parse(localStorage.getItem(key)!) as string[]) : [])));
+  await expect.poll(stored).toEqual(remembered);
 
+  // Opened again, it is asked about the OpenID capability only.
   await host.populate("lab", seed);
   await host.ready(NEW);
-  await expect.poll(() => approved(host, NEW)).toEqual(granted);
+  await expect(capabilityBoxes(prompt)).toHaveCount(1);
+  await expect(prompt.getByRole("checkbox", { name: escape(GET_OPENID) })).toBeVisible();
+  await prompt.getByRole("button", { name: "Deny all" }).click();
   await expect(prompt).toHaveCount(0);
+  await expect.poll(() => approved(host, NEW)).toEqual(remembered);
 
   // A capability this app does not know is approved like any other (it allows nothing), but not remembered.
   const unknown = "widget:org.example.custom.share_screen";
-  const stored = () => host.page.evaluate(() => Object.keys(localStorage).flatMap((key) => (key.startsWith("widget_host_capabilities_v1 ") ? (JSON.parse(localStorage.getItem(key)!) as string[]) : [])));
   await requestNext(host, NEW, [unknown]);
   await press(host, NEW, "request_capabilities");
   await expect(prompt.getByRole("group", { name: "Unknown to this app" })).toBeVisible();
   await host.passApproveDelay();
   await prompt.getByRole("button", { name: "Approve 1 selected" }).click();
   await expect.poll(() => approved(host, NEW)).toContain(unknown);
-  expect(await stored()).toEqual(expect.arrayContaining(granted));
-  expect(await stored()).not.toContain(unknown);
-  // Opened again, the widget is asked about it again.
+  expect(await stored()).toEqual(remembered);
+  // Opened again, the widget is asked about it again (with the OpenID capability of its start).
   await host.populate("lab", seed);
   await host.ready(NEW);
-  await expect.poll(() => approved(host, NEW)).toEqual(granted);
+  await expect(capabilityBoxes(prompt)).toHaveCount(1);
   await requestNext(host, NEW, [unknown]);
   await press(host, NEW, "request_capabilities");
-  await expect(capabilityBoxes(prompt)).toHaveCount(1);
+  await expect(capabilityBoxes(prompt)).toHaveCount(2);
   await expect(prompt.getByRole("group", { name: "Unknown to this app" })).toBeVisible();
 });
 
-test("OpenID prompt: block, allow, and auto-approve", async ({ host }) => {
+test("an approval remembered before OpenID became a one-use capability (store version 1) no longer hands out tokens", async ({ browser }) => {
+  const context = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+  const fresh = new Host(await context.newPage());
+  await fresh.page.goto("/?mode=memory");
+  // Version 1 held `get_openid` for every widget approved once; it meant "may ask", it would now mean "gets every token".
+  const v1 = `widget_host_capabilities_v1 @alice:dev.local ${LAB} ${NEW_WIDGET}`;
+  await fresh.page.evaluate((key) => localStorage.setItem(key, JSON.stringify(["widget:org.matrix.mscXXXX.send_event.timeline:m.room.message", "widget:org.matrix.mscXXXX.get_openid", "widget:m.get_openid"])), v1);
+  // The next start moves the entry to version 2 without it.
+  await fresh.page.goto("/?mode=memory");
+  await fresh.page.waitForFunction(() => window.widgetHost?.state().screen.kind === "main");
+  const stored = () => fresh.page.evaluate(() => Object.fromEntries(Object.keys(localStorage).filter((key) => key.startsWith("widget_host_capabilities_")).map((key) => [key, JSON.parse(localStorage.getItem(key)!) as string[]])));
+  expect(await stored()).toEqual({ [v1.replace("_v1 ", "_v2 ")]: [SEND_MESSAGE] });
+
+  // Opened with remembering on: the remembered capability is granted at once, the OpenID one is asked about.
+  await fresh.populate("lab", { sidePanel: null, behavior: { rememberCapabilities: true }, open: [{ room: LAB, widgets: [NEW_WIDGET] }] });
+  const prompt = fresh.page.getByTestId("capability-prompt");
+  await expect(prompt.getByRole("checkbox", { name: escape(GET_OPENID) })).toBeVisible();
+  await expect(prompt.getByRole("checkbox", { name: escape(SEND_MESSAGE) })).toHaveCount(0);
+  await prompt.getByRole("button", { name: "Deny all" }).click();
+  await expect.poll(() => approved(fresh, NEW)).toContain(SEND_MESSAGE);
+  expect(await approved(fresh, NEW)).not.toContain(GET_OPENID);
+  await context.close();
+});
+
+test("OpenID is a one-use capability: every token is a grant of its own, asked in the capability prompt", async ({ host }) => {
   await host.populate("lab", { sidePanel: null, behavior: { autoApproveCapabilities: true }, open: [{ room: LAB, widgets: [NEW_WIDGET] }] });
   await host.ready(NEW);
-  const prompt = host.page.getByTestId("openid-prompt");
-
+  const prompt = host.page.getByTestId("capability-prompt");
+  const tokens = widgetLog(host, NEW).locator("pre", { hasText: /get_openid →.*access_token/ });
+  expect(await host.page.evaluate((i) => window.widgetHost!.driverSnapshot(i)?.singleUse, NEW)).toEqual([GET_OPENID]);
+  // The test widget asks for it at the start, and auto-approve granted it; the token uses it up.
+  await expect.poll(() => approved(host, NEW)).toContain(GET_OPENID);
   await press(host, NEW, "get_openid");
-  await expect(prompt).toContainText("New test widget asks for your identity");
-  await prompt.getByRole("button", { name: "Block" }).click();
-  await expect(prompt).toHaveCount(0);
-  await expect(widgetLog(host, NEW)).toContainText("get_openid failed");
-
+  await expect(tokens).toHaveCount(1);
+  await expect.poll(() => approved(host, NEW)).not.toContain(GET_OPENID);
+  // "Auto-approve capabilities" covers it: the next token requests it again and gets it without a prompt.
   await press(host, NEW, "get_openid");
-  await prompt.getByRole("button", { name: "Allow" }).click();
+  await expect(tokens).toHaveCount(2);
   await expect(prompt).toHaveCount(0);
-  await expect(widgetLog(host, NEW).locator("pre").first()).toContainText(/get_openid →.*access_token/);
+  // The response is the token itself; `update_capabilities` without the capability follows it.
+  const wire = await host.page.evaluate((i) => window.widgetHost!.messages(i), NEW);
+  const replies = wire.flatMap(({ direction, message }, index) => {
+    const m = message as { action: string; response?: Record<string, unknown> };
+    return direction === "toWidget" && m.action.endsWith(".get_openid") && m.response ? [{ index, response: m.response }] : [];
+  });
+  expect(replies).toHaveLength(2);
+  for (const { index, response } of replies) {
+    expect(Object.keys(response).sort()).toEqual(["access_token", "expires_in", "matrix_server_name", "token_type"]);
+    const next = wire[index + 1].message as { action: string; request: { allowed: string[] } };
+    expect(next.action).toBe("org.matrix.msc4412.update_capabilities");
+    expect(next.request.allowed).not.toContain(GET_OPENID);
+  }
 
-  // "auto-approve OpenID tokens" of the DevBackendView applies to the running widget.
-  await host.dispatch({ type: "mock/setBehavior", behavior: { autoApproveOpenId: true } });
+  // Without auto-approve the capability prompt asks, about the one capability, for one use by default.
+  await host.dispatch({ type: "mock/setBehavior", behavior: { autoApproveCapabilities: false } });
   await press(host, NEW, "get_openid");
-  await expect(widgetLog(host, NEW).locator("pre", { hasText: /get_openid →.*access_token/ })).toHaveCount(2);
+  await expect(capabilityBoxes(prompt)).toHaveCount(1);
+  await expect(prompt.getByRole("checkbox", { name: escape(GET_OPENID) })).toBeVisible();
+  await expect(lifetime(prompt).getByRole("radio", { name: "Once" })).toBeChecked();
+  await expect(prompt.getByRole("status")).toContainText("You can approve in");
+  await host.leaf("widgetview/prompt-openid");
+  await host.passApproveDelay();
+  await prompt.getByRole("button", { name: "Approve 1 selected" }).click();
   await expect(prompt).toHaveCount(0);
+  await expect(tokens).toHaveCount(3);
+  await expect.poll(() => approved(host, NEW)).not.toContain(GET_OPENID);
+  // The next token is asked about again; denied, there is none.
+  await press(host, NEW, "get_openid");
+  await expect(capabilityBoxes(prompt)).toHaveCount(1);
+  await prompt.getByRole("button", { name: "Deny all" }).click();
+  await expect(prompt).toHaveCount(0);
+  await expect(widgetLog(host, NEW).locator("pre").first()).toContainText(/get_openid failed.*blocked the OpenID request/);
+  await expect(tokens).toHaveCount(3);
+});
+
+test("OpenID \"Always\": every next token without the card, remembered with the other approvals; the driver panel marks the one-use grant", async ({ host }) => {
+  const seed: Partial<HostSeed> = { sidePanel: null, behavior: { autoApproveCapabilities: true, rememberCapabilities: true }, open: [{ room: LAB, widgets: [NEW_WIDGET] }] };
+  await host.populate("lab", seed);
+  await host.ready(NEW);
+  const prompt = host.page.getByTestId("capability-prompt");
+  const tokens = widgetLog(host, NEW).locator("pre", { hasText: /get_openid →.*access_token/ });
+  const stored = () => host.page.evaluate(() => Object.keys(localStorage).flatMap((key) => (key.startsWith("widget_host_capabilities_v2 ") ? (JSON.parse(localStorage.getItem(key)!) as string[]) : [])));
+  await host.button("Dev tools of New test widget").click();
+  await host.page.getByRole("toolbar", { name: "Widget dev tools" }).getByRole("button", { name: /^Driver/ }).click();
+  const driver = host.page.getByTestId("devtools-driver");
+  const heldRow = driver.getByRole("list", { name: "Approved capabilities", exact: true }).locator(`[data-capability="${GET_OPENID}"]`);
+  const autoRow = driver.getByRole("list", { name: "Auto-approved capabilities" }).locator(`[data-capability="${GET_OPENID}"]`);
+
+  // Granted at the start (auto-approve), for one use: marked "once", not auto-approved, not remembered.
+  await expect(heldRow).toContainText("once");
+  await expect(autoRow).toHaveCount(0);
+  expect(await stored()).not.toContain(GET_OPENID);
+  await host.dispatch({ type: "mock/setBehavior", behavior: { autoApproveCapabilities: false } });
+  await press(host, NEW, "get_openid");
+  await expect(tokens).toHaveCount(1);
+  await expect(heldRow).toHaveCount(0);
+
+  // The next token asks. The choice is in the row's label, but choosing does not toggle the row; unchecked, it is disabled.
+  await press(host, NEW, "get_openid");
+  await expect(capabilityBoxes(prompt)).toHaveCount(1);
+  const row = prompt.getByRole("checkbox", { name: escape(GET_OPENID) });
+  const [once, always] = [lifetime(prompt).getByRole("radio", { name: "Once" }), lifetime(prompt).getByRole("radio", { name: "Always" })];
+  await always.click();
+  await expect(always).toBeChecked();
+  await expect(once).not.toBeChecked();
+  await expect(row).toBeChecked();
+  await row.click();
+  await expect(always).toBeDisabled();
+  await expect(lifetime(prompt)).toHaveAttribute("aria-disabled", "true");
+  await row.click();
+  await expect(always).toBeEnabled();
+  await expect(always).toBeChecked();
+  await host.passApproveDelay();
+  await prompt.getByRole("button", { name: "Approve 1 selected" }).click();
+  await expect(prompt).toHaveCount(0);
+  await expect(tokens).toHaveCount(2);
+
+  // From now on every token is granted without the card: auto-approved, and remembered.
+  await expect(autoRow).toHaveCount(1);
+  await expect(heldRow).toHaveCount(0);
+  await expect.poll(stored).toContain(GET_OPENID);
+  await press(host, NEW, "get_openid");
+  await expect(tokens).toHaveCount(3);
+  await expect(prompt).toHaveCount(0);
+
+  // Opened again, the widget is not asked at all: its start request gets the OpenID capability too.
+  await host.populate("lab", { ...seed, behavior: { autoApproveCapabilities: false, rememberCapabilities: true } });
+  await host.ready(NEW);
+  await expect.poll(() => approved(host, NEW)).toContain(GET_OPENID);
+  await expect(prompt).toHaveCount(0);
+});
+
+test("OpenID \"Always\" without remembering lasts while the widget runs", async ({ host }) => {
+  await host.populate("lab", { sidePanel: null, behavior: { autoApproveCapabilities: false, rememberCapabilities: false }, open: [{ room: LAB, widgets: [NEW_WIDGET] }] });
+  const prompt = host.page.getByTestId("capability-prompt");
+  const tokens = widgetLog(host, NEW).locator("pre", { hasText: /get_openid →.*access_token/ });
+  // The start request: everything, the OpenID capability "Always".
+  await expect(prompt).toBeVisible();
+  await lifetime(prompt).getByRole("radio", { name: "Always" }).click();
+  await host.passApproveDelay();
+  await prompt.getByRole("button", { name: /^Approve \d+ selected$/ }).click();
+  await expect(prompt).toHaveCount(0);
+  await press(host, NEW, "get_openid");
+  await press(host, NEW, "get_openid");
+  await expect(tokens).toHaveCount(2);
+  await expect(prompt).toHaveCount(0);
+  expect(await host.page.evaluate(() => Object.keys(localStorage).filter((key) => key.startsWith("widget_host_capabilities_v2 ")))).toEqual([]);
+
+  // A reload starts it again: it is asked again, the OpenID capability included, "Once" again.
+  await host.dispatch({ type: "widget/reload", widgetId: NEW });
+  await expect(prompt.getByRole("checkbox", { name: escape(GET_OPENID) })).toBeVisible();
+  await expect(lifetime(prompt).getByRole("radio", { name: "Once" })).toBeChecked();
+});
+
+test("legacy widget: get_openid through the wrapper", async ({ host }) => {
+  await host.populate("lab", { sidePanel: null, open: [{ room: LAB, widgets: [LEGACY_WIDGET] }] });
+  const prompt = host.page.getByTestId("capability-prompt");
+  await expect(prompt).toContainText("Legacy test widget asks for permissions");
+  // A legacy widget may always ask for a token, but the wrapper requests the capability per token, not up front.
+  await expect(prompt.getByRole("checkbox", { name: /get_openid/ })).toHaveCount(0);
+  const count = await capabilityBoxes(prompt).count();
+  await host.passApproveDelay();
+  await prompt.getByRole("button", { name: `Approve ${count} selected` }).click();
+  await host.ready(LEGACY);
+  const legacy = host.frame(LEGACY).frameLocator("iframe");
+  const getOpenId = legacy.getByRole("button", { name: "get_openid", exact: true });
+  const tokens = legacy.locator("#log pre", { hasText: /get_openid →.*access_token/ });
+
+  // The wrapper answers `state: "request"`, requests the capability, and the user is asked.
+  await getOpenId.click();
+  await expect(capabilityBoxes(prompt)).toHaveCount(1);
+  await expect(prompt.getByRole("checkbox", { name: escape(GET_OPENID) })).toBeVisible();
+  await host.passApproveDelay();
+  await prompt.getByRole("button", { name: "Approve 1 selected" }).click();
+  // The token reaches the legacy widget as `openid_credentials`, and the grant is used up.
+  await expect(tokens).toHaveCount(1);
+  await expect(legacy.locator("#log pre", { hasText: /openid_credentials.*"state":"allowed"/ })).toHaveCount(1);
+  await expect.poll(() => approved(host, LEGACY)).not.toContain(GET_OPENID);
+  expect(await host.actions(LEGACY, "fromWidget")).toContain("org.matrix.mscXXXX.get_openid");
+
+  // Denied the next time: the legacy widget is told `blocked`.
+  await getOpenId.click();
+  await expect(capabilityBoxes(prompt)).toHaveCount(1);
+  await prompt.getByRole("button", { name: "Deny all" }).click();
+  await expect(prompt).toHaveCount(0);
+  await expect(legacy.locator("#log pre").first()).toContainText("get_openid failed");
+  await expect(tokens).toHaveCount(1);
 });
 
 test("the legacy widget runs through the compat wrapper: one prompt with the new names, template variables resolved", async ({ host }) => {

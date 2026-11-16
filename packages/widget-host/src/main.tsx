@@ -5,6 +5,7 @@ import { uniffiInitAsync } from "@matrix-widget-tools/widget-host-bindings";
 import { AppRoot } from "./app/AppRoot";
 import { AppController } from "./app/controller";
 import { installTestHook } from "./app/testHook";
+import { migrateCapabilityStore } from "./lib/capabilityStore";
 import { setupDriverLogging } from "./lib/hostLogging";
 import "./styles/fonts";
 import css from "./styles/app.css?inline";
@@ -37,6 +38,7 @@ try {
   await uniffiInitAsync();
   const params = new URLSearchParams(location.search);
   setupDriverLogging(params.get("log"), params.get("logFilter"));
+  migrateCapabilityStore();
   const controller = new AppController();
   installTestHook(controller);
   root.render(

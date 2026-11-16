@@ -2,17 +2,17 @@
 //! `InMemoryBackend`; the platform records everything it is told.
 
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
 use serde_json::{json, Value};
 use widget_actions::{
-    Base64File, Capability, DownloadFileRequest, DownloadFileResponse, ErrorKind, ForwardOpenIdCredentialsRequest,
-    GetClientContextResponse, GetMatrixContextResponse, GetOpenIdResponse, GetRtcLivekitTokenResponse, HostRequest,
-    JsonValue, MatrixEvent, ReadEventsRequest, ReadRelationsRequest, ReadRoomAccountDataRequest,
-    RequestCapabilitiesRequest, RoomSelector, RtcTransportsResponse, SendEventRequest, SendToDeviceRequest,
-    SetAlwaysOnScreenResponse, Source, StateKeySelector, ToDeviceEvent, TurnServer, UpdateCapabilitiesRequest,
-    UpdateDelayedEventAction, UploadFileRequest, WidgetRequest, WidgetResponse, WireMessage,
+    Base64File, Capability, DownloadFileRequest, DownloadFileResponse, ErrorKind, GetClientContextResponse,
+    GetMatrixContextResponse, GetRtcLivekitTokenResponse, HostRequest, JsonValue, MatrixEvent, ReadEventsRequest,
+    ReadRelationsRequest, ReadRoomAccountDataRequest, RequestCapabilitiesRequest, RoomSelector, RtcTransportsResponse,
+    SendEventRequest, SendToDeviceRequest, SetAlwaysOnScreenResponse, Source, StateKeySelector, ToDeviceEvent,
+    TurnServer, UpdateCapabilitiesRequest, UpdateDelayedEventAction, UploadFileRequest, WidgetRequest, WidgetResponse,
+    WireMessage,
 };
 use widget_matrix_backend::{BackendError, InMemoryBackend, MatrixBackend, MediaFile};
 
@@ -23,7 +23,6 @@ struct RecordingPlatform {
     sent: Mutex<Vec<WireMessage>>,
     requested: Mutex<Vec<Vec<Capability>>>,
     ready: AtomicBool,
-    openid_requests: AtomicUsize,
     navigated: Mutex<Vec<String>>,
     always_on_screen: Mutex<Option<bool>>,
 }
@@ -43,9 +42,6 @@ impl WidgetHostPlatform for RecordingPlatform {
     }
     fn on_ready(&self) {
         self.ready.store(true, Ordering::SeqCst);
-    }
-    fn on_openid_requested(&self) {
-        self.openid_requests.fetch_add(1, Ordering::SeqCst);
     }
     fn navigate(&self, uri: String) -> Result<(), PlatformError> {
         if uri.contains("broken") {
@@ -601,69 +597,161 @@ fn approving_capabilities_subscribes_with_derived_subjects() {
     assert_eq!(subscriptions[0].state_event_types, types(&["m.room.topic"]));
 }
 
-#[test]
-fn openid_flow() {
-    let (driver, backend, platform) = setup();
-    // Without the capability the user is not even asked.
-    block(feed(&driver, WidgetRequest::GetOpenId, "o0")).unwrap();
-    assert!(platform.drain()[0].error().unwrap().message.contains("widget:org.matrix.mscXXXX.get_openid"));
-    assert_eq!(platform.openid_requests.load(Ordering::SeqCst), 0);
-    grant(&driver, &platform, vec![Capability::GetOpenId]);
+/// The `get_openid` response: the token.
+fn token_of(msg: &WireMessage) -> widget_actions::OpenIdToken {
+    match WidgetResponse::from_wire(msg) {
+        Ok(WidgetResponse::GetOpenId { response }) => response,
+        other => panic!("not a token: {other:?}"),
+    }
+}
 
-    // Phase one: the user is asked.
+#[test]
+fn openid_is_a_one_use_capability() {
+    let (driver, _, platform) = setup();
+    assert_eq!(driver.snapshot().single_use, vec![Capability::GetOpenId]);
+    // Without the capability: refused, the error names it.
+    block(feed(&driver, WidgetRequest::GetOpenId, "o0")).unwrap();
+    let error = platform.drain()[0].error().unwrap();
+    assert_eq!(error.kind(), ErrorKind::MissingCapability);
+    assert!(error.message.contains("widget:org.matrix.mscXXXX.get_openid"));
+
+    // Granted in the capability negotiation like any other; it is the user's consent.
+    grant(&driver, &platform, vec![Capability::GetOpenId, Capability::Navigate]);
+    block(feed(&driver, WidgetRequest::GetOpenId, "o1")).unwrap();
+    let sent = platform.drain();
+    // The token at once, then the update without the capability: the use ended the grant.
+    assert_eq!(sent.len(), 2);
+    assert_eq!(sent[0].request_id, "o1");
+    let token = token_of(&sent[0]);
+    assert!(token.access_token.starts_with("openid-token-"));
+    assert_eq!(token.matrix_server_name, "matrix.example.org");
+    assert_eq!(updates(&sent[1..]), [vec![Capability::Navigate]]);
+    assert_eq!(driver.snapshot().approved, vec![Capability::Navigate]);
+    block(driver.handle_message_from_widget(sent[1].ack().to_json())).unwrap();
+
+    // A second token needs a second grant.
+    block(feed(&driver, WidgetRequest::GetOpenId, "o2")).unwrap();
+    let sent = platform.drain();
+    assert_eq!(sent.len(), 1);
+    assert_eq!(sent[0].error().unwrap().kind(), ErrorKind::MissingCapability);
+    request_caps(&driver, vec![Capability::GetOpenId], "again");
+    assert_eq!(platform.requested.lock().unwrap().last().unwrap(), &vec![Capability::GetOpenId]);
+    driver.approve_capabilities(vec![Capability::GetOpenId]);
+    platform.drain();
+    block(feed(&driver, WidgetRequest::GetOpenId, "o3")).unwrap();
+    let sent = platform.drain();
+    assert_ne!(token_of(&sent[0]), token);
+    assert_eq!(updates(&sent), [vec![Capability::Navigate]]);
+}
+
+#[test]
+fn a_use_is_a_request_that_passed_the_check_whatever_its_result() {
+    let (driver, _, platform) = setup();
+    driver.set_single_use(vec![Capability::Navigate]);
+    assert_eq!(driver.snapshot().single_use, vec![Capability::Navigate]);
+    grant(&driver, &platform, vec![Capability::Navigate, Capability::GetOpenId]);
+    // The platform refuses to navigate: the widget gets the error, and the capability is used up.
+    let navigate = |uri: &str, id: &str| {
+        block(feed(
+            &driver,
+            WidgetRequest::Navigate { request: widget_actions::NavigateRequest { uri: uri.into() } },
+            id,
+        ))
+        .unwrap();
+        platform.drain()
+    };
+    let sent = navigate("https://matrix.to/#/!broken:x", "n1");
+    assert!(sent[0].error().unwrap().message.contains("no such room"));
+    assert_eq!(updates(&sent), [vec![Capability::GetOpenId]]);
+    // An invalid request does not pass the check, so nothing is used up.
+    grant(&driver, &platform, vec![Capability::Navigate]);
+    let wire = WireMessage::request(Source::Widget, "org.matrix.msc2931.navigate", "n2", json!({"uri": 5}));
+    block(driver.handle_message_from_widget(wire.to_json())).unwrap();
+    assert_eq!(platform.drain()[0].error().unwrap().kind(), ErrorKind::InvalidRequest);
+    assert!(driver.snapshot().approved.contains(&Capability::Navigate));
+    // `get_openid` is no longer single use: it stays.
     block(feed(&driver, WidgetRequest::GetOpenId, "o1")).unwrap();
     block(feed(&driver, WidgetRequest::GetOpenId, "o2")).unwrap();
     let sent = platform.drain();
     assert_eq!(sent.len(), 2);
-    for m in &sent {
-        assert_eq!(
-            WidgetResponse::from_wire(m).unwrap(),
-            WidgetResponse::GetOpenId { response: GetOpenIdResponse::pending() }
-        );
+    assert!(updates(&sent).is_empty());
+    token_of(&sent[1]);
+}
+
+#[test]
+fn an_empty_single_use_list_keeps_every_grant() {
+    let (driver, _, platform) = setup();
+    driver.set_single_use(vec![]);
+    assert!(driver.snapshot().single_use.is_empty());
+    grant(&driver, &platform, vec![Capability::GetOpenId]);
+    for id in ["o1", "o2"] {
+        block(feed(&driver, WidgetRequest::GetOpenId, id)).unwrap();
+        let sent = platform.drain();
+        assert_eq!(sent.len(), 1);
+        token_of(&sent[0]);
     }
-    assert_eq!(platform.openid_requests.load(Ordering::SeqCst), 2);
-    assert_eq!(driver.snapshot().pending_openid_requests, vec!["o1".to_string(), "o2".to_string()]);
+    assert_eq!(driver.snapshot().approved, vec![Capability::GetOpenId]);
+}
 
-    // Allowed: one forward_openid_credentials per pending request, all with the same token.
-    block(driver.resolve_openid(true));
+#[test]
+fn host_capabilities_are_never_single_use() {
+    let (driver, _, platform) = setup();
+    // `watch_turn_servers` needs the host capability of the pushes it starts; a push uses nothing up.
+    driver.set_single_use(vec![Capability::UpdateTurnServers, Capability::UpdateTheme, Capability::Navigate]);
+    assert_eq!(driver.snapshot().single_use, vec![Capability::Navigate]);
+    grant(&driver, &platform, vec![Capability::UpdateTurnServers, Capability::UpdateTheme]);
+    block(feed(&driver, WidgetRequest::WatchTurnServers, "w1")).unwrap();
+    block(feed(&driver, WidgetRequest::UnwatchTurnServers, "w2")).unwrap();
+    driver.update_theme(json!({"name": "dark"}).into());
+    driver.update_theme(json!({"name": "light"}).into());
     let sent = platform.drain();
-    assert_eq!(sent.len(), 2);
-    let creds: Vec<ForwardOpenIdCredentialsRequest> = sent
-        .iter()
-        .map(|m| match HostRequest::from_wire(m).unwrap() {
-            HostRequest::ForwardOpenIdCredentials { request } => request,
-            other => panic!("{other:?}"),
-        })
-        .collect();
-    assert_eq!(creds[0].original_request_id, "o1");
-    assert_eq!(creds[1].original_request_id, "o2");
-    assert_eq!(creds[0].token().unwrap().matrix_server_name, "matrix.example.org");
-    assert_eq!(creds[0].token(), creds[1].token());
-    assert!(driver.snapshot().pending_openid_requests.is_empty());
-    // Resolving again is a no-op.
-    block(driver.resolve_openid(true));
-    assert!(platform.drain().is_empty());
+    assert!(updates(&sent).is_empty());
+    assert_eq!(sent.iter().filter(|m| short(m) == "update_theme").count(), 2);
+    assert_eq!(driver.snapshot().approved, vec![Capability::UpdateTurnServers, Capability::UpdateTheme]);
+}
 
-    // Blocked.
-    block(feed(&driver, WidgetRequest::GetOpenId, "o3")).unwrap();
+#[test]
+fn an_auto_approved_single_use_capability_is_granted_again_per_request() {
+    // "Always": the client remembers it as auto-approved.
+    let (driver, _, platform) = setup();
+    driver.set_auto_approved(vec![Capability::GetOpenId]);
+    for round in 0..2 {
+        request_caps(&driver, vec![Capability::GetOpenId], &format!("r{round}"));
+        assert_eq!(updates(&platform.drain()), [vec![Capability::GetOpenId]]);
+        block(feed(&driver, WidgetRequest::GetOpenId, &format!("o{round}"))).unwrap();
+        let sent = platform.drain();
+        token_of(&sent[0]);
+        assert_eq!(updates(&sent), [Vec::<Capability>::new()]);
+    }
+    assert!(platform.requested.lock().unwrap().is_empty());
+}
+
+#[test]
+fn using_a_capability_up_while_a_question_is_open() {
+    let (driver, _, platform) = setup();
+    grant(&driver, &platform, vec![Capability::GetOpenId]);
+    platform.requested.lock().unwrap().clear();
+    request_caps(&driver, vec![Capability::Navigate, Capability::GetOpenId], "a");
+    assert_eq!(platform.requested.lock().unwrap().as_slice(), &[vec![Capability::Navigate]]);
     platform.drain();
-    block(driver.resolve_openid(false));
-    let sent = platform.drain();
-    assert_eq!(
-        HostRequest::from_wire(&sent[0]).unwrap(),
-        HostRequest::ForwardOpenIdCredentials { request: ForwardOpenIdCredentialsRequest::blocked("o3") }
-    );
 
-    // Auto-approved: answered in phase one, platform not asked.
-    driver.set_openid_auto_approved(true);
-    assert!(driver.snapshot().openid_auto_approved);
-    block(feed(&driver, WidgetRequest::GetOpenId, "o4")).unwrap();
+    // The use ends the grant at once; the open question stays open.
+    block(feed(&driver, WidgetRequest::GetOpenId, "o1")).unwrap();
     let sent = platform.drain();
-    assert_eq!(sent.len(), 1);
-    let WidgetResponse::GetOpenId { response } = WidgetResponse::from_wire(&sent[0]).unwrap() else { panic!() };
-    assert!(response.token().unwrap().access_token.starts_with("openid-token-"));
-    assert_eq!(platform.openid_requests.load(Ordering::SeqCst), 3);
-    let _ = backend;
+    token_of(&sent[0]);
+    assert_eq!(updates(&sent), [Vec::<Capability>::new()]);
+    assert_eq!(driver.snapshot().pending_requested, vec![Capability::Navigate, Capability::GetOpenId]);
+    // The platform was not asked about it, so an answer that approves what it was asked about
+    // does not grant it again (like a capability revoked while the question is open) ...
+    driver.approve_capabilities(vec![Capability::Navigate]);
+    assert_eq!(updates(&platform.drain()), [vec![Capability::Navigate]]);
+    // ... and a request for it while a question is open joins the question.
+    request_caps(&driver, vec![Capability::UploadFile], "b");
+    request_caps(&driver, vec![Capability::GetOpenId], "c");
+    assert_eq!(
+        platform.requested.lock().unwrap().last().unwrap(),
+        &vec![Capability::UploadFile, Capability::GetOpenId]
+    );
 }
 
 #[test]
@@ -1154,7 +1242,6 @@ fn nothing_is_sent_before_the_widget_spoke() {
     // The host must not send an action before it has received the first one from the widget.
     driver.revoke_capabilities(vec![Capability::Navigate]);
     driver.update_language("de".into());
-    block(driver.resolve_openid(true));
     assert!(platform.drain().is_empty());
 
     grant(&driver, &platform, vec![Capability::UpdateLanguage]);

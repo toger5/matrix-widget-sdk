@@ -69,6 +69,7 @@ envelope fields and `uses_widget_api` are not prefixed) → Dependencies (MSC441
 | MSC4412 action naming: wire names, stable `m.` aliases | serde `rename` / `alias` in `crates/widget-actions/src/actions/{widget,host}/mod.rs` |
 | MSC4412 capability format | `crates/widget-actions/src/capabilities.rs`; all actions and their capabilities in `docs/spec-appendix/capability-naming-proposal.md` |
 | MSC4412 core actions | `crates/widget-actions/src/actions/widget/{notify_ready,request_capabilities}.rs`, `crates/widget-actions/src/actions/host/update_capabilities.rs`; handshake and approval in `crates/widget-host-driver/src/driver/` and `platform.rs` |
+| MSC4412 limited grants (proposed: `spec/patch/msc4412/capability-lifetimes.md`) | single use in the driver: `WidgetHostDriver::set_single_use` (`driver/mod.rs`), used up in `driver/requests.rs` `handle_request`; time limits are the platform's timer plus `revoke_capabilities` |
 | MSC4412 transport | widget: `crates/widget-base-sdk/src/wasm.rs`; host: `packages/widget-host/src/app/runtime/widgetRuntime.ts` |
 | MSC4412 `uses_widget_api` | `widget_event.rs` (`WidgetDefinition.uses_widget_api`, `WidgetEmbed.uses_widget_api`); the host's runtime: `packages/widget-host/src/app/runtime/widgetRuntime.ts` |
 | MSC4412 backwards compatibility | the driver rejects legacy messages (`DriverError::LegacyWidgetApi`, `crates/widget-host-driver/src/error.rs`); `packages/widget-compat-wrapper` runs legacy widgets |
@@ -97,7 +98,7 @@ grep -hoE 'rename = "[a-z]+\.[^"]+"' crates/widget-actions/src/actions/{widget,h
 
 Behind actions that use the placeholder (`docs/parity.md` §2 has the full table): MSC2762
 (sending/receiving events: `send_event`, `forward_event`, `update_state`), MSC3819 (to-device),
-MSC1960 (OpenID, merged), MSC3846 (TURN servers), MSC2873 (client and theme), MSC4407 / MSC4354
+MSC1960 (OpenID, merged; as a capability: the draft `spec/patch/new/openid-capability.md`), MSC3846 (TURN servers), MSC2873 (client and theme), MSC4407 / MSC4354
 (sticky events), MSC2974 and MSC2871 (capability re-exchange and approval). `com.beeper.read_room_account_data`
 has no MSC (related: MSC3751). Also watch MSC4541 ("Widget state"), an alternative proposal for
 the widget state event. All widget MSCs:

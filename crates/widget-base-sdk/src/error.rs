@@ -25,7 +25,7 @@ pub enum WidgetClientError {
     /// The client was dropped before the host answered.
     #[error("the widget client was dropped before a response arrived")]
     Cancelled,
-    /// The host (or the user) refused to hand out an OpenID token.
+    /// The host (or the user) did not grant `widget:…get_openid`, so there is no OpenID token.
     #[error("the host blocked the OpenID request")]
     OpenIdBlocked,
 }

@@ -26,7 +26,6 @@ mod json;
 mod matrix;
 mod wire;
 
-pub use actions::host::forward_openid_credentials::ForwardOpenIdCredentialsRequest;
 pub use actions::host::update_capabilities::UpdateCapabilitiesRequest;
 pub use actions::host::update_language::UpdateLanguageRequest;
 pub use actions::host::update_state::UpdateStateRequest;
@@ -36,7 +35,6 @@ pub use actions::widget::download_file::{DownloadFileRequest, DownloadFileRespon
 pub use actions::widget::get_client_context::GetClientContextResponse;
 pub use actions::widget::get_matrix_context::GetMatrixContextResponse;
 pub use actions::widget::get_media_config::MediaConfigResponse;
-pub use actions::widget::get_openid::{GetOpenIdResponse, OpenIdState};
 pub use actions::widget::get_rtc_transports::RtcTransportsResponse;
 pub use actions::widget::navigate::NavigateRequest;
 pub use actions::widget::read_events::{ReadEventsRequest, ReadEventsResponse, RoomSelector};

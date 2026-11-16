@@ -24,7 +24,7 @@ pub(super) fn required_capability(request: &WidgetRequest) -> Option<Capability>
         R::UpdateDelayedEvent { .. } => Capability::UpdateDelayedEvent,
         // Watching is how the widget starts the `update_turn_servers` pushes.
         R::WatchTurnServers | R::UnwatchTurnServers => Capability::UpdateTurnServers,
-        // The capability allows asking; the user may still be asked per request.
+        // Single use by default (`WidgetHostDriver::set_single_use`).
         R::GetOpenId => Capability::GetOpenId,
         R::GetRtcTransports => Capability::GetRtcTransports,
         R::SearchUserDirectory { .. } => Capability::SearchUserDirectory,
@@ -61,8 +61,8 @@ pub(super) fn push_capability(request: &HostRequest) -> Option<Capability> {
         H::UpdateTheme { .. } => Capability::UpdateTheme,
         H::UpdateLanguage { .. } => Capability::UpdateLanguage,
         H::UpdateVisibility { .. } => Capability::UpdateVisibility,
-        // The handshake, and the late reply to a `get_openid` that was already allowed.
-        H::UpdateCapabilities { .. } | H::ForwardOpenIdCredentials { .. } | H::Unknown => return None,
+        // The handshake.
+        H::UpdateCapabilities { .. } | H::Unknown => return None,
         // Checked against the event by the forwarding code.
         H::ForwardEvent { .. } | H::UpdateState { .. } | H::ForwardToDevice { .. } => return None,
     })
