@@ -1,4 +1,4 @@
-/** Decide how to embed a widget from its state event: directly (MSC4411) or via the compat wrapper (legacy). */
+/** Decide how to embed a widget from its state event: directly (MSC4411), via the compat wrapper (legacy), or not at all (not an http(s) URL). */
 
 export interface StateEvent {
   type: string;
@@ -26,19 +26,42 @@ export const describesWidget = (event: StateEvent) => typeof event.content.url =
 export const widgetKey = (event: Pick<StateEvent, "type" | "state_key">) => `${event.type}/${event.state_key}`;
 
 /**
- * The only transition-specific code a client needs. The host never templates URLs: a legacy
- * widget's `content.url` is handed to the compat wrapper as is, and the wrapper resolves
- * `$matrix_user_id` & co. itself via the `get_matrix_context` / `get_client_context` actions.
+ * Why a widget URL cannot be embedded, or `undefined` when it can: only absolute `http:` and
+ * `https:` URLs. A `javascript:`, `data:`, `blob:`, `about:` or relative URL would run in, or
+ * inherit, the origin of the page that loads it; for a legacy widget that is the compat wrapper,
+ * which is served from the host's origin. Parsed as the browser parses an iframe's `src`: leading
+ * spaces and control characters, tabs and newlines are dropped, the scheme is case-insensitive.
+ * A legacy URL is checked as the template it is: one that starts with a `$variable` has no scheme
+ * and is refused, since the variable could expand to one; after the scheme a variable cannot
+ * change it (the wrapper URI-encodes what it fills in).
+ */
+export function widgetUrlProblem(url: string): string | undefined {
+  if (!URL.canParse(url)) return "the URL is not an absolute http: or https: URL";
+  const { protocol } = new URL(url);
+  return protocol === "http:" || protocol === "https:" ? undefined : `${protocol} URLs are not allowed, only http: and https:`;
+}
+
+/**
+ * The only transition-specific code a client needs, and the one place where a state event
+ * becomes something the host puts into an iframe: it throws for a URL `widgetUrlProblem` refuses.
+ * The host never templates URLs: a legacy widget's `content.url` is handed to the compat wrapper
+ * as is, and the wrapper resolves `$matrix_user_id` & co. itself via the `get_matrix_context` /
+ * `get_client_context` actions.
  */
 export function resolveWidget(event: StateEvent, wrapperUrl: string): ResolvedWidget {
   const { content } = event;
   if (typeof content.url !== "string") throw new Error("removed widget or missing `url`");
+  const problem = widgetUrlProblem(content.url);
+  if (problem) throw new Error(problem);
   const name = typeof content.name === "string" ? content.name : event.state_key;
 
   if (NEW_TYPES.includes(event.type)) {
     return { url: content.url, name, legacy: false, usesWidgetApi: content.uses_widget_api === true };
   }
   if (!LEGACY_TYPES.includes(event.type)) throw new Error(`not a widget state event: ${event.type}`);
+  // `?wrapper=` can replace the wrapper by a link, so its URL is checked too.
+  const wrapperProblem = widgetUrlProblem(wrapperUrl);
+  if (wrapperProblem) throw new Error(`compat wrapper: ${wrapperProblem}`);
 
   const query = new URLSearchParams({
     legacy_widget_url: content.url,

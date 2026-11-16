@@ -2,7 +2,7 @@
 import type { Locator } from "@playwright/test";
 
 import type { HostSeed } from "../src/app/controller";
-import { expect, type Host, LAB, LEGACY_WIDGET, NEW_WIDGET, test, widgetId } from "./host";
+import { expect, Host, LAB, LEGACY_WIDGET, NEW_WIDGET, test, widgetId } from "./host";
 
 const NEW = widgetId(LAB, NEW_WIDGET);
 const LEGACY = widgetId(LAB, LEGACY_WIDGET);
@@ -187,6 +187,31 @@ test("the legacy widget runs through the compat wrapper: one prompt with the new
 
   await legacy.getByRole("button", { name: "send m.room.message" }).click();
   await expect.poll(() => messageBodies(host)).toContain("hello from the legacy widget");
+});
+
+test("a widget URL that is not http(s) is refused, also by a link that opens it at once: the tile is disabled, nothing runs", async ({ browser }) => {
+  const context = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+  const fresh = new Host(await context.newPage());
+  const pwned = () => fresh.page.evaluate(() => (window as Window & { __pwned?: unknown }).__pwned);
+  const refused = (name: string) => fresh.button(`${name} cannot be opened: javascript: URLs are not allowed, only http: and https:`);
+
+  // `?event=` with `autoload=1`: a link that would run the legacy widget (in the compat wrapper, on the host's origin) without a click.
+  const legacy = { type: "im.vector.modular.widgets", state_key: "evil", content: { type: "m.custom", name: "Evil legacy widget", url: "javascript:top.__pwned=document.domain//" } };
+  await fresh.page.goto(`/?mode=memory&autoload=1&event=${encodeURIComponent(JSON.stringify(legacy))}`);
+  await expect(refused("Evil legacy widget")).toHaveAttribute("aria-disabled", "true");
+  await refused("Evil legacy widget").click({ force: true });
+  expect((await fresh.main()).widgets).toEqual({});
+  await expect(fresh.page.locator("iframe")).toHaveCount(0);
+  expect(await pwned()).toBeUndefined();
+
+  // A seed (`populate`, `?seed=`) that opens a new-type widget whose scheme hides behind a space and capitals.
+  const evil = { type: "m.widget", state_key: "evil", content: { name: "Evil widget", url: " JAVASCRIPT:top.__pwned=1//", uses_widget_api: true } };
+  await fresh.populate({ userId: "@alice:dev.local", rooms: [{ id: LAB, name: "Widget lab", widgets: [evil] }], sidePanel: null, open: [{ room: LAB, widgets: ["m.widget/evil"] }] });
+  await expect(refused("Evil widget")).toBeVisible();
+  expect((await fresh.main()).widgets).toEqual({});
+  await expect(fresh.page.locator("iframe")).toHaveCount(0);
+  expect(await pwned()).toBeUndefined();
+  await context.close();
 });
 
 test("a widget sends m.room.message: it lands in the room, and the other widget of the room is told", async ({ host }) => {

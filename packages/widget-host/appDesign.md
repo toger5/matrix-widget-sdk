@@ -336,6 +336,7 @@ Notes for the implementation. They add to the design above, they do not change i
 **Widgets are iframes**
 
 - Moving an iframe in the DOM reloads it, and a shadow DOM does not prevent that. To move a widget between a tab and the PictureInPicturePanel without a reload, keep every iframe mounted in one persistent layer and position it over its current slot.
+- Only absolute `http:` / `https:` widget URLs are embedded, for both widget kinds (a legacy URL is checked as its template, so one starting with `$variable` is refused); any other widget is a disabled tile with the reason.
 - The host cannot read the console of a cross-origin iframe. The WidgetDevToolConsolePanel needs the widget side (SDK or compat wrapper) to forward its logs.
 - To-device messages are account-scoped, not room-scoped. The section may fit better next to the media box than in the per-room page.
 

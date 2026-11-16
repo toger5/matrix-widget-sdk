@@ -3,7 +3,7 @@ import { useState, type FormEvent } from "react";
 
 import type { DevBackendViewModel, MockedStateEvent, RoomId } from "../../appViewModel";
 import { EXAMPLE_LEGACY, EXAMPLE_NEW } from "../../exampleWidgets";
-import { WIDGET_EVENT_TYPES } from "../../widgetStateEvent";
+import { WIDGET_EVENT_TYPES, widgetUrlProblem } from "../../widgetStateEvent";
 import { useDispatch } from "../env";
 import { Field, Toggle } from "../ui/atoms";
 import { DelayRow, FormChips, FormError, JsonArea, NO_DELAY, Sub, delayOf, parseJsonObject, pretty } from "./parts";
@@ -28,7 +28,8 @@ function freeWidgetId(state: MockedStateEvent[]): string {
   return `widget-${n}`;
 }
 
-const isHttpUrl = (url: string) => URL.canParse(url) && /^https?:$/.test(new URL(url).protocol);
+/** The forms check the URL as the host does before it embeds a widget (the Raw JSON form does not, so the disabled tile can be tried). */
+const isHttpUrl = (url: string) => !widgetUrlProblem(url);
 
 /** The `intent` URL parameter of Element Call (`UserIntent`, `src/UrlConfiguration.ts`): it picks the defaults of everything else (lobby, header, ringing). */
 const ELEMENT_CALL_INTENTS = ["start_call", "join_existing", "start_call_voice", "join_existing_voice", "start_call_dm", "join_existing_dm", "start_call_dm_voice", "join_existing_dm_voice"];
