@@ -22,9 +22,11 @@ answered the legacy `capabilities` request, so a plain page behind the wrapper g
 
 ## 1. The CSS path
 
-- `src/styles/app.css` gives the theme a colour scheme: `[data-theme="dark"] { color-scheme: dark }`,
-  `[data-theme="light"] { color-scheme: light }`. `AppShell` puts `data-theme` (the setting, with
-  "System" resolved to the OS preference) on `.app-root` in the shadow root.
+- The tokens of the stylesheet (`packages/widget-host/design/css/tokens.css`, design rules the app
+  imports through `src/styles/app.css`) give the theme a colour scheme:
+  `[data-theme="dark"] { color-scheme: dark }`, `[data-theme="light"] { color-scheme: light }`.
+  `AppShell` puts `data-theme` (the setting, with "System" resolved to the OS preference) on
+  `.app-root` in the shadow root.
 - A widget iframe is a light-DOM child of the host element, shown through a `<slot>` inside
   `.app-root` (`src/views/ui/WidgetSlot.tsx`). A slotted element inherits along the flat tree, so
   the iframe's computed `color-scheme` is the theme's. The host also sets it on the iframe itself

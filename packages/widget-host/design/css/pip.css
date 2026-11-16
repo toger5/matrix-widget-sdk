@@ -1,0 +1,23 @@
+/* PictureInPicturePanel (layer views). The specification; the mockups and the app use the same file (design/mock.css, src/styles/app.css). */
+
+.pip { position: absolute; z-index: 25; right: 24px; bottom: 24px; }
+.pip-list { display: flex; gap: 6px; }
+.pip.v .pip-list { flex-direction: column; }
+.pip-box { flex: none; border-radius: 12px; overflow: hidden; background: var(--surface); box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.1), 0 0 0 2px rgba(0, 0, 0, 0.35), var(--shadow); display: flex; }
+.pip.hover { padding: 8px 10px 10px; border-radius: 18px; background: var(--surface-2); border: 1px solid var(--border-strong); box-shadow: var(--shadow); cursor: grab; }
+.pip.hover .pip-box { box-shadow: none; }
+.pip-grip { display: flex; align-items: center; gap: 6px; height: 24px; margin-bottom: 4px; color: var(--text-muted); font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; }
+.pip-cell { display: grid; gap: 4px; }
+.pip-label { display: flex; align-items: center; gap: 2px; min-width: 0; }
+.pip-names { display: grid; flex: 1; min-width: 0; line-height: 1.2; }
+.pip-names small { font-size: 11px; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pip-names b { font-size: 12px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pip-resize { position: absolute; right: 0; bottom: 0; width: 24px; height: 24px; cursor: nwse-resize; }
+.pip-resize::after { content: ""; position: absolute; right: 5px; bottom: 5px; width: 9px; height: 9px; border-right: 2px solid var(--text-muted); border-bottom: 2px solid var(--text-muted); border-radius: 0 0 5px 0; }
+
+/* PiP: widgets that do not fit are behind "+N" */
+.pip-more { flex: none; align-self: flex-end; min-width: 40px; min-height: 32px; display: grid; place-items: center; border-radius: 12px; background: var(--surface-2); color: var(--text); font-weight: 600; box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.1), 0 0 0 2px rgba(0, 0, 0, 0.35), var(--shadow); }
+.pip-more.on { background: var(--surface-3); box-shadow: inset 0 0 0 1px var(--text-muted); }
+.pip.hover .pip-more { box-shadow: inset 0 0 0 1px var(--border-strong); }
+.pip.hover .pip-more.on { box-shadow: inset 0 0 0 1px var(--text-muted); }
+.pip-menu { right: 0; bottom: calc(100% + 8px); min-width: 280px; }

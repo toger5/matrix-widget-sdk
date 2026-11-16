@@ -10,9 +10,14 @@ import "./styles/fonts";
 import css from "./styles/app.css?inline";
 
 // One stylesheet for the document (the tokens on `:root`, the page itself) and for the shadow root (the views).
+// `app.css` lists the files of `design/css` and `src/views/**`; Vite inlines them (an adopted sheet ignores `@import`).
 const sheet = new CSSStyleSheet();
 sheet.replaceSync(css);
 document.adoptedStyleSheets = [...document.adoptedStyleSheets, sheet];
+// A changed CSS file replaces the sheet's rules in place: no reload, so the DevBackend keeps its rooms.
+import.meta.hot?.accept("./styles/app.css?inline", (module) => {
+  if (module) sheet.replaceSync(module.default as string);
+});
 
 /**
  * The host element. The UI is rendered into its shadow root; the widget iframes are its

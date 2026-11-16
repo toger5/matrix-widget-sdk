@@ -1,7 +1,7 @@
 // Renders the mockups: one static HTML page per leaf in ./leaves, and ./index.html, the gallery
 // that includes all of them at their real size. Run: node design/build.mjs
 //
-// The pages are plain HTML + mock.css, without scripts (except the two lines that pick the theme),
+// The pages are plain HTML + mock.css (which imports css/*.css, the design rules the app uses too), without scripts (except the two lines that pick the theme),
 // so they can be opened from the file system and inspected with the browser devtools.
 
 import { mkdirSync, writeFileSync } from "node:fs";

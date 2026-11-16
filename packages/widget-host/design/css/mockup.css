@@ -1,0 +1,58 @@
+/* Mockups only (layer views, last): the fake widgets and the stages of the component leaves. The app does not load this file; Storybook does (.storybook/preview.css: the stage wrappers and FakeWidget). */
+
+/* fake widgets: foreign content with its own colors */
+.w { width: 100%; height: 100%; overflow: hidden; display: flex; flex-direction: column; }
+.w-call { background: #14171c; color: #fff; }
+.w-grid { flex: 1; min-height: 0; display: grid; grid-template: 1fr 1fr / 1fr 1fr; gap: 8px; padding: 8px 8px 0; }
+.w-tile { container-type: size; position: relative; border-radius: 10px; background: linear-gradient(140deg, hsl(var(--h) 30% 24%), hsl(var(--h) 34% 14%)); display: grid; place-items: center; }
+.w-face { width: min(36cqh, 36cqw); height: min(36cqh, 36cqw); border-radius: 50%; display: grid; place-items: center; background: hsl(var(--h) 45% 46%); font-weight: 600; font-size: min(15cqh, 15cqw); }
+.w-name { position: absolute; left: 8px; bottom: 8px; padding: 2px 8px; border-radius: 6px; background: rgba(0, 0, 0, 0.5); font-size: 12px; }
+.w-bar { height: 60px; flex: none; display: flex; align-items: center; justify-content: center; gap: 12px; }
+.w-rb { width: 38px; height: 38px; display: grid; place-items: center; border-radius: 50%; background: #2b3038; }
+.w-rb.red { background: #e5484d; }
+.w-call.compact .w-grid { gap: 3px; padding: 3px; }
+.w-call.compact .w-tile { border-radius: 6px; }
+.w-call.compact .w-bar, .w-call.compact .w-name { display: none; }
+.w-board { position: relative; background: #fbfaf6; }
+.w-board svg { width: 100%; height: 100%; display: block; }
+.w-tools { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); display: grid; gap: 6px; padding: 6px; border-radius: 10px; background: #fff; box-shadow: 0 2px 10px rgba(0, 0, 0, 0.18); }
+.w-tools i { width: 22px; height: 22px; border-radius: 6px; background: #e8e6df; }
+.w-tools i.on { background: #2b6fe0; }
+.w-board.compact .w-tools { display: none; }
+.w-poll { background: #0f1a2b; color: #e8eefc; display: grid; place-items: center; }
+.w-poll-in { width: min(420px, 86%); display: grid; gap: 10px; }
+.w-poll-in > b { font-size: 16px; }
+.w-opt { position: relative; display: flex; justify-content: space-between; padding: 9px 12px; border-radius: 8px; background: #19294a; overflow: hidden; }
+.w-opt span { position: relative; z-index: 1; }
+.w-opt i { position: absolute; inset: 0 auto 0 0; background: #2f5fd0; }
+.w-poll small { color: #9db0d6; }
+.w-poll.compact .w-poll-in { gap: 4px; font-size: 10px; }
+.w-poll.compact .w-poll-in > b { font-size: 11px; }
+.w-poll.compact .w-opt { padding: 3px 6px; border-radius: 4px; }
+.w-poll.compact small { display: none; }
+.w-notes { background: #f7f5ef; color: #2a2a2a; align-items: center; }
+.w-notes-in { width: min(560px, 84%); padding-top: 9%; display: grid; gap: 10px; }
+.w-notes-in b { font-size: 18px; margin-bottom: 6px; }
+.w-notes-in i { height: 8px; border-radius: 4px; background: #d9d5c9; }
+.w-notes-in u { height: 8px; }
+.w-notes.compact .w-notes-in { gap: 5px; }
+.w-notes.compact b { font-size: 11px; margin: 0; }
+.w-notes.compact i { height: 4px; }
+
+/* --- stages of component leaves ----------------------------------------------------------- */
+.stage { position: relative; width: 100%; height: 100%; padding: 12px; background: var(--bg); display: flex; }
+.stage.fence { background: repeating-linear-gradient(45deg, var(--fence-a) 0 11px, var(--fence-b) 11px 22px); }
+.stage > .sidecol { width: 100%; }
+.stage > .leftbar { height: 100%; }
+.stage.float { padding: 0; }
+.stage.float > .roompanel { position: absolute; inset: 12px; opacity: 0.5; }
+.stage.float > .pip { right: 20px; bottom: 20px; }
+.roompanel.cut { flex: none; width: 100%; height: 100%; border-bottom: 0; border-radius: var(--r-4) var(--r-4) 0 0; }
+.roompanel.cut .rp-body { background: linear-gradient(var(--surface-2), var(--surface)); }
+
+/* fake timer widget (PiP leaves) */
+.w-timer { background: #1f1512; color: #ffd9cc; display: grid; place-items: center; text-align: center; container-type: size; }
+.w-timer > div { display: grid; gap: 4px; }
+.w-timer b { font-size: min(26cqh, 18cqw); font-weight: 600; font-variant-numeric: tabular-nums; line-height: 1; }
+.w-timer small { color: #c79a8c; font-size: 12px; }
+.w-timer.compact small { font-size: 10px; }

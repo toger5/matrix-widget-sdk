@@ -1,0 +1,3 @@
+/* Stories: the app's stylesheet plus the mockup-only rules (the `.stage` wrappers, `.roompanel.cut`, FakeWidget). */
+@import "../src/styles/app.css";
+@import "../design/css/mockup.css" layer(views);

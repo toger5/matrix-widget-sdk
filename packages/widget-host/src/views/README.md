@@ -20,14 +20,27 @@ A view
 
 ## Markup and styles
 
-The mockups are the specification. `design/src/components.mjs` has one function per view that returns its HTML, `design/src/leaves.mjs` composes them into the leaves (states) listed in `design/index.html`, and `design/mock.css` styles them. `src/styles/app.css` started as a copy of `mock.css`.
+The mockups are the specification. `design/src/components.mjs` has one function per view that returns its HTML, `design/src/leaves.mjs` composes them into the leaves (states) listed in `design/index.html`, and the design rules in `design/css/` style them.
 
 - Port the markup of the mockup function 1:1 (same elements, same class names, same `aria-*`, same `title`s), replacing the fixture data with props. Do not restyle.
 - Atoms are in `src/views/ui/atoms.tsx`: `Icon`, `Logo`, `Avatar`, `DevAvatar`, `IconButton` (`ibtn`), `Button` (`btn`), `Toggle`, `Field`, `Json`.
 - Form pieces several views share: `src/views/ui/forms.tsx` (`FormChips`, `JsonArea`, `FormError`, `parseJsonObject`, `pretty`) and `src/views/forms/widgetForms.tsx` (the widget and Element Call forms of "Send state" and "Add widget").
-- New CSS goes to the end of `src/styles/app.css`, under a comment naming the view. Only tokens (`var(--…)`), no raw colors. Do not edit existing rules that other views use. Do not change `design/` while implementing a view: a mockup change is a design step (step 3 of [`.claude/agents/widget-host-ui.md`](../../../../.claude/agents/widget-host-ui.md)), and then the same rule changes in `mock.css` and `app.css`.
 - A running widget is shown with `<WidgetSlot widgetId>` (`src/views/ui/WidgetSlot.tsx`), never with an `<iframe>`.
 - Mock-only decoration (fake widget content `.w-*`, the `.stage` wrappers) is not ported.
+
+The stylesheet is plain CSS in files per area, in the cascade layers `tokens, base, atoms, views` (a rule of a later layer wins whatever its specificity):
+
+| file | holds | layer |
+| --- | --- | --- |
+| `design/css/<area>.css` (`tokens`, `base`, `atoms`, `shell`, `sidepanel`, `devbackend`, `rooms`, `devtools`, `widget`, `pip`) | the design rules: the mockups' and the app's, the same file | its name, else `views` |
+| `design/css/mockup.css` | stages and fake widgets: mockups and stories only | `views` |
+| `src/views/<area>/<file>.css` (`ui/atoms`, `app/shell`, `sidepanel/sidepanel`, `devbackend/devbackend`, `rooms/rooms`, `widget/devtools`, `widget/widget`, `pip/pip`) | the app-only rules of the design file of the same name: what the mockups do not draw (real inputs, scrolling, resizing, hover states) | as the design file, after the design files of that layer |
+
+`design/mock.css` (the leaf pages) and `src/styles/app.css` (the app; `src/main.tsx` adopts it into the shadow root, Vite inlines the imports) only list the files, in the same order (`test/styles.test.ts` checks it); `.storybook/preview.css` adds `mockup.css` to `app.css`. In the `views` layer the order of the areas matters where their classes meet (`.caps` of the dev tools before `.prompt-card` of the widget view).
+
+- New CSS of a view goes to its app-only file, under a comment naming the view (a new file is listed in `src/styles/app.css`; a view never imports CSS: that would reach the document, not the shadow root). Only tokens (`var(--…)`), no raw colors. Do not edit existing rules that other views use.
+- Do not change `design/css/` while implementing a view: a mockup change is a design step (step 3 of [`.claude/agents/widget-host-ui.md`](../../../../.claude/agents/widget-host-ui.md)), and it changes the app at the same time.
+- Theme selectors are `[data-theme=…]`: `:root` does not reach into the shadow root, and the leaf pages put `data-theme` on `<html>`.
 
 ## Accessibility and tests
 
@@ -58,3 +71,5 @@ node e2e/tools/shot.mjs story app-leftbar--expanded /tmp/…/story.png 68 620  #
 ```
 
 The story id is the title in kebab case, `--`, the export name in kebab case. The script prints page and console errors.
+
+A change that should not change any pixel (a CSS refactor) is checked on everything at once: `node e2e/tools/shot.mjs all /tmp/…/before` and `node e2e/tools/shot.mjs all /tmp/…/before light` (into `before/dark` and `before/light`) before the change, the same into `…/after` afterwards, then `diff -rq /tmp/…/before /tmp/…/after`. It writes every leaf and every story (with Storybook running) as a PNG plus a hash of the computed style of each element, which also shows changes that draw nothing. Run it twice before the change: a few stories (the stats chart, the DevBackendView's timeline) vary from run to run.

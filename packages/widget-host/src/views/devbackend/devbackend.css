@@ -1,0 +1,44 @@
+/* Dev tools of the side panel, app-only (layer views, after the design files): real form controls, scrolling sections, disclosure rows. The design rules are design/css/devbackend.css. */
+
+/* header: the room dropdown shares the row with the room actions and the close button */
+.sidebox.devb .room-pick { flex: 1; width: auto; min-width: 0; }
+.sidebox.devb .room-pick .side-title > * { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sidebox.devb button.dd-row { width: 100%; }
+.sidebox.devb .dd-row.danger, .sidebox.devb .dd-row.danger small { color: var(--danger); }
+.sidebox.devb .dd-row > .ico:first-child { color: var(--text-muted); }
+.sidebox.devb .dd-row.danger > .ico:first-child { color: var(--danger); }
+.sidebox.devb .dd-row .end { color: var(--text-muted); }
+/* the room box keeps its header and two section headers; a large tool box gives way (it may shrink).
+   A squeezed open section clips its body instead of drawing it over the next header. */
+.sidebox.devb:not(.toolbox) { min-height: 122px; }
+.sidebox.devb .acc-sec { overflow: hidden; }
+/* sections scroll for real */
+.sidebox.devb .acc-sec-b { overflow-y: auto; }
+.sidebox.devb .acc-sec-b > * { flex: none; }
+.sidebox.mediabox .side-body { overflow-y: auto; }
+.sidebox.mediabox .side-body > * { flex: none; }
+/* form controls: the mockup draws them as spans */
+.sidebox.devb input.input, .sidebox.devb select.input { width: 100%; font: inherit; color: inherit; }
+.sidebox.devb input.input.mono, .sidebox.devb select.input.mono { font-family: var(--font-mono); font-size: 11.5px; }
+.sidebox.devb input.input.narrow { width: 56px; }
+/* the account's sender (the Dev tools of a Matrix account): read-only, muted as in the mockup */
+.sidebox.devb input.input[aria-readonly="true"] { color: var(--text-muted); }
+.sidebox.devb .input.search > input { flex: 1; min-width: 0; padding: 0; border: 0; outline: 0; background: none; font: inherit; color: inherit; }
+.sidebox.devb .input.search:focus-within, .sidebox.devb textarea:focus-visible, .sidebox.devb select:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.sidebox.devb ::placeholder { color: var(--text-faint); opacity: 1; }
+.sidebox.devb textarea.code { display: block; width: 100%; min-height: 62px; max-height: 320px; field-sizing: content; margin: 0; resize: vertical; font-family: var(--font-mono); font-size: 11.5px; }
+.sidebox.devb .devb-err { color: var(--danger); font-size: 12px; }
+/* state explorer: rows are disclosure buttons */
+.sidebox.devb .tree-group { display: grid; gap: 1px; min-width: 0; }
+.sidebox.devb button.tree-row { width: 100%; }
+.sidebox.devb .tree-key { flex: 1; min-width: 0; height: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sidebox.devb .tree-group > .code, .sidebox.devb .tree-group > .editor { margin: 2px 0 4px 26px; }
+/* event rows expand to their JSON */
+.sidebox.devb .ev-item { display: grid; gap: 2px; min-width: 0; }
+.sidebox.devb button.ev { width: 100%; }
+.sidebox.devb .ev-s { display: inline-flex; gap: 4px; align-items: center; }
+/* media box */
+.sidebox.mediabox button.drop { width: 100%; }
+.sidebox.mediabox .drop.over { border-color: var(--focus); color: var(--text); }
+.sidebox.mediabox .thumb { overflow: hidden; }
+.sidebox.mediabox .thumb img { width: 100%; height: 100%; object-fit: cover; }

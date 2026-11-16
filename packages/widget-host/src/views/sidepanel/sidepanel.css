@@ -1,0 +1,25 @@
+/* Side panel, app-only (layer views, after the design files): resizing, scrolling, the account list's states, the recovery key form. The design rules are design/css/sidepanel.css. */
+
+.sidecol { position: relative; }
+.app.narrow .sidecol { max-width: calc(100% - 68px); }
+.side-resize { position: absolute; top: 0; bottom: 0; right: -8px; width: 8px; z-index: 5; cursor: col-resize; touch-action: none; border-radius: 4px; }
+.app.fence .side-resize { right: -11px; }
+.side-resize::after { content: ""; position: absolute; left: 3px; top: calc(50% - 16px); width: 2px; height: 32px; border-radius: 1px; background: var(--text-muted); opacity: 0; }
+.side-resize:hover::after, .side-resize:active::after, .side-resize:focus-visible::after { opacity: 1; }
+.side-resize:focus-visible { outline-offset: -2px; }
+.sidebox.acc .side-body, .sidebox.acc-dev .side-body, .sidebox.settings .side-body { overflow-y: auto; }
+.sidebox.acc .side-body > *, .sidebox.acc-dev .side-body > *, .sidebox.settings .side-body > * { flex-shrink: 0; }
+.acc-item { display: grid; gap: 6px; }
+.acc-mark { flex: none; }
+.acc-mark.failed { color: var(--danger); }
+.acc-note { display: flex; align-items: center; gap: 6px; color: var(--text-muted); font-size: 12px; }
+.acc-error { display: flex; gap: 8px; padding: 10px 12px; border-radius: var(--r-3); border: 1px solid var(--danger); color: var(--danger); font-size: 12px; }
+.acc-error .ico { flex: none; margin-top: 2px; }
+.acc-error span { display: grid; gap: 2px; min-width: 0; }
+.acc-error b { font-weight: 600; }
+.acc-error small { color: var(--text); }
+
+/* AccountView: device verification */
+/* The recovery key form adds no box of its own (the `.verify` column lays out its children); its field is a real input. */
+.verify-form { display: contents; }
+.verify input.input { width: 100%; color: inherit; }

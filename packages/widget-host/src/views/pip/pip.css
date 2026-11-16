@@ -1,0 +1,18 @@
+/* PictureInPicturePanel, app-only (layer views, after the design files): moving and resizing. The design rules are design/css/pip.css. */
+
+/* The label rows are always in the DOM, so a box is not remounted when the surround appears.
+   Horizontal: they are above the boxes and the panel is anchored at the bottom, so they can come and go.
+   Vertical: they are between the boxes, so their space is reserved while idle (the boxes must not move). */
+.pip-label { height: 28px; }
+.pip.h:not(.hover) .pip-label { display: none; }
+.pip.v:not(.hover) .pip-label { visibility: hidden; }
+.pip.hover { touch-action: none; }
+.pip.dragging { user-select: none; }
+.pip.dragging.move { cursor: grabbing; }
+.pip.dragging.resize { cursor: nwse-resize; }
+/* Widget iframes swallow pointer events: switch them off while the panel is moved or resized. */
+.pip.dragging .pip-box > *, .pip.dragging ::slotted(iframe) { pointer-events: none; }
+@media (prefers-reduced-motion: no-preference) {
+  .pip.hover .pip-grip, .pip.hover .pip-label, .pip.hover .pip-resize { animation: pip-surround-in 120ms ease-out; }
+}
+@keyframes pip-surround-in { from { opacity: 0; } }

@@ -1,0 +1,27 @@
+/* Widget view, app-only (layer views, after the design files): the widget iframes (slotted) and the layer that covers them. The design rules are design/css/widget.css. */
+
+/* The widget iframes. Every widget iframe is a light-DOM child of the app's host element and is rendered where the
+   shadow tree has a <slot name="widget-<id>"> (see src/views/ui/WidgetSlot.tsx).
+   The iframe's `color-scheme` is the theme's, and that becomes the widget's `prefers-color-scheme`
+   (css-color-adjust-1 §2.1). It is set on the iframe itself, not only inherited: WebKit passes on
+   only a scheme set on the iframe. A widget in the same scheme has a transparent canvas (§2.4):
+   `Canvas` is the backdrop it would get on its own. See docs/widget-color-scheme.md. */
+::slotted(iframe) { display: block; width: 100%; height: 100%; border: 0; background: Canvas; }
+[data-theme="dark"] ::slotted(iframe) { color-scheme: dark; }
+[data-theme="light"] ::slotted(iframe) { color-scheme: light; }
+/* Hidden until notify_ready (the loading layer covers it). Laid out, so the widget already has its
+   size and the scheme of the theme, but not painted and not reached by a click or Tab. (In
+   Chromium a widget can still focus itself by script, as a shown one can.) */
+::slotted(iframe[hidden]) { visibility: hidden; }
+
+/* The widget view: the layer that covers the widget slot */
+/* loading / failed / prompt: covers the slot, which stays in the DOM below it */
+.wv-over { position: absolute; inset: 0; z-index: 1; overflow: auto; background: var(--surface); }
+.wv-over .wv-state { height: auto; min-height: 100%; }
+/* the capability prompt is as tall as the widget area (so that only its sections scroll), but not less than 420px: in a tiny area the overlay scrolls */
+.wv-over .wv-state.wv-prompt { height: 100%; min-height: 420px; }
+.wv-over.compact .wv-state { padding: 8px; gap: 6px; }
+.wv-over.compact .wv-state b { max-width: 100%; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wv-over.compact .wv-state .btn { margin-top: 0; }
+.wv-over.compact .spinner { width: 18px; height: 18px; border-width: 2px; }
+.wv-state .btn:disabled { opacity: 0.55; cursor: default; }

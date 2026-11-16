@@ -1,0 +1,57 @@
+/* App shell (layer views): AppShell, LeftBar, toasts, modal, login page, DevBackend badge, room panel pager. The specification; the mockups and the app use the same file (design/mock.css, src/styles/app.css). */
+
+.app { position: relative; width: 100%; height: 100%; display: flex; gap: 8px; padding: 8px; background: var(--bg); overflow: hidden; }
+.app.fence { gap: 14px; padding: 14px; background: repeating-linear-gradient(45deg, var(--fence-a) 0 11px, var(--fence-b) 11px 22px); }
+.app.fullscreen { padding: 0; gap: 0; }
+.app.fullscreen .roompanel { border: 0; border-radius: 0; }
+.roomsarea { flex: 1; min-width: 0; display: flex; gap: 8px; }
+.sidecol { width: 324px; flex: none; display: flex; flex-direction: column; gap: 0; min-height: 0; }
+.app.narrow .sidecol { position: absolute; left: 60px; top: 8px; bottom: 8px; z-index: 31; filter: drop-shadow(0 10px 30px rgba(0, 0, 0, 0.5)); }
+.app.narrow .side-scrim { left: 52px; z-index: 30; }
+
+.leftbar { width: 44px; flex: none; display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 4px 0; }
+.lb-logo { width: 36px; height: 36px; display: grid; place-items: center; border-radius: var(--r-3); margin-bottom: 6px; }
+.lb-btn { width: 34px; height: 34px; display: grid; place-items: center; border-radius: var(--r-3); color: var(--text-muted); border: 1px solid transparent; }
+.lb-btn.on { background: var(--surface-2); border-color: var(--border); color: var(--text); }
+.lb-btn.dev-on { background: var(--dev-soft); border-color: var(--dev); color: var(--dev); }
+.lb-badge { writing-mode: vertical-rl; transform: rotate(180deg); font-size: 10.5px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: var(--dev); background: var(--surface); border: 1px solid var(--dev); padding: 8px 3px; border-radius: var(--r-2); }
+.lb-avatar { width: 34px; height: 34px; display: grid; place-items: center; border-radius: 50%; border: 2px solid transparent; }
+.lb-avatar.on { border-color: var(--text); }
+
+.expand-btn { position: absolute; left: 0; bottom: 20px; z-index: 15; width: 26px; height: 40px; display: grid; place-items: center; border-radius: 0 var(--r-3) var(--r-3) 0; border-left: 0 !important; background: var(--surface-2); border: 1px solid var(--border-strong); box-shadow: var(--shadow); }
+.dev-badge { position: absolute; left: 50%; top: 8px; transform: translateX(-50%); z-index: 15; pointer-events: none; display: inline-flex; gap: 5px; align-items: center; height: 22px; padding: 0 10px; border-radius: 11px; background: var(--surface); border: 1px solid var(--dev); color: var(--dev); font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; }
+.toast { position: absolute; left: 50%; top: 16px; transform: translateX(-50%); z-index: 40; display: flex; align-items: center; gap: 8px; padding: 10px 16px; border-radius: 20px; background: var(--primary); color: var(--on-primary); font-weight: 500; box-shadow: var(--shadow); white-space: nowrap; }
+.toast kbd { color: inherit; border-color: currentColor; }
+
+.modal { position: absolute; z-index: 41; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 500px; padding: 24px; display: grid; gap: 16px; border-radius: 18px; background: var(--surface); border: 1px solid var(--border-strong); box-shadow: var(--shadow); font-size: 14px; }
+.modal header { display: flex; gap: 12px; align-items: center; }
+.modal h2 { font-size: 18px; }
+.modal small { color: var(--text-muted); }
+.modal p { color: var(--text-muted); line-height: 1.5; }
+.modal p b { color: var(--text); }
+.feat { display: grid; gap: 10px; }
+.feat li { display: flex; gap: 10px; color: var(--text-muted); }
+.feat li .ico { margin-top: 2px; color: var(--text); }
+.feat b { color: var(--text); }
+.modal footer { display: flex; gap: 16px; align-items: center; }
+
+.login-page { display: grid; place-items: center; }
+.login-card { width: 380px; display: grid; gap: 14px; justify-items: stretch; padding: 32px; border-radius: 20px; background: var(--surface); border: 1px solid var(--border); }
+.login-card .logo { justify-self: center; }
+.login-card h1 { text-align: center; font-size: 20px; }
+.login-card > .muted { text-align: center; margin-top: -8px; }
+.login-card .input { min-height: 38px; font-size: 14px; }
+.login-card .btn { height: 38px; }
+.or { display: flex; align-items: center; gap: 10px; color: var(--text-faint); font-size: 12px; }
+.or::before, .or::after { content: ""; flex: 1; height: 1px; background: var(--border); }
+.skip { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-radius: var(--r-4); border: 1px dashed var(--dev); background: var(--dev-soft); color: var(--dev); }
+.skip span { display: grid; gap: 2px; flex: 1; }
+.skip b { color: var(--text); font-weight: 600; }
+.skip small { color: var(--text-muted); }
+
+.pager { position: absolute; left: 50%; bottom: 16px; transform: translateX(-50%); z-index: 20; display: flex; align-items: center; gap: 6px; height: 32px; padding: 0 6px; border-radius: 16px; background: var(--surface-2); border: 1px solid var(--border-strong); box-shadow: var(--shadow); color: var(--text-muted); font-size: 12px; white-space: nowrap; }
+.pager b { color: var(--text); font-weight: 600; }
+.modal.sm { width: 420px; }
+.lb-wrap { position: relative; display: grid; }
+.tooltip { position: absolute; left: calc(100% + 10px); top: 50%; transform: translateY(-50%); z-index: 50; padding: 5px 9px; border-radius: var(--r-2); background: var(--primary); color: var(--on-primary); font-size: 12px; font-weight: 500; white-space: nowrap; box-shadow: var(--shadow); }
+.tooltip::before { content: ""; position: absolute; left: -4px; top: 50%; width: 8px; height: 8px; transform: translateY(-50%) rotate(45deg); background: var(--primary); }

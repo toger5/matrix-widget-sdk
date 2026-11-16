@@ -95,7 +95,7 @@ export function ToolSeparator({ tool, heightShare }: { tool: DevBackendTool; hei
 
 /**
  * The open tool box: header with the minimise button, then the tool's content. It shrinks below its
- * share where the column is too short for the room box's minimum height (app.css).
+ * share where the column is too short for the room box's minimum height (devbackend.css).
  */
 export function ToolBox({ tool, heightShare, className, children }: { tool: DevBackendTool; heightShare: number; className: string; children: ReactNode }) {
   const dispatch = useDispatch();

@@ -1,0 +1,32 @@
+/* Widget dev tools, app-only (layer views, after the design files): docking limits, real inputs, scrolling lists, empty states. The design rules are design/css/devtools.css. */
+
+/* the status dot of the bar */
+.dot.wait { background: var(--warning); }
+.dot.err { background: var(--danger); }
+/* the panel area never pushes the widget out of the view */
+.wv.dock-top .dt, .wv.dock-bottom .dt { max-height: calc(100% - 48px); }
+.wv.dock-left .dt, .wv.dock-right .dt { max-width: calc(100% - 48px); }
+.wv .dt-panels { flex: 0 1 auto; }
+.dt-split, .dt-resize { touch-action: none; }
+/* real text fields inside the mockup's `.input` box */
+.dt-in { all: unset; flex: 1; min-width: 0; width: 100%; font: inherit; color: inherit; }
+.dt-in::placeholder { color: var(--text-faint); }
+.dt-in:focus-visible { outline: none; }
+.dt-in::-webkit-search-cancel-button { display: none; }
+.dt .input:focus-within { outline: 2px solid var(--focus); outline-offset: -1px; }
+/* The dev tools' segmented controls style the span inside each button. */
+.dt .seg > button { display: flex; padding: 0; }
+.dt .btn:disabled { opacity: 0.55; cursor: default; }
+/* the lists scroll */
+.msgs, .console, .driver { overflow-y: auto; }
+.stats { overflow-y: auto; }
+.driver > * { flex: none; }
+.caps .dt-empty { padding: 6px 8px; text-align: left; }
+.dt-empty { margin: 0; padding: 14px 12px; color: var(--text-muted); text-align: center; font: 12px/1.4 var(--font-tech); white-space: normal; }
+.dt-empty b { color: var(--text); font-weight: 600; }
+/* the response time next to the state icon of a message row */
+.msg-st { grid-auto-flow: column; align-items: center; gap: 4px; }
+.msg-ms { color: var(--text-muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+/* the chart tooltip lies over the bars without taking the pointer */
+.tip { pointer-events: none; z-index: 1; }
+.chart { position: relative; }

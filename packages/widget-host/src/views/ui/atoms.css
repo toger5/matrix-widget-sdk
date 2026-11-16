@@ -1,0 +1,6 @@
+/* Atoms, app-only (layer atoms, after the design files): real controls where the mockups draw spans. The design rules are design/css/atoms.css. */
+
+/* A segmented control made of buttons (the mockups draw spans): the theme of the Settings, "Add to" of the "Add widget" form. */
+.seg button { padding: 4px 12px; border-radius: 7px; color: var(--text-muted); font-size: 12px; }
+.seg button.on { background: var(--surface); color: var(--text); font-weight: 500; box-shadow: 0 0 0 1px var(--text-muted); }
+.seg.sm button { padding: 3px 8px; font-size: 11px; }

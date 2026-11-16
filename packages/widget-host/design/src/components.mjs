@@ -558,7 +558,7 @@ const pickerGroup = (id, title, inner, count) =>
 const pickerRow = (room, name = room.name) =>
   `<button class="row">${avatar({ name: room.name, hue: room.hue, size: 34, square: true })}<span class="row-main"><b>${name}</b><small class="mono">${room.id}</small></span><span class="row-meta">${icon("grid", 12)}${room.widgets} ${icon("users", 12)}${room.members}</span>${icon("chevRight", 14, "end")}</button>`;
 
-/** How far the search state is scrolled: the "All rooms" group at the top of the scroll area (it depends on the heights in mock.css). */
+/** How far the search state is scrolled: the "All rooms" group at the top of the scroll area (it depends on the heights in css/rooms.css). */
 const SEARCH_SCROLL = 222;
 
 /**

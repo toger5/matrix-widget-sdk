@@ -1,0 +1,134 @@
+/* Rooms (layer views): RoomsArea, RoomPanel and its tabs, room picker, room overview, RoomTimeline. The specification; the mockups and the app use the same file (design/mock.css, src/styles/app.css). */
+
+/* --- room panel and tabs ----------------------------------------------------------------- */
+.roompanel { position: relative; flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; border-radius: var(--r-4); border: 1px solid var(--border); background: var(--surface); overflow: hidden; container: rp / inline-size; }
+.rp-head { height: 44px; flex: none; display: flex; align-items: center; gap: 4px; padding: 0 8px 0 6px; border-bottom: 1px solid var(--border); }
+.rp-body { flex: 1; min-height: 0; position: relative; display: flex; flex-direction: column; }
+.rp-div { width: 1px; height: 20px; flex: none; background: var(--border); margin: 0 4px; }
+.rp-tabs { display: contents; }
+/* The room name is the first tab: plain header text, and like the active tab while it is selected. */
+.room-chip { height: 32px; flex: 0 0 auto; max-width: 46%; min-width: 0; display: flex; align-items: center; gap: 8px; padding: 0 8px 0 4px; border-radius: var(--r-3); border: 1px solid transparent; }
+.room-chip:hover { background: var(--surface-2); }
+.room-chip.active { background: var(--surface-3); border-color: var(--border-strong); }
+.room-name { font-weight: 600; font-size: 13.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.room-counts { display: inline-flex; gap: 8px; color: var(--text-muted); font-size: 11.5px; flex: none; }
+.room-counts span { display: inline-flex; gap: 3px; align-items: center; }
+
+.tabs { display: flex; gap: 4px; min-width: 0; flex: 0 1 auto; overflow: hidden; padding: 2px; }
+.tabs.overflowing { -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 36px), transparent); mask-image: linear-gradient(to right, #000 calc(100% - 36px), transparent); }
+.tabs.overflowing .tab { flex-shrink: 0; }
+/* Tab style: every tab has a slightly different background than the header; only the active tab has a border. */
+.tab { position: relative; height: 30px; min-width: 88px; flex: 0 1 auto; display: flex; align-items: center; gap: 2px; padding: 0 6px 0 7px; border-radius: var(--r-3); border: 1px solid transparent; background: var(--surface-2); color: var(--text-muted); cursor: pointer; }
+.tab-main { flex: 1; min-width: 0; height: 100%; display: flex; align-items: center; gap: 6px; }
+.tab-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; min-width: 0; }
+.tab.active { background: var(--surface-3); border-color: var(--border-strong); color: var(--text); padding-right: 2px; }
+.tab-pin { display: inline-grid; flex: none; color: var(--text); }
+/* A host tab (the timeline) has an icon where a widget tab has the widget's avatar. */
+.tab-ico { flex: none; }
+.tab-btn { width: 24px; height: 24px; flex: none; display: grid; place-items: center; border-radius: 4px; color: var(--text-muted); }
+.tab-btn:hover { background: var(--surface-3); color: var(--text); }
+.tab-btn.on { background: var(--bg); color: var(--text); box-shadow: inset 0 0 0 1px var(--text-muted); }
+.tab-add { margin-left: 2px; }
+.tab-menu { right: 44px; top: 42px; }
+
+.picker { flex: 1; overflow: hidden; display: flex; align-items: flex-start; justify-content: center; padding: 24px; }
+.picker-in { width: 100%; max-width: 680px; display: flex; flex-direction: column; gap: 22px; }
+.sidebox.rooms .side-body { padding: 0; }
+.side-body > .picker { padding: 14px; }
+.pick-sec { display: flex; flex-direction: column; gap: 8px; }
+.pick-sec > .side-h { margin-top: 0; }
+.picker .input.search { min-height: 36px; }
+.rows { display: grid; gap: 4px; }
+.row { width: 100%; display: flex; align-items: center; gap: 12px; padding: 8px 10px; border-radius: var(--r-3); border: 1px solid transparent; }
+/* the first match of a search: what Enter opens */
+.rows.filtered > .row:first-child { background: var(--surface-2); border-color: var(--border); }
+.row.sm { padding: 5px 6px; gap: 10px; }
+.row-main { display: grid; flex: 1; min-width: 0; gap: 1px; }
+.row-main b { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.row-main small { color: var(--text-muted); font-size: 11.5px; display: flex; align-items: center; gap: 5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.row-meta { color: var(--text-muted); font-size: 12px; display: inline-flex; align-items: center; gap: 4px; flex: none; }
+.row .end { color: var(--text-faint); }
+
+.ov { flex: 1; overflow: hidden; display: flex; justify-content: center; padding: 28px 24px; }
+.ov-in { width: 100%; max-width: 720px; display: flex; flex-direction: column; gap: 18px; }
+.ov-hero { display: flex; flex-wrap: wrap; gap: 12px 18px; align-items: center; }
+/* "Open timeline" sits at the end of the header, and below it in a narrow panel. */
+.ov-hero > div { flex: 1 1 220px; min-width: 0; }
+.ov-hero > .btn { flex: none; align-self: flex-start; }
+.ov-hero h1 { font-size: 22px; font-weight: 600; }
+.ov-hero p { margin-top: 6px; color: var(--text-muted); max-width: 520px; line-height: 1.5; }
+.ov-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.card { display: flex; flex-direction: column; gap: 8px; padding: 14px; border-radius: var(--r-4); border: 1px solid var(--border); background: var(--surface-2); min-width: 0; }
+.card.span { grid-column: 1 / -1; }
+.card h3 { display: flex; align-items: center; gap: 7px; font-size: 12px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--text-muted); }
+.card h3 em { font-style: normal; font-weight: 400; }
+.ov-members { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 16px; }
+/* A widget that already has a tab: grayed out, with "jump to tab" (and "move widget here"). */
+.row.opened .av { opacity: 0.4; filter: grayscale(1); }
+.row.opened .row-main b { color: var(--text-muted); }
+.row-acts { display: flex; gap: 6px; flex: none; }
+.member { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.card.devcard { border: 1px dashed var(--dev); background: var(--dev-soft); }
+.card.devcard h3 { color: var(--dev); }
+.card .link { align-self: start; font-size: 12px; }
+/* A card title with a button at its end: "Add widget" of the Widgets card. */
+.card-h { display: flex; align-items: center; gap: 8px; }
+.card-h h3 { flex: 1; }
+/* "Add widget": the form at the top of the widget list. */
+.card .form { background: var(--surface); border: 1px solid var(--border); margin-bottom: 6px; }
+.card .form .seg { justify-self: start; }
+/* A local widget: its row-open part opens it; edit and remove are buttons of their own. */
+.row.local { padding: 0 4px 0 0; }
+.row-open { flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; padding: 5px 6px; border-radius: var(--r-3); }
+.row.local .row-acts { gap: 2px; }
+
+/* The RoomTimeline: newest at the bottom, so its content sits at the bottom of the body. */
+.tl { flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column; padding: 16px 24px 12px; }
+.tl-in { width: 100%; max-width: 920px; margin: auto auto 0; display: flex; flex-direction: column; gap: 6px; }
+.tl-state { margin: auto; }
+.tl-top { display: flex; justify-content: center; padding-bottom: 4px; }
+.tl-start { color: var(--text-muted); font-size: 12px; }
+.tl-day { display: flex; flex-direction: column; gap: 1px; }
+.tl-day-h { display: flex; align-items: center; gap: 10px; margin: 6px 0 4px; font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-muted); }
+.tl-day-h::before, .tl-day-h::after { content: ""; flex: 1; height: 1px; background: var(--border); }
+.tl-list { display: flex; flex-direction: column; gap: 1px; }
+.tl-h { width: 100%; display: grid; grid-template-columns: 58px minmax(0, 150px) minmax(0, 1fr) minmax(0, max-content); align-items: center; gap: 12px; padding: 5px 8px; border-radius: var(--r-2); text-align: left; }
+.tl-ev.open .tl-h { background: var(--surface-2); }
+.tl-time { color: var(--text-faint); font-size: 11px; font-variant-numeric: tabular-nums; }
+.tl-s { color: var(--text-muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tl-p { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.tl-p > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tl-p > svg { flex: none; color: var(--text-muted); }
+.tl-ev.state .tl-p { color: var(--text-muted); }
+.tl-t { max-width: 240px; color: var(--text-faint); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tl-ev > .code { margin: 2px 8px 8px 78px; }
+
+/* --- narrow room panels: the header drops the counts first, then the room name ---------------- */
+@container rp (max-width: 560px) { .room-counts { display: none; } .room-chip { max-width: 36%; } }
+@container rp (max-width: 400px) { .room-name { display: none; } .room-chip { padding: 0 4px; } }
+@container rp (max-width: 620px) {
+  .devcard .inline-row { flex-wrap: wrap; }
+  .devcard .inline-row > div { flex-basis: 100%; }
+  .ov-grid { grid-template-columns: 1fr; }
+  .ov-members { grid-template-columns: 1fr; }
+}
+
+/* --- room picker: tiles of the recent widgets and rooms (2 columns in the SidePanel and narrow panels) --- */
+.ptiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(136px, 1fr)); gap: 8px; }
+.ptile { width: 100%; height: 58px; display: flex; align-items: center; gap: 10px; padding: 0 10px; border-radius: var(--r-3); border: 1px solid var(--border); background: var(--surface-2); }
+.ptile-t { display: grid; gap: 2px; flex: 1; min-width: 0; }
+.ptile-t b { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ptile-t small { display: flex; align-items: center; gap: 4px; min-width: 0; color: var(--text-muted); font-size: 11.5px; white-space: nowrap; }
+.ptile-t small > span:not(.pill) { overflow: hidden; text-overflow: ellipsis; }
+.ptile-t .pill { margin-left: auto; height: 16px; padding: 0 6px; }
+.ptile.skeleton i, .row.skeleton i { display: block; height: 9px; border-radius: 5px; background: var(--surface-3); }
+.ptile.skeleton > i { width: 32px; height: 32px; border-radius: var(--r-2); flex: none; }
+.row.skeleton > i { width: 34px; height: 34px; border-radius: var(--r-2); flex: none; }
+.ptile.skeleton > span, .row.skeleton > span { display: grid; gap: 7px; flex: 1; }
+.ptile.skeleton > span > i:first-child, .row.skeleton > span > i:first-child { width: 70%; }
+.ptile.skeleton > span > i:last-child, .row.skeleton > span > i:last-child { width: 40%; }
+
+.area-empty { flex: 1; display: grid; place-content: center; justify-items: center; gap: 8px; text-align: center; color: var(--text-muted); border-radius: var(--r-4); border: 1px dashed var(--border-strong); background: color-mix(in srgb, var(--surface) 80%, transparent); }
+.area-empty b { color: var(--text); font-size: 15px; }
+.area-empty p { max-width: 320px; }
+.area-empty .btn { margin-top: 6px; }

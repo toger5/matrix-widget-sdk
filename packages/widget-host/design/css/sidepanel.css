@@ -1,0 +1,74 @@
+/* Side panel (layer views): SideBox, AccountView with device verification, Settings, the account list. The specification; the mockups and the app use the same file (design/mock.css, src/styles/app.css). */
+
+.sidebox { position: relative; flex: 1 1 0; min-height: 0; display: flex; flex-direction: column; border-radius: var(--r-4); border: 1px solid var(--border); background: var(--surface); overflow: hidden; }
+.sidebox.toolbox { flex: 0 0 410px; }
+.side-head { height: 48px; flex: none; display: flex; align-items: center; gap: 8px; padding: 0 10px 0 14px; border-bottom: 1px solid var(--border); }
+.side-title { display: grid; min-width: 0; }
+.side-title b { font-weight: 600; font-size: 13.5px; }
+.side-title small { color: var(--text-muted); font-size: 11px; }
+.side-body { flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column; gap: 12px; padding: 14px; }
+.sidebox.devb .side-body { padding: 0; gap: 0; }
+.side-h { font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-muted); margin-top: 6px; }
+
+.acc-card { display: flex; gap: 14px; align-items: center; padding: 6px 0 4px; }
+.acc-card > div { display: grid; gap: 2px; min-width: 0; }
+.acc-card b { font-size: 16px; font-weight: 600; }
+.acc-card small { color: var(--text-muted); }
+.acc-card.dev b { font-size: 15px; }
+.acc-card .pill { margin-top: 4px; justify-self: start; }
+.kv { display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; padding: 10px 12px; border-radius: var(--r-3); background: var(--surface-2); font-size: 12px; }
+.kv dt { color: var(--text-muted); }
+.menu { display: grid; gap: 2px; }
+.menu-row { display: flex; align-items: center; gap: 10px; height: 36px; padding: 0 10px; border-radius: var(--r-3); font-weight: 500; }
+.menu-row:hover { background: var(--surface-2); }
+.menu-row .ico:first-child { color: var(--text-muted); }
+.menu-row .end { margin-left: auto; color: var(--text-faint); }
+.menu-row.danger, .menu-row.danger .ico:first-child { color: var(--danger); }
+.switch-list { display: grid; gap: 6px; padding-top: 12px; border-top: 1px solid var(--border); }
+.switch-acc { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: var(--r-3); border: 1px solid var(--border); background: var(--surface-2); }
+.switch-txt { display: grid; min-width: 0; flex: 1; line-height: 1.25; }
+.switch-txt small { font-size: 11px; color: var(--text-muted); letter-spacing: 0.04em; }
+.switch-txt b { font-weight: 600; }
+.switch-txt em { font-style: normal; font-size: 11px; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.switch-acc .end { color: var(--text-muted); }
+.acc-list { display: grid; gap: 6px; }
+.acc-line { display: flex; gap: 10px; align-items: center; margin-top: 8px; }
+.acc-unverified { display: inline-flex; align-items: center; gap: 4px; color: var(--text-muted); }
+
+/* "Verify this device": the box under the account card */
+.verify { display: flex; flex-direction: column; gap: 10px; padding: 12px; border-radius: var(--r-3); border: 1px solid var(--border); background: var(--surface-2); }
+.verify.ok { border-color: transparent; background: var(--highlight-soft); }
+.verify-h { display: flex; align-items: center; gap: 8px; min-height: 24px; font-weight: 600; }
+.verify-h h3 { font-size: 13px; font-weight: 600; }
+.verify-h .ico { flex: none; color: var(--text-muted); }
+.verify.ok .verify-h, .verify.ok .verify-h .ico { color: var(--highlight); }
+.verify-h .ibtn { margin: -4px -6px -4px auto; }
+.verify .hint { line-height: 1.45; }
+.verify .btn:disabled, .verify .input.disabled { opacity: 0.55; cursor: default; }
+.verify .btn .spinner { width: 14px; height: 14px; border-width: 2px; border-top-color: currentColor; }
+.verify .input { font-size: 12px; }
+.input.invalid { border-color: var(--danger); }
+.verify-status { display: flex; align-items: center; gap: 10px; color: var(--text-muted); }
+.verify-status .spinner { flex: none; width: 16px; height: 16px; border-width: 2px; }
+.verify-emoji { list-style: none; margin: 0; padding: 4px 0; display: flex; flex-wrap: wrap; justify-content: center; row-gap: 10px; text-align: center; font-size: 11px; color: var(--text-muted); }
+.verify-emoji li { flex: 0 0 25%; display: grid; justify-items: center; gap: 2px; min-width: 0; }
+.verify-emoji span { font-size: 26px; line-height: 1.15; }
+.verify-emoji.dim { opacity: 0.45; }
+.verify-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.verify-err, .form-err { display: flex; gap: 8px; padding: 8px 10px; border-radius: var(--r-2); background: color-mix(in srgb, var(--danger) 12%, transparent); color: var(--danger); font-size: 12px; }
+.verify-err .ico, .form-err .ico { flex: none; margin-top: 1px; }
+.verify-err > span, .form-err > span { display: grid; gap: 2px; min-width: 0; }
+.verify-err small, .form-err small { color: var(--text); font-size: 12px; }
+
+.set-row { display: flex; align-items: center; gap: 12px; }
+.set-row > div { display: grid; gap: 2px; flex: 1; }
+.set-row b { font-weight: 500; }
+.set-row small { color: var(--text-muted); font-size: 12px; }
+.set-list { display: grid; gap: 8px; padding: 10px 12px; border-radius: var(--r-3); background: var(--surface-2); color: var(--text-muted); font-size: 12px; }
+.set-list li { display: flex; gap: 8px; align-items: center; }
+.set-list b { color: var(--text); font-weight: 500; }
+/* The DevBackend switch while the DevBackend is active. */
+.sidebox .toggle:disabled { opacity: 0.6; cursor: not-allowed; }
+.set-locked { display: flex; align-items: center; gap: 6px; }
+.switch-acc.add { border-style: dashed; border-color: var(--border-strong); background: none; }
+.acc-list-end { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); display: grid; }

@@ -78,7 +78,11 @@ Run `npx tsc --noEmit`. The errors are the work list of step 4; do not fix them 
 - `design/src/leaves.mjs`: one leaf per state of "Required visualisations":
   `{ id: "<area>/<state>", section, group, title, w, h, note?, theme?, html }`, `section` from
   `SECTIONS`. A redrawn state keeps its id; only a new state gets a new id.
-- `design/mock.css`: tokens (`var(--…)`) only, both themes.
+- `design/css/<area>.css` (`tokens`, `base`, `atoms`, `shell`, `sidepanel`, `devbackend`, `rooms`,
+  `devtools`, `widget`, `pip`; `mockup` for stages and fake widgets): tokens (`var(--…)`) only, both
+  themes, theme selectors `[data-theme=…]`. `design/mock.css` only lists these files in their cascade
+  layers. They are also the app's stylesheet (`src/styles/app.css` imports them), so a change here
+  changes the app at once; there is nothing to port. A new file goes into both lists.
 - Build: `npm run design -w @matrix-widget-tools/widget-host`. It writes `design/leaves/**.html` and
   `design/index.html`; both are committed, never edited by hand. Look at every changed leaf:
   `node e2e/tools/shot.mjs leaf <id> <scratch dir>/<id>.png` (add `light` once) and read the PNG.
@@ -102,12 +106,11 @@ depends on them.
   `data-*` attributes, stories (2 to 5 per view, each naming its leaf).
 - A design change may change a view's `…Props` contract; then update its parents and stories in
   the same step (tsc lists them).
-- CSS: port what you changed in `design/mock.css` to the same rules in `src/styles/app.css`.
-  Everything above its comment `/* --- real widgets` is a copy of `mock.css` with deliberate
-  differences only: no font `@import`, `[data-theme=…]` instead of `:root[data-theme=…]`,
-  `pointer-events: none` on `.dev-badge`.
-  `diff -B <(sed '/^\/\* --- real widgets/,$d' src/styles/app.css) design/mock.css` must show
-  only those. App-only rules go to the end, as `src/views/README.md` says.
+- CSS: the design rules of step 3 already style the app (`src/styles/app.css` imports
+  `design/css/*.css`). What only the app needs (real inputs, scrolling, resizing, hover states the
+  mockups do not draw) goes to the area's app-only file `src/views/<area>/<file>.css`, as
+  `src/views/README.md` says; never into `design/css` while implementing. `npx vitest run`
+  (`test/styles.test.ts`) checks that both manifests list the files in the same order and layers.
 - A new icon: copy its entry from `ICONS` in `design/src/lib.mjs` to `src/views/ui/icons.ts` (there
   is no generator; tsc reports a missing `IconName`).
 - Stories: update the stories of redrawn leaves, add one for each new leaf, delete those of

@@ -86,8 +86,12 @@ grep -rlE '(from |import\()"(matrix-js-sdk|matrix-sdk-uniffi-js)' src | grep -vE
   "is in PiP".
 - The UI lives in a shadow root: `document.querySelector` and `document.activeElement` do not see
   it, theme selectors are `[data-theme=…]` on the app root, styles are adopted from
-  `src/styles/app.css?inline`, fonts are self-hosted. Stories render without the shadow root, where
-  a `<slot>` shows its children (`FakeWidget`).
+  `src/styles/app.css?inline`, fonts are self-hosted. `app.css` only lists files in cascade layers
+  (`tokens, base, atoms, views`): the design rules `design/css/*.css` (the same files as the
+  mockups' `design/mock.css`), then the app-only `src/views/<area>/*.css`. Vite inlines the
+  imports; an adopted sheet would ignore `@import`. Stories render without the shadow root, where
+  a `<slot>` shows its children (`FakeWidget`); they load `.storybook/preview.css` (`app.css` plus
+  the mockups' `design/css/mockup.css`).
 - Key presses and clicks inside an iframe never reach the host. `AppRoot` focuses the widget's
   panel when the window loses focus to an iframe.
 - The iframe `sandbox` and `allow` attributes are set in one place, `WidgetIframes`. Widening them
@@ -164,7 +168,8 @@ their tests) is the `matrix-session` skill (`.claude/skills/matrix-session/SKILL
   `layout.ts` plus a case in `test/layout.test.ts` if it moves panels, tabs or dev tools → the view
   dispatches it.
 - **A view**: the `widget-host-ui` process; a folder per area in `src/views/`, a `…Props`
-  interface, stories, fixtures in `src/views/fixtures.ts`.
+  interface, stories, fixtures in `src/views/fixtures.ts`, app-only CSS in the area's
+  `src/views/<area>/<file>.css` (a new file is listed in `src/styles/app.css`).
 - **A setting**: `SettingsViewModel` → `loadPersisted` in `src/app/persistence.ts` (it parses the
   settings field by field: an unlisted field is lost on reload) → `src/views/sidepanel/SettingsView.tsx`
   and its story → the views that depend on it get it as a prop. `settings/set` and
@@ -208,7 +213,8 @@ their tests) is the `matrix-session` skill (`.claude/skills/matrix-session/SKILL
   `http://localhost:5173/?mode=memory` opens the DevBackend; `?seed=/e2e/seeds/lab.json` opens a
   seeded screen. More URL parameters are in `README.md`.
 - `npm run storybook -w @matrix-widget-tools/widget-host` (port 6006). Screenshots of a leaf, a
-  story or a URL: `node e2e/tools/shot.mjs` (usage in `src/views/README.md`).
+  story or a URL: `node e2e/tools/shot.mjs` (usage in `src/views/README.md`); `shot.mjs all <dir>`
+  shoots every leaf and story, to compare before and after a change that should not change pixels.
 - Stop every server you started.
 
 ## Checks

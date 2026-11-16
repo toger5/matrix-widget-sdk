@@ -1,7 +1,7 @@
 /**
  * The atoms every view is built from. They produce the markup of the mockups
  * (`design/src/components.mjs`: `icon`, `logo`, `avatar`, `ibtn`, `btn`, `toggle`, `field`, `json`)
- * and are styled by `src/styles/app.css`, which started as a copy of `design/mock.css`.
+ * and are styled by the same rules: `design/css/atoms.css` (and the app-only `atoms.css` next to this file).
  */
 import { useEffect, useState, type ButtonHTMLAttributes, type CSSProperties, type ReactNode } from "react";
 
