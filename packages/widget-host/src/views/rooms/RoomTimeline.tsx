@@ -147,12 +147,15 @@ function TimelineEvents({ roomId, timeline }: { roomId: RoomId; timeline: RoomTi
   // when events are added or dropped above them (older ones shown, the oldest rendered one dropped).
   const scrollerRef = useRef<HTMLDivElement>(null);
   const pinned = useRef(true);
+  /** Where the scroller was scrolled to and how high its content was, as of the last scroll or render. */
+  const seen = useRef<{ scrollTop: number; scrollHeight: number; clientHeight: number }>(undefined);
   /** The first rows in view and their distance from the top edge, as of the last scroll or render. */
   const anchors = useRef<{ key: string; top: number }[]>([]);
   const remember = () => {
     const el = scrollerRef.current;
     if (!el) return;
     pinned.current = el.scrollHeight - el.scrollTop - el.clientHeight <= PINNED_SLACK;
+    seen.current = { scrollTop: el.scrollTop, scrollHeight: el.scrollHeight, clientHeight: el.clientHeight };
     const top = el.getBoundingClientRect().top;
     const rows = Array.from(el.querySelectorAll<HTMLElement>(".tl-ev"));
     // The first row whose bottom is below the top edge (the rows are in order: binary search).
@@ -175,12 +178,21 @@ function TimelineEvents({ roomId, timeline }: { roomId: RoomId; timeline: RoomTi
     }
     // The UI lives in a shadow root: its own `activeElement`.
     olderFocused.current = !!topRef.current?.contains((el.getRootNode() as Document | ShadowRoot).activeElement);
+    // The browser reports a scroll (`remember()`) only with the next frame, so the user may have scrolled since: an
+    // event that arrives right after a scroll away from the bottom must not pull the timeline back. That scroll is
+    // measured against the content as it was then. A position that moved up to the new bottom was not scrolled: the
+    // content got shorter.
+    const last = seen.current;
+    const moved = last ? el.scrollTop - last.scrollTop : 0;
+    const scrolled = Math.abs(moved) < 1 || (moved < 0 && el.scrollTop >= el.scrollHeight - el.clientHeight - 1) ? 0 : moved;
+    if (last && scrolled) pinned.current = last.scrollHeight - el.scrollTop - last.clientHeight <= PINNED_SLACK;
     if (pinned.current) el.scrollTop = el.scrollHeight;
     else {
       const rows = new Map(Array.from(el.querySelectorAll<HTMLElement>(".tl-ev"), (row) => [row.dataset.key, row]));
       const anchor = anchors.current.find((a) => rows.has(a.key));
       const row = anchor && rows.get(anchor.key);
-      if (anchor && row) el.scrollTop += row.getBoundingClientRect().top - el.getBoundingClientRect().top - anchor.top;
+      // Where the anchor was before this render: its place as remembered, moved by what was scrolled since.
+      if (anchor && row) el.scrollTop += row.getBoundingClientRect().top - el.getBoundingClientRect().top - (anchor.top - scrolled);
     }
     remember();
   });
@@ -190,6 +202,7 @@ function TimelineEvents({ roomId, timeline }: { roomId: RoomId; timeline: RoomTi
     if (!el || typeof ResizeObserver === "undefined") return;
     const observer = new ResizeObserver(() => {
       if (pinned.current) el.scrollTop = el.scrollHeight;
+      remember();
     });
     observer.observe(el);
     if (el.firstElementChild) observer.observe(el.firstElementChild);

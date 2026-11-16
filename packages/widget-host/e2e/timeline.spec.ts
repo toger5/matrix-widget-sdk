@@ -112,14 +112,31 @@ test("250 events: the newest 200 are shown, at the bottom; â€œLoad older eventsâ
   await expect(rows(host)).toHaveCount(200);
   await expect(focused).toBeFocused();
 
-  // Scrolled up: the events in view stay where they are, also when the oldest rendered one is dropped.
+  // Scrolled up: the events in view stay where they are, also when the oldest rendered one is dropped. The
+  // browser reports a scroll with the next frame. An event may arrive before that (in the same task here, as
+  // on a busy page): it neither pulls the timeline back to the bottom nor to where it was scrolled before.
   const anchor = rows(host).filter({ has: host.page.getByText("message 120", { exact: true }) });
-  await anchor.evaluate((row) => row.scrollIntoView({ block: "start" }));
-  const before = (await anchor.boundingBox())!.y;
-  await send(host, "live 2");
-  await expect(rows(host).last()).toContainText("live 2");
-  await expect(rows(host).last()).not.toBeInViewport();
-  expect(Math.abs((await anchor.boundingBox())!.y - before)).toBeLessThan(2);
+  const steps = [
+    ["start", "live 2", false], // away from the bottom, not reported yet
+    ["center", "live 3", true], // reported
+    ["start", "live 4", false], // scrolled up further, not reported yet
+  ] as const;
+  for (const [block, body, reported] of steps) {
+    const before = await anchor.evaluate(
+      async (row, { block, body, reported, roomId }) => {
+        const scrolled = new Promise((resolve) => row.closest(".tl")!.addEventListener("scroll", resolve, { once: true }));
+        row.scrollIntoView({ block });
+        if (reported) await scrolled;
+        const y = row.getBoundingClientRect().y;
+        window.widgetHost!.dispatch({ type: "mock/sendEvent", roomId, event: { type: "m.room.message", sender: "@carol:dev.local", content: { msgtype: "m.text", body } } });
+        return y;
+      },
+      { block, body, reported, roomId: LAB },
+    );
+    await expect(rows(host).last()).toContainText(body);
+    await expect(rows(host).last()).not.toBeInViewport();
+    expect(Math.abs((await anchor.boundingBox())!.y - before)).toBeLessThan(2);
+  }
 
   await anchor.getByRole("button").click();
   await expect(anchor.locator("pre.code")).toContainText('"body": "message 120"');
@@ -132,7 +149,7 @@ test("250 events: the newest 200 are shown, at the bottom; â€œLoad older eventsâ
   const top = (await anchor.boundingBox())!.y;
   await older.focus();
   await host.page.keyboard.press("Enter");
-  await expect(rows(host)).toHaveCount(ids.length + 2);
+  await expect(rows(host)).toHaveCount(ids.length + 4);
   await expect(timeline(host).getByText("Start of the room")).toBeAttached();
   await expect(older).toHaveCount(0);
   await expect(rows(host).first()).toContainText("created the room");
