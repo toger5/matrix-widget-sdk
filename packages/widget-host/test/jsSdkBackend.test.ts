@@ -217,18 +217,20 @@ describe("JsSdkBackend behind the driver", () => {
     });
     // The driver reports the device that could not be reached to the widget.
     expect((response.error as { message: string }).message).toContain("@bob:example.org/D2");
+    // One payload for all three devices. The driver hands the recipients over in HashMap order,
+    // which changes between runs, so their order is not checked.
     expect(encrypted).toEqual([
       [
         "org.example.key",
-        // One payload for all three devices, in the order the driver hands the recipients over.
-        [
+        expect.arrayContaining([
           { userId: "@carol:example.org", deviceId: "C1" },
           { userId: "@bob:example.org", deviceId: "D1" },
           { userId: "@bob:example.org", deviceId: "D2" },
-        ],
+        ]),
         { k: 1 },
       ],
     ]);
+    expect(encrypted[0][1]).toHaveLength(3);
     expect(calls.map(([name]) => name)).toEqual(["queueToDevice"]);
     expect((calls[0][1] as { batch: unknown[] }).batch).toHaveLength(2);
   });
