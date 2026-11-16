@@ -25,6 +25,14 @@ const DEFAULT_READ_LIMIT: u32 = 50;
 /// Upper bound for the `limit` of `read_events`.
 const MAX_READ_LIMIT: u32 = 1000;
 
+/// A `limit` from the wire for the backend. On the wire a limit is a `u64`, so that any number a
+/// widget sends parses and is cut down here instead of failing the whole request. The backend
+/// takes a `u32`: no page is that large, and a `u64` would be a `bigint` in the TypeScript
+/// bindings.
+fn backend_limit(limit: u64) -> u32 {
+    u32::try_from(limit).unwrap_or(u32::MAX)
+}
+
 impl WidgetHostDriver {
     pub(super) async fn handle_request(&self, msg: WireMessage, request: WidgetRequest) {
         let mut used_up = false;
@@ -100,7 +108,7 @@ impl WidgetHostDriver {
             R::GetRtcTransports => W::GetRtcTransports { response: self.rtc_transports().await? },
             R::SearchUserDirectory { request } => W::SearchUserDirectory {
                 response: backend
-                    .search_user_directory(request.search_term, request.limit)
+                    .search_user_directory(request.search_term, request.limit.map(backend_limit))
                     .await
                     .map_err(backend_error("Failed to search the user directory"))?,
             },
@@ -298,7 +306,7 @@ impl WidgetHostDriver {
             };
             return Err(access::missing(&needed));
         }
-        let limit = request.limit.unwrap_or(DEFAULT_READ_LIMIT).clamp(1, MAX_READ_LIMIT);
+        let limit = request.limit.map_or(DEFAULT_READ_LIMIT, backend_limit).clamp(1, MAX_READ_LIMIT);
         let events = match request.state_key {
             Some(selector) => self.backend.read_room_state(room_id, request.event_type, selector).await,
             None => {
@@ -322,7 +330,7 @@ impl WidgetHostDriver {
         let ReadRelationsRequest { event_id, rel_type, event_type, limit, from, to, direction, .. } = request;
         let page = self
             .backend
-            .relations(room_id, event_id, rel_type, event_type, from, to, limit, direction)
+            .relations(room_id, event_id, rel_type, event_type, from, to, limit.map(backend_limit), direction)
             .await
             .map_err(backend_error("Failed to read relations"))?;
         Ok(ReadRelationsResponse {

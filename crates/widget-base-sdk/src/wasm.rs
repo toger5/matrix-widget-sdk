@@ -396,7 +396,7 @@ impl WidgetApi {
     /// Resolves with an array of timeline events; `msgtype` narrows `m.room.message` reads.
     #[wasm_bindgen(js_name = readEvents)]
     pub fn read_events(&self, event_type: String, limit: Option<u32>, msgtype: Option<String>) -> Promise {
-        let mut request = ReadEventsRequest::timeline(event_type, limit);
+        let mut request = ReadEventsRequest::timeline(event_type, limit.map(u64::from));
         request.msgtype = msgtype;
         promise(self.client.read_events_request(request))
     }
@@ -413,7 +413,7 @@ impl WidgetApi {
         let mut request = ReadRelationsRequest::new(event_id);
         request.rel_type = rel_type;
         request.event_type = event_type;
-        request.limit = limit;
+        request.limit = limit.map(u64::from);
         promise(self.client.read_relations(request))
     }
 
@@ -450,7 +450,7 @@ impl WidgetApi {
     /// Resolves with `{ limited, results: [{ user_id, display_name?, avatar_url? }] }` (MSC3973).
     #[wasm_bindgen(js_name = searchUserDirectory)]
     pub fn search_user_directory(&self, search_term: String, limit: Option<u32>) -> Promise {
-        promise(self.client.search_user_directory(search_term, limit))
+        promise(self.client.search_user_directory(search_term, limit.map(u64::from)))
     }
 
     /// Resolves with the media config, e.g. `{ "m.upload.size": 52428800 }` (MSC4039).

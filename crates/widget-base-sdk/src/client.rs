@@ -442,7 +442,7 @@ impl WidgetClient {
     pub fn read_events(
         &self,
         event_type: impl Into<String>,
-        limit: Option<u32>,
+        limit: Option<u64>,
     ) -> impl Future<Output = Result<Vec<MatrixEvent>, WidgetClientError>> + 'static {
         self.read_events_request(ReadEventsRequest::timeline(event_type, limit))
     }
@@ -513,7 +513,7 @@ impl WidgetClient {
     pub fn search_user_directory(
         &self,
         search_term: impl Into<String>,
-        limit: Option<u32>,
+        limit: Option<u64>,
     ) -> impl Future<Output = Result<SearchUserDirectoryResponse, WidgetClientError>> + 'static {
         self.call(
             WidgetRequest::SearchUserDirectory {

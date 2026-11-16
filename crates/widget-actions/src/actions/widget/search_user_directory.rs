@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 pub struct SearchUserDirectoryRequest {
     pub search_term: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub limit: Option<u32>,
+    pub limit: Option<u64>,
 }
 
 /// One user directory hit.

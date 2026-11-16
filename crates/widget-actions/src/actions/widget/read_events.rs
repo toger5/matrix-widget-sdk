@@ -58,9 +58,10 @@ pub struct ReadEventsRequest {
     /// Only `m.room.message` events with this `msgtype` (timeline reads).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub msgtype: Option<String>,
-    /// Maximum number of events. Hosts may clamp this.
+    /// Maximum number of events. Hosts may clamp this: any number parses (`u64`), also one no
+    /// host would serve.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub limit: Option<u32>,
+    pub limit: Option<u64>,
     /// Rooms to read from; the widget's own room when absent.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub room_ids: Option<RoomSelector>,
@@ -71,7 +72,7 @@ pub struct ReadEventsRequest {
 
 impl ReadEventsRequest {
     /// Read recent timeline events of `event_type`.
-    pub fn timeline(event_type: impl Into<String>, limit: Option<u32>) -> Self {
+    pub fn timeline(event_type: impl Into<String>, limit: Option<u64>) -> Self {
         Self { event_type: event_type.into(), state_key: None, msgtype: None, limit, room_ids: None, since: None }
     }
 
