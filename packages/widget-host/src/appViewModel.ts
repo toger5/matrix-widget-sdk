@@ -36,8 +36,8 @@
  *
  * - **A widget is not owned by its tab.** Moving an iframe in the DOM reloads it, so all iframes
  *   are rendered as one flat list in a persistent layer (keyed by `WidgetInstanceId`, never
- *   reordered) and positioned over a slot. Tabs only hold the id; `widgetSlot` says where each
- *   widget is shown.
+ *   reordered) and displayed through a `<slot>` where the view shows the widget. Tabs only hold
+ *   the id; `widgetSlot` says where each widget is shown.
  * - **The PiP panel is derived.** A widget that is always on screen only gets a pin icon on its
  *   tab. It is shown in the PictureInPicturePanel exactly while its tab is not shown (`pipWidgetIds`),
  *   so pressing the tab takes it out of the panel again. Nothing stores "is in PiP".

@@ -95,10 +95,18 @@ tests assert on them.
 Only when the action needs something new from Matrix.
 
 - The `MatrixBackend` trait and its sinks in `lib.rs`.
-- `InMemoryBackend` in `in_memory.rs` (it backs every Rust test and the browser host's in-memory mode).
-- The matrix-js-sdk backend of the browser host, `packages/widget-host/src/matrix_session/js/backend/jsSdkBackend.ts`,
-  implements the trait in TypeScript: a new or changed method needs its js-sdk mapping there and a
-  case in `packages/widget-host/test/jsSdkBackend.test.ts`.
+- `InMemoryBackend` in `in_memory.rs` (it backs every Rust test and the browser host's DevBackend).
+- The browser host implements the trait twice in TypeScript, once per Matrix SDK. A new or changed
+  method needs its mapping in both, and a case in both tests:
+  - matrix-rust-sdk (the default build): `packages/widget-host/src/matrix_session/rust/backend/rustSdkBackend.ts`,
+    test `packages/widget-host/test/rustSdkBackend.test.ts`. If the SDK's ffi lacks the call, it is
+    added in `packages/matrix-sdk-uniffi-js/sdk-additions/` (new files only, see that README).
+  - matrix-js-sdk: `packages/widget-host/src/matrix_session/js/backend/jsSdkBackend.ts`,
+    test `packages/widget-host/test/jsSdkBackend.test.ts`.
+  - `packages/widget-host/test/backendContract.ts` runs against both and the DevBackend.
+- Account-scoped data (media, to-device messages, TURN credentials, RTC transports) is mirrored
+  across the rooms' `InMemoryBackend`s by the DevBackend,
+  `packages/widget-host/src/matrix_session/memory/devBackend.ts`.
 - The table in `docs/parity.md` §3 that compares the trait with matrix-rust-rtc.
 
 ## 5. Widget SDK (`crates/widget-base-sdk`)
@@ -155,14 +163,20 @@ Ask for every change:
 
 | what | where |
 |---|---|
-| Driver calls, platform implementation, per-widget buttons | `packages/widget-host/src/views/WidgetView.tsx` |
+| Driver calls, platform callbacks (`WidgetHostPlatform`), the message pump, capability and OpenID answers | `packages/widget-host/src/app/runtime/widgetRuntime.ts` |
+| Host pushes the dev tools send by hand (`update_theme`, `update_language`, `update_visibility`) | intent `devTools/mockHostAction` in `packages/widget-host/src/appViewModel.ts`, `WidgetRuntime.mockHostAction`, buttons in `packages/widget-host/src/views/widget/DriverPanel.tsx` |
+| Readable label of a capability in the permission prompt | `capabilityLabel` in `packages/widget-host/src/views/widget/format.ts` (keyed by action name; an unknown action gets no label) |
 | Auto-approved capabilities of legacy widgets | `packages/widget-host/src/widgetStateEvent.ts` |
-| Controls of the in-memory store | `packages/widget-host/src/memory/MemoryStorePanel.tsx` |
+| Controls of the in-memory store (the DevBackendView) | `packages/widget-host/src/matrix_session/memory/devBackend.ts` (editing API), `packages/widget-host/src/views/devbackend/` |
 | End to end through the JS bindings | `packages/widget-host/test/driver.test.ts` |
 | What every backend must do behind the driver | `packages/widget-host/test/backendContract.ts` |
+| Action names and capability strings asserted in the browser (Playwright) | `packages/widget-host/e2e/widget.spec.ts`, `devtools.spec.ts`, `devbackend.spec.ts`, `devbackendTimeline.spec.ts` |
 | New widget: capability lists | `packages/test-widgets/new/capabilities.ts` |
 | New widget: a button per action, log labels | `packages/test-widgets/new/main.ts` |
 | Legacy widget: only when matrix-widget-api itself gained the action | `packages/test-widgets/legacy/main.ts`, `legacy/capabilities.ts` |
+
+A UI change in the host (a new button, panel or prompt) follows the `widget-host-ui` agent
+(`.claude/agents/widget-host-ui.md`); the host's architecture is in the `widget-host` skill.
 
 Logging needs no change for a new action: the driver and the client log every message by its
 action name. Only if the action's body carries a credential, add its name to `SECRET_ACTIONS` in
@@ -203,6 +217,7 @@ cargo test --workspace
 cargo build --features uniffi -p widget-host-driver
 cargo build --target wasm32-unknown-unknown -p widget-base-sdk
 npm run wasm && npm run bindings && npm run build --workspaces --if-present && npm test
+(cd packages/widget-host && npx playwright test)   # the host in DevBackend mode with both test widgets
 for f in docs/diagrams/*.svg; do xmllint --noout "$f"; done
 ```
 
@@ -221,4 +236,4 @@ grep -rn "<old_name>" --include='*.rs' --include='*.ts' --include='*.md' --inclu
 
 For a behaviour change, also run the browser setup (`npm run dev`: host on 5173, which also serves the wrapper at `/widget_compatibility_wrapper/`,
 widgets on 5175) and load both test widgets. `packages/widget-host/README.md` lists the URL
-parameters for scripted runs (`autoload=1`, `autoApprove=1`, `event=<json>`).
+parameters for scripted runs (`autoload=1`, `autoApprove=1`, `event=<json>`, `seed=/e2e/seeds/lab.json`).

@@ -12,7 +12,7 @@ The views of the widget host, one folder per area of `appDesign.md`. Read this b
 
 A view
 
-- gets its slice of the view model as **props** (the `…Props` interface at the top of its file is the contract with its parent: extend it with optional props only);
+- gets its slice of the view model as **props** (the `…Props` interface at the top of its file is the contract with its parent: extend it with optional props only, unless the design changes the contract; then update the parent and the stories in the same change);
 - sends intents with `useDispatch()` and reads the data that is not in the view model with the hooks of `useViewEnv()` (`src/views/env.tsx`): `useDevToolsData`, `useMockedRoomData`, `useRoomDetails`, `avatar`, `narrow`;
 - keeps **view state** that nobody else needs in `useState` (a form draft, a hover, a filter text, an open menu, which log row is expanded);
 - never imports `src/app/**`, `src/session.ts` values (types are fine), a session implementation, or the bindings;
@@ -24,7 +24,7 @@ The mockups are the specification. `design/src/components.mjs` has one function 
 
 - Port the markup of the mockup function 1:1 (same elements, same class names, same `aria-*`, same `title`s), replacing the fixture data with props. Do not restyle.
 - Atoms are in `src/views/ui/atoms.tsx`: `Icon`, `Logo`, `Avatar`, `DevAvatar`, `IconButton` (`ibtn`), `Button` (`btn`), `Toggle`, `Field`, `Json`.
-- New CSS goes to the end of `src/styles/app.css`, under a comment naming the view. Only tokens (`var(--…)`), no raw colors. Do not edit existing rules that other views use; do not edit `design/`.
+- New CSS goes to the end of `src/styles/app.css`, under a comment naming the view. Only tokens (`var(--…)`), no raw colors. Do not edit existing rules that other views use. Do not change `design/` while implementing a view: a mockup change is a design step (step 3 of [`.claude/agents/widget-host-ui.md`](../../../../.claude/agents/widget-host-ui.md)), and then the same rule changes in `mock.css` and `app.css`.
 - A running widget is shown with `<WidgetSlot widgetId>` (`src/views/ui/WidgetSlot.tsx`), never with an `<iframe>`.
 - Mock-only decoration (fake widget content `.w-*`, the `.stage` wrappers) is not ported.
 

@@ -12,13 +12,11 @@ in `../widget-host-bindings`. One React app (`src/`) with two modes that share e
 The start page is the login screen. **Skip login and use the DevBackend** on it switches to the
 in-memory mode, and so do the URL parameters below. Logged in, the cone button of the left bar
 (shown when dev tools are enabled in the settings) activates it. The app has no Element Web or Compound
-components yet. Where this is heading (devtools, layouts, timeline) is in
-[`docs/host-app/feature-set-and-tech-stack.md`](../../docs/host-app/feature-set-and-tech-stack.md)
-and [`handover.md`](../../handover.md).
+components yet.
 
 ## Structure
 
-The app is built as MVVM from the design in [`appDesign.md`](appDesign.md) (mockups: `design/index.html`). How, and why the widget iframes live outside the UI tree, is in [`implementationPlan.md`](implementationPlan.md); open questions are in [`implementation_findings.md`](implementation_findings.md).
+The app is built as MVVM from the design in [`appDesign.md`](appDesign.md) (mockups: `design/index.html`). How, and why the widget iframes live outside the UI tree, is in [`implementationPlan.md`](implementationPlan.md); open questions are in [`implementation_findings.md`](implementation_findings.md). A UI change is made in a fixed order (design document, view model, mockups, views with stories, app logic, tests), written down for agents in [`.claude/agents/widget-host-ui.md`](../../.claude/agents/widget-host-ui.md).
 
 - `src/appViewModel.ts` is the view model: one serialisable `AppViewModel`, the functions that derive from it, and `AppIntent`, the list of everything a user can ask for.
 - `src/app/` is the controller and the runtime. `controller.ts` holds the view model in a store, turns intents into changes and effects, and feeds runtime events back. `layout.ts` has the pure panel/tab transitions. `runtime/widgetRuntime.ts` is one running widget: its `WidgetHostDriver`, the message pump to its iframe, the capability and OpenID answers and the data of its dev tools. `AppRoot.tsx` connects both to the views and renders the widget iframes. `testHook.ts` is `window.widgetHost`.
@@ -26,7 +24,7 @@ The app is built as MVVM from the design in [`appDesign.md`](appDesign.md) (mock
 - `src/styles/app.css` is the stylesheet (it started as a copy of `design/mock.css`).
 - `src/session.ts` is what the app needs from a Matrix client, as interfaces (login, several stored logins, room list, the widget state events of a room, a backend per room, account and room details, suspend/resume, device verification). Its `sessions` export picks the SDK and loads it lazily.
 - `src/matrix_session/js/` implements it on matrix-js-sdk: OAuth 2.0 (dynamic client registration, PKCE, in a popup that returns through `oidc-callback.html`) or a password, `/sync` v2, end-to-end encryption, verification with a recovery key. It is the only folder that imports matrix-js-sdk.
-- `src/matrix_session/rust/` is the same on matrix-rust-sdk (`../matrix-sdk-uniffi-js`, with native sliding sync). A build has one SDK or the other, see "Choosing the Matrix SDK" below. This implementation has not run against a homeserver yet; `../../rust-sdk-port.md` says what it relies on and how it differs.
+- `src/matrix_session/rust/` is the same on matrix-rust-sdk (`../matrix-sdk-uniffi-js`, with native sliding sync). A build has one SDK or the other, see "Choosing the Matrix SDK" below. This implementation has not run against a homeserver yet. The SDK API it adds is in [`../matrix-sdk-uniffi-js/README.md`](../matrix-sdk-uniffi-js/README.md) ("API added to the SDK"), its open questions in [`implementation_findings.md`](implementation_findings.md) ("Matrix sessions").
 - `src/matrix_session/memory/devBackend.ts` is the DevBackend: the same `LiveSession` on the crate's `InMemoryBackend`, with several mocked rooms, an editing API for the DevBackendView and a JSON seed format (`seed.ts`).
 - `src/lib/` holds what is neither a view nor a session: the store of approved capabilities, the avatar cache, log formatting and the driver's log.
 - `src/widgetStateEvent.ts` decides how a widget state event is embedded (below).

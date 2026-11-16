@@ -1,8 +1,8 @@
 /**
- * Everything the widget host needs from a Matrix client, as interfaces. The UI (`App`, `Login`,
- * `LoggedInView`, `RoomView`, `WidgetView`) only uses this module, so supporting another Matrix SDK
- * means writing another `SessionProvider` and adding it to the choice at the bottom. Nothing
- * here, and nothing in the UI, may import an SDK.
+ * Everything the widget host needs from a Matrix client, as interfaces. The app (`src/app`,
+ * `src/views`) only uses this module, so supporting another Matrix SDK means writing another
+ * `SessionProvider` and adding it to the choice at the bottom. Nothing here, and nothing in the
+ * app, may import an SDK; only `src/matrix_session/*` does.
  *
  * The in-memory mode (`./matrix_session/memory/devBackend`) implements `LiveSession` too, which is why it gets the
  * same views as a logged-in client.

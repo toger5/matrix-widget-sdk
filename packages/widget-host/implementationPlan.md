@@ -1,5 +1,7 @@
 # Implementation plan
 
+> **Historical.** The plan of the first implementation (commit `c1ef94d`); it is not kept up to date, and some files named in section 1 do not exist. Section 2 (moving widgets without a reload) still describes how the app works. The current structure is in [README.md](README.md) and [src/views/README.md](src/views/README.md).
+
 How the design ([appDesign.md](appDesign.md), [designFeedback.md](designFeedback.md), `design/`) becomes the app. What came up on the way is in [implementation_findings.md](implementation_findings.md).
 
 1. [Gaps in the existing code](#1-gaps-in-the-existing-code)

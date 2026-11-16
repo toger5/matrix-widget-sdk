@@ -47,7 +47,7 @@ Web packages (npm workspaces under `packages/`, see each README):
 |---|---|
 | [`widget-compat-wrapper`](packages/widget-compat-wrapper) | Hosted widget that wraps a legacy matrix-widget-api widget and speaks MSC4412 to the host. Lets a client drop its legacy widget code during the transition. |
 | [`widget-host-bindings`](packages/widget-host-bindings) | The host crates as TypeScript + one wasm module, generated with uniffi-bindgen-react-native (`web` flavour). A JS client implements `MatrixBackend` / `WidgetHostPlatform` against these. |
-| [`widget-host`](packages/widget-host) | Browser host on `widget-host-bindings`: one app that logs in with matrix-js-sdk and opens the widgets of your rooms, or runs on the in-memory backend instead (chosen on the login screen or by URL parameters), with a memory-store panel, a state event input and the legacy/new embedding decision. For debugging widgets and for manual and e2e testing. The plan is in [`handover.md`](handover.md). |
+| [`widget-host`](packages/widget-host) | Browser host on `widget-host-bindings`: one app that logs in with matrix-rust-sdk (matrix-js-sdk in a `js` build) and opens the widgets of your rooms, or runs on mocked in-memory rooms (the DevBackend, chosen on the login screen or by URL parameters), with per-widget dev tools and the legacy/new embedding decision. For debugging widgets and for manual and e2e testing. The design is in [`appDesign.md`](packages/widget-host/appDesign.md). |
 | [`test-widgets`](packages/test-widgets) | A legacy and an MSC4412 test widget with buttons for the basic actions and a log of what arrives. |
 
 ```sh

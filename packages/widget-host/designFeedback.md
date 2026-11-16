@@ -1,5 +1,7 @@
 # Design feedback
 
+> **Historical.** The record of the review rounds of the first design (2026-11-16); it is not kept up to date. The current design is [appDesign.md](appDesign.md) and `design/`, open decisions are in [implementation_findings.md](implementation_findings.md). The accessibility list "Later, for the implementation" below is still a requirement.
+
 Feedback collected while drawing the mockups for [appDesign.md](appDesign.md) (`design/index.html`) and the view model (`src/appViewModel.ts`).
 
 **Round 1.** Four reviewers looked at the first complete pass, each with a different job:
