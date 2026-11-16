@@ -88,7 +88,7 @@ const manyMessages = (n: number): HostSeed => ({
   sidePanel: null,
   open: [{ room: LAB, timeline: true }],
 });
-const send = (host: Host, body: string) => host.dispatch({ type: "mock/sendEvent", roomId: LAB, event: { type: "m.room.message", sender: "@carol:dev.local", content: { msgtype: "m.text", body } } });
+const send = (host: Host, body: string) => host.dispatch({ type: "roomTools/sendEvent", roomId: LAB, event: { type: "m.room.message", sender: "@carol:dev.local", content: { msgtype: "m.text", body } } });
 
 test("250 events: the newest 200 are shown, at the bottom; “Load older events” shows the rest and the start of the room. At the bottom it stays there, scrolled up the events in view stay put", async ({ host }) => {
   await host.populate(manyMessages(250));
@@ -128,7 +128,7 @@ test("250 events: the newest 200 are shown, at the bottom; “Load older events�
         row.scrollIntoView({ block });
         if (reported) await scrolled;
         const y = row.getBoundingClientRect().y;
-        window.widgetHost!.dispatch({ type: "mock/sendEvent", roomId, event: { type: "m.room.message", sender: "@carol:dev.local", content: { msgtype: "m.text", body } } });
+        window.widgetHost!.dispatch({ type: "roomTools/sendEvent", roomId, event: { type: "m.room.message", sender: "@carol:dev.local", content: { msgtype: "m.text", body } } });
         return y;
       },
       { block, body, reported, roomId: LAB },

@@ -30,7 +30,7 @@ import initSdkWasm from "../../matrix-sdk-uniffi-js/src/generated/wasm-bindgen/i
 import * as sdkFfi from "../../matrix-sdk-uniffi-js/src/generated/matrix_sdk_ffi";
 import * as rumaEvents from "../../matrix-sdk-uniffi-js/src/generated/ruma_events";
 import { RoomTimelines } from "../src/matrix_session/roomTimelines";
-import { accountInfo, exportRoom, LOAD_MEMBERS_UP_TO, loadOlderEvents, onTimelineChanged, roomDetails, timelineEvents } from "../src/matrix_session/rust/roomData";
+import { accountInfo, exportRoom, LOAD_MEMBERS_UP_TO, loadOlderEvents, onTimelineChanged, roomDetails, roomState, timelineEvents } from "../src/matrix_session/rust/roomData";
 import { needsVerification, onVerificationChanged, startEmojiVerification, verifyWithRecoveryKey } from "../src/matrix_session/rust/verification";
 
 const require = createRequire(import.meta.url);
@@ -196,6 +196,18 @@ describe("matrix-rust-sdk session data", () => {
     ]);
     expect(exported.timeline.map((ev) => ev.event_id)).toEqual(["$c"]);
     expect(fetched).not.toHaveBeenCalled();
+    expect(calls).toEqual([]);
+  });
+
+  it("roomState (the Dev tools): the homeserver's answer; when it fails, the stored state of the known types and of those in the event cache; no pagination", async () => {
+    const serverState = [{ type: "m.room.name", state_key: "", content: { name: "Widgets" }, sender: USER, event_id: "$name" }];
+    let answer: Response = new Response(JSON.stringify(serverState));
+    vi.stubGlobal("fetch", async () => answer);
+    const { client, room, calls } = fakeSdk({ events: [{ type: "m.policy.rule.user", state_key: "key", event_id: "$c", content: { a: 1 } }] });
+    expect(await roomState(client, room)).toEqual(serverState);
+
+    answer = new Response("", { status: 500 });
+    expect((await roomState(client, room)).map((ev) => ev.type)).toEqual(["m.room.name", "m.policy.rule.user"]);
     expect(calls).toEqual([]);
   });
 });

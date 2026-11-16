@@ -1,17 +1,17 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 
-import type { DevBackendViewModel } from "../../appViewModel";
+import type { RoomToolsViewModel } from "../../appViewModel";
 import { EMPTY_MOCKED_ROOM_DATA } from "../env";
-import { devMainVm } from "../fixtures";
+import { ROOMS, roomToolsVm } from "../fixtures";
 import { StoryEnv } from "../storyEnv";
 import { DevBackendView } from "./DevBackendView";
 
-const devBackend = (o: Partial<DevBackendViewModel> = {}): DevBackendViewModel => ({ ...devMainVm().devBackend!, ...o });
+const roomTools = (o: Partial<RoomToolsViewModel> = {}): RoomToolsViewModel => roomToolsVm(o);
 
 const meta: Meta<typeof DevBackendView> = {
   title: "SidePanel/DevBackendView",
   component: DevBackendView,
-  args: { canLeave: true },
+  args: { canLeave: true, roomId: ROOMS.lab.id },
   decorators: [
     (Story) => (
       <div className="sidecol" style={{ width: 324, height: 820 }}>
@@ -28,7 +28,7 @@ const nextFrame = () => new Promise((resolve) => setTimeout(resolve, 50));
 
 /** leaf devbackend/none (after "skip login": no leave link) */
 export const NoRooms: Story = {
-  args: { devBackend: devBackend({ selectedRoomId: undefined, openSections: [] }), canLeave: false },
+  args: { roomTools: roomTools({ openSections: [] }), roomId: undefined, canLeave: false },
   render: (args) => (
     <StoryEnv env={{ useMockedRoomData: () => EMPTY_MOCKED_ROOM_DATA }}>
       <DevBackendView {...args} />
@@ -38,7 +38,7 @@ export const NoRooms: Story = {
 
 /** leaf devbackend/dropdown */
 export const RoomDropdown: Story = {
-  args: { devBackend: devBackend({ openSections: [] }) },
+  args: { roomTools: roomTools({ openSections: [] }) },
   play: ({ canvasElement }) => {
     canvasElement.querySelector<HTMLElement>(".room-pick")?.click();
   },
@@ -46,7 +46,7 @@ export const RoomDropdown: Story = {
 
 /** leaf devbackend/state: the widget form, `m.room.member` expanded, the content of one member shown */
 export const State: Story = {
-  args: { devBackend: devBackend({ openSections: ["state"] }) },
+  args: { roomTools: roomTools({ openSections: ["state"] }) },
   play: async ({ canvasElement }) => {
     click(canvasElement, ".tree-row.lvl0", "m.room.member");
     await nextFrame();
@@ -56,10 +56,10 @@ export const State: Story = {
 
 /** leaves devbackend/timeline-raw and devbackend/timeline-delayed (the "Scheduled" list) */
 export const TimelineRawJson: Story = {
-  args: { devBackend: devBackend({ openSections: ["timeline"], sendForm: "raw" }) },
+  args: { roomTools: roomTools({ openSections: ["timeline"], sendForm: "raw" }) },
 };
 
 /** leaf devbackend/tools-collapsed: the room box with its sections closed, the tools as buttons. The open tools are in ToolBox.stories.tsx. */
 export const ToolsCollapsed: Story = {
-  args: { devBackend: devBackend({ openSections: [] }) },
+  args: { roomTools: roomTools({ openSections: [] }) },
 };

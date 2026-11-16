@@ -182,7 +182,8 @@ test("the dev tools button of a tab only exists while dev tools are enabled, als
   await expect(host.button("Dev tools of New test widget")).toHaveCount(0);
   await expect(host.button("Close New test widget")).toHaveCount(1);
   await expect(host.app).toHaveClass(/fence/);
-  await expect(host.button("DevBackend panel")).toBeVisible();
+  // The Dev tools button stays while the DevBackend is active.
+  await expect(host.leftBar.getByRole("button", { name: "Dev tools", exact: true })).toBeVisible();
   expect((await host.state()).settings).toMatchObject({ devTools: false, devBackend: true });
 
   await host.dispatch({ type: "settings/set", settings: { devTools: true } });

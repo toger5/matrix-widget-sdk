@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { EXAMPLE_LEGACY, EXAMPLE_NEW } from "../src/exampleWidgets";
 import { DevBackend, seedDemoMedia, validateSeed, type DevBackendSeed } from "../src/matrix_session/memory/devBackend";
+import type { RawEvent } from "../src/session";
 import { describeBackendContract } from "./backendContract";
 import { X, behindDriver, tick } from "./harness";
 
@@ -46,7 +47,7 @@ describe("DevBackend: rooms", () => {
     expect(dev.accountId).toBe("devBackend");
     expect(dev.userId).toBe("@alice:dev.local");
     expect(dev.rooms()).toEqual([]);
-    expect(dev.snapshot()).toEqual({ rooms: [], userId: "@alice:dev.local", state: [], timeline: [], scheduled: [], toDevice: [], failSends: false, media: [] });
+    expect(dev.snapshot()).toEqual({ rooms: [], userId: "@alice:dev.local", scheduled: [], toDevice: [], failSends: false, media: [] });
     expect((await dev.account()).userId).toBe("@alice:dev.local");
     expect(await dev.needsVerification()).toBe(false);
     expect(await dev.widgets("!nope:dev.local")).toEqual([]);
@@ -68,7 +69,7 @@ describe("DevBackend: rooms", () => {
       { id: a, name: "Alpha", widgetEvents: [], memberCount: 1 },
       { id: b, name: "Beta", widgetEvents: [], memberCount: 1 },
     ]);
-    expect(dev.snapshot(a).state.map((e) => `${e.type}|${e.stateKey}`)).toEqual(["m.room.create|", "m.room.member|@alice:dev.local", "m.room.name|"]);
+    expect((await dev.roomState(a)).map((e) => `${e.type}|${e.state_key}`)).toEqual(["m.room.create|", "m.room.member|@alice:dev.local", "m.room.name|"]);
     expect(dev.snapshot().rooms.map((r) => r.id)).toEqual([b, a]); // in the order they were added
     expect(() => dev.addRoom({ id: a })).toThrow("exists already");
 
@@ -111,9 +112,8 @@ describe("DevBackend: rooms", () => {
     await dev.sendEvent(room, { type: "m.room.message", content: { body: "later" } }, 1000);
 
     dev.clearRoom(room);
-    const snapshot = dev.snapshot(room);
-    expect(snapshot.timeline).toHaveLength(3);
-    expect(snapshot.scheduled).toEqual([]);
+    expect((await dev.timeline(room)).events).toHaveLength(3);
+    expect(dev.snapshot(room).scheduled).toEqual([]);
     expect(dev.rooms()).toEqual([{ id: room, name: "Lab", widgetEvents: [], memberCount: 1 }]);
   });
 
@@ -130,7 +130,7 @@ describe("DevBackend: rooms", () => {
     await dev.logout();
     expect(notified).toHaveBeenCalledTimes(1);
     expect(revoke).toHaveBeenCalledTimes(1);
-    expect(dev.snapshot()).toEqual({ rooms: [], userId: "@alice:dev.local", state: [], timeline: [], scheduled: [], toDevice: [], failSends: false, media: [] });
+    expect(dev.snapshot()).toEqual({ rooms: [], userId: "@alice:dev.local", scheduled: [], toDevice: [], failSends: false, media: [] });
     revoke.mockRestore();
   });
 });
@@ -187,18 +187,18 @@ describe("DevBackend: widgets from the room state", () => {
 });
 
 describe("DevBackend: events", () => {
-  it("injects timeline events with an id, the time and a default sender; newest first", async () => {
+  it("injects timeline events with an id, the time and a default sender", async () => {
     const dev = new DevBackend();
     const room = dev.addRoom();
     const before = Date.now();
     const first = await dev.sendEvent(room, { type: "m.room.message", content: { body: "one" } });
     await dev.sendEvent(room, { type: "m.room.message", sender: "@bob:dev.local", content: { body: "two" } });
 
-    const [two, one] = dev.snapshot(room).timeline;
+    const [one, two] = (await dev.timeline(room)).events.slice(-2);
     expect(two).toMatchObject({ type: "m.room.message", sender: "@bob:dev.local", content: { body: "two" } });
-    expect(one).toMatchObject({ eventId: first, sender: "@alice:dev.local", content: { body: "one" } });
-    expect(one.timestamp).toBeGreaterThanOrEqual(before);
-    expect(two.eventId).not.toBe(one.eventId);
+    expect(one).toMatchObject({ event_id: first, sender: "@alice:dev.local", content: { body: "one" } });
+    expect(one.origin_server_ts).toBeGreaterThanOrEqual(before);
+    expect(two.event_id).not.toBe(one.event_id);
     await expect(dev.sendEvent(room, { type: "", content: {} })).rejects.toThrow("type");
     await expect(dev.sendEvent("!nope:dev.local", { type: "m.room.message", content: {} })).rejects.toThrow("unknown room");
   });
@@ -212,11 +212,11 @@ describe("DevBackend: events", () => {
     const sent = await ask(`${X}send_event`, { type: "m.room.message", content: { body: "from the widget" } });
     dev.refresh();
 
-    const [newest] = dev.snapshot(room).timeline;
-    expect(newest.eventId).toBe(sent.event_id);
-    expect(newest.timestamp).toBeGreaterThanOrEqual(before);
+    const newest = (await dev.timeline(room)).events.at(-1)!;
+    expect(newest.event_id).toBe(sent.event_id);
+    expect(newest.origin_server_ts).toBeGreaterThanOrEqual(before);
     const exported = await dev.exportRoom(room, 1);
-    expect(exported.timeline).toEqual([expect.objectContaining({ event_id: sent.event_id, origin_server_ts: newest.timestamp, room_id: room })]);
+    expect(exported.timeline).toEqual([expect.objectContaining({ event_id: sent.event_id, origin_server_ts: newest.origin_server_ts, room_id: room })]);
   });
 
   it("has the RoomTimeline of a room: every event oldest first, the start always reached; its listeners hear what refresh() finds in that room", async () => {
@@ -300,7 +300,7 @@ describe("DevBackend: events", () => {
     await dev.sendEvent(room, { type: "m.room.message", content: { body: "from the host" } });
     const delayId = await dev.sendEvent(room, { type: "m.room.message", content: { body: "later" } }, 100);
     await dev.fireDelayedEvent(room, delayId);
-    expect(dev.snapshot(room).timeline.slice(0, 2).map((e) => e.content.body)).toEqual(["later", "from the host"]);
+    expect((await dev.timeline(room)).events.slice(-2).map((e) => e.content.body)).toEqual(["from the host", "later"]);
     // Still on for the widget.
     expect((await ask(`${X}send_event`, { type: "m.room.message", content: { body: "hi" } })).error).toBeDefined();
 
@@ -450,7 +450,9 @@ describe("DevBackend: snapshot", () => {
     expect(dev.snapshot(a)).toBe(first);
     expect(dev.snapshot(b)).not.toBe(first);
     expect(dev.snapshot(b).rooms).toBe(first.rooms);
-    expect(dev.snapshot("!nope:dev.local").timeline).toEqual([]);
+    expect(dev.snapshot("!nope:dev.local").scheduled).toEqual([]);
+    const stateA = await dev.roomState(a);
+    const eventsA = (await dev.timeline(a)).events;
     expect(notified).not.toHaveBeenCalled();
 
     // A change in room B: room A's lists, the rooms and the media keep their identity.
@@ -458,19 +460,20 @@ describe("DevBackend: snapshot", () => {
     expect(notified).toHaveBeenCalledTimes(1);
     const second = dev.snapshot(a);
     expect(second).not.toBe(first);
-    expect(second.timeline).toBe(first.timeline);
-    expect(second.state).toBe(first.state);
+    expect(second.scheduled).toBe(first.scheduled);
+    expect(await dev.roomState(a)).toBe(stateA);
+    expect((await dev.timeline(a)).events).toBe(eventsA);
     expect(second.rooms).toBe(first.rooms);
     expect(second.media).toBe(first.media);
     expect(second.toDevice).toBe(first.toDevice);
-    expect(dev.snapshot(b).timeline[0].content).toEqual({ body: "hi" });
+    expect((await dev.timeline(b)).events.at(-1)!.content).toEqual({ body: "hi" });
 
     // A widget's write is only seen by refresh().
     await (await dev.backendFor(a)).sendRoomEvent(a, "m.room.message", { body: "from a widget" });
     expect(dev.snapshot(a)).toBe(second);
     expect(dev.refresh()).toBe(true);
     expect(notified).toHaveBeenCalledTimes(2);
-    expect(dev.snapshot(a).timeline).toHaveLength(second.timeline.length + 1);
+    expect((await dev.timeline(a)).events).toHaveLength(eventsA.length + 1);
 
     await dev.sendState(a, { type: "m.room.name", stateKey: "", content: { name: "A2" } });
     expect(dev.snapshot(a).rooms).toEqual([{ id: a, name: "A2" }, { id: b, name: "B" }]);
@@ -515,9 +518,9 @@ describe("DevBackend: seeds", () => {
     ]);
     expect(await dev.roomDetails("!one:seed.local")).toMatchObject({ topic: "The first", memberCount: 3 });
     expect(dev.failSends()).toBe(true);
-    expect(dev.snapshot("!one:seed.local").timeline.slice(0, 2)).toMatchObject([
-      { sender: "@dev:seed.local", content: { body: "hello" } },
+    expect((await dev.timeline("!one:seed.local")).events.slice(-2)).toMatchObject([
       { sender: "@bob:seed.local", content: { body: "hi" } },
+      { sender: "@dev:seed.local", content: { body: "hello" } },
     ]);
     const backend = await dev.backendFor("!two:seed.local");
     expect(text((await backend.downloadMedia("mxc://seed.local/notes")).data)).toBe("some notes");
@@ -594,7 +597,7 @@ describe("DevBackend: seeds", () => {
     stubFetch();
     const lab = await DevBackend.fromSeed(validateSeed(seedFile("lab.json")));
     expect(lab.rooms()).toEqual([{ id: "!lab:dev.local", name: "Widget lab", widgetEvents: [EXAMPLE_NEW, EXAMPLE_LEGACY], memberCount: 3 }]);
-    expect(lab.snapshot("!lab:dev.local").timeline.filter((e) => e.type === "m.room.message")).toHaveLength(3);
+    expect((await lab.timeline("!lab:dev.local")).events.filter((e) => e.type === "m.room.message")).toHaveLength(3);
     expect(lab.snapshot().media).toHaveLength(3);
 
     const two = await DevBackend.fromSeed(validateSeed(seedFile("two-rooms.json")));
@@ -635,10 +638,10 @@ describe("DevBackend: copy to DevBackend", () => {
     ]);
     expect(await dev.roomDetails(room)).toMatchObject({ members: [{ userId: "@alice:dev.local" }, { userId: "@bob:example.org", displayName: "Bob" }] });
 
-    const { timeline } = dev.snapshot(room);
-    expect(timeline[1]).toEqual({ eventId: "$msg", type: "m.room.message", sender: "@bob:example.org", timestamp: 1_700_000_005_000, content: { msgtype: "m.text", body: "hello" } });
-    expect(timeline.map((e) => e.eventId)).not.toContain("$name1");
-    expect(timeline.filter((e) => e.eventId === "$name2")).toHaveLength(1);
+    const { events } = await dev.timeline(room);
+    expect(events.at(-2)).toEqual({ type: "m.room.message", sender: "@bob:example.org", event_id: "$msg", room_id: room, origin_server_ts: 1_700_000_005_000, content: { msgtype: "m.text", body: "hello" }, unsigned: { age: 5 } });
+    expect(events.map((e) => e.event_id)).not.toContain("$name1");
+    expect(events.filter((e) => e.event_id === "$name2")).toHaveLength(1);
 
     // A widget reads the copy under the new room id.
     const { ask, grant } = behindDriver(await dev.backendFor(room));
@@ -662,7 +665,10 @@ describe("DevBackend: copy to DevBackend", () => {
     expect(again.timeline.map((e) => e.content.body)).toEqual(["two"]);
     expect(again.state).toHaveLength(2);
     const copy = dev.importRoom(again, { accountId: dev.accountId, roomId: dm });
-    expect(dev.snapshot(copy).state).toEqual(dev.snapshot(dm).state);
-    expect(dev.snapshot(copy).timeline[0]).toEqual(dev.snapshot(dm).timeline[0]);
+    // The same events, but for the room id.
+    const inRoom = ({ room_id: _, ...event }: RawEvent) => event;
+    const content = ({ type, state_key, content }: RawEvent) => ({ type, state_key, content });
+    expect((await dev.roomState(copy)).map(content)).toEqual((await dev.roomState(dm)).map(content));
+    expect(inRoom((await dev.timeline(copy)).events.at(-1)!)).toEqual(inRoom((await dev.timeline(dm)).events.at(-1)!));
   });
 });

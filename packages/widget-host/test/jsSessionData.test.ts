@@ -12,7 +12,7 @@ import { SECRET_STORAGE_ALGORITHM_V1_AES, ServerSideSecretStorageImpl } from "ma
 import { describe, expect, it, vi } from "vitest";
 
 import { FetchGate, SuspendedError } from "../src/matrix_session/js/fetchGate";
-import { accountInfo, exportRoom, loadOlderEvents, LOAD_MEMBERS_UP_TO, MEMBER_LIMIT, onTimelineChanged, roomDetails, timelineEvents } from "../src/matrix_session/js/roomData";
+import { accountInfo, exportRoom, loadOlderEvents, LOAD_MEMBERS_UP_TO, MEMBER_LIMIT, onTimelineChanged, roomDetails, roomState, timelineEvents } from "../src/matrix_session/js/roomData";
 import { needsVerification, onVerificationChanged, RecoveryKeySlot, startEmojiVerification, verifyWithRecoveryKey } from "../src/matrix_session/js/verification";
 
 const ROOM = "!room:example.org";
@@ -162,6 +162,15 @@ describe("matrix-js-sdk session data", () => {
     expect(exported.state).toEqual(localState);
     expect(exported.timeline.map((ev) => ev.event_id)).toEqual(["$3"]);
     expect((await exportRoom(client, ROOM, 0)).timeline).toEqual([]);
+  });
+
+  it("roomState (the Dev tools): the whole state from the homeserver, else the local copy; no pagination", async () => {
+    const online = fakeClient();
+    expect(await roomState(online.client, ROOM)).toEqual(online.serverState);
+    expect(online.calls).toEqual([]);
+    const offline = fakeClient({ offline: true });
+    expect(await roomState(offline.client, ROOM)).toEqual(offline.localState);
+    await expect(roomState(online.client, "!unknown:example.org")).rejects.toThrow();
   });
 });
 

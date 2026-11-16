@@ -1,14 +1,19 @@
-/** The "Timeline" section of a mocked room (mockup functions `formChips`, `timelineSection`, `eventList`). leaves devbackend/timeline* */
-import { useId, useState, type FormEvent } from "react";
+/**
+ * The "Timeline" section of the room box (mockup functions `formChips`, `timelineSection`,
+ * `accountTimelineSection`, `eventList`). leaves devbackend/timeline*, roomtools/timeline
+ */
+import { useId, useMemo, useState, type FormEvent } from "react";
 
-import type { DevBackendViewModel, MockedRoomData, MockedTimelineEvent, RoomId } from "../../appViewModel";
+import { OLDER_EVENTS_PER_LOAD, type MockedTimelineEvent, type RoomId, type RoomToolsViewModel, type ScheduledEvent } from "../../appViewModel";
+import type { RawEvent } from "../../session";
 import { useDispatch } from "../env";
 import { previewOf } from "../helpers";
 import { Button, Field, Icon, Json, Toggle } from "../ui/atoms";
 import { FormChips, FormError, JsonArea, parseJsonObject, pretty } from "../ui/forms";
 import { DelayRow, NO_DELAY, Sub, delayOf, timeOf, useNow } from "./parts";
+import type { RoomBoxMode } from "./RoomBox";
 
-type SendForm = DevBackendViewModel["sendForm"];
+type SendForm = RoomToolsViewModel["sendForm"];
 type NewEvent = Pick<MockedTimelineEvent, "type" | "sender" | "content">;
 
 const FORMS: { form: SendForm; label: string }[] = [
@@ -23,19 +28,28 @@ const FORMS: { form: SendForm; label: string }[] = [
 const PAGE = 100;
 
 interface Props {
+  /** "account": a real room: the sender is the account (read-only), "Scheduled" lists what was scheduled here, older events can be loaded. */
+  mode: RoomBoxMode;
   roomId: RoomId;
   sendForm: SendForm;
-  timeline: MockedTimelineEvent[];
-  scheduled: MockedRoomData["scheduled"];
-  /** The default sender. */
+  /** The events of the room, oldest first (`RoomTimeline.events`); the list shows them newest first. */
+  events: RawEvent[];
+  /** `RoomTimeline.atStart`: there is nothing older to load. */
+  atStart: boolean;
+  loadingOlder: boolean;
+  scheduled: ScheduledEvent[];
+  /** The default sender (DevBackend), or the only one (account). */
   userId?: string;
   /** Suggestions for the sender field. */
   members: string[];
 }
 
-export function TimelineSection({ roomId, sendForm, timeline, scheduled, userId = "", members }: Props) {
+const keyOf = (event: RawEvent, index: number) => (typeof event.event_id === "string" ? event.event_id : `#${index}`);
+
+export function TimelineSection({ mode, roomId, sendForm, events, atStart, loadingOlder, scheduled, userId = "", members }: Props) {
   const dispatch = useDispatch();
   const senders = useId();
+  const account = mode === "account";
 
   const [draft, setDraft] = useState(() => ({
     sender: userId,
@@ -55,7 +69,7 @@ export function TimelineSection({ roomId, sendForm, timeline, scheduled, userId 
 
   /** The event of the shown form, or what is wrong with the draft. */
   const build = (): NewEvent | string => {
-    const sender = draft.sender.trim();
+    const sender = account ? userId : draft.sender.trim();
     const mxc = (url: string) => url.trim().startsWith("mxc://");
     if (sendForm === "raw") {
       const parsed = parseJsonObject(draft.raw);
@@ -92,23 +106,29 @@ export function TimelineSection({ roomId, sendForm, timeline, scheduled, userId 
     setError(problem);
     if (problem || typeof event === "string") return;
     // TODO-FINDING devbackend-delayed-sender - the form offers any sender, but the DevBackend only schedules a delayed event for its own user (the backend's `sendDelayedEvent` sends as the user); another sender is refused and shown as a toast. Options: disable the sender field while "Delayed" is on, or allow it in the backend.
-    dispatch({ type: "mock/sendEvent", roomId, event, ...(delayed.delayMs === undefined ? {} : { delayMs: delayed.delayMs }) });
+    dispatch({ type: "roomTools/sendEvent", roomId, event, ...(delayed.delayMs === undefined ? {} : { delayMs: delayed.delayMs }) });
   };
   const selectForm = (form: SendForm) => {
     setError(undefined);
-    dispatch({ type: "mock/setSendForm", form });
+    dispatch({ type: "roomTools/setSendForm", form });
   };
 
   const now = useNow(scheduled.some((s) => s.scheduledAt !== undefined && s.scheduledAt + s.delayMs > Date.now()));
-  const due = (s: MockedRoomData["scheduled"][number]) => {
+  const due = (s: ScheduledEvent) => {
     const left = s.scheduledAt === undefined ? 0 : s.scheduledAt + s.delayMs - now;
     return left > 0 ? `in ${(left / 1000).toFixed(1)} s` : `${s.delayMs / 1000} s delay`;
   };
 
   const [expanded, setExpanded] = useState<string>();
   const [limit, setLimit] = useState(PAGE);
-  // TODO-FINDING devbackend-timeline-not-virtualized - `MockedRoomData.timeline` says "the view virtualizes it"; the list renders the newest 100 events and a "Show more" button instead.
-  const shown = timeline.slice(0, limit);
+  // TODO-FINDING devbackend-timeline-not-virtualized - the list renders the newest 100 events and a "Show more" button instead of a virtualized list.
+  const newest = useMemo(() => events.map((event, i) => ({ key: keyOf(event, i), event })).reverse(), [events]);
+  const shown = newest.slice(0, limit);
+  const loadOlder = () => {
+    if (loadingOlder) return;
+    setLimit(events.length + OLDER_EVENTS_PER_LOAD);
+    dispatch({ type: "room/loadOlderEvents", roomId });
+  };
 
   return (
     <>
@@ -117,6 +137,10 @@ export function TimelineSection({ roomId, sendForm, timeline, scheduled, userId 
       <form className="form" aria-label="Send event" onSubmit={submit}>
         {sendForm === "raw" ? (
           <JsonArea label="Event (JSON)" tall value={draft.raw} onChange={(raw) => set({ raw })} />
+        ) : account ? (
+          <Field label="Sender">
+            <input className="input mono" readOnly aria-readonly="true" value={userId} />
+          </Field>
         ) : (
           <>
             <Field label="Sender">
@@ -180,6 +204,7 @@ export function TimelineSection({ roomId, sendForm, timeline, scheduled, userId 
           <Sub title="Scheduled">
             <em className="count">{scheduled.length}</em>
           </Sub>
+          {account && <p className="hint">Only the delayed events you scheduled here: the homeserver does not list the others.</p>}
           <div className="ev-list" role="list" aria-label="Scheduled events">
             {scheduled.map((s) => (
               <div key={s.delayId} className="ev sched" role="listitem" data-delay-id={s.delayId}>
@@ -196,7 +221,7 @@ export function TimelineSection({ roomId, sendForm, timeline, scheduled, userId 
                       ["cancel", "Cancel"],
                     ] as const
                   ).map(([update, label]) => (
-                    <Button key={update} sm onClick={() => dispatch({ type: "mock/updateScheduled", roomId, delayId: s.delayId, update })}>
+                    <Button key={update} sm onClick={() => dispatch({ type: "roomTools/updateScheduled", roomId, delayId: s.delayId, update })}>
                       {label}
                     </Button>
                   ))}
@@ -208,34 +233,43 @@ export function TimelineSection({ roomId, sendForm, timeline, scheduled, userId 
       )}
 
       <Sub title="Events">
-        <em className="count">{shown.length < timeline.length ? `${shown.length} of ${timeline.length}` : timeline.length}</em>
+        <em className="count">{shown.length < newest.length ? `${shown.length} of ${newest.length}` : newest.length}</em>
       </Sub>
       <div className="ev-list" role="list" aria-label="Timeline events">
-        {shown.map((event) => {
-          const open = expanded === event.eventId;
+        {shown.map(({ key, event }) => {
+          const open = expanded === key;
+          const timestamp = Number(event.origin_server_ts);
           return (
-            <div key={event.eventId} className="ev-item" role="listitem">
-              <button type="button" className="ev" aria-expanded={open} onClick={() => setExpanded(open ? undefined : event.eventId)}>
-                <span className="mono ev-t">{event.type}</span>
-                <span className="ev-time">{timeOf(event.timestamp)}</span>
-                <span className="ev-p">{previewOf(event.content)}</span>
-                <span className="ev-s">{event.sender}</span>
+            <div key={key} className="ev-item" role="listitem">
+              <button type="button" className="ev" aria-expanded={open} onClick={() => setExpanded(open ? undefined : key)}>
+                {/* String(): the event may come from a homeserver, which may send anything. */}
+                <span className="mono ev-t">{String(event.type)}</span>
+                <span className="ev-time">{timeOf(Number.isFinite(timestamp) ? timestamp : undefined)}</span>
+                <span className="ev-p">{previewOf(event.content ?? {})}</span>
+                <span className="ev-s">{typeof event.sender === "string" ? event.sender : ""}</span>
               </button>
               {open && (
                 <pre className="code">
-                  <Json value={{ event_id: event.eventId, type: event.type, sender: event.sender, origin_server_ts: event.timestamp, content: event.content }} />
+                  <Json value={event} />
                 </pre>
               )}
             </div>
           );
         })}
-        {timeline.length === 0 && <p className="hint">No events yet.</p>}
-        {shown.length < timeline.length && (
+        {newest.length === 0 && <p className="hint">No events yet.</p>}
+        {shown.length < newest.length && (
           <Button sm onClick={() => setLimit(limit + PAGE)}>
             Show more
           </Button>
         )}
       </div>
+      {shown.length === newest.length && !atStart && (
+        <div className="ev-more">
+          <Button sm aria-disabled={loadingOlder || undefined} onClick={loadOlder}>
+            {loadingOlder ? "Loading older events…" : "Load older events"}
+          </Button>
+        </div>
+      )}
     </>
   );
 }

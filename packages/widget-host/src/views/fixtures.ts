@@ -12,6 +12,7 @@ import {
   type RecentRoom,
   type RecentWidget,
   type RoomPanelViewModel,
+  type RoomToolsViewModel,
   type TabId,
   type TabViewModel,
   type VerificationViewModel,
@@ -165,6 +166,18 @@ export function mainVm(o: Partial<MainViewModel> = {}): MainViewModel {
   };
 }
 
+/** The UI state of the Dev tools: "Widget lab" picked in the DevBackend, "Design crit" by Ada; the State section open. */
+export const roomToolsVm = (o: Partial<RoomToolsViewModel> = {}): RoomToolsViewModel => ({
+  selectedRoomIds: { [ACCOUNTS.dev.id]: ROOMS.lab.id, [ACCOUNTS.ada.id]: ROOMS.design.id },
+  openSections: ["state"],
+  sendForm: "message",
+  stateForm: "widget",
+  tools: { open: null, heightShare: 0.5 },
+  behavior: { autoApproveCapabilities: true, autoApproveOpenId: false, rememberCapabilities: false },
+  scheduled: {},
+  ...o,
+});
+
 /** The DevBackend active (leaf app/devbackend): mocked rooms, the DevBackendView open. */
 export function devMainVm(o: Partial<MainViewModel> = {}): MainViewModel {
   const widgets = [widgetVm("lab", "call"), widgetVm("lab", "notes")];
@@ -172,15 +185,8 @@ export function devMainVm(o: Partial<MainViewModel> = {}): MainViewModel {
     accounts: [ACCOUNTS.ada, ACCOUNTS.dev],
     activeAccountId: ACCOUNTS.dev.id,
     returnAccountId: "ada",
-    sidePanel: { view: "devBackend", width: 324 },
-    devBackend: {
-      selectedRoomId: ROOMS.lab.id,
-      openSections: ["state"],
-      sendForm: "message",
-      stateForm: "widget",
-      tools: { open: null, heightShare: 0.5 },
-      behavior: { autoApproveCapabilities: true, autoApproveOpenId: false, rememberCapabilities: false },
-    },
+    sidePanel: { view: "roomTools", width: 324 },
+    roomTools: roomToolsVm(),
     workspaces: { ada: workspace([]), [ACCOUNTS.dev.id]: workspace([roomPanel("lab", [widgetTab("lab", "call"), widgetTab("lab", "notes")])]) },
     data: { rooms: { status: "ready", value: [ROOMS.lab, ROOMS.empty] }, recentWidgets: recentWidgets(["lab", "call"]), recentRooms: recentRooms("lab"), localWidgets: {} },
     widgets: Object.fromEntries(widgets.map((w) => [w.id, w])),
@@ -237,18 +243,6 @@ export const MOCKED_ROOM_DATA: MockedRoomData = {
     { id: ROOMS.lab.id, name: "Widget lab" },
     { id: ROOMS.empty.id, name: "Empty room" },
     { id: "!copy:dev.local", name: "Design crit (copy)", copiedFrom: { accountId: "ada", roomId: ROOMS.design.id } },
-  ],
-  state: [
-    { type: "m.room.name", stateKey: "", content: { name: "Widget lab" } },
-    { type: "m.room.topic", stateKey: "", content: { topic: "Mocked room for the call widget." } },
-    { type: "m.room.member", stateKey: "@alice:dev.local", content: { membership: "join", displayname: "Alice" } },
-    { type: "m.room.member", stateKey: "@bob:dev.local", content: { membership: "join", displayname: "Bob" } },
-    { type: "m.widget", stateKey: "call", content: WIDGET_EVENTS.call.content },
-  ],
-  timeline: [
-    { eventId: "$e3", type: "m.room.message", sender: "@bob:dev.local", timestamp: 1_763_300_003_000, content: { msgtype: "m.text", body: "Can you hear me?" } },
-    { eventId: "$e2", type: "m.sticker", sender: "@alice:dev.local", timestamp: 1_763_300_002_000, content: { body: "wave", url: "mxc://dev.local/wave" } },
-    { eventId: "$e1", type: "m.room.message", sender: "@alice:dev.local", timestamp: 1_763_300_001_000, content: { msgtype: "m.text", body: "Starting the call" } },
   ],
   scheduled: [{ delayId: "delay-1", type: "org.matrix.msc3401.call.member", stateKey: "@alice:dev.local", delayMs: 8000, restarts: 2, scheduledAt: 1_763_300_000_000 }],
   toDevice: [
@@ -310,5 +304,54 @@ export const ROOM_TIMELINE: RoomTimeline = {
     rawEvent("12:04:33", 0, "@ada:example.org", "org.matrix.msc3381.poll.start", {
       "org.matrix.msc3381.poll.start": { question: { body: "Ship the new tab bar?" }, kind: "org.matrix.msc3381.poll.disclosed", max_selections: 1, answers: [{ id: "yes", "org.matrix.msc1767.text": "Yes" }] },
     }),
+  ],
+};
+
+const state = (type: string, stateKey: string, content: Record<string, unknown>, sender = "@alice:dev.local"): RawEvent => ({ type, state_key: stateKey, sender, content });
+
+/** The state of "Widget lab", the mocked room of the DevBackendView stories (`useRoomState`). */
+export const MOCKED_ROOM_STATE: RawEvent[] = [
+  state("m.room.name", "", { name: "Widget lab" }),
+  state("m.room.topic", "", { topic: "Mocked room for the call widget." }),
+  state("m.room.member", "@alice:dev.local", { membership: "join", displayname: "Alice" }),
+  state("m.room.member", "@bob:dev.local", { membership: "join", displayname: "Bob" }, "@bob:dev.local"),
+  state("m.widget", "call", WIDGET_EVENTS.call.content),
+];
+
+/** The timeline of "Widget lab" (`useRoomTimeline`), oldest first: every event of a mocked room is there. */
+export const MOCKED_ROOM_TIMELINE: RoomTimeline = {
+  atStart: true,
+  loadingOlder: false,
+  events: [
+    { event_id: "$e1", type: "m.room.message", sender: "@alice:dev.local", origin_server_ts: 1_763_300_001_000, content: { msgtype: "m.text", body: "Starting the call" } },
+    { event_id: "$e2", type: "m.sticker", sender: "@alice:dev.local", origin_server_ts: 1_763_300_002_000, content: { body: "wave", url: "mxc://dev.local/wave" } },
+    { event_id: "$e3", type: "m.room.message", sender: "@bob:dev.local", origin_server_ts: 1_763_300_003_000, content: { msgtype: "m.text", body: "Can you hear me?" } },
+  ],
+};
+
+/** The state of "Design crit" as the Dev tools of Ada's account read it (leaf roomtools/state). */
+export const ROOM_STATE: RawEvent[] = [
+  state("m.room.create", "", { room_version: "11" }, "@ada:example.org"),
+  state("m.room.name", "", { name: "Design crit" }, "@ada:example.org"),
+  state("m.room.topic", "", { topic: ROOM_DETAILS.topic }, "@ada:example.org"),
+  state("m.room.member", "@ada:example.org", { membership: "join", displayname: "Ada Okafor" }, "@ada:example.org"),
+  state("m.room.member", "@bob:example.org", { membership: "join", displayname: "Bob" }, "@bob:example.org"),
+  state("m.room.member", "@carol:example.org", { membership: "join", displayname: "Carol" }, "@carol:example.org"),
+  state("org.matrix.msc4411.widget", "call", WIDGET_EVENTS.call.content, "@ada:example.org"),
+  state("org.matrix.msc4411.widget", "board", WIDGET_EVENTS.board.content, "@ada:example.org"),
+  state("org.matrix.msc4411.widget", "notes", WIDGET_EVENTS.notes.content, "@ada:example.org"),
+  state("m.room.power_levels", "", { users: { "@ada:example.org": 100 } }, "@ada:example.org"),
+];
+
+/** The newest events of "Design crit" in the Dev tools of Ada's account (leaf roomtools/timeline); older ones can be loaded. */
+export const ROOM_TOOLS_TIMELINE: RoomTimeline = {
+  atStart: false,
+  loadingOlder: false,
+  events: [
+    rawEvent("12:01:10", 0, "@carol:example.org", "m.room.member", { membership: "join", displayname: "Carol" }, { state_key: "@carol:example.org" }),
+    rawEvent("12:03:40", 0, "@bob:example.org", "im.vector.modular.widgets", { type: "m.custom", name: "Whiteboard", url: "https://board.example.org/room" }, { state_key: "board" }),
+    rawEvent("12:04:02", 0, "@carol:example.org", "m.reaction", { "m.relates_to": { rel_type: "m.annotation", event_id: "$Mk2pXr8sLw0bQe4tNa1cVu", key: "👍" } }),
+    rawEvent("12:04:33", 0, "@bob:example.org", "m.room.message", { msgtype: "m.text", body: "Can you see the board?" }),
+    rawEvent("12:06:12", 0, "@ada:example.org", "com.example.board.stroke", { color: "#e5484d", points: 14 }),
   ],
 };

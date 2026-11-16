@@ -14,8 +14,8 @@ const suspended = (a: AccountViewModel): AccountViewModel => ({ ...a, status: "s
 // leaf sidepanel/account-one
 export const OneAccount: Story = { args: { accounts: [ACCOUNTS.ada], activeAccountId: "ada" } };
 
-// leaf sidepanel/account-several (the QA bot's restore failed: marker in the switch list)
-export const SeveralAccounts: Story = { args: { accounts: [ACCOUNTS.ada, ACCOUNTS.work, ACCOUNTS.bot], activeAccountId: "ada" } };
+// leaf sidepanel/account-several (the QA bot's restore failed: marker in the switch list; the DevBackend is enabled, so it is listed)
+export const SeveralAccounts: Story = { args: { accounts: [ACCOUNTS.ada, ACCOUNTS.work, ACCOUNTS.bot, ACCOUNTS.dev], activeAccountId: "ada" }, parameters: { stageHeight: 680 } };
 
 // leaf sidepanel/account-dev (the Matrix accounts are suspended while the DevBackend is active)
 export const DevBackendMode: Story = {

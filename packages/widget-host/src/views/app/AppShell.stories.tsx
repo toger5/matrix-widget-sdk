@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 
 import type { MainViewModel, SettingsViewModel } from "../../appViewModel";
-import { appVm, devMainVm, mainVm, roomPanel, widgetTab, widgetVm, workspace } from "../fixtures";
+import { appVm, devMainVm, mainVm, roomPanel, roomToolsVm, widgetTab, widgetVm, workspace } from "../fixtures";
 import { StoryEnv } from "../storyEnv";
 import { AppShell } from "./AppShell";
 
@@ -36,6 +36,9 @@ export const DevBackendActive: Story = { args: { vm: appVm(devMainVm(), true) } 
 
 // leaf sidepanel/rooms-app: the Room list next to the room panels, the LeftBar button pressed
 export const RoomList: Story = { args: { vm: appVm(twoRooms({ sidePanel: { view: "rooms", width: 324 } })) } };
+
+// leaf roomtools/app: the Dev tools of the open rooms next to the room panels, its sections closed; the DevBackend is enabled ("Switch to the DevBackend")
+export const RoomTools: Story = { args: { vm: appVm(twoRooms({ sidePanel: { view: "roomTools", width: 324 }, roomTools: roomToolsVm({ openSections: [] }) }), true) } };
 
 // leaf leftbar/collapsed-toast (900 x 480)
 export const CollapsedToast: Story = {

@@ -21,7 +21,7 @@ import {
 } from "matrix-sdk-uniffi-js";
 
 import { RustSdkBackend } from "./backend/rustSdkBackend";
-import { accountInfo, exportRoom, loadOlderEvents, onTimelineChanged, roomDetails, timelineEvents } from "./roomData";
+import { accountInfo, exportRoom, loadOlderEvents, onTimelineChanged, roomDetails, roomState, timelineEvents } from "./roomData";
 import { needsVerification, onVerificationChanged, startEmojiVerification, verifyWithRecoveryKey } from "./verification";
 import { AccountStore } from "../js/accountStore";
 import { RoomTimelines } from "../roomTimelines";
@@ -34,6 +34,7 @@ import {
   type LiveSession,
   type LoginOptions,
   type PendingLogin,
+  type RawEvent,
   type RoomDetails,
   type RoomExport,
   type RoomSummary,
@@ -360,6 +361,11 @@ class RustSdkSession implements LiveSession {
 
   async exportRoom(roomId: string, lastEvents: number): Promise<RoomExport> {
     return exportRoom(this.client, this.knownRoom(roomId), lastEvents, !this.suspended);
+  }
+
+  /** From the homeserver (no request while suspended), else what the SDK has stored. Does not subscribe to the room. */
+  async roomState(roomId: string): Promise<RawEvent[]> {
+    return roomState(this.client, this.knownRoom(roomId), !this.suspended);
   }
 
   /**

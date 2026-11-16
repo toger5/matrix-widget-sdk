@@ -11,8 +11,10 @@ import {
   activeAccount,
   activeWorkspace,
   approveBlockedUntil,
+  devToolsAvailable,
   loggableIntent,
   OLDER_EVENTS_PER_LOAD,
+  roomToolsRoomId,
   widgetInstanceId,
   type AccountDataViewModel,
   type AccountId,
@@ -20,15 +22,18 @@ import {
   type AppIntent,
   type AppViewModel,
   type CapabilityPromptViewModel,
-  type DevBackendViewModel,
   type Loadable,
   type LoginViewModel,
   type MainViewModel,
+  type MockedStateEvent,
+  type MockedTimelineEvent,
   type ModalViewModel,
   type PanelId,
   type RecentRoom,
   type RecentWidget,
   type RoomId,
+  type RoomToolsViewModel,
+  type ScheduledEvent,
   type SettingsViewModel,
   type WidgetHostBehavior,
   type WidgetInstanceId,
@@ -67,6 +72,7 @@ import {
   workspaceWidgetIds,
 } from "./layout";
 import { loadPersisted, savePersisted, type PersistedUi } from "./persistence";
+import { DEFAULT_DEV_BEHAVIOR, changeScheduled, defaultRoomToolsVm, dropScheduled, restartScheduled, roomChangeConfirmation, withoutAccount } from "./roomTools";
 import { AccountVerification, type AccountVerificationEvents } from "./runtime/deviceVerification";
 import { WidgetRuntime } from "./runtime/widgetRuntime";
 import { Store } from "./store";
@@ -97,18 +103,14 @@ const joinCapabilityPrompt = (open: CapabilityPromptViewModel | undefined, quest
   lastRequestAt: now,
 });
 
-const DEFAULT_DEV_BEHAVIOR: WidgetHostBehavior = { autoApproveCapabilities: false, autoApproveOpenId: false, rememberCapabilities: false };
 /** Matrix accounts: the user is asked, and the answer is remembered. */
 const MATRIX_BEHAVIOR: WidgetHostBehavior = { autoApproveCapabilities: false, autoApproveOpenId: false, rememberCapabilities: true };
-
-const defaultDevBackendVm = (): DevBackendViewModel => ({
-  // "widgetHostBehavior" is a section of the Client Backend Tool: open once the tool is opened.
-  openSections: ["state", "timeline", "widgetHostBehavior"],
-  sendForm: "message",
-  stateForm: "widget",
-  tools: { open: null, heightShare: 0.5 },
-  behavior: DEFAULT_DEV_BEHAVIOR,
-});
+/** A delayed event scheduled from the Dev tools of a Matrix account leaves "Scheduled" this long after its delay has passed. */
+const SCHEDULED_SLACK_MS = 1000;
+/** The longest a `setTimeout` waits; a longer delay would fire at once. */
+const MAX_TIMER_MS = 2 ** 31 - 1;
+/** The views `HostSeed.sidePanel` may name. */
+const SEED_SIDE_PANEL_VIEWS: readonly string[] = ["roomTools", "settings", "account", "rooms"];
 
 /**
  * What `window.widgetHost.populate()` and the `?seed=` parameter take: the content of the
@@ -126,8 +128,8 @@ export interface HostSeed extends DevBackendSeed {
    * panel without tabs shows the RoomOverview anyway.
    */
   open?: { room: RoomId; widgets?: string[]; timeline?: boolean; active?: string; overview?: boolean }[];
-  /** The SidePanel view; `null` closes it. Default: the DevBackendView, like after activating the DevBackend. */
-  sidePanel?: "devBackend" | "settings" | "account" | "rooms" | null;
+  /** The SidePanel view; `null` closes it. Default: the Dev tools (the DevBackendView), like after activating the DevBackend. */
+  sidePanel?: "roomTools" | "settings" | "account" | "rooms" | null;
   /** WidgetHostBehavior of the DevBackend (all mocked rooms). "Fail sends" is the content field `failSends`. */
   behavior?: Partial<WidgetHostBehavior>;
   leftBarCollapsed?: boolean;
@@ -165,6 +167,8 @@ export class AppController {
   private saveQueued = false;
   /** `HostSeed.notifyReadyTimeoutMs` of the last `populate`. */
   private notifyReadyTimeoutMs: number | undefined;
+  /** Per Matrix account: the timers that take its delayed events off "Scheduled" of the Dev tools (`expireScheduled`); cleared when it goes. */
+  private readonly scheduledTimers = new Map<AccountId, Set<number>>();
   /** The OS preference, for the theme "system". Kept in a field: the listener must live as long as the controller. */
   private readonly darkScheme = globalThis.matchMedia?.("(prefers-color-scheme: dark)");
   /** The theme the running widgets were last told about (`pushTheme`). */
@@ -403,6 +407,8 @@ export class AppController {
     delete this.recentWidgets[accountId];
     delete this.recentRooms[accountId];
     delete this.localWidgets[accountId];
+    for (const timer of this.scheduledTimers.get(accountId) ?? []) window.clearTimeout(timer);
+    this.scheduledTimers.delete(accountId);
     const accounts = m.accounts.filter((a) => a.id !== accountId);
     const next = accounts.find((a) => a.kind === "matrix");
     if (!next && !(this.devActive && !wasActive)) {
@@ -414,7 +420,7 @@ export class AppController {
     }
     this.setMain((mm) => {
       const { [accountId]: _dropped, ...workspaces } = mm.workspaces;
-      return { ...mm, accounts, workspaces, returnAccountId: mm.returnAccountId === accountId ? next?.id : mm.returnAccountId };
+      return { ...mm, accounts, workspaces, roomTools: mm.roomTools && withoutAccount(mm.roomTools, accountId), returnAccountId: mm.returnAccountId === accountId ? next?.id : mm.returnAccountId };
     });
     if (wasActive && next) void this.switchAccount(next.id, true);
   }
@@ -504,7 +510,7 @@ export class AppController {
   /** How the host answers the widgets of the active account. The only reader of `WidgetHostBehavior`. */
   private behavior(): WidgetHostBehavior {
     if (!this.devActive) return MATRIX_BEHAVIOR;
-    return { ...DEFAULT_DEV_BEHAVIOR, ...this.main?.devBackend?.behavior };
+    return { ...DEFAULT_DEV_BEHAVIOR, ...this.main?.roomTools?.behavior };
   }
 
   private acquireBackend(session: LiveSession, roomId: RoomId): Promise<RoomBackend> {
@@ -816,15 +822,30 @@ export class AppController {
     this.setWidget(id, (w) => ({ ...w, widget: resolved }));
   }
 
-  /** Send the widget state event as the active account (`widgetWrite` follows it), then let the DevBackend see it. */
-  private async sendWidgetToRoom(roomId: RoomId, event: StateEvent): Promise<void> {
+  /**
+   * Run `work` on the backend of a room of the active account (the one its widgets share, acquired
+   * for the time it runs), as the account: "Add widget" to the room and the Dev tools of a Matrix
+   * account write to a real room through it.
+   */
+  private async withRoomBackend<T>(roomId: RoomId, work: (backend: RoomBackend) => Promise<T>): Promise<T> {
     const session = this.activeSession();
-    if (!session) return;
-    const write: WidgetWriteViewModel = { roomId, widgetKey: widgetKey(event), state: "sending" };
-    this.setMain((m) => ({ ...m, widgetWrite: write }));
+    if (!session) throw new Error("No account is active");
     const backend = this.acquireBackend(session, roomId);
     try {
-      await (await backend).sendStateEvent(roomId, event.type, event.state_key, event.content);
+      return await work(await backend);
+    } finally {
+      // An account switch disposed every backend meanwhile; a backend acquired after it is not ours to release.
+      if (this.backends.get(roomId)?.backend === backend) this.releaseBackend(roomId);
+    }
+  }
+
+  /** Send the widget state event as the active account (`widgetWrite` follows it), then let the DevBackend see it. */
+  private async sendWidgetToRoom(roomId: RoomId, event: StateEvent): Promise<void> {
+    if (!this.activeSession()) return;
+    const write: WidgetWriteViewModel = { roomId, widgetKey: widgetKey(event), state: "sending" };
+    this.setMain((m) => ({ ...m, widgetWrite: write }));
+    try {
+      await this.withRoomBackend(roomId, (backend) => backend.sendStateEvent(roomId, event.type, event.state_key, event.content));
       this.devBackend?.refresh();
       if (this.main?.widgetWrite === write) this.setMain((m) => ({ ...m, widgetWrite: undefined }));
     } catch (e) {
@@ -832,10 +853,102 @@ export class AppController {
       // The form that sent it was closed: nobody shows the refusal there.
       if (this.main?.widgetWrite === write) this.setMain((m) => ({ ...m, widgetWrite: { ...write, state: "failed", error } }));
       else this.toast(`Adding the widget to the room failed: ${error}`);
-    } finally {
-      // An account switch disposed every backend meanwhile; a backend acquired after it is not ours to release.
-      if (this.backends.get(roomId)?.backend === backend) this.releaseBackend(roomId);
     }
+  }
+
+  // -------------------------------------------------------------------------------------------
+  // The Dev tools: the DevBackend while it is active, else a real room as the active Matrix account
+
+  /** `roomTools/sendState`. A real room: changing its configuration asks first (`roomChangeConfirmation`); a refusal is a toast. */
+  private sendState(roomId: RoomId, event: MockedStateEvent, delayMs: number | undefined, confirmed: boolean): void {
+    checkDelay(delayMs);
+    if (this.devActive) {
+      // The DevBackend refuses some edits (a malformed event, a delayed event of another sender): say so instead of an unhandled rejection.
+      return void this.devBackend?.sendState(roomId, event, delayMs).catch((e: unknown) => this.toast(`Sending the state event failed: ${errorText(e)}`));
+    }
+    const session = this.activeSession();
+    if (!session) return;
+    if (!confirmed) {
+      const room = this.rooms().find((r) => r.id === roomId);
+      const ask = roomChangeConfirmation(event, { userId: session.userId, name: room?.name || roomId, widgetEvents: room?.widgetEvents });
+      if (ask) {
+        return this.modal({ kind: "confirm", ...ask, confirmLabel: "Send the state event", danger: true, intent: { type: "roomTools/sendState", roomId, event, ...(delayMs === undefined ? {} : { delayMs }), confirmed: true } });
+      }
+    }
+    void this.sendToRoom(roomId, { ...event, delayMs }, "Sending the state event failed");
+  }
+
+  /** `roomTools/sendEvent`. A real room only takes events sent as the active account. */
+  private sendEvent(roomId: RoomId, event: Pick<MockedTimelineEvent, "type" | "sender" | "content">, delayMs: number | undefined): void {
+    checkDelay(delayMs);
+    if (this.devActive) return void this.devBackend?.sendEvent(roomId, event, delayMs).catch((e: unknown) => this.toast(`Sending the event failed: ${errorText(e)}`));
+    const session = this.activeSession();
+    if (!session) return;
+    if (event.sender !== session.userId) return this.toast(`Sending the event failed: a real room only takes events sent as ${session.userId}`);
+    void this.sendToRoom(roomId, { type: event.type, content: event.content, delayMs }, "Sending the event failed");
+  }
+
+  /** Send to a real room as the active account; a delayed event is listed under "Scheduled" until it is sent, cancelled or due. */
+  // TODO-FINDING room-tools-delayed-list - the homeserver's delayed events of the room cannot be listed (no list in the rust bindings; matrix-js-sdk could call MSC4140's `GET /delayed_events`). "Scheduled" lists only what was scheduled here, not persisted; a widget's delayed events are missing.
+  private async sendToRoom(roomId: RoomId, event: { type: string; stateKey?: string; content: Record<string, unknown>; delayMs?: number }, failure: string): Promise<void> {
+    const accountId = this.main?.activeAccountId;
+    if (!accountId) return;
+    const { type, stateKey, content, delayMs } = event;
+    try {
+      if (delayMs === undefined) {
+        await this.withRoomBackend(roomId, (backend) => (stateKey === undefined ? backend.sendRoomEvent(roomId, type, content) : backend.sendStateEvent(roomId, type, stateKey, content)));
+        return;
+      }
+      const delayId = await this.withRoomBackend(roomId, (backend) => backend.sendDelayedEvent(roomId, type, stateKey, content, BigInt(Math.trunc(delayMs))));
+      this.schedule(accountId, roomId, { delayId, type, ...(stateKey === undefined ? {} : { stateKey }), delayMs, restarts: 0, scheduledAt: Date.now() });
+    } catch (e) {
+      this.toast(`${failure}: ${backendErrorText(e)}`);
+    }
+  }
+
+  /** `roomTools/updateScheduled`. A real room: only what was scheduled from here is listed, and only that can be updated. */
+  private async updateScheduled(roomId: RoomId, delayId: string, update: "send" | "restart" | "cancel"): Promise<void> {
+    const accountId = this.main?.activeAccountId;
+    try {
+      if (this.devActive) return await this.devBackend?.updateScheduled(roomId, delayId, update);
+      if (!accountId) return;
+      // A delay id is the account's, not the room's: another one (a widget's, another room's) is not touched from here.
+      if (!this.main?.roomTools?.scheduled[accountId]?.[roomId]?.some((s) => s.delayId === delayId)) {
+        return this.toast(`Updating the scheduled event failed: ${delayId} was not scheduled from the Dev tools in this room`);
+      }
+      await this.withRoomBackend(roomId, (backend) =>
+        update === "send" ? backend.sendDelayedEventNow(roomId, delayId) : update === "restart" ? backend.restartDelayedEvent(roomId, delayId) : backend.cancelDelayedEvent(roomId, delayId),
+      );
+      if (update !== "restart") return this.setRoomTools((t) => changeScheduled(t, accountId, roomId, (list) => dropScheduled(list, delayId)));
+      const now = Date.now();
+      this.setRoomTools((t) => changeScheduled(t, accountId, roomId, (list) => restartScheduled(list, delayId, now)));
+      const restarted = this.main?.roomTools?.scheduled[accountId]?.[roomId]?.find((s) => s.delayId === delayId);
+      if (restarted) this.expireScheduled(accountId, roomId, restarted);
+    } catch (e) {
+      this.toast(`Updating the scheduled event failed: ${backendErrorText(e)}`);
+    }
+  }
+
+  private schedule(accountId: AccountId, roomId: RoomId, scheduled: ScheduledEvent): void {
+    this.setRoomTools((t) => changeScheduled(t, accountId, roomId, (list) => [...list, scheduled]));
+    this.expireScheduled(accountId, roomId, scheduled);
+  }
+
+  /**
+   * The homeserver sends a delayed event once its delay has passed: then it leaves "Scheduled", unless
+   * it was restarted meanwhile. A delay longer than a timer can wait stays listed until it is sent or
+   * cancelled from here.
+   */
+  private expireScheduled(accountId: AccountId, roomId: RoomId, { delayId, delayMs, scheduledAt }: ScheduledEvent): void {
+    const wait = delayMs + SCHEDULED_SLACK_MS;
+    if (wait > MAX_TIMER_MS) return;
+    let timers = this.scheduledTimers.get(accountId);
+    if (!timers) this.scheduledTimers.set(accountId, (timers = new Set()));
+    const timer = window.setTimeout(() => {
+      timers.delete(timer);
+      this.setRoomTools((t) => changeScheduled(t, accountId, roomId, (list) => dropScheduled(list, delayId, scheduledAt)));
+    }, wait);
+    timers.add(timer);
   }
 
   /** `room/removeLocalWidget`: asks first; stops the widget, closes its tab and forgets its approvals. */
@@ -894,8 +1007,9 @@ export class AppController {
       widgetWrite: undefined,
       modal: undefined,
       returnAccountId: toDev ? (from?.kind === "matrix" ? from.id : mm.returnAccountId) : mm.returnAccountId,
-      sidePanel: toDev ? { ...mm.sidePanel, view: "devBackend" } : mm.sidePanel.view === "devBackend" ? { ...mm.sidePanel, view: undefined } : mm.sidePanel,
-      devBackend: toDev ? (mm.devBackend ?? defaultDevBackendVm()) : mm.devBackend,
+      // The Dev tools open with the DevBackend and stay open when it is left (the account's then), unless they are disabled.
+      sidePanel: toDev ? { ...mm.sidePanel, view: "roomTools" } : mm.sidePanel.view === "roomTools" && !this.vm.settings.devTools ? { ...mm.sidePanel, view: undefined } : mm.sidePanel,
+      roomTools: toDev ? (mm.roomTools ?? defaultRoomToolsVm()) : mm.roomTools,
       workspaces: { ...mm.workspaces, [target]: mm.workspaces[target] ?? emptyWorkspace() },
       accounts: mm.accounts.map((a) => (a.kind === "matrix" && (a.status === "live" || a.status === "suspended") ? { ...a, status: toDev ? "suspended" : "live" } : a)),
       data: this.accountData(target, { status: "loading" }),
@@ -1015,6 +1129,10 @@ export class AppController {
     const localWidgets = localWidgetsOfSeed(seed.localWidgets);
     const seededRoomIds = new Set(Array.isArray(seed.rooms) ? seed.rooms.map((r) => r?.id) : []);
     for (const roomId of Object.keys(localWidgets)) if (!seededRoomIds.has(roomId)) throw new Error(`seed.localWidgets: unknown room ${roomId}`);
+    // A JSON seed is not type checked: an unknown view (the old "devBackend") would open an empty panel.
+    if (seed.sidePanel != null && !SEED_SIDE_PANEL_VIEWS.includes(seed.sidePanel)) {
+      throw new Error(`seed.sidePanel: unknown view ${JSON.stringify(seed.sidePanel)}, expected one of ${SEED_SIDE_PANEL_VIEWS.join(", ")} or null`);
+    }
     this.stopOAuth?.();
     for (const verification of this.verifications.values()) verification.stop(VERIFICATION_STOPPED);
     if (this.main) this.stopAllWidgets();
@@ -1041,8 +1159,8 @@ export class AppController {
     this.showMain(matrixAccounts, DEV_ACCOUNT_ID, {
       returnAccountId: matrixAccounts[0]?.id,
       leftBar: { collapsed: seed.leftBarCollapsed === true, expandButtonVisible: false },
-      sidePanel: { width: 324, view: seed.sidePanel === null ? undefined : (seed.sidePanel ?? "devBackend") },
-      devBackend: { ...defaultDevBackendVm(), selectedRoomId: dev.roomIds()[0], behavior }, // the first room of the dropdown (seed order), not of the sorted room list
+      sidePanel: { width: 324, view: seed.sidePanel === null ? undefined : (seed.sidePanel ?? "roomTools") },
+      roomTools: this.seededRoomTools(dev.roomIds()[0], behavior),
       workspaces: { [DEV_ACCOUNT_ID]: emptyWorkspace() },
       data: this.accountData(DEV_ACCOUNT_ID, { status: "ready", value: rooms }),
     });
@@ -1073,6 +1191,20 @@ export class AppController {
     }
     const first = this.workspace?.roomsArea.panels[0]?.id;
     if (first) this.setWorkspace((ws) => focusPanel(ws, first));
+  }
+
+  /**
+   * The Dev tools after `populate`: as new, on the first mocked room of the dropdown (seed order, not
+   * the sorted room list). What the Matrix accounts picked and scheduled is kept.
+   */
+  private seededRoomTools(firstRoomId: RoomId | undefined, behavior: WidgetHostBehavior): RoomToolsViewModel {
+    const { [DEV_ACCOUNT_ID]: _old, ...picked } = this.main?.roomTools?.selectedRoomIds ?? {};
+    return {
+      ...defaultRoomToolsVm(),
+      selectedRoomIds: firstRoomId === undefined ? picked : { ...picked, [DEV_ACCOUNT_ID]: firstRoomId },
+      scheduled: this.main?.roomTools?.scheduled ?? {},
+      behavior,
+    };
   }
 
   // -------------------------------------------------------------------------------------------
@@ -1113,6 +1245,8 @@ export class AppController {
         if (this.devActive) settings.devBackend = true;
         this.store.update((vm) => ({ ...vm, settings }));
         this.pushTheme();
+        // Dev tools off with the DevBackend inactive: the Dev tools are gone, and so is their panel.
+        if (!devToolsAvailable(this.vm)) this.setMain((m) => (m.sidePanel.view === "roomTools" ? { ...m, sidePanel: { ...m.sidePanel, view: undefined } } : m));
         return this.syncDevAccount();
       }
       case "modal/open":
@@ -1125,10 +1259,9 @@ export class AppController {
       // accounts
       case "account/switch":
         return void this.switchAccount(intent.accountId, intent.confirmed === true);
-      case "devBackend/toggle":
-        if (!this.devActive) return void this.switchAccount(DEV_ACCOUNT_ID, false);
-        // While it is active the button only opens and closes the DevBackendView; leaving is the text button at its bottom.
-        return this.setMain((m) => ({ ...m, sidePanel: { ...m.sidePanel, view: m.sidePanel.view === "devBackend" ? undefined : "devBackend" } }));
+      case "devBackend/activate":
+        // "Switch to the DevBackend" exists only while the DevBackend is enabled (its account is listed then).
+        return this.vm.settings.devBackend ? void this.switchAccount(DEV_ACCOUNT_ID, false) : undefined;
       case "devBackend/leave": {
         const back = this.main?.returnAccountId ?? this.main?.accounts.find((a) => a.kind === "matrix")?.id;
         return back ? void this.switchAccount(back, true) : undefined;
@@ -1170,7 +1303,7 @@ export class AppController {
       case "leftBar/expand":
         return this.setMain((m) => ({ ...m, leftBar: { collapsed: false, expandButtonVisible: false } }));
       case "sidePanel/toggle":
-        if (intent.view === "devBackend" && !this.devActive) return;
+        if (intent.view === "roomTools") return this.toggleRoomTools();
         return this.setMain((m) => ({ ...m, sidePanel: { ...m.sidePanel, view: m.sidePanel.view === intent.view ? undefined : intent.view } }));
       case "sidePanel/close":
         return this.setMain((m) => ({ ...m, sidePanel: { ...m.sidePanel, view: undefined } }));
@@ -1284,7 +1417,7 @@ export class AppController {
       case "pip/setStacking":
         return this.setWorkspace((ws) => ({ ...ws, pip: { ...ws.pip, stacking: intent.stacking } }));
 
-      // RoomOverview and DevBackendView
+      // RoomOverview, RoomTimeline and Dev tools
       case "room/addWidget":
         return this.addWidget(intent.roomId, intent.event, intent.target, intent.confirmed === true);
       case "room/removeLocalWidget":
@@ -1311,36 +1444,39 @@ export class AppController {
         return void this.activeSession()
           ?.loadOlderEvents(intent.roomId, OLDER_EVENTS_PER_LOAD)
           .catch((e: unknown) => this.toast(`Loading older events failed: ${errorText(e)}`));
-      case "mock/selectRoom":
-        return this.setDevVm((d) => ({ ...d, selectedRoomId: intent.roomId }));
+      case "roomTools/selectRoom":
+        return this.setRoomTools((t) => ({ ...t, selectedRoomIds: { ...t.selectedRoomIds, [this.main!.activeAccountId]: intent.roomId } }));
+      case "roomTools/toggleSection":
+        return this.setRoomTools((t) => ({ ...t, openSections: t.openSections.includes(intent.section) ? t.openSections.filter((s) => s !== intent.section) : [...t.openSections, intent.section] }));
+      case "roomTools/setSendForm":
+        return this.setRoomTools((t) => ({ ...t, sendForm: intent.form }));
+      case "roomTools/setStateForm":
+        return this.setRoomTools((t) => ({ ...t, stateForm: intent.form }));
+      case "roomTools/sendState":
+        return this.sendState(intent.roomId, intent.event, intent.delayMs, intent.confirmed === true);
+      case "roomTools/sendEvent":
+        return this.sendEvent(intent.roomId, intent.event, intent.delayMs);
+      case "roomTools/updateScheduled":
+        return void this.updateScheduled(intent.roomId, intent.delayId, intent.update);
       case "mock/addRoom": {
         if (!dev) return;
         const roomId = dev.addRoom();
-        return this.setDevVm((d) => ({ ...d, selectedRoomId: roomId }));
+        return this.setRoomTools((t) => ({ ...t, selectedRoomIds: { ...t.selectedRoomIds, [DEV_ACCOUNT_ID]: roomId } }));
       }
       case "mock/removeRoom":
         if (!dev) return;
         dev.removeRoom(intent.roomId);
-        return this.setDevVm((d) => ({ ...d, selectedRoomId: d.selectedRoomId === intent.roomId ? dev.roomIds()[0] : d.selectedRoomId }));
+        return this.setRoomTools((t) => {
+          const { [DEV_ACCOUNT_ID]: selected, ...others } = t.selectedRoomIds;
+          const next = selected === intent.roomId ? dev.roomIds()[0] : selected;
+          return { ...t, selectedRoomIds: next === undefined ? others : { ...others, [DEV_ACCOUNT_ID]: next } };
+        });
       case "mock/clearRoom":
         return dev?.clearRoom(intent.roomId);
-      case "mock/toggleSection":
-        return this.setDevVm((d) => ({ ...d, openSections: d.openSections.includes(intent.section) ? d.openSections.filter((s) => s !== intent.section) : [...d.openSections, intent.section] }));
-      case "mock/setSendForm":
-        return this.setDevVm((d) => ({ ...d, sendForm: intent.form }));
-      case "mock/setStateForm":
-        return this.setDevVm((d) => ({ ...d, stateForm: intent.form }));
-      case "mock/sendState":
-        // The DevBackend refuses some edits (a malformed event, a delayed event of another sender): say so instead of an unhandled rejection.
-        return void dev?.sendState(intent.roomId, intent.event, intent.delayMs).catch((e: unknown) => this.toast(`Sending the state event failed: ${errorText(e)}`));
-      case "mock/sendEvent":
-        return void dev?.sendEvent(intent.roomId, intent.event, intent.delayMs).catch((e: unknown) => this.toast(`Sending the event failed: ${errorText(e)}`));
-      case "mock/updateScheduled":
-        return void dev?.updateScheduled(intent.roomId, intent.delayId, intent.update).catch((e: unknown) => this.toast(`Updating the scheduled event failed: ${errorText(e)}`));
       case "mock/sendToDevice":
         return void dev?.sendToDevice(intent.message);
       case "mock/setBehavior": {
-        this.setDevVm((d) => ({ ...d, behavior: { ...DEFAULT_DEV_BEHAVIOR, ...d.behavior, ...intent.behavior } }));
+        this.setRoomTools((t) => ({ ...t, behavior: { ...DEFAULT_DEV_BEHAVIOR, ...t.behavior, ...intent.behavior } }));
         if (intent.behavior.autoApproveOpenId === undefined) return;
         const { autoApproveOpenId } = this.behavior();
         for (const runtime of this.runtimes.values()) runtime.setOpenIdAutoApproved(autoApproveOpenId);
@@ -1349,9 +1485,9 @@ export class AppController {
       case "mock/setFailSends":
         return dev?.setFailSends(intent.on);
       case "mock/toggleTool":
-        return this.setDevVm((d) => ({ ...d, tools: { ...d.tools, open: d.tools.open === intent.tool ? null : intent.tool } }));
+        return this.setRoomTools((t) => ({ ...t, tools: { ...t.tools, open: t.tools.open === intent.tool ? null : intent.tool } }));
       case "mock/resizeTool":
-        return this.setDevVm((d) => ({ ...d, tools: { ...d.tools, heightShare: Math.max(0.15, Math.min(intent.heightShare, 0.8)) } }));
+        return this.setRoomTools((t) => ({ ...t, tools: { ...t.tools, heightShare: Math.max(0.15, Math.min(intent.heightShare, 0.8)) } }));
       case "media/upload":
         return void Promise.all(intent.files.map(async (file) => ({ name: file.name, mimetype: file.type || undefined, data: await file.arrayBuffer() }))).then(
           (files) => dev?.addMedia(files),
@@ -1372,8 +1508,28 @@ export class AppController {
     }
   }
 
-  private setDevVm(change: (devBackend: DevBackendViewModel) => DevBackendViewModel): void {
-    this.setMain((m) => ({ ...m, devBackend: change(m.devBackend ?? defaultDevBackendVm()) }));
+  private setRoomTools(change: (roomTools: RoomToolsViewModel) => RoomToolsViewModel): void {
+    this.setMain((m) => ({ ...m, roomTools: change(m.roomTools ?? defaultRoomToolsVm()) }));
+  }
+
+  /**
+   * The Dev tools button of the LeftBar (only while `devToolsAvailable`): opens or closes the Dev
+   * tools, never switches accounts. A Matrix account's start on the room of the focused room panel
+   * unless a room picked before is still open, and stay where they are while it is open.
+   */
+  private toggleRoomTools(): void {
+    if (!devToolsAvailable(this.vm)) return;
+    const devActive = this.devActive;
+    this.setMain((m) => {
+      if (m.sidePanel.view === "roomTools") return { ...m, sidePanel: { ...m.sidePanel, view: undefined } };
+      const roomTools = m.roomTools ?? defaultRoomToolsVm();
+      const shown = devActive ? undefined : roomToolsRoomId({ ...m, roomTools });
+      return {
+        ...m,
+        sidePanel: { ...m.sidePanel, view: "roomTools" },
+        roomTools: shown === undefined ? roomTools : { ...roomTools, selectedRoomIds: { ...roomTools.selectedRoomIds, [m.activeAccountId]: shown } },
+      };
+    });
   }
 
   private copy(text: string, done: string): void {
@@ -1382,6 +1538,11 @@ export class AppController {
       () => this.toast("Copying failed: the browser did not allow access to the clipboard"),
     );
   }
+}
+
+/** The intents can come from anywhere (the test hook): a delay is a number of milliseconds, 0 or more. */
+function checkDelay(delayMs: number | undefined): void {
+  if (delayMs !== undefined && !(Number.isFinite(delayMs) && delayMs >= 0)) throw new Error("The delay has to be a number of milliseconds, 0 or more");
 }
 
 /** Why a state event cannot be a widget of "Add widget", or `undefined`: a widget type with a URL the host embeds. */

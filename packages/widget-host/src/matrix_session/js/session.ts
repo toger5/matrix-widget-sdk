@@ -16,7 +16,7 @@ import {
 import { AccountStore } from "./accountStore";
 import { JsSdkBackend } from "./backend/jsSdkBackend";
 import { FetchGate } from "./fetchGate";
-import { accountInfo, exportRoom, loadOlderEvents, onTimelineChanged, roomDetails, timelineEvents } from "./roomData";
+import { accountInfo, exportRoom, loadOlderEvents, onTimelineChanged, roomDetails, roomState, timelineEvents } from "./roomData";
 import { needsVerification, onVerificationChanged, RecoveryKeySlot, startEmojiVerification, verifyWithRecoveryKey } from "./verification";
 import { AVATAR_SIZE, AvatarCache } from "../../lib/avatarCache";
 import { RoomTimelines } from "../roomTimelines";
@@ -28,6 +28,7 @@ import {
   type LiveSession,
   type LoginOptions,
   type PendingLogin,
+  type RawEvent,
   type RoomDetails,
   type RoomExport,
   type RoomSummary,
@@ -303,6 +304,10 @@ class JsSdkSession implements LiveSession {
 
   exportRoom(roomId: string, lastEvents: number): Promise<RoomExport> {
     return exportRoom(this.client, roomId, lastEvents);
+  }
+
+  roomState(roomId: string): Promise<RawEvent[]> {
+    return roomState(this.client, roomId);
   }
 
   async timeline(roomId: string): Promise<RoomTimeline> {

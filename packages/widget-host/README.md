@@ -11,8 +11,9 @@ in `../widget-host-bindings`. One React app (`src/`) with two modes that share e
 
 The start page is the login screen. **Skip login and use the DevBackend** on it switches to the
 in-memory mode (and enables the dev tools and the DevBackend), and so do the URL parameters below.
-Logged in, the cone button of the left bar (shown when **Enable the DevBackend** is on in the
-settings) activates it. **Enable dev tools** is a switch of its own: the widget dev tools and
+Logged in, it is activated from the account list or with **Switch to the DevBackend** at the
+bottom of the Dev tools (both shown while **Enable the DevBackend** is on in the settings).
+**Enable dev tools** is a switch of its own: the Dev tools, the widget dev tools and
 **Add widget** work with a Matrix account as well. The app has no Element Web or Compound
 components yet.
 
@@ -27,7 +28,7 @@ The app is built as MVVM from the design in [`appDesign.md`](appDesign.md) (mock
 - `src/session.ts` is what the app needs from a Matrix client, as interfaces (login, several stored logins, room list, the widget state events of a room, a backend per room, account and room details, a room's timeline, suspend/resume, device verification). Its `sessions` export picks the SDK and loads it lazily.
 - `src/matrix_session/js/` implements it on matrix-js-sdk: OAuth 2.0 (dynamic client registration, PKCE, in a popup that returns through `oidc-callback.html`) or a password, `/sync` v2, end-to-end encryption, device verification (emoji or recovery key). It is the only folder that imports matrix-js-sdk.
 - `src/matrix_session/rust/` is the same on matrix-rust-sdk (`../matrix-sdk-uniffi-js`, with native sliding sync). A build has one SDK or the other, see "Choosing the Matrix SDK" below. This implementation has not run against a homeserver yet. The SDK API it adds is in [`../matrix-sdk-uniffi-js/README.md`](../matrix-sdk-uniffi-js/README.md) ("API added to the SDK"), its open questions in [`implementation_findings.md`](implementation_findings.md) ("Matrix sessions").
-- `src/matrix_session/memory/devBackend.ts` is the DevBackend: the same `LiveSession` on the crate's `InMemoryBackend`, with several mocked rooms, an editing API for the DevBackendView and a JSON seed format (`seed.ts`).
+- `src/matrix_session/memory/devBackend.ts` is the DevBackend: the same `LiveSession` on the crate's `InMemoryBackend`, with several mocked rooms, an editing API for the Dev tools (the DevBackendView) and a JSON seed format (`seed.ts`).
 - `src/lib/` holds what is neither a view nor a session: the store of approved capabilities, the avatar cache, log formatting and the driver's log.
 - `src/widgetStateEvent.ts` decides how a widget state event is embedded (below).
 
@@ -74,7 +75,7 @@ hands it to the driver of each widget of that room like any other `MatrixBackend
   - A `content.url` (or `wrapper=` URL) that is not an absolute `http:` / `https:` URL is not
     embedded: the widget is listed disabled in the room overview, with the reason. A legacy URL is checked untemplated,
     so one that starts with a `$variable` is refused.
-  Send the event as state in the DevBackendView and the widget appears in the room overview (the
+  Send the event as state in the Dev tools of the DevBackend and the widget appears in the room overview (the
   URL parameters below start with the two test widgets). This is the logic a real client
   needs during the transition, in `src/widgetStateEvent.ts`, and the logged-in mode uses the same.
 - **Drives the protocol**: every message from the widget iframe goes into the driver, every
@@ -94,16 +95,28 @@ hands it to the driver of each widget of that room like any other `MatrixBackend
   like a new widget. The prompt lists the **new** capability names: the wrapper has already
   translated the legacy ones. The **Driver** panel lists the auto-approved set.
   **auto-approve OpenID tokens** hands tokens out without the Allow / Block prompt.
-- **DevBackendView** (the side panel, opened with the cone button of the left bar): one page per
-  mocked room, with a dropdown to switch and add rooms.
-  - **State**: shortcuts (name, description, add member), send a state event (also delayed) from
+- **Dev tools** (the side panel, opened with the cone button of the left bar; shown while dev tools
+  are enabled or the DevBackend is active; it never switches accounts): the State and Timeline of
+  one room at a time, with a dropdown to switch rooms.
+  - With a **Matrix account** the dropdown lists the rooms open in the room panels (it starts on the
+    focused panel's room). Everything is sent to the real room **as you**, through the room's
+    backend: another sender is refused, power levels, join rules, encryption, history visibility,
+    guest access, server ACL, tombstone, create event, canonical alias, another user's membership
+    and replacing a widget ask first, and a refusal (`M_FORBIDDEN`) is a toast. **Scheduled** lists
+    only the delayed events scheduled here (the homeserver does not list the others); older
+    events are loaded with **Load older events**. **Switch to the DevBackend** is at the bottom
+    while the DevBackend is enabled.
+  - While the **DevBackend** is active it is the **DevBackendView**: one page per mocked room, the
+    dropdown also adds rooms, events are sent as any user, and two tool boxes and **Leave
+    DevBackend** are below the room box (leaving keeps the Dev tools open while dev tools are enabled).
+  - **State**: shortcuts (name, description, add member in the DevBackend), send a state event (also delayed) from
     a form or as raw JSON, and the current state by type and key with an edit button. Sending a
     widget state event adds a widget to the room; one without `url` removes it. The **Widget** form
     starts with a test widget (new or legacy); the **Element Call** form adds Element Call
     (default `https://call.element.io/room`, loaded from the internet) as Element Web describes its
     call widget: `im.vector.modular.widgets` of type `m.call`, embedded through the compat wrapper.
   - **Timeline**: send an event from a form (message, sticker, RTC member, image/audio) or as raw
-    JSON, also delayed. It is stored as if it came from sync: the driver's subscription delivers
+    JSON, also delayed. In the DevBackend it is stored as if it came from sync: the driver's subscription delivers
     it to the widget (`forward_event`, and for state events also `update_state`) if the matching
     `host:…forward_event.*` / `host:…update_state` capability was approved. Events the widget
     sends are echoed back the same way. **Scheduled** lists the delayed events (MSC4157) with
@@ -121,7 +134,7 @@ hands it to the driver of each widget of that room like any other `MatrixBackend
   ones widgets send included, as they arrive.
 - **Add widget** (the Widgets card of the room overview; enable dev tools in the settings), in
   any room, logged in or in the DevBackend: the **Widget** or **Element Call** form of the
-  DevBackendView, or **Paste JSON** (a whole `{ type, state_key, content }`, e.g. from Element's
+  Dev tools, or **Paste JSON** (a whole `{ type, state_key, content }`, e.g. from Element's
   room state explorer; other fields are ignored). It adds the widget without opening it, either
   **only in this host** (a local widget, marked "Local": kept in `localStorage` per account and
   room, deleted on logout, the DevBackend's in memory only; edit and remove are in its row) or to

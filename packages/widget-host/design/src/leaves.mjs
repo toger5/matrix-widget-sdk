@@ -14,6 +14,7 @@ import {
   pip,
   roomListView,
   roomPanel,
+  roomToolsView,
   settingsView,
   tabMenu,
   timelineBody,
@@ -57,7 +58,7 @@ export const SECTIONS = [
   ["Complete views", "Whole screens with several features at once, to judge how the leaves below work together."],
   ["App", "The app-level states."],
   ["LeftBar", "The slim bar on the left. It sits directly on the app background."],
-  ["SidePanel", "One panel next to the LeftBar, hosting the AccountView, the Settings or the DevBackendView."],
+  ["SidePanel", "One panel next to the LeftBar, hosting the AccountView, the Settings, the Room list or the Dev tools (the DevBackendView while the DevBackend is active)."],
   ["PictureInPicturePanel", "The floating container for the always-on-screen widgets whose tab is not shown at the moment."],
   ["RoomsArea", "Room panels next to each other. Each one is a tabbed RoomView."],
 ];
@@ -68,7 +69,7 @@ export const LEAVES = [
     id: "complete/workspace", section: "Complete views", group: "", title: "Workspace: two rooms, dev tools, AccountView, PiP", ...BIG,
     note: "SidePanel open (RoomsArea shifted), dev tools docked on top with two panels, the whiteboard is always on screen and its tab is not the active one, so it is in the floating panel.",
     html: app({
-      leftBar: { devBackend: true, active: "account" },
+      leftBar: { devTools: true, active: "account" },
       side: accountView({ mode: "several" }),
       panels: [
         roomPanel({ room: "design", devTools: true, style: "flex:1.7 1 0", tabs: [wt("call", { active: true, devOpen: true }), wt("board", { pinned: true })], body: widgetView({ kind: "call", dev: { dock: "top", panels: ["messages", "stats"], size: 290, stats: { plot: [254, 56], hover: null } } }) }),
@@ -82,7 +83,7 @@ export const LEAVES = [
     note: "Construction-fence background and DevBackend badge. The DevBackendView with the Media Backend Tool open; dev tools docked right.",
     html: app({
       fence: true,
-      leftBar: { devBackend: true, devActive: true, active: "devbackend" },
+      leftBar: { devActive: true, active: "devtools" },
       side: devBackendView({ state: "timeline", tool: "media" }),
       panels: [labCall({ pinNotes: true, dev: { dock: "right", panels: ["messages", "driver"], size: 400 } })],
       pip: pip({ items: [{ room: "lab", widget: "notes" }], style: "right:470px;top:70px;bottom:auto" }),
@@ -92,7 +93,7 @@ export const LEAVES = [
     id: "complete/light", section: "Complete views", group: "", title: "Light theme: the overall screen in the other theme", ...BIG, theme: "light",
     note: "Always rendered in the light theme, whatever the gallery's theme switch says.",
     html: app({
-      leftBar: { devBackend: true, active: "settings" },
+      leftBar: { devTools: true, active: "settings" },
       side: settingsView({ devTools: true }),
       panels: [
         roomPanel({ room: "design", devTools: true, style: "flex:1.5 1 0", tabs: [wt("call", { active: true, devOpen: true }), wt("board", { pinned: true })], body: widgetView({ kind: "call", dev: { dock: "top", panels: ["messages", "driver"], size: 250 } }) }),
@@ -108,7 +109,7 @@ export const LEAVES = [
   {
     id: "app/devbackend", section: "App", group: "", title: "DevBackend active: construction fence + badge", ...FULL,
     note: "The badge sits in the LeftBar, so the mode is not signalled by the background alone.",
-    html: app({ fence: true, leftBar: { devBackend: true, devActive: true, active: "devbackend" }, side: devBackendView({ state: "timeline" }), panels: [labCall({ dev: { dock: "top", panels: [] } })] }),
+    html: app({ fence: true, leftBar: { devActive: true, active: "devtools" }, side: devBackendView({ state: "timeline" }), panels: [labCall({ dev: { dock: "top", panels: [] } })] }),
   },
   {
     id: "app/devbackend-collapsed", section: "App", group: "", title: "DevBackend active, LeftBar collapsed: floating badge (extra)", ...FULL,
@@ -118,9 +119,9 @@ export const LEAVES = [
   {
     id: "app/devbackend-empty", section: "App", group: "", title: "DevBackend just activated: empty RoomsArea (extra)", ...FULL,
     note: "Activating the DevBackend removes all panels.",
-    html: app({ fence: true, leftBar: { devBackend: true, devActive: true, active: "devbackend" }, side: devBackendView({ state: "none" }), panels: [] }),
+    html: app({ fence: true, leftBar: { devActive: true, active: "devtools" }, side: devBackendView({ state: "none" }), panels: [] }),
   },
-  { id: "app/confirm", section: "App", group: "", title: "Confirmation before an action that loses state (extra)", ...FULL, html: app({ leftBar: { devBackend: true }, panels: [designCall(), platformPoll()], modal: confirmModal() }) },
+  { id: "app/confirm", section: "App", group: "", title: "Confirmation before an action that loses state (extra)", ...FULL, html: app({ leftBar: { devTools: true }, panels: [designCall(), platformPoll()], modal: confirmModal() }) },
   { id: "app/info-modal", section: "App", group: "", title: "App info modal", ...FULL, html: app({ leftBar: {}, panels: [designCall()], modal: infoModal() }) },
   {
     id: "app/fullscreen", section: "App", group: "", title: "Fullscreen: LeftBar collapsed, one widget", ...FULL,
@@ -137,10 +138,10 @@ export const LEAVES = [
   },
 
   // ---- LeftBar ----------------------------------------------------------------------------
-  { id: "leftbar/expanded", section: "LeftBar", group: "", title: "Expanded, DevBackend disabled", w: 68, h: 620, html: stage(leftBar()) },
-  { id: "leftbar/devtools", section: "LeftBar", group: "", title: "DevBackend enabled, inactive", w: 68, h: 620, html: stage(leftBar({ devBackend: true })) },
-  { id: "leftbar/devbackend", section: "LeftBar", group: "", title: "DevBackend enabled and active", w: 68, h: 620, note: "The account icon is the DevBackend icon.", html: stage(leftBar({ devBackend: true, devActive: true, active: "devbackend" }), "fence") },
-  { id: "leftbar/devbackend-hover", section: "LeftBar", group: "", title: "DevBackend active, button hovered: it opens and closes the DevBackend panel", w: 230, h: 620, html: stage(leftBar({ devBackend: true, devActive: true, active: "devbackend", tooltip: true }), "fence") },
+  { id: "leftbar/expanded", section: "LeftBar", group: "", title: "Expanded, dev tools disabled", w: 68, h: 620, html: stage(leftBar()) },
+  { id: "leftbar/devtools", section: "LeftBar", group: "", title: "Dev tools enabled: the Dev tools button", w: 68, h: 620, note: "Whether the DevBackend is enabled makes no difference here: it is activated from the AccountView or the bottom of the Dev tools.", html: stage(leftBar({ devTools: true })) },
+  { id: "leftbar/devbackend", section: "LeftBar", group: "", title: "DevBackend active: the Dev tools button highlighted", w: 68, h: 620, note: "Shown even with dev tools disabled. The account icon is the DevBackend icon.", html: stage(leftBar({ devActive: true, active: "devtools" }), "fence") },
+  { id: "leftbar/devbackend-hover", section: "LeftBar", group: "", title: "DevBackend active, button hovered: it opens and closes the Dev tools, never switches accounts", w: 230, h: 620, html: stage(leftBar({ devActive: true, active: "devtools", tooltip: true }), "fence") },
   { id: "leftbar/collapsed-toast", section: "LeftBar", group: "", title: "Collapsed with toast", w: 900, h: 480, html: app({ panels: [designCall({ overflow: true }), platformPoll()], toast: TOAST }) },
   {
     id: "leftbar/collapsed-expand", section: "LeftBar", group: "", title: "Collapsed, expand icon revealed (after Esc)", w: 900, h: 480,
@@ -151,7 +152,7 @@ export const LEAVES = [
   // ---- SidePanel --------------------------------------------------------------------------
   { id: "sidepanel/closed", section: "SidePanel", group: "", title: "Closed", w: 900, h: 480, html: app({ leftBar: {}, panels: [designCall()] }) },
   { id: "sidepanel/account-one", section: "SidePanel", group: "AccountView", title: "One account", w: 348, h: 620, html: side(accountView({ mode: "one" })) },
-  { id: "sidepanel/account-several", section: "SidePanel", group: "AccountView", title: "Several accounts (switch list at the bottom, ending with “Add account”)", w: 348, h: 620, html: side(accountView({ mode: "several" })) },
+  { id: "sidepanel/account-several", section: "SidePanel", group: "AccountView", title: "Several accounts, DevBackend enabled (switch list at the bottom with the DevBackend, ending with “Add account”)", w: 348, h: 680, note: "Switching to the DevBackend activates it (confirmed if room panels are open).", html: side(accountView({ mode: "several", devBackend: true })) },
   { id: "sidepanel/account-dev", section: "SidePanel", group: "AccountView", title: "DevBackend mode (full account list)", w: 348, h: 620, html: side(accountView({ mode: "dev" }), true) },
   { id: "sidepanel/verify-start", section: "SidePanel", group: VERIFY, title: "Device not verified: the “Verify this device” box", w: 348, h: 700, note: "Taller than the other AccountView leaves to show the whole panel; in a shorter window its body scrolls.", html: side(accountView({ verify: "start" })) },
   { id: "sidepanel/verify-failed", section: "SidePanel", group: VERIFY, title: "After a failure: the box again, with the reason", w: 348, h: 700, note: "The reason is the session's error (cancelled, timed out) or, as here, that the emoji did not match. It takes the place of the explanation.", html: side(accountView({ verify: "failed" })) },
@@ -164,7 +165,7 @@ export const LEAVES = [
   { id: "sidepanel/verify-done", section: "SidePanel", group: VERIFY, title: "Verified, until “Done”", w: 348, h: 700, note: "The details below already say “This device is verified”.", html: side(accountView({ verify: "done" })) },
   { id: "sidepanel/settings-off", section: "SidePanel", group: "Settings", title: "Both switches off", w: 348, h: 420, html: side(settingsView({ devTools: false, devBackend: false })) },
   {
-    id: "sidepanel/settings-on", section: "SidePanel", group: "Settings", title: "Both switches on", w: 348, h: 560,
+    id: "sidepanel/settings-on", section: "SidePanel", group: "Settings", title: "Both switches on", w: 348, h: 620,
     note: "The two switches are independent: each lists what it shows while it is on.",
     html: side(settingsView({ devTools: true, devBackend: true })),
   },
@@ -178,6 +179,31 @@ export const LEAVES = [
     id: "sidepanel/rooms-app", section: "SidePanel", group: "Room list", title: "Next to the room panels: LeftBar button pressed, RoomsArea shifted", ...FULL,
     note: "A pick opens in the room panel that shows the room (Design crit, Platform team), else in the focused empty room panel, else in a new room panel next to the focused one. In a narrow window the SidePanel closes after a pick.",
     html: app({ leftBar: { active: "rooms" }, side: roomListView(), panels: [designCall({ overflow: true }), platformPoll()] }),
+  },
+  { id: "roomtools/none", section: "SidePanel", group: "Dev tools of a Matrix account", title: "No room open", w: 348, h: 520, note: "“New room panel” opens a room panel with the room picker; the Dev tools stay open and show the room picked there.", html: side(roomToolsView({ state: "none", devBackend: true })) },
+  { id: "roomtools/dropdown", section: "SidePanel", group: "Dev tools of a Matrix account", title: "Room dropdown open: the rooms of the room panels, left to right", w: 348, h: 520, note: "No “Add room”. It starts on the room of the focused panel; a picked room stays while it is open.", html: side(roomToolsView({ state: "dropdown" })) },
+  { id: "roomtools/state", section: "SidePanel", group: "Dev tools of a Matrix account", title: "State: “sent as you”, shortcuts without “Add member”, send state, state explorer", w: 348, h: 1040, html: side(roomToolsView({ state: "state" })) },
+  { id: "roomtools/timeline", section: "SidePanel", group: "Dev tools of a Matrix account", title: "Timeline: the sender is the account, a delayed event scheduled here, “Load older events”", w: 348, h: 1000, note: "The events are the ones the session holds, newest first.", html: side(roomToolsView({ state: "timeline" })) },
+  { id: "roomtools/loading-failed", section: "SidePanel", group: "Dev tools of a Matrix account", title: "Reading the room: the state is loading, the timeline failed", w: 348, h: 620, html: side(roomToolsView({ state: "loading" })) },
+  {
+    id: "roomtools/app", section: "SidePanel", group: "Dev tools of a Matrix account", title: "Next to the room panels (LeftBar button pressed), “Switch to the DevBackend” at the bottom", ...FULL,
+    note: "A Matrix account: no fence. The dropdown offers Design crit and Platform team, the rooms of the two panels. The DevBackend is enabled, so its switch link is at the bottom.",
+    html: app({ leftBar: { devTools: true, active: "devtools" }, side: roomToolsView({ state: "closed", devBackend: true }), panels: [designCall(), platformPoll()] }),
+  },
+  {
+    id: "roomtools/confirm", section: "SidePanel", group: "Dev tools of a Matrix account", title: "Confirming a change of the room's configuration", ...FULL,
+    note: "Asked for power levels, join rules, encryption, history visibility, guest access, server ACL, tombstone, create event, canonical alias, another user's membership and replacing a widget. Other events are sent at once.",
+    html: app({
+      leftBar: { devTools: true, active: "devtools" },
+      side: roomToolsView({ state: "state" }),
+      panels: [designCall(), platformPoll()],
+      modal: confirmModal({
+        title: "Change the power levels of Design crit?",
+        body: "This <b>m.room.power_levels</b> event is sent to the room as <b>@ada:example.org</b> and changes who may do what in it, for everyone. Some changes cannot be undone, for example lowering your own level.",
+        confirm: "Send the state event",
+        danger: true,
+      }),
+    }),
   },
   { id: "devbackend/none", section: "SidePanel", group: "DevBackendView", title: "No rooms yet", w: 348, h: 520, html: side(devBackendView({ state: "none" }), true) },
   { id: "devbackend/dropdown", section: "SidePanel", group: "DevBackendView", title: "Room dropdown open (rooms + add room)", w: 348, h: 520, html: side(devBackendView({ state: "dropdown" }), true) },

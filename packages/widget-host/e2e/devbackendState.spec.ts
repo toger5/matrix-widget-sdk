@@ -1,5 +1,5 @@
 /** DevBackendView › State: the shortcuts, "send state" (widget, Element Call and raw JSON forms), the state explorer and "edit state"; widget state events add and remove widgets of the room overview. */
-import { expect, type Host, LAB, test, widgetId } from "./host";
+import { expect, type Host, LAB, NEW_WIDGET, test, widgetId } from "./host";
 
 type StateEvent = { eventType: string; stateKey: string; content: Record<string, unknown> };
 const stateOf = async (host: Host, type: string, stateKey = "") => ((await host.store(LAB)).state as StateEvent[]).find((e) => e.eventType === type && e.stateKey === stateKey)?.content;
@@ -219,4 +219,23 @@ test("delayed state: the event is scheduled and “Send now” applies it", asyn
   await scheduled.getByRole("button", { name: "Send now" }).click();
   await expect(scheduled).toHaveCount(0);
   expect(await stateOf(host, "m.room.topic")).toEqual({ topic: "Later" });
+});
+
+test("the state is read like a real room's: a widget's state event reaches the state explorer through the room's timeline", async ({ host }) => {
+  const NEW = widgetId(LAB, NEW_WIDGET);
+  await host.populate("lab", { behavior: { autoApproveCapabilities: true }, open: [{ room: LAB, widgets: [NEW_WIDGET] }] });
+  await host.ready(NEW);
+  const view = host.page.getByTestId("devbackend-view");
+  const timeline = view.getByRole("button", { name: /^Timeline \d+ events/ });
+  const before = Number((await timeline.textContent())?.match(/(\d+) events/)?.[1]);
+  await view.getByRole("button", { name: "m.room.topic 1", exact: true }).click();
+  await view.getByRole("button", { name: "State key (empty) of m.room.topic" }).click();
+  const topic = view.locator(".tree pre.code");
+  await expect(topic).not.toContainText("hello from the new widget");
+
+  // The widget writes to the room's backend directly: only the refresh after its message sees it.
+  await host.frame(NEW).getByRole("button", { name: "send state m.room.topic" }).click();
+  await expect(topic).toContainText('"topic": "hello from the new widget"');
+  await expect(timeline).toHaveAccessibleName(`Timeline ${before + 1} events`);
+  expect(await stateOf(host, "m.room.topic")).toEqual({ topic: "hello from the new widget" });
 });

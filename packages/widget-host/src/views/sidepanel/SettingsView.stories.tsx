@@ -11,7 +11,7 @@ type Story = StoryObj<typeof SettingsView>;
 export const BothOff: Story = { args: { settings: { devTools: false, devBackend: false, theme: "system" }, devBackendActive: false } };
 
 // leaf sidepanel/settings-on
-export const BothOn: Story = { args: { settings: { devTools: true, devBackend: true, theme: "system" }, devBackendActive: false }, parameters: { stageHeight: 560 } };
+export const BothOn: Story = { args: { settings: { devTools: true, devBackend: true, theme: "system" }, devBackendActive: false }, parameters: { stageHeight: 620 } };
 
 // leaf sidepanel/settings-devbackend: the DevBackend switch is locked while it is active
 export const DevBackendActive: Story = {

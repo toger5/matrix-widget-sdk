@@ -8,11 +8,11 @@ import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 
 import { createPortal } from "react-dom";
 
 import { widgetTab, type Loadable, type MockedRoomData, type WidgetDevToolsData, type WidgetInstanceViewModel } from "../appViewModel";
-import type { RoomDetails, RoomTimeline } from "../session";
+import type { RawEvent, RoomDetails, RoomTimeline } from "../session";
 import { AppShell } from "../views/app/AppShell";
-import { EMPTY_DEV_TOOLS_DATA, EMPTY_MOCKED_ROOM_DATA, ViewEnvContext, type RoomTimelineData, type ViewEnv } from "../views/env";
+import { EMPTY_DEV_TOOLS_DATA, EMPTY_MOCKED_ROOM_DATA, ViewEnvContext, type RoomStateData, type RoomTimelineData, type ViewEnv } from "../views/env";
 import { widgetSlotName } from "../views/ui/WidgetSlot";
-import type { AppController } from "./controller";
+import { DEV_ACCOUNT_ID, type AppController } from "./controller";
 
 const NARROW = "(max-width: 900px)";
 const noSubscription = () => () => {};
@@ -40,7 +40,8 @@ function viewEnv(controller: AppController, narrow: boolean): ViewEnv {
     },
     useMockedRoomData: (): MockedRoomData => {
       const dev = controller.getDevBackend();
-      const selected = () => (controller.vm.screen.kind === "main" ? controller.vm.screen.main.devBackend?.selectedRoomId : undefined);
+      // The mocked room picked in the Dev tools: its scheduled events.
+      const selected = () => (controller.vm.screen.kind === "main" ? controller.vm.screen.main.roomTools?.selectedRoomIds[DEV_ACCOUNT_ID] : undefined);
       return useSyncExternalStore(dev ? (onChange) => dev.subscribe(onChange) : noSubscription, () => dev?.snapshot(selected()) ?? EMPTY_MOCKED_ROOM_DATA);
     },
     useRoomDetails: (roomId): Loadable<RoomDetails> => {
@@ -99,6 +100,29 @@ function viewEnv(controller: AppController, narrow: boolean): ViewEnv {
         setAttempt((n) => n + 1);
       }, []);
       return useMemo(() => ({ timeline, retry }), [timeline, retry]);
+    },
+    // TODO-FINDING room-tools-state-refresh - the whole state is read again on every new state event of the room's timeline (`roomStateVersion`): one `/state` request each time in both SDKs. Options: apply the state event to the state read before, or a state change listener per SDK.
+    useRoomState: (roomId, version): RoomStateData => {
+      const session = controller.activeSession();
+      const [state, setState] = useState<Loadable<RawEvent[]>>({ status: "loading" });
+      const [attempt, setAttempt] = useState(0);
+      useEffect(() => {
+        // Read once the timeline says which version to read; a new version reads again and shows the old state meanwhile.
+        if (!session || version === undefined) return;
+        let cancelled = false;
+        session.roomState(roomId).then(
+          (value) => !cancelled && setState({ status: "ready", value }),
+          (e: unknown) => !cancelled && setState({ status: "error", error: e instanceof Error ? e.message : String(e) }),
+        );
+        return () => {
+          cancelled = true;
+        };
+      }, [session, roomId, version, attempt]);
+      const retry = useCallback(() => {
+        setState({ status: "loading" });
+        setAttempt((n) => n + 1);
+      }, []);
+      return useMemo(() => ({ state, retry }), [state, retry]);
     },
     avatar: async (mxcUrl) => controller.activeSession()?.avatar(mxcUrl),
   };

@@ -39,7 +39,7 @@ test("room dropdown: select a room, add a room and open it in a new room panel",
 
   await rooms.getByRole("option", { name: /Standup/ }).click();
   await expect(view).toHaveAttribute("data-room-id", STANDUP);
-  expect((await host.main()).devBackend?.selectedRoomId).toBe(STANDUP);
+  expect((await host.main()).roomTools?.selectedRoomIds.devBackend).toBe(STANDUP);
 
   await view.getByRole("button", { name: /^Standup !standup/ }).click();
   await host.button("Add room").click();
@@ -107,7 +107,7 @@ test("widget host behavior: the same for every room; without auto-approve the wi
 
   await autoApprove.click();
   await expect(autoApprove).not.toBeChecked();
-  expect((await host.main()).devBackend?.behavior.autoApproveCapabilities).toBe(false);
+  expect((await host.main()).roomTools?.behavior.autoApproveCapabilities).toBe(false);
   await host.button("Open New test widget").click();
   await expect(host.page.getByTestId("capability-prompt")).toBeVisible();
   expect((await host.main()).widgets[NEW].prompts.capabilities).toBeDefined();
@@ -156,7 +156,7 @@ test("to-device: a message sent from the view reaches the widget, one sent by th
   await expect(separator).toHaveAttribute("aria-valuenow", "80");
   await separator.press("ArrowDown");
   await expect(separator).toHaveAttribute("aria-valuenow", "75");
-  expect((await host.main()).devBackend?.tools.heightShare).toBe(0.75);
+  expect((await host.main()).roomTools?.tools.heightShare).toBe(0.75);
   const form = view.getByRole("form", { name: "Send to-device message" });
   const messages = view.getByRole("list", { name: "To-device messages" }).getByRole("listitem");
 
@@ -203,7 +203,7 @@ test("media tool: open (closing the client tool), upload a file, copy its MXC UR
   const separator = side.getByRole("separator", { name: "Resize the media box" });
   await expect(separator).toHaveAttribute("aria-valuenow", "50");
   await expect(files).toHaveText([/landscape\.png/, /tiles\.png/, /notes\.txt/]);
-  expect((await host.main()).devBackend?.tools.open).toBe("media");
+  expect((await host.main()).roomTools?.tools.open).toBe("media");
   await expect.poll(() => files.first().locator("img").evaluate((img: HTMLImageElement) => img.complete && img.naturalWidth > 0)).toBe(true);
   await host.leaf("devbackend/media-open");
 

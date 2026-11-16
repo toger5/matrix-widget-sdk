@@ -106,7 +106,7 @@ test("Alt+N opens a panel with the recent widgets and rooms: the search scrolls 
   expect(Object.keys((await host.main()).widgets)).toEqual([NOTES]);
 
   // A recent widget whose URL is refused now (widgetUrlProblem) is left out; its room stays a recent room.
-  await host.dispatch({ type: "mock/sendState", roomId: STANDUP, event: { type: "m.widget", stateKey: "notes", content: { name: "Standup notes", url: "javascript:alert(1)", uses_widget_api: true } } });
+  await host.dispatch({ type: "roomTools/sendState", roomId: STANDUP, event: { type: "m.widget", stateKey: "notes", content: { name: "Standup notes", url: "javascript:alert(1)", uses_widget_api: true } } });
   await host.page.keyboard.press("Alt+KeyN");
   await expect(host.panels.nth(2).getByTestId("room-picker").getByRole("heading")).toHaveText(["Recent rooms", "All rooms 2"]);
   expect((await host.main()).data.recentWidgets.map((r) => r.widgetKey)).toEqual(["m.widget/notes"]);

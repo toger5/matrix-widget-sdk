@@ -1,4 +1,4 @@
-/** The app shell: the LeftBar (DevBackend button, collapse, fullscreen), the modals, the narrow window and the login page. */
+/** The app shell: the LeftBar (Dev tools button, collapse, fullscreen), the modals, the narrow window and the login page. */
 import { expect, Host, LAB, LEGACY_WIDGET, NEW_WIDGET, test, widgetId } from "./host";
 
 const NEW = widgetId(LAB, NEW_WIDGET);
@@ -14,7 +14,7 @@ test.describe("LeftBar while the DevBackend is active", () => {
     await expect(host.app).toHaveClass(/fence/);
     await expect(host.leftBar.getByText("DevBackend", { exact: true })).toBeVisible();
     await expect(host.button("Account: DevBackend")).toBeVisible();
-    await expect(host.button("DevBackend panel")).toHaveAttribute("aria-pressed", "true");
+    await expect(host.leftBar.getByRole("button", { name: "Dev tools", exact: true })).toHaveAttribute("aria-pressed", "true");
     await host.leaf("leftbar/devbackend");
 
     await host.button("Dev tools of New test widget").click();
@@ -22,11 +22,11 @@ test.describe("LeftBar while the DevBackend is active", () => {
     await host.leaf("app/devbackend");
   });
 
-  test("the DevBackend button only opens and closes the DevBackendView: it never leaves the DevBackend", async ({ host }) => {
-    const button = host.button("DevBackend panel");
+  test("the Dev tools button only opens and closes the Dev tools: it never leaves the DevBackend", async ({ host }) => {
+    const button = host.leftBar.getByRole("button", { name: "Dev tools", exact: true });
     await button.hover();
     await expect(host.leftBar.locator(".tooltip")).toBeVisible();
-    await expect(host.leftBar.locator(".tooltip")).toHaveText("DevBackend panel");
+    await expect(host.leftBar.locator(".tooltip")).toHaveText("Dev tools");
     await host.leaf("leftbar/devbackend-hover");
 
     await button.click();

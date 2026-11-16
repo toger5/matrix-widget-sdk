@@ -132,8 +132,15 @@ export interface LiveSession {
   account(): Promise<AccountInfo>;
   /** Topic, members and encryption state of a room. */
   roomDetails(roomId: string): Promise<RoomDetails>;
-  /** The room's current state and its last `lastEvents` timeline events, for "Copy to DevBackend". */
+  /** The room's current state and its last `lastEvents` timeline events, for "Copy to DevBackend". Its `state` is `roomState(roomId)`. */
   exportRoom(roomId: string, lastEvents: number): Promise<RoomExport>;
+  /**
+   * The room's whole current state (the Dev tools): from the homeserver where the session can ask
+   * it, else what the session holds (which may lack members and state types it never saw). A
+   * change usually arrives as a state event in `timeline(roomId)`, after which it is worth reading
+   * again (not after a gap in the sync or a redaction: finding `room-tools-state-refresh`).
+   */
+  roomState(roomId: string): Promise<RawEvent[]>;
   /** The events of a room the session holds (the RoomTimeline). The rust session subscribes to the room for it, like `backendFor`. */
   timeline(roomId: string): Promise<RoomTimeline>;
   /**

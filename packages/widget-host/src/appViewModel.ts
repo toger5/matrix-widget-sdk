@@ -7,8 +7,8 @@
  *   row is expanded) stays in the component.
  * - **Runtime objects** (sessions, backends, drivers, iframes) live in a registry next to the
  *   model, keyed by the same ids. Nothing here holds an SDK object.
- * - **High-frequency data** (a widget's message log, console and stats, the content of a mocked
- *   room) lives in per-widget / per-room stores that a view subscribes to with
+ * - **High-frequency data** (a widget's message log, console and stats, the state and timeline of a
+ *   room, the content of the DevBackend) lives in per-widget / per-room stores that a view subscribes to with
  *   `useSyncExternalStore`. One postMessage must not produce a new `AppViewModel`. Their shapes
  *   are at the bottom of this file (`WidgetDevToolsData`, `MockedRoomData`).
  *
@@ -22,8 +22,10 @@
  *       │                              each Matrix account with its device verification
  *       ├─ addAccount?                 the login form while a second account is added
  *       ├─ leftBar                     LeftBar
- *       ├─ sidePanel                   SidePanel: AccountView | Settings | Room list (RoomPicker) | DevBackendView
- *       ├─ devBackend?                 UI state of the DevBackendView
+ *       ├─ sidePanel                   SidePanel: AccountView | Settings | Room list (RoomPicker) | Dev tools
+ *       │                              (of the open rooms; the DevBackendView while the DevBackend is active)
+ *       ├─ roomTools?                  UI state of the Dev tools: picked room per account, sections, forms,
+ *       │                              what an account scheduled; the DevBackend's tool boxes and behavior
  *       ├─ workspaces[accountId]       WorkspaceLayout: persisted, one per account
  *       │  ├─ roomsArea                RoomsArea → RoomPanel → RoomPicker | RoomView → room name
  *       │  │                           (RoomOverview) + Tabs (widgets, the RoomTimeline)
@@ -53,7 +55,7 @@
  * the comments refer to them. `designFeedback.md` lists what the current `LiveSession`,
  * `SessionProvider` and `InMemoryBackend` cannot provide yet.
  */
-import type { RoomSummary, VerificationEmoji } from "./session";
+import type { RoomSummary, RoomTimeline, VerificationEmoji } from "./session";
 import type { ResolvedWidget, StateEvent } from "./widgetStateEvent";
 
 export type AccountId = string;
@@ -104,12 +106,16 @@ export interface LoginViewModel {
  * developer switches are independent. leaves sidepanel/settings-off, settings-on, settings-devbackend
  */
 export interface SettingsViewModel {
-  /** Off: no widget dev tool is visible (⋯ button of widget tabs, WidgetDevToolBar, "Add widget" and editing local widgets in the RoomOverview). Local widgets are still listed and run. */
+  /**
+   * Off: no dev tool is visible (the Dev tools button of the LeftBar unless the DevBackend is active,
+   * ⋯ button of widget tabs, WidgetDevToolBar, "Add widget" and editing local widgets in the
+   * RoomOverview). Local widgets are still listed and run.
+   */
   devTools: boolean;
   /**
-   * Off: the DevBackend cannot be reached (LeftBar button, the DevBackend account, "Copy to
-   * DevBackend"). It cannot be turned off while the DevBackend is active. Stored settings without it
-   * take the value of `devTools`.
+   * Off: the DevBackend cannot be reached (the DevBackend account in the AccountView, "Switch to the
+   * DevBackend" at the bottom of the Dev tools, "Copy to DevBackend"). It cannot be turned off while
+   * the DevBackend is active. Stored settings without it take the value of `devTools`.
    */
   devBackend: boolean;
   /** "system" follows `prefers-color-scheme`. */
@@ -126,12 +132,12 @@ export interface MainViewModel {
   sidePanel: SidePanelViewModel;
   /**
    * The Matrix account that was active before the DevBackend. "Leave DevBackend" at the bottom of
-   * the DevBackendView switches back to it. `undefined` if the login was skipped: then there is
+   * the Dev tools switches back to it. `undefined` if the login was skipped: then there is
    * nothing to go back to and the leave button is not shown (`canLeaveDevBackend`).
    */
   returnAccountId?: AccountId;
-  /** UI state of the DevBackendView. Kept while the SidePanel shows something else. */
-  devBackend?: DevBackendViewModel;
+  /** UI state of the Dev tools. Created when they first open; kept while the SidePanel shows something else and across account switches. */
+  roomTools?: RoomToolsViewModel;
   /** Persisted. Only the active account's workspace is rendered; `account/switch` swaps it. */
   workspaces: Record<AccountId, WorkspaceLayout>;
   /** What the active account's session reports. */
@@ -229,7 +235,7 @@ export const RECENT_TILES = 4;
 export type ModalViewModel =
   /** leaf app/info-modal */
   | { kind: "appInfo" }
-  /** Actions that lose state are confirmed: activating the DevBackend, logging out, revoking capabilities. leaf app/confirm */
+  /** Actions that lose state are confirmed: activating the DevBackend, logging out, revoking capabilities, changing a real room's configuration. `danger`: the alert icon and a danger button. leaves app/confirm, roomtools/confirm */
   | { kind: "confirm"; title: string; body: string; confirmLabel: string; danger: boolean; intent: AppIntent };
 
 export interface ToastViewModel {
@@ -248,42 +254,86 @@ export interface LeftBarViewModel {
   expandButtonVisible: boolean;
 }
 
-/** leaves sidepanel/*, devbackend/* */
+/** leaves sidepanel/*, roomtools/*, devbackend/* */
 export interface SidePanelViewModel {
   /**
    * `undefined`: closed. "rooms": the Room list, the RoomPicker of the SidePanel (leaves
-   * sidepanel/rooms, sidepanel/rooms-app). "devBackend" is only possible while the DevBackend account is active.
+   * sidepanel/rooms, sidepanel/rooms-app). "roomTools": the Dev tools, only while `devToolsAvailable`;
+   * of the open rooms of a Matrix account (leaves roomtools/*), or the DevBackendView while the
+   * DevBackend is active (leaves devbackend/*). Switching accounts keeps it.
    */
-  view?: "account" | "settings" | "rooms" | "devBackend";
+  view?: "account" | "settings" | "rooms" | "roomTools";
   /** Persisted. In a narrow window the panel overlays the RoomsArea instead of shifting it. */
   width: number;
 }
 
 /**
- * UI state of the DevBackendView. The content of the mocked rooms (state, timeline, scheduled
- * events, to-device messages, "fail sends", media) is `MockedRoomData`, read from the DevBackend's store.
+ * UI state of the Dev tools, of a Matrix account and of the DevBackend (the DevBackendView). The
+ * state and timeline of the shown room are read with `useRoomState` / `useRoomTimeline` in both
+ * cases; the DevBackend's other content (its rooms, scheduled events, to-device messages, "fail
+ * sends", media) is `MockedRoomData`.
  */
-export interface DevBackendViewModel {
-  /** `undefined`: no rooms yet (leaf devbackend/none). */
-  selectedRoomId?: RoomId;
-  openSections: DevBackendSection[];
+export interface RoomToolsViewModel {
+  /**
+   * The room picked in the dropdown, per account. The DevBackend's is set when a mocked room is
+   * added or seeded; none: no mocked room yet (leaf devbackend/none). A Matrix account's counts only
+   * while the room is open in a room panel: `roomToolsRoomId`.
+   */
+  selectedRoomIds: Record<AccountId, RoomId>;
+  /** Of the room box, and of the Client Backend Tool (DevBackend). */
+  openSections: RoomToolsSection[];
   /** Which predefined form "send event" shows. "raw" is the JSON editor. */
   sendForm: "message" | "sticker" | "rtcMember" | "media" | "raw";
   /** Which predefined form "send state" shows. "raw" is type, state key and a JSON editor. leaves devbackend/state, devbackend/state-element-call, devbackend/state-raw */
   stateForm: "widget" | "elementCall" | "raw";
-  /** The tool boxes below the room box. leaves devbackend/tools-collapsed, devbackend/behavior, devbackend/todevice, devbackend/media-open */
+  /** DevBackend: the tool boxes below the room box. leaves devbackend/tools-collapsed, devbackend/behavior, devbackend/todevice, devbackend/media-open */
   tools: {
     /** The one open tool box; the other tools are buttons. `null`: only the buttons. */
     open: DevBackendTool | null;
     /** Share of the SidePanel height the open box takes (0..1). */
     heightShare: number;
   };
-  /** For all mocked rooms. */
+  /** DevBackend: for all mocked rooms. */
   behavior: WidgetHostBehavior;
+  /**
+   * The delayed events (MSC4140) a Matrix account scheduled from the Dev tools, per account and
+   * room, until they are sent or cancelled from here or their delay has passed. The homeserver
+   * cannot be asked for them, so the ones of widgets are not listed. Not persisted. leaf roomtools/timeline
+   */
+  scheduled: Record<AccountId, Record<RoomId, ScheduledEvent[]>>;
 }
 
 /** The sections of the room box ("state", "timeline") and of the Client Backend Tool. */
-export type DevBackendSection = "state" | "timeline" | "widgetHostBehavior" | "toDevice";
+export type RoomToolsSection = "state" | "timeline" | "widgetHostBehavior" | "toDevice";
+
+/** A delayed event that is scheduled but not sent yet. */
+export interface ScheduledEvent {
+  delayId: string;
+  type: string;
+  /** Set: a state event. */
+  stateKey?: string;
+  delayMs: number;
+  restarts: number;
+  /** When it was scheduled or last restarted (`Date.now()`), so the view can count down. */
+  scheduledAt?: number;
+}
+
+/**
+ * State event types that change how the room works for everyone: writing one to a real room from
+ * the Dev tools asks first (`roomTools/sendState` with `confirmed`), as does another user's
+ * `m.room.member` and replacing a widget of the room. leaf roomtools/confirm
+ */
+export const ROOM_CONFIGURATION_TYPES = [
+  "m.room.power_levels",
+  "m.room.join_rules",
+  "m.room.encryption",
+  "m.room.history_visibility",
+  "m.room.guest_access",
+  "m.room.server_acl",
+  "m.room.tombstone",
+  "m.room.create",
+  "m.room.canonical_alias",
+];
 /** "client": the Client Backend Tool (behavior, to-device messages). "media": the Media Backend Tool. */
 export type DevBackendTool = "client" | "media";
 
@@ -474,6 +524,52 @@ export const devBackendActive = (vm: AppViewModel) => {
   return !!m && activeAccount(m)?.kind === "devBackend";
 };
 
+/** The Dev tools button of the LeftBar and the Dev tools exist. leaves leftbar/devtools, leftbar/devbackend */
+export const devToolsAvailable = (vm: AppViewModel) => vm.settings.devTools || devBackendActive(vm);
+
+/** "Switch to the DevBackend" at the bottom of the Dev tools. leaf roomtools/app */
+export const canSwitchToDevBackend = (vm: AppViewModel) => vm.settings.devBackend && !devBackendActive(vm);
+
+/** The rooms the Dev tools of a Matrix account offer: those open in a room panel, left to right, each once. leaf roomtools/dropdown */
+export function roomToolsRooms(m: MainViewModel): RoomId[] {
+  const ids: RoomId[] = [];
+  for (const panel of activeWorkspace(m)?.roomsArea.panels ?? []) {
+    if (panel.content.kind === "room" && !ids.includes(panel.content.roomId)) ids.push(panel.content.roomId);
+  }
+  return ids;
+}
+
+/**
+ * The room the Dev tools of a Matrix account show: the picked one while it is open, else the room
+ * of the focused panel, else the first open room. `undefined`: no room open (leaf roomtools/none).
+ * The DevBackend's is `selectedRoomIds` (its rooms are in `MockedRoomData`).
+ */
+export function roomToolsRoomId(m: MainViewModel): RoomId | undefined {
+  const open = roomToolsRooms(m);
+  const picked = m.roomTools?.selectedRoomIds[m.activeAccountId];
+  if (picked !== undefined && open.includes(picked)) return picked;
+  const roomsArea = activeWorkspace(m)?.roomsArea;
+  const focused = roomsArea?.panels.find((p) => p.id === roomsArea.focusedPanelId)?.content;
+  return focused?.kind === "room" ? focused.roomId : open[0];
+}
+
+/**
+ * What `useRoomState(roomId, version)` reads the room state again on: the newest state event of the
+ * room's timeline, where every change of the state arrives. `undefined` while the timeline loads
+ * (the state is read once it is known); `""` when it failed or holds no state event.
+ */
+export function roomStateVersion(timeline: Loadable<RoomTimeline>): string | undefined {
+  if (timeline.status === "loading") return undefined;
+  if (timeline.status === "error") return "";
+  const { events } = timeline.value;
+  for (let i = events.length - 1; i >= 0; i--) {
+    const event = events[i];
+    if (typeof event.state_key !== "string") continue;
+    return typeof event.event_id === "string" ? event.event_id : `#${i} ${event.type} ${event.state_key}`;
+  }
+  return "";
+}
+
 /**
  * The tab of a running widget, if a panel has one. `shown`: it is the active tab of a visible
  * panel (in a narrow window only the focused panel is visible).
@@ -557,8 +653,8 @@ export type AppIntent =
   | { type: "toast/dismiss"; id: string }
   // accounts
   | { type: "account/switch"; accountId: AccountId; confirmed?: boolean } // to the DevBackend account: confirmed first (the modal sends it again with `confirmed`)
-  | { type: "devBackend/toggle" } // the LeftBar button: activates the DevBackend (confirmed if panels are open); while it is active it only opens and closes the DevBackendView
-  | { type: "devBackend/leave" } // "Leave DevBackend": back to `returnAccountId`. The DevBackend's workspace is kept, so activating it again shows the same rooms and widgets (the widgets start again)
+  | { type: "devBackend/activate" } // "Switch to the DevBackend" at the bottom of the Dev tools: like account/switch to the DevBackend account (confirmed if panels are open); the Dev tools stay open
+  | { type: "devBackend/leave" } // "Leave DevBackend": back to `returnAccountId`; the Dev tools stay open while dev tools are enabled. The DevBackend's workspace is kept, so activating it again shows the same rooms and widgets (the widgets start again)
   | { type: "account/add" }
   | { type: "account/retryRestore"; accountId: AccountId }
   | { type: "account/manage"; accountId: AccountId } // opens the MAS account page
@@ -573,7 +669,7 @@ export type AppIntent =
   | { type: "leftBar/collapse" }
   | { type: "leftBar/revealExpandButton" } // Escape, or the mouse at the left edge
   | { type: "leftBar/expand" }
-  | { type: "sidePanel/toggle"; view: NonNullable<SidePanelViewModel["view"]> }
+  | { type: "sidePanel/toggle"; view: NonNullable<SidePanelViewModel["view"]> } // "roomTools": the Dev tools button of the LeftBar, only while `devToolsAvailable`; never switches accounts
   | { type: "sidePanel/close" }
   | { type: "sidePanel/resize"; width: number }
   // rooms area
@@ -612,21 +708,23 @@ export type AppIntent =
   | { type: "pip/move"; position: PipViewModel["position"] }
   | { type: "pip/resize"; boxSize: PipViewModel["boxSize"] }
   | { type: "pip/setStacking"; stacking: PipViewModel["stacking"] }
-  // RoomOverview, RoomTimeline and DevBackendView
+  // RoomOverview, RoomTimeline and Dev tools
   | { type: "room/addWidget"; roomId: RoomId; event: StateEvent; target: "local" | "room"; confirmed?: boolean } // "Add widget" of the RoomOverview; does not open it. "local": a local widget; one with the same key is replaced (editing): a changed URL (of a legacy widget also its `data`) forgets its remembered capabilities and reloads it if it runs. "room": sends the state event (`widgetWrite`), only once the room's widgets are known; confirmed if it replaces a widget of the room
   | { type: "room/removeLocalWidget"; roomId: RoomId; widgetKey: WidgetKey; confirmed?: boolean } // confirmed; stops the widget, closes its tab and forgets its remembered capabilities
   | { type: "room/dismissWidgetWrite" } // the "Add widget" form was closed: forgets a refusal (`widgetWrite`)
   | { type: "room/copyToDevBackend"; roomId: RoomId; lastEvents: number } // only while the DevBackend is enabled; local widgets are not copied
   | { type: "room/loadOlderEvents"; roomId: RoomId } // "Load older events" of the RoomTimeline, once it shows every loaded event: the session loads up to OLDER_EVENTS_PER_LOAD older ones (from its store or the homeserver); a failure is a toast
-  | { type: "mock/selectRoom"; roomId: RoomId }
+  // Dev tools: the DevBackend while it is active, else the room as the active Matrix account (through the room's backend)
+  | { type: "roomTools/selectRoom"; roomId: RoomId } // the dropdown, for the active account
+  | { type: "roomTools/toggleSection"; section: RoomToolsSection }
+  | { type: "roomTools/setSendForm"; form: RoomToolsViewModel["sendForm"] }
+  | { type: "roomTools/setStateForm"; form: RoomToolsViewModel["stateForm"] } // which form "send state" shows
+  | { type: "roomTools/sendState"; roomId: RoomId; event: MockedStateEvent; delayMs?: number; confirmed?: boolean } // also "edit state" and the shortcuts. A real room: confirmed if it changes the room's configuration (`ROOM_CONFIGURATION_TYPES`, another user's membership, replacing a widget); a refusal is a toast
+  | { type: "roomTools/sendEvent"; roomId: RoomId; event: Pick<MockedTimelineEvent, "type" | "sender" | "content">; delayMs?: number } // the DevBackend sends as `sender`; a real room only as the account (another sender is refused); a refusal is a toast
+  | { type: "roomTools/updateScheduled"; roomId: RoomId; delayId: string; update: "send" | "restart" | "cancel" } // "Send now", "Restart", "Cancel" of a scheduled event (a real room: one scheduled from here)
+  // DevBackendView only
   | { type: "mock/addRoom" }
   | { type: "mock/removeRoom"; roomId: RoomId }
-  | { type: "mock/toggleSection"; section: DevBackendSection }
-  | { type: "mock/setSendForm"; form: DevBackendViewModel["sendForm"] }
-  | { type: "mock/setStateForm"; form: DevBackendViewModel["stateForm"] } // which form "send state" shows
-  | { type: "mock/sendState"; roomId: RoomId; event: MockedStateEvent; delayMs?: number } // also "edit state" and the shortcuts
-  | { type: "mock/sendEvent"; roomId: RoomId; event: Pick<MockedTimelineEvent, "type" | "sender" | "content">; delayMs?: number }
-  | { type: "mock/updateScheduled"; roomId: RoomId; delayId: string; update: "send" | "restart" | "cancel" }
   | { type: "mock/sendToDevice"; message: Omit<ToDeviceMessage, "direction"> }
   | { type: "mock/setBehavior"; behavior: Partial<WidgetHostBehavior> } // for all mocked rooms
   | { type: "mock/setFailSends"; on: boolean } // every send of a widget in every mocked room fails (or succeeds again)
@@ -690,17 +788,16 @@ export const STATS_BUCKET_MS = 5_000;
 /** Buckets kept per widget (5 minutes); the graph shows as many of the newest as fit. */
 export const MAX_STATS_BUCKETS = 60;
 
-/** The content of the DevBackend, read from its store. leaves devbackend/* */
+/**
+ * The content of the DevBackend, read from its store. The state and timeline of a mocked room are
+ * read like those of a real room (`useRoomState`, `useRoomTimeline`). leaves devbackend/*
+ */
 export interface MockedRoomData {
   rooms: { id: RoomId; name: string; avatarUrl?: string; copiedFrom?: { accountId: AccountId; roomId: RoomId } }[];
   /** The user the DevBackend acts as: the default sender of the send forms. */
   userId?: string;
-  /** Of the selected room. */
-  state: MockedStateEvent[];
-  /** Newest first; the view virtualizes it. */
-  timeline: MockedTimelineEvent[];
-  /** Delayed events (state and timeline) that are scheduled but not sent yet. */
-  scheduled: { delayId: string; type: string; stateKey?: string; delayMs: number; restarts: number; scheduledAt?: number }[];
+  /** Of the selected room: its delayed events (state and timeline), whoever scheduled them, that are not sent yet. */
+  scheduled: ScheduledEvent[];
   /** Account-scoped, not per room. */
   toDevice: ToDeviceMessage[];
   /** Account-scoped: every send of a widget is answered with an error. */
@@ -709,11 +806,13 @@ export interface MockedRoomData {
   media: { mxcUri: string; mimetype?: string; bytes: number; name?: string; uploadedBy?: WidgetInstanceId; /** An object URL for a preview or a download. */ url?: string }[];
 }
 
+/** A state event as the Dev tools show and send it (of a mocked or a real room). */
 export interface MockedStateEvent {
   type: string;
   stateKey: string;
   content: Record<string, unknown>;
 }
+/** A timeline event as the Dev tools show and send it (of a mocked or a real room). */
 export interface MockedTimelineEvent {
   eventId: string;
   type: string;

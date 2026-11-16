@@ -4,8 +4,9 @@ import { Avatar, DevAvatar, Icon, Logo, type IconName } from "../ui/atoms";
 
 export interface LeftBarProps {
   leftBar: LeftBarViewModel;
-  /** `settings.devBackend`: shows the DevBackend button. */
-  devBackend: boolean;
+  /** `devToolsAvailable`: shows the Dev tools button. */
+  devTools: boolean;
+  /** The Dev tools button is highlighted (and the DevBackend badge shown). */
   devBackendActive: boolean;
   /** The open SidePanel view, to mark its button. */
   sidePanelView?: SidePanelViewModel["view"];
@@ -40,12 +41,9 @@ function LbButton({ icon, title, pressed, className = "", noTitle, onClick }: Lb
 }
 
 /** leaves leftbar/*. Renders nothing while collapsed (the AppShell shows the expand button and the toast). */
-export function LeftBar({ leftBar, devBackend, devBackendActive, sidePanelView, account }: LeftBarProps) {
+export function LeftBar({ leftBar, devTools, devBackendActive, sidePanelView, account }: LeftBarProps) {
   const dispatch = useDispatch();
   if (leftBar.collapsed) return null;
-
-  // While the DevBackend is active the button opens and closes the DevBackendView; leaving is the text button at the bottom of that view.
-  const devTitle = devBackendActive ? "DevBackend panel" : "Activate the DevBackend";
 
   return (
     <nav className="leftbar" aria-label="App" data-testid="leftbar">
@@ -54,19 +52,20 @@ export function LeftBar({ leftBar, devBackend, devBackendActive, sidePanelView, 
       </button>
       <LbButton icon="plus" title="New room panel (Alt+N) · with the same room: Alt+Shift+N" onClick={() => dispatch({ type: "panel/new" })} />
       <LbButton icon="list" title="Room list" pressed={sidePanelView === "rooms"} onClick={() => dispatch({ type: "sidePanel/toggle", view: "rooms" })} />
-      {devBackend && (
+      {devTools && (
         <span className="lb-wrap">
+          {/* It opens and closes the Dev tools, never switches accounts. */}
           <LbButton
             icon="cone"
-            title={devTitle}
+            title="Dev tools"
             noTitle
-            pressed={devBackendActive ? sidePanelView === "devBackend" : undefined}
+            pressed={sidePanelView === "roomTools"}
             className={devBackendActive ? "dev-on" : ""}
-            onClick={() => dispatch({ type: "devBackend/toggle" })}
+            onClick={() => dispatch({ type: "sidePanel/toggle", view: "roomTools" })}
           />
           {/* TODO-FINDING tooltip-component - only this button has a drawn tooltip (as in leaf leftbar/devbackend-hover; shown on hover and on keyboard focus). All other buttons still rely on `title`, which a keyboard user never sees. */}
           <span className="tooltip" aria-hidden="true">
-            {devTitle}
+            Dev tools
           </span>
         </span>
       )}

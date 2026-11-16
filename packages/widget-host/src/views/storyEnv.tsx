@@ -2,17 +2,23 @@
 import type { Decorator } from "@storybook/react-vite";
 import type { ReactNode } from "react";
 
-import { DEFAULT_VIEW_ENV, ViewEnvContext, type RoomTimelineData, type ViewEnv } from "./env";
-import { DEV_TOOLS_DATA, MOCKED_ROOM_DATA, ROOM_DETAILS, ROOM_TIMELINE } from "./fixtures";
+import { DEFAULT_VIEW_ENV, ViewEnvContext, type RoomStateData, type RoomTimelineData, type ViewEnv } from "./env";
+import { DEV_TOOLS_DATA, MOCKED_ROOM_DATA, MOCKED_ROOM_STATE, MOCKED_ROOM_TIMELINE, ROOM_DETAILS, ROOM_STATE, ROOM_TIMELINE, ROOMS } from "./fixtures";
 
-const TIMELINE: RoomTimelineData = { timeline: { status: "ready", value: ROOM_TIMELINE }, retry: () => console.info("retry the timeline") };
+const retry = (what: string) => () => console.info(`retry the ${what}`);
+const TIMELINE: RoomTimelineData = { timeline: { status: "ready", value: ROOM_TIMELINE }, retry: retry("timeline") };
+const STATE: RoomStateData = { state: { status: "ready", value: ROOM_STATE }, retry: retry("state") };
+/** "Widget lab", the mocked room of the DevBackendView stories. */
+const LAB_TIMELINE: RoomTimelineData = { timeline: { status: "ready", value: MOCKED_ROOM_TIMELINE }, retry: retry("timeline") };
+const LAB_STATE: RoomStateData = { state: { status: "ready", value: MOCKED_ROOM_STATE }, retry: retry("state") };
 
 export const STORY_ENV: ViewEnv = {
   ...DEFAULT_VIEW_ENV,
   useDevToolsData: () => DEV_TOOLS_DATA,
   useMockedRoomData: () => MOCKED_ROOM_DATA,
   useRoomDetails: () => ({ status: "ready", value: ROOM_DETAILS }),
-  useRoomTimeline: () => TIMELINE,
+  useRoomTimeline: (roomId) => (roomId === ROOMS.lab.id ? LAB_TIMELINE : TIMELINE),
+  useRoomState: (roomId) => (roomId === ROOMS.lab.id ? LAB_STATE : STATE),
 };
 
 /** Wrap a story to override parts of the environment, e.g. `<StoryEnv env={{ narrow: true }}>`. */

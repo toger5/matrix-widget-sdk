@@ -485,7 +485,7 @@ test("a reload decides nothing for the user: an open prompt and denied capabilit
 
 test("a reload loads the current URL of the widget's state event", async ({ host }) => {
   const url = "http://localhost:5175/new/?changed=1";
-  await host.dispatch({ type: "mock/sendState", roomId: LAB, event: { type: "m.widget", stateKey: "widget-1", content: { name: "New test widget", url, uses_widget_api: true } } });
+  await host.dispatch({ type: "roomTools/sendState", roomId: LAB, event: { type: "m.widget", stateKey: "widget-1", content: { name: "New test widget", url, uses_widget_api: true } } });
   const eventUrl = async () => {
     const rooms = (await host.main()).data.rooms;
     const event = rooms.status === "ready" ? rooms.value.find((r) => r.id === LAB)?.widgetEvents?.find((e) => e.type === "m.widget") : undefined;

@@ -28,6 +28,7 @@ While the [DevBackend](#devbackend) is active, the app background (on which all 
 - An in-memory session that mocks a full session: multiple rooms and all events in them ([DevBackend](#devbackend))
 - Copy an existing room into the DevBackend (last X timeline events + state) to experiment with it entirely offline
 - Custom widgets: add a widget to a room, only in this host or as a state event of the room ([RoomOverview](#roomoverview))
+- Dev tools for the open rooms: explore their state and timeline, send custom events and state ([Dev tools](#dev-tools))
 - Tabbed widget panels ([RoomView](#roomview))
 - Multiple room panels ([RoomsArea](#roomsarea))
 - User device management, via a button that links to the OIDC auth service (MAS)
@@ -42,7 +43,7 @@ See the leftmost bar in the `reference_image`. It contains:
 - An app icon in the top left corner. It opens a modal explaining what this app is.
 - A + button, equivalent to Ctrl+N (new room panel).
 - A room list button. It opens the [Room list](#room-list).
-- A DevBackend button (only if the DevBackend is enabled). It activates the [DevBackend](#devbackend). While the DevBackend is active, it opens and closes the DevBackendView (tooltip: "DevBackend panel").
+- A Dev tools button (while dev tools are enabled or the [DevBackend](#devbackend) is active, then highlighted). It opens and closes the [Dev tools](#dev-tools); it never switches accounts.
 - A settings button. It opens [Settings](#settings).
 - The user avatar. It opens the [AccountView](#accountview). While the DevBackend is active, it is the DevBackend icon.
 - A collapse button.
@@ -51,13 +52,13 @@ Collapsing the bar shows a toast: "Press Esc to show the expand button". Pressin
 
 ## SidePanel
 
-One panel next to the LeftBar, positioned and styled like the "Core product" panel in the `reference_image`. It hosts one of AccountView, Settings, the Room list or, while the [DevBackend](#devbackend) is active, the [DevBackendView](#devbackendview) (the tools to create and edit its mocked rooms). When it opens, the RoomsArea is shifted to the side.
+One panel next to the LeftBar, positioned and styled like the "Core product" panel in the `reference_image`. It hosts one of AccountView, Settings, the Room list or the [Dev tools](#dev-tools). When it opens, the RoomsArea is shifted to the side.
 
 ### AccountView
 
 - The current account at the top: avatar and the default account information, including whether this device is verified. That state follows the session, whatever changes it.
 - Buttons: Manage account & devices (opens the MAS account page), Copy Matrix URI, Log out.
-- At the bottom, a list to switch to the other logged-in accounts: "switch to: `<Avatar>` `<AccName>`", with "switch to" very small above the name and an arrow icon on the right. Its last entry is "Add account" (opens the OIDC login page).
+- At the bottom, a list to switch to the other logged-in accounts and, while it is enabled, the DevBackend: "switch to: `<Avatar>` `<AccName>`", with "switch to" very small above the name and an arrow icon on the right. Its last entry is "Add account" (opens the OIDC login page).
 
 While this device is not verified (other devices share the keys of encrypted rooms only with verified devices), a "Verify this device" box under the account card offers two ways:
 
@@ -71,8 +72,8 @@ In DevBackend mode the account icon is the DevBackend icon, and the view shows t
 ### Settings
 
 - Two independent switches. What one enables is hidden while it is off and listed under it while it is on:
-  - Dev tools: the overflow button of widget tabs with the [WidgetDevToolBar](#widgetdevtoolbar), and "Add widget" in the [RoomOverview](#roomoverview).
-  - DevBackend: the DevBackend button in the LeftBar and "Copy to DevBackend" in the RoomOverview. It cannot be turned off while the DevBackend is active.
+  - Dev tools: the [Dev tools](#dev-tools) button in the LeftBar, the overflow button of widget tabs with the [WidgetDevToolBar](#widgetdevtoolbar), and "Add widget" in the [RoomOverview](#roomoverview).
+  - DevBackend: the DevBackend in the account list and at the bottom of the Dev tools, and "Copy to DevBackend" in the RoomOverview. It cannot be turned off while the DevBackend is active.
 
 ### Room list
 
@@ -115,7 +116,7 @@ A room view is a tabbed container, shown inside a room panel. Its first tab is t
 - Widget list, first and full width. Pressing a widget opens it. A widget that is already open is grayed out, says where it is open and offers:
   - "jump to tab"
   - "move widget here", if it is open in another room view: it closes the tab there and opens the widget in this room view.
-- "Add widget" (dev tools) opens a form at the top of the widget list: the widget or Element Call form of the DevBackendView, or a pasted state event. It adds the widget, it does not open it:
+- "Add widget" (dev tools) opens a form at the top of the widget list: the widget or Element Call form of the Dev tools, or a pasted state event. It adds the widget, it does not open it:
   - only in this host (the default): a local widget, kept in this browser for this account and room and never sent. The same type and ID replaces it.
   - to the room: sends the state event as you. Replacing a widget of the room asks first; a refusal (no permission) is shown in the form, the draft stays.
 - Local widgets follow the room's widgets, marked "Local", with edit (dev tools; the form with type and ID fixed) and remove (asks first). They are listed and run also with dev tools disabled.
@@ -207,43 +208,48 @@ The DevBackend is a custom in-memory backend. It is implemented as a separate ac
 
 - Activating it removes all current panels (empty RoomsArea).
 - Once active, no Matrix CS API calls are made anymore. Only widget <-> host, with the memory widget driver.
-- The SidePanel opens with the DevBackendView.
-- The RoomsArea keeps the same design, but only shows the rooms that were created in the DevBackendView or copied over from a RoomOverview.
-- It is left by switching to an account in the AccountView or with the "Leave DevBackend" text button at the bottom of the DevBackendView, not with the LeftBar button. Leaving restores the panels of the account; their widgets reload.
+- The SidePanel opens with the [Dev tools](#dev-tools).
+- The RoomsArea keeps the same design, but only shows the rooms that were created in the Dev tools or copied over from a RoomOverview.
+- It is entered and left by switching accounts in the AccountView or with the text button at the bottom of the Dev tools. Leaving restores the panels of the account (their widgets reload); the Dev tools stay open while dev tools are enabled.
 
-## DevBackendView
+## Dev tools
 
-One of the [SidePanel](#sidepanel) views. It has one page per mocked room. The rooms are not rendered as tabs but as a dropdown next to the room name and ID (where "Core product" is in the `reference_image`). The last entry of the dropdown is a + button to add a room.
+One of the [SidePanel](#sidepanel) views: the tools of one room at a time. The rooms are not tabs but a dropdown next to the room name and ID (where "Core product" is in the `reference_image`).
+
+- With a Matrix account, the dropdown lists the rooms open in a room panel, left to right. It starts on the room of the focused room panel and keeps a picked room while it is open. With no room open: "No room open" and "New room panel".
+- While the [DevBackend](#devbackend) is active, it is the DevBackendView: one page per mocked room, and the last entry of the dropdown adds a room.
 
 Each room has these sections:
 
 - State
-  - shortcuts: edit name, edit description, add member
+  - shortcuts: edit name, edit description, add member (DevBackend)
   - send state (also delayed), with a menu of predefined forms like "send event". The default is the widget form; the last option is raw JSON (type, state key, content).
     - widget: event type (`m.widget`, `org.matrix.msc4411.widget` or legacy `im.vector.modular.widgets`), widget ID, name, URL and, unless legacy, "uses the widget API". Prefilled with the test widget of that kind
     - Element Call: a legacy `m.call` widget as Element Web describes its call widget, from the Element Call URL (default call.element.io), the call intent and the widget ID
   - current state (explore by type and key), with an edit button per state event
 - Timeline
   - send event (also delayed), with a menu of predefined forms so that users don't need to know the raw JSON: message, sticker, RTC member, image/audio. The default is a predefined form; the last option is raw JSON with a text editor.
-  - show the list of events
+  - "Scheduled": the delayed events sent from here (with the DevBackend also those of widgets): send now, restart, cancel
+  - the list of events, newest first; with a Matrix account the ones the session holds, then "Load older events"
 
-**Tools**
+**Sending to a real room**
+
+- Everything is sent as you, which a line above the sections says (the DevBackend sends as any user). A refusal (no permission, no delayed events on the homeserver) is a toast; the form keeps its draft.
+- Changing the room's configuration asks first: power levels, join rules, encryption, history visibility, guest access, server ACL, tombstone, create event, canonical alias, another user's membership, replacing a widget.
+
+**Tools** (DevBackend)
 
 What is not per room is in tool boxes below the room box: the "Client Backend Tool" and the "Media Backend Tool".
 
-- The room box does not go all the way to the bottom of the SidePanel. Below it, each tool is a button.
-- Pressing a button turns it into the tool's box; the box and the room box are resized by dragging between them. Only one tool box is open at a time: opening one closes the other.
-- The header of a tool box has a minimise button that turns it back into its button.
+- Below the room box each tool is a button. Pressing it turns it into the tool's box (resized by dragging between it and the room box); its minimise button turns it back. One tool box is open at a time.
 - Client Backend Tool, with collapsible sections like the room box:
   - Widget host behavior, for all mocked rooms: auto-approve capabilities, auto-approve OpenID tokens, remember capabilities, fail sends (every send of a widget is answered with an error)
   - To-device messages: sending and reading
 - Media Backend Tool: upload media, a list of all media (including media uploaded by widgets), and buttons to copy the MXC URI of each item. Its button shows the number of files.
 
-**Leave**
+**Switch and leave**
 
-At the very bottom of the view, below the tools: "Leave DevBackend" followed by a leave icon. It is just a text button, styled like a link (the icon may be colored). No header and no box: it should not draw attention.
-
-Remove the leave options in case there is no logged in account to fallback to.
+At the very bottom of the view: "Leave DevBackend" while it is active (not without a Matrix account to go back to), "Switch to the DevBackend" while it is enabled and not active, each followed by an icon. Just a text button, styled like a link (the icon may be colored). No header and no box: it should not draw attention.
 
 ## Login page
 
@@ -267,14 +273,14 @@ The mockups needed to review the full design. Each leaf is one state to draw. Do
   - Fullscreen: LeftBar collapsed, one widget, no rounded containers: room header without tab and + button / header hovered
   - Narrow window: SidePanel overlays, one room panel
 - LeftBar
-  - Expanded: DevBackend disabled / enabled (DevBackend button), inactive / active / active and hovered ("DevBackend panel" tooltip)
+  - Expanded: dev tools disabled / enabled (Dev tools button) / DevBackend active (button highlighted) / active and hovered ("Dev tools" tooltip)
   - Collapsed with toast
   - Collapsed, expand icon revealed (after Esc)
 - SidePanel
   - Closed
   - AccountView
     - One account
-    - Several accounts (switch list at the bottom, ending with "Add account")
+    - Several accounts, DevBackend enabled (switch list at the bottom with the DevBackend, ending with "Add account")
     - DevBackend mode (full account list)
     - Device not verified: the box / after a failure (with the reason) / verified ("Done")
       - With another device: waiting for it / comparing the emoji / waiting for it to confirm
@@ -282,16 +288,16 @@ The mockups needed to review the full design. Each leaf is one state to draw. Do
   - Settings
     - Both switches off / both on / DevBackend active (its switch locked), dev tools off
   - Room list: the room picker / next to the room panels (LeftBar button pressed)
-  - DevBackendView
+  - Dev tools of a Matrix account
+    - No room open / room dropdown open (the rooms of the room panels) / reading the room: loading, failed
+    - State: "sent as you", no "add member" / Timeline: fixed sender, a scheduled event, "Load older events"
+    - Next to the room panels (LeftBar button pressed), "Switch to the DevBackend" at the bottom / confirming a change of the room's configuration
+  - Dev tools while the DevBackend is active (DevBackendView)
     - No rooms yet
     - Room dropdown open (rooms + add room)
-    - Room page
-      - State: shortcuts, send state with the widget form / the Element Call form / as raw JSON, state explorer, edit state
-      - Timeline: send event with a predefined form, send event as raw JSON, send delayed event, event list
-    - Tools
-      - Collapsed (the "Client Backend Tool" and "Media Backend Tool" buttons)
-      - Client Backend Tool open below the room box (resize handle, minimise button): WidgetHostBehavior / To-device messages
-      - Media Backend Tool open below the room box (media list)
+    - State: shortcuts, send state with the widget form / the Element Call form / as raw JSON, state explorer, edit state
+    - Timeline: send event with a predefined form, send event as raw JSON, send delayed event, event list
+    - Tools: collapsed (the "Client Backend Tool" and "Media Backend Tool" buttons) / Client Backend Tool open below the room box (resize handle, minimise button): WidgetHostBehavior, To-device messages / Media Backend Tool open (media list)
     - "Leave DevBackend" text button at the bottom (part of every DevBackendView state)
 - PictureInPicturePanel
   - Idle: borderless boxes, 1 widget / 4 widgets
@@ -358,7 +364,7 @@ Notes for the implementation. They add to the design above, they do not change i
 - A local widget's key is `local:` plus its type and state key, so it never shares remembered capabilities with a room widget of the same ID; they are forgotten when its URL (of a legacy widget also its `data`, the values of the URL's variables) changes or it is removed. Local widgets are persisted with the account's layout and deleted on logout (the DevBackend's are kept in memory).
 - The host cannot read the console of a cross-origin iframe. The WidgetDevToolConsolePanel needs the widget side (SDK or compat wrapper) to forward its logs.
 
-**DevBackend forms**
+**Dev tools forms**
 
 - The Element Call form writes `im.vector.modular.widgets` with `type: "m.call"`, `waitForIframeLoad: false` and the URL `<Element Call URL>#?intent=…&roomId=$matrix_room_id&userId=$matrix_user_id&deviceId=$org.matrix.msc3819.matrix_device_id&baseUrl=$org.matrix.msc4039.matrix_base_url&lang=$org.matrix.msc2873.client_language&theme=$org.matrix.msc2873.client_theme`. The compat wrapper fills in the variables and adds `widgetId` and `parentUrl`.
 

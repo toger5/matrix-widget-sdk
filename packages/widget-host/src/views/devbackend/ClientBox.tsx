@@ -4,17 +4,17 @@
  */
 import { useState, type FormEvent } from "react";
 
-import type { DevBackendSection, MockedRoomData, ToDeviceMessage, WidgetHostBehavior } from "../../appViewModel";
+import type { MockedRoomData, RoomToolsSection, ToDeviceMessage, WidgetHostBehavior } from "../../appViewModel";
 import { useDispatch } from "../env";
 import { Button, Field, Json, Toggle } from "../ui/atoms";
 import { FormError, JsonArea, parseJsonObject } from "../ui/forms";
 import { Acc, Sub, timeOf } from "./parts";
 import { ToolBox } from "./ToolBox";
 
-export function ClientBox({ openSections, heightShare, behavior, data }: { openSections: DevBackendSection[]; heightShare: number; behavior: WidgetHostBehavior; data: MockedRoomData }) {
+export function ClientBox({ openSections, heightShare, behavior, data }: { openSections: RoomToolsSection[]; heightShare: number; behavior: WidgetHostBehavior; data: MockedRoomData }) {
   const dispatch = useDispatch();
-  const isOpen = (section: DevBackendSection) => openSections.includes(section);
-  const toggle = (section: DevBackendSection) => () => dispatch({ type: "mock/toggleSection", section });
+  const isOpen = (section: RoomToolsSection) => openSections.includes(section);
+  const toggle = (section: RoomToolsSection) => () => dispatch({ type: "roomTools/toggleSection", section });
   return (
     <ToolBox tool="client" heightShare={heightShare} className="devb">
       <Acc id="widgetHostBehavior" title="Widget host behavior" open={isOpen("widgetHostBehavior")} onToggle={toggle("widgetHostBehavior")}>

@@ -5,6 +5,7 @@ import {
   activeAccount,
   activeWorkspace,
   devBackendActive,
+  devToolsAvailable,
   fullscreenWidget,
   hasTab,
   pipWidgetIds,
@@ -171,7 +172,7 @@ function MainScreen({ vm, main }: { vm: AppViewModel; main: MainViewModel }) {
   return (
     <>
       <div className={`app ${fence ? "fence" : ""} ${narrow ? "narrow" : ""} ${fullscreen ? "fullscreen" : ""}`} data-testid="app" inert={main.addAccount ? true : undefined}>
-        {!collapsed && <LeftBar leftBar={main.leftBar} devBackend={settings.devBackend} devBackendActive={fence} sidePanelView={main.sidePanel.view} account={activeAccount(main)} />}
+        {!collapsed && <LeftBar leftBar={main.leftBar} devTools={devToolsAvailable(vm)} devBackendActive={fence} sidePanelView={main.sidePanel.view} account={activeAccount(main)} />}
         {narrow && main.sidePanel.view && <div className="scrim side-scrim" data-testid="side-scrim" onClick={() => dispatch({ type: "sidePanel/close" })} />}
         <SidePanel main={main} settings={settings} />
         <RoomsArea main={main} settings={settings} fullscreen={fullscreen} renderWidget={renderWidget} />

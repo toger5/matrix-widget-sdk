@@ -334,6 +334,12 @@ mark { background: var(--highlight-soft); color: var(--highlight); border-radius
 .ev.sched { border-style: dashed; border-color: var(--border-strong); }
 .ev.sched .ev-time { color: var(--warning); }
 .ev-acts { grid-column: 1 / -1; display: flex; gap: 4px; margin-top: 4px; }
+/* The Dev tools of a Matrix account: everything goes to a real room, as the account. */
+.rt-hint { flex: none; display: flex; align-items: flex-start; gap: 6px; padding: 8px 12px; border-bottom: 1px solid var(--border); color: var(--text-muted); font-size: 12px; line-height: 1.4; }
+.rt-hint .ico { flex: none; margin-top: 1px; }
+.rt-hint b { color: var(--text); font-weight: 500; }
+.input[aria-readonly="true"] { background: transparent; border-style: dashed; color: var(--text-muted); }
+.ev-more { display: flex; justify-content: center; padding-top: 4px; }
 
 .tool-btn { margin-top: 8px; height: 44px; flex: none; display: flex; align-items: center; gap: 10px; padding: 0 14px; border-radius: var(--r-4); border: 1px solid var(--border); background: var(--surface); font-weight: 500; }
 .tool-btn > span { flex: 1; }

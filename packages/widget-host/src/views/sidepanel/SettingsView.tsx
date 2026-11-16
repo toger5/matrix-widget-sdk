@@ -79,6 +79,7 @@ export function SettingsView({ settings, devBackendActive }: SettingsViewProps) 
       {settings.devTools && (
         <SetList
           items={[
+            ["cone", "Dev tools", "button in the left bar: state and timeline of the open rooms"],
             ["dots", "Widget dev tools", "via the ⋯ button of a widget tab"],
             ["plus", "Add widget", "in the room overview"],
           ]}
@@ -100,7 +101,7 @@ export function SettingsView({ settings, devBackendActive }: SettingsViewProps) 
       {settings.devBackend && (
         <SetList
           items={[
-            ["cone", "DevBackend", "button in the left bar"],
+            ["users", "DevBackend", "in the account list and at the bottom of the dev tools"],
             ["copy", "Copy to DevBackend", "in the room overview"],
           ]}
         />

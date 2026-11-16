@@ -8,7 +8,7 @@ Every leaf of `design/index.html` (`design/src/leaves.mjs`), with the test in wh
 | --- | --- |
 | `app/login`, `app/devbackend-empty` | `shell.spec.ts` › a fresh browser without a stored login (a second browser context; "Skip login" leads into the DevBackend) |
 | `app/devbackend`, `leftbar/devbackend` | `shell.spec.ts` › the DevBackend is signalled by the fence |
-| `leftbar/devbackend-hover` | `shell.spec.ts` › the DevBackend button only opens and closes the panel |
+| `leftbar/devbackend-hover` | `shell.spec.ts` › the Dev tools button only opens and closes the Dev tools |
 | `leftbar/collapsed-toast`, `leftbar/collapsed-expand`, `app/devbackend-collapsed` | `shell.spec.ts` › collapse → toast → Escape |
 | `app/fullscreen`, `app/fullscreen-hover` | `shell.spec.ts` › with exactly one widget tab; also `rooms.spec.ts` |
 | `app/info-modal` | `shell.spec.ts` › the app info modal closes |
@@ -21,7 +21,7 @@ Every leaf of `design/index.html` (`design/src/leaves.mjs`), with the test in wh
 | `sidepanel/account-dev` | `sidepanel.spec.ts` › account: the DevBackend is the account |
 | `complete/workspace`, `complete/devbackend`, `complete/light` | `sidepanel.spec.ts` › complete views |
 | `sidepanel/verify-start`, `sidepanel/verify-failed`, `sidepanel/verify-done`, `sidepanel/verify-waiting`, `sidepanel/verify-emoji`, `sidepanel/verify-confirming`, `sidepanel/verify-recovery-key`, `sidepanel/verify-recovery-checking`, `sidepanel/verify-recovery-wrong` | **not reachable**: they need a Matrix account whose device is not verified (the DevBackend's device is). The flows are tested on a faked session in `test/deviceVerification.test.ts`. Stories: `sidepanel-deviceverification--start`, `--failed`, `--done`, `sidepanel-emojiverification--waiting`, `--compare`, `--confirming`, `sidepanel-recoverykeyform--entering`, `--checking`, `--refused` |
-| `app/default`, `leftbar/expanded`, `leftbar/devtools`, `sidepanel/settings-off`, `sidepanel/account-one`, `sidepanel/account-several` | **not reachable**: they need a Matrix account (DevBackend inactive). Stories: `app-appshell--default`, `app-leftbar--expanded`, `app-leftbar--dev-backend-enabled`, `sidepanel-settingsview--both-off`, `sidepanel-accountview--one-account`, `--several-accounts` |
+| `app/default`, `leftbar/expanded`, `leftbar/devtools`, `sidepanel/settings-off`, `sidepanel/account-one`, `sidepanel/account-several` | **not reachable**: they need a Matrix account (DevBackend inactive). Stories: `app-appshell--default`, `app-leftbar--expanded`, `app-leftbar--dev-tools-enabled`, `sidepanel-settingsview--both-off`, `sidepanel-accountview--one-account`, `--several-accounts` |
 
 ## Rooms, tabs, overview
 
@@ -48,9 +48,17 @@ Every leaf of `design/index.html` (`design/src/leaves.mjs`), with the test in wh
 | `overview/add-widget-json` | `overview.spec.ts` › Add widget, Paste JSON (a pasted state event as Element's room state explorer shows it) |
 | `overview/add-widget-refused` | `overview.spec.ts` › Add widget, to the room ("fail sends" of the DevBackend stands for the room's refusal; a real `M_FORBIDDEN` needs a Matrix room) |
 
-## DevBackendView
+## Dev tools
 
-"Leave DevBackend" is in no screenshot: without a Matrix account there is nothing to go back to, so the button is not shown.
+The Dev tools of a Matrix account are **not reachable**: the tests run on the DevBackend only, without a Matrix account. They read a room the same way as the DevBackendView (`useRoomTimeline`, `useRoomState`), which `devbackendState.spec.ts` › the state is read like a real room's covers; the account's send path, the confirmation, "Scheduled", the selection and the footer links run on a faked session in `test/roomTools.test.ts`.
+
+| Leaf | Reached by |
+| --- | --- |
+| `roomtools/none`, `roomtools/dropdown`, `roomtools/state`, `roomtools/timeline`, `roomtools/loading-failed` | **not reachable** (a Matrix account). Stories: `sidepanel-roomtoolsview--no-room-open`, `--room-dropdown`, `--state`, `--timeline`, `--loading-failed` |
+| `roomtools/app` | **not reachable** (a Matrix account). Story: `app-appshell--room-tools` |
+| `roomtools/confirm` | **not reachable** (a Matrix account). Stories: `app-modal--confirm-danger` (the modal) and `sidepanel-roomtoolsview--state` (behind it) |
+
+While the DevBackend is active they are the DevBackendView. "Leave DevBackend" is in no screenshot: without a Matrix account there is nothing to go back to, so the button is not shown.
 
 | Leaf | Reached by |
 | --- | --- |
@@ -59,7 +67,7 @@ Every leaf of `design/index.html` (`design/src/leaves.mjs`), with the test in wh
 | `devbackend/behavior` | `devbackend.spec.ts` › widget host behavior: the same for every room; without auto-approve the widget asks for permissions |
 | `devbackend/todevice` | `devbackend.spec.ts` › to-device: a message sent from the view reaches the widget, one sent by the widget is listed |
 | `devbackend/tools-collapsed`, `devbackend/media-open` | `devbackend.spec.ts` › media tool: open (closing the client tool), upload a file, copy its MXC URI, minimise |
-| `devbackend/state`, `devbackend/state-raw` | `devbackendState.spec.ts` › send state and the state explorer (the widget form, then raw JSON) |
+| `devbackend/state`, `devbackend/state-raw` | `devbackendState.spec.ts` › send state and the state explorer (the widget form, then raw JSON); the state of a widget's write: › the state is read like a real room's |
 | `devbackend/state-element-call` | `devbackendState.spec.ts` › the Element Call form writes the call widget as Element Web describes it, and the compat wrapper fills in its URL |
 | `devbackend/state-edit` | `devbackendState.spec.ts` › edit state: saving the editor sends a new state event |
 | `devbackend/timeline` | `devbackendTimeline.spec.ts` › message form: the event is added to the timeline and forwarded to the widget |

@@ -85,17 +85,24 @@ export async function roomDetails(client: MatrixClient, roomId: string): Promise
 // TODO-FINDING export-decrypted-events - exportRoom hands out timeline events decrypted (type and content in the clear, as widgets see them); an event that could not be decrypted stays `m.room.encrypted`. The alternative is the events as the homeserver has them. Done: decrypted, because the DevBackend room is not encrypted.
 const raw = (event: MatrixEvent): RawEvent => ({ ...event.getEffectiveEvent() }) as unknown as RawEvent;
 
+/**
+ * The whole current state of a room (the Dev tools, "Copy to DevBackend"): from the homeserver, as
+ * the lazy-loading sync leaves most member events out; the local copy if that fails (while
+ * suspended, `./fetchGate` refuses the request).
+ */
+export async function roomState(client: MatrixClient, roomId: string): Promise<RawEvent[]> {
+  const room = knownRoom(client, roomId);
+  try {
+    return (await client.roomState(roomId)) as unknown as RawEvent[];
+  } catch (e) {
+    console.warn("reading the room state from the homeserver failed, using the local copy", e);
+    return [...room.currentState.events.values()].flatMap((byStateKey) => [...byStateKey.values()]).map(raw);
+  }
+}
+
 export async function exportRoom(client: MatrixClient, roomId: string, lastEvents: number): Promise<RoomExport> {
   const room = knownRoom(client, roomId);
-
-  // The whole state from the homeserver: the lazy-loading sync leaves most member events out.
-  let state: RawEvent[];
-  try {
-    state = (await client.roomState(roomId)) as unknown as RawEvent[];
-  } catch (e) {
-    console.warn("reading the room state from the homeserver failed, exporting the local copy", e);
-    state = [...room.currentState.events.values()].flatMap((byStateKey) => [...byStateKey.values()]).map(raw);
-  }
+  const state = await roomState(client, roomId);
 
   const timeline = room.getLiveTimeline();
   // Not the local echo of something still being sent.

@@ -2,6 +2,7 @@ import { useRef, type KeyboardEvent, type PointerEvent } from "react";
 
 import { activeAccount, canLeaveDevBackend, type MainViewModel, type SettingsViewModel } from "../../appViewModel";
 import { DevBackendView } from "../devbackend/DevBackendView";
+import { RoomToolsView } from "../devbackend/RoomToolsView";
 import { useDispatch, useViewEnv } from "../env";
 import { AccountView } from "./AccountView";
 import { RoomListView } from "./RoomListView";
@@ -75,20 +76,33 @@ function ResizeHandle({ width }: { width: number }) {
   );
 }
 
-/** The column next to the LeftBar: AccountView, SettingsView, the Room list or DevBackendView by `main.sidePanel.view`; nothing while closed. leaves sidepanel/* */
+/**
+ * The column next to the LeftBar: AccountView, SettingsView, the Room list or the Dev tools (the
+ * DevBackendView while the DevBackend is active) by `main.sidePanel.view`; nothing while closed.
+ * leaves sidepanel/*, roomtools/*, devbackend/*
+ */
 export function SidePanel({ main, settings }: SidePanelProps) {
   const { narrow } = useViewEnv();
   const { view } = main.sidePanel;
+  const { roomTools } = main;
   if (!view) return null;
-  if (view === "devBackend" && !main.devBackend) return null;
+  if (view === "roomTools" && !roomTools) return null;
   const width = clampWidth(main.sidePanel.width);
+  const devBackendActive = activeAccount(main)?.kind === "devBackend";
 
   return (
     <div className="sidecol" style={{ width }} data-testid="sidepanel" data-view={view}>
       {view === "account" && <AccountView accounts={main.accounts} activeAccountId={main.activeAccountId} />}
-      {view === "settings" && <SettingsView settings={settings} devBackendActive={activeAccount(main)?.kind === "devBackend"} />}
+      {view === "settings" && <SettingsView settings={settings} devBackendActive={devBackendActive} />}
       {view === "rooms" && <RoomListView main={main} />}
-      {view === "devBackend" && main.devBackend && <DevBackendView devBackend={main.devBackend} canLeave={canLeaveDevBackend(main)} />}
+      {view === "roomTools" &&
+        roomTools &&
+        (devBackendActive ? (
+          <DevBackendView roomTools={roomTools} roomId={roomTools.selectedRoomIds[main.activeAccountId]} canLeave={canLeaveDevBackend(main)} />
+        ) : (
+          // Per account: another account's view of the same room starts afresh (its reads, the drafts).
+          <RoomToolsView key={main.activeAccountId} main={main} roomTools={roomTools} canSwitchToDevBackend={settings.devBackend} />
+        ))}
       {/* TODO-FINDING narrow-side-panel-width - in a narrow window the panel overlays and has no resize handle; it keeps the persisted width, capped to the window by CSS. */}
       {!narrow && <ResizeHandle width={width} />}
     </div>

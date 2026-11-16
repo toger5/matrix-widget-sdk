@@ -14,7 +14,7 @@ grep -rn "TODO-FINDING <name>" src     # one finding
 
 Not decisions, but statements in the documents that turned out wrong or outdated. The documents were not edited.
 
-- `src/appViewModel.ts` was changed for the decision that the LeftBar's DevBackend button does not leave: `devBackend/toggle` no longer leaves, `devBackend/leave` and `canLeaveDevBackend` are new, `widget/close` asks for confirmation, `WidgetInstanceViewModel.generation` is new, and the views added `picker/reloadRooms` and `devTools/copyMessage`.
+- `src/appViewModel.ts` differs from `implementationPlan.md`: the LeftBar's Dev tools button never switches accounts (`sidePanel/toggle` "roomTools"; `devBackend/activate` and `devBackend/leave` are the text buttons at the bottom of the Dev tools, `canLeaveDevBackend` decides the latter), `widget/close` asks for confirmation, `WidgetInstanceViewModel.generation` is new, and the views added `picker/reloadRooms` and `devTools/copyMessage`.
 
 ## Controversial
 
@@ -36,7 +36,6 @@ Not decisions, but statements in the documents that turned out wrong or outdated
 | `login-password-step` | `src/views/app/LoginView.tsx` | The mockup says "No password is entered here"; password login is not designed | (a) separate step (b) inline fields; and what to show if a server offers OAuth and a password | (b): the fields appear once the homeserver offers a password; editing the homeserver goes back to "Continue" |
 | `add-account-overlay` | `src/views/app/AppShell.tsx` | "Add account" while logged in is not drawn | (a) full-page overlay (b) modal (c) in the SidePanel | (a), the app behind it is `inert` |
 | `toast-dismiss-button` | `AppShell.tsx` | The mockup toast has no dismiss control and no timeout | (a) × button (b) timeout only | Both: × and 4 s |
-| `confirm-modal-icon` | `src/views/app/Modal.tsx` | `ModalViewModel` has no icon; the mockup shows the cone | (a) icon in the view model (b) derive | (b): alert if `danger`, else the cone; a dangerous confirm focuses Cancel |
 | `floating-dev-badge-covers-header` | `src/views/app/AppShell.tsx` | The floating DevBackend badge (LeftBar collapsed) sits on top of the room panel header, as in the mockup | move it to a corner / leave it | Left there; presses go through it |
 | `restore-failed-actions` | `src/views/sidepanel/AccountView.tsx` | Where "Try again" / "Log out" go for an account whose restore failed | (a) buttons next to the error (b) menu rows | Error box under the card, "Try again" as the first menu row, the existing "Log out" row |
 | `account-status-markers` | `AccountView.tsx` (`StatusMark`) | The mockups show no account states in the switch list | (a) pills (b) subtitle line (c) disabled row | (a): "paused", "Restoring…", "restore failed"; rows stay clickable |
@@ -48,13 +47,15 @@ Not decisions, but statements in the documents that turned out wrong or outdated
 
 | Name | Where | Question | Options | Now |
 | --- | --- | --- | --- | --- |
-| `devbackend-header-buttons` | `src/views/devbackend/DevBackendView.tsx` | Where "close panel", "clear room" and "remove room" go; the mockup header only has the dropdown | (a) header buttons (b) inside the dropdown | A ⋯ menu ("Room actions") and × next to the dropdown |
-| `devbackend-destructive-confirm` | `DevBackendView.tsx` | Clear room / remove room lose state | confirm or not | Not confirmed |
+| `devbackend-header-buttons` | `src/views/devbackend/RoomBox.tsx` | Where "close panel", "clear room" and "remove room" go; the mockup header only has the dropdown | (a) header buttons (b) inside the dropdown | A ⋯ menu ("Room actions", DevBackend only) and × next to the dropdown; the Dev tools of a Matrix account have the × too |
+| `devbackend-destructive-confirm` | `RoomBox.tsx` | Clear room / remove room lose state | confirm or not | Not confirmed |
 | `devbackend-rtc-member-shape` | `src/views/devbackend/TimelineSection.tsx` | Which event the "RTC member" form sends | (a) `org.matrix.msc4143.rtc.member` timeline event (b) `org.matrix.msc3401.call.member` state event | (a), with a guessed content (empty = left) |
 | `devbackend-raw-form-shape` | `TimelineSection.tsx` | Raw JSON: one editor for `{type, sender, content}` (leaf) or type + content fields | either | One editor |
 | `devbackend-todevice-sender` | `src/views/devbackend/ClientBox.tsx` | The mockup has one sender select | select / separate fields | Separate user id and device id fields |
 | `devbackend-extra-store-tools` | `DevBackendView.tsx` | The old store tools have no place in the design: push TURN credentials, room account data, RTC transports, fire the oldest delayed event | sections of the Client Backend Tool (room account data: of the room box) / drop them | Not in the UI; they exist as methods of `DevBackend` |
 | `devbackend-delayed-sender` | `src/views/devbackend/TimelineSection.tsx`, `devBackend.ts` | The send form offers any sender, but the backend only schedules a delayed event for the DevBackend user | disable the sender field while "Delayed" is on / allow it in the backend | The refusal is shown as a toast |
+| `room-tools-delayed-list` | `src/app/controller.ts` (`sendToRoom`) | The Dev tools of a Matrix account cannot ask the homeserver for the room's delayed events (no list in the rust bindings; MSC4140 has `GET /delayed_events`, which matrix-js-sdk can call) | (a) list only what was scheduled here, until sent, cancelled or due (b) the homeserver's list where an SDK offers it (js; rust with an SDK addition) | (a), not persisted, forgotten on logout; a delayed event a widget scheduled is not listed, and only listed ones can be sent, restarted or cancelled from here. Needs MSC4140 on the homeserver; a refusal is a toast |
+| `room-tools-state-refresh` | `src/app/AppRoot.tsx` (`useRoomState`), `roomStateVersion` in `src/appViewModel.ts` | When the Dev tools read the room state again | (a) the whole state on every new state event of the timeline (b) apply the state event to the state read before (c) a state change listener per SDK | (a): one `/state` request per new state event in both SDKs; the first read waits for the timeline. A change without a new state event in the timeline (a gap in the sync, the redaction of a state event) is shown with the next one |
 
 The DevBackend runtime (`src/matrix_session/memory/devBackend.ts`):
 
@@ -107,13 +108,13 @@ Login, sync, suspend/resume, device verification and the storage migration of bo
 | `account-id-choice` | `src/matrix_session/js/session.ts`, `rust/session.ts` | What identifies a stored login | (a) random id (b) user id + device id | js: a UUID (`legacy` for the login migrated from the old layout, which keeps its crypto store and device); rust: the existing store id |
 | `suspend-in-flight-requests` | `src/matrix_session/js/fetchGate.ts` | What happens to requests that are running when the DevBackend is activated | (a) abort all (b) abort only `/sync` (c) hold until resume | New requests are refused, `/sync` is aborted, sends in flight finish. `stopClient()` is not used because it shuts crypto down for good |
 | `rust-suspend-explicit-requests` | `src/matrix_session/rust/session.ts` | Suspending the rust session stops sync and the send queues, but a backend can still make a request for a widget | (a) the controller detaches the backends (it already stops all widgets) (b) a gate in `RustSdkBackend` | Neither. `Client::pause()` is avoided because it closes the stores |
-| `rust-export-state` | `src/matrix_session/rust/roomData.ts` | "Copy to DevBackend" needs all state; the bindings read state by type only | (a) a direct `/state` request with the access token (no token refresh) (b) a fixed type list (c) a new `Room::state_raw` in the SDK patches | (a), falling back to (b), which is incomplete |
+| `rust-export-state` | `src/matrix_session/rust/roomData.ts` (`roomState`) | The Dev tools and "Copy to DevBackend" need all state; the bindings read state by type only | (a) a direct `/state` request with the access token (no token refresh) (b) a fixed type list (c) a new `Room::state_raw` in the SDK patches | (a), falling back to (b) plus the state types of the event cache, which is incomplete. The Dev tools read it again on every new state event (`room-tools-state-refresh`) |
 | `room-details-member-loading` | `js/roomData.ts`, `rust/roomData.ts` | Load all members for the RoomOverview? | always / never / up to a size | Loaded up to 500 joined members, else what is local |
 | `export-decrypted-events` | `js/roomData.ts` | A copied room holds decrypted events or the events as sent | either | Decrypted |
 | `concurrent-sessions` | both `session.ts` | Several accounts run at once, one client each; unverified with real SDK stores | restore all / only the active one | All are restored and kept syncing (suspended while the DevBackend is active) |
 | `rust-resume-room-subscription` | `rust/session.ts` | Whether a room's full-state subscription survives stop/start of the sync service | verify on a homeserver | It is requested again on resume |
 | `verification-incoming-requests` | `rust/verification.ts` (`didReceiveVerificationRequest`) | A verification request that another device of the account sends to this one | (a) ignore it (b) show it in the AccountView (design, view model, both SDKs) | (a): only this device starts a verification |
-| `rust-one-room-subscription` | `rust/session.ts` (`open`) | The rust session subscribes to one room with its full state at a time: opening the widgets or the Timeline tab of room B moves the subscription away from room A, whose widgets and timeline then only get what the room list syncs. Pre-existing for the widgets of two rooms side by side | (a) keep (b) subscribe to every room on screen, with an SDK addition next to `subscribeToRoomWithFullState` that takes the list | (a). A Timeline tab subscribes when it is shown, not again on each new event |
+| `rust-one-room-subscription` | `rust/session.ts` (`open`) | The rust session subscribes to one room with its full state at a time: opening the widgets, the Timeline tab or the Dev tools of room B moves the subscription away from room A, whose widgets and timeline then only get what the room list syncs. Pre-existing for the widgets of two rooms side by side | (a) keep (b) subscribe to every room on screen, with an SDK addition next to `subscribeToRoomWithFullState` that takes the list | (a). A Timeline tab and the Dev tools subscribe when they show the room (its timeline), not again on each new event |
 | `rust-late-decryption-not-reported` | `rust/roomData.ts` (`onTimelineChanged`) | `subscribeToEventsRaw` reports the events a sync appends, not an event the event cache replaces (decrypted late, redacted): the RoomTimeline shows it as it was until the room's next event arrives | (a) an SDK addition that reports replaced events too (b) read again on a timer. Verify on a homeserver first | Neither |
 | `verification-cancel-on-suspend` | `src/app/controller.ts` (`switchAccount`) | Activating the DevBackend cancels a running verification, but the sessions are suspended right after, so the cancel likely never reaches the other device | (a) wait for the cancel (with a time limit) before suspending (b) let the other device time out | (b) |
 
@@ -155,7 +156,6 @@ Login, sync, suspend/resume, device verification and the storage migration of bo
 - rust: an abandoned pending login leaves IndexedDB stores behind unless `discard()` is called (pre-existing).
 - js: `onRoomsChanged` does not fire on member-count changes; one `/sync` response in flight may still be processed after `suspend()`.
 - `importRoom` drops timeline state events whose key is in the exported state. `toSeed()` does not keep event ids, timestamps, scheduled events, the to-device log or `copiedFrom`.
-- `MockedTimelineEvent` has no `stateKey`, though the timeline of a mocked room contains state events.
 - A JS `TurnServerSink` cannot be passed to `subscribeTurnServers` of the in-memory backend ("Cannot lower this object to a pointer").
 - The DevBackend's defaults changed from the old in-memory mode: user `@alice:dev.local`, device `DEVBACKEND`, base URL `https://matrix.dev.local`. The URL parameters of the README still give `!room:example.org` and `@alice:example.org`.
 - `tab-overflow-threshold`: tabs shrink to 88px before the bar scrolls and shows "All tabs"; `all-tabs-button-name`: that button's name contains the tab count.
@@ -166,11 +166,12 @@ Login, sync, suspend/resume, device verification and the storage migration of bo
 - `panel-focus-from-widget`: a press inside a widget iframe does not reach the host; the app root focuses the widget's panel when the iframe takes the focus (`src/app/AppRoot.tsx`).
 - Room picker: once the search field had the focus, the "All rooms" group keeps the height of the scroll area (empty space under a short list), so a press on a row that takes the focus from the field does not move the row away. Without recents above it, the field is at the top already and nothing scrolls. A pick that only jumps to a widget's tab changes no recents.
 - Alt+N inserts the new panel to the right of the focused panel, not at the far right (appDesign.md: "a new panel on the right").
-- The DevBackendView's timeline list and its count include state events (the lab seed shows "12 events" for 3 messages).
+- The timeline list of the Dev tools and its count include state events (the lab seed shows "12 events" for 3 messages), as the RoomTimeline does. Its rows show the generic content preview (`previewOf`), not the descriptions of the RoomTimeline (`describeEvent`: "joined", "👍") the mockups show.
 - `populate` does not reset view-local drafts (send forms, filters, the delayed toggle).
-- Scheduled rows show "timeline" where the mockup shows a body preview: `MockedRoomData.scheduled` has no content.
+- Scheduled rows show "timeline" where the mockup shows a body preview: `ScheduledEvent` has no content.
 - The to-device list is headed "Messages" (mockup: "Sent by widgets"); rows sent by widgets show device `*`.
-- The sender of the send forms is a text input with suggestions; the mockup has a select with an avatar.
+- The sender of the send forms (DevBackend) is a text input with suggestions; the mockup has a select with an avatar.
+- The Dev tools of a Matrix account: the shortcut forms and the state editor close on Save, so a refusal (a toast) or a cancelled confirmation loses their text; the send forms keep their drafts. The dropdown's room starts on the focused room panel's when the Dev tools open, unless the room picked before is still open.
 - A widget may send `notify_ready` before its capabilities are answered, so it counts as ready while the permission prompt is shown.
 - In a narrow window the panel pager is partly hidden under the overlaying SidePanel.
 - The toast's 4 s auto-dismiss has no test (the tests do not sleep).

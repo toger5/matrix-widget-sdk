@@ -10,7 +10,7 @@
  */
 import { InMemoryBackend, type InMemoryBackendLike, type MatrixEvent, type TurnServer } from "@matrix-widget-tools/widget-host-bindings";
 
-import type { MockedRoomData, MockedStateEvent, MockedTimelineEvent, ToDeviceMessage } from "../../appViewModel";
+import type { MockedRoomData, MockedStateEvent, MockedTimelineEvent, ScheduledEvent, ToDeviceMessage } from "../../appViewModel";
 import type { AccountInfo, LiveSession, RawEvent, RoomBackend, RoomDetails, RoomExport, RoomMember, RoomSummary, RoomTimeline } from "../../session";
 import { WIDGET_EVENT_TYPES, describesWidget, type StateEvent } from "../../widgetStateEvent";
 import { base64ToBytes, bytesToBase64, validateSeed, type DevBackendSeed, type SeedMedia, type SeedRoom } from "./seed";
@@ -74,11 +74,10 @@ interface RoomContent {
   members: Member[];
   /** Every state event of a widget event type, in the order the widgets were first added. */
   widgetEvents: StateEvent[];
+  /** For `toSeed()`. */
   state: MockedStateEvent[];
-  /** Newest first. */
-  timeline: MockedTimelineEvent[];
-  scheduled: MockedRoomData["scheduled"];
-  /** Oldest first, as plain Matrix JSON. */
+  scheduled: ScheduledEvent[];
+  /** Oldest first, as plain Matrix JSON: what `roomState()` and `timeline()` hand out. */
   raw: { state: RawEvent[]; timeline: RawEvent[] };
 }
 
@@ -116,13 +115,10 @@ const EMPTY_CONTENT: RoomContent = {
   members: [],
   widgetEvents: [],
   state: [],
-  timeline: [],
   scheduled: [],
   raw: { state: [], timeline: [] },
 };
-const NO_STATE: MockedStateEvent[] = [];
-const NO_TIMELINE: MockedTimelineEvent[] = [];
-const NO_SCHEDULED: MockedRoomData["scheduled"] = [];
+const NO_SCHEDULED: ScheduledEvent[] = [];
 
 const asObject = (value: unknown): Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
@@ -255,7 +251,12 @@ export class DevBackend implements LiveSession {
 
   async exportRoom(roomId: string, lastEvents: number): Promise<RoomExport> {
     const { name, raw } = this.room(roomId).content;
-    return { roomId, name, state: raw.state, timeline: lastEvents > 0 ? raw.timeline.slice(-lastEvents) : [] };
+    return { roomId, name, state: await this.roomState(roomId), timeline: lastEvents > 0 ? raw.timeline.slice(-lastEvents) : [] };
+  }
+
+  /** The whole state of a mocked room. The same array until the room changes (`refresh()`). */
+  async roomState(roomId: string): Promise<RawEvent[]> {
+    return this.room(roomId).content.raw.state;
   }
 
   /** Nothing to stop: the DevBackend never talks to a homeserver. */
@@ -293,9 +294,10 @@ export class DevBackend implements LiveSession {
   };
 
   /**
-   * The content of the DevBackend, with `state` / `timeline` / `scheduled` of `selectedRoomId`.
-   * The same object is returned until `refresh()` finds a change; its parts (`rooms`, `media`,
-   * `toDevice`, the room's lists) keep their identity as long as they did not change themselves.
+   * The content of the DevBackend, with the `scheduled` events of `selectedRoomId` (its state and
+   * timeline are `roomState()` and `timeline()`, as of any session). The same object is returned
+   * until `refresh()` finds a change; its parts (`rooms`, `media`, `toDevice`, `scheduled`) keep
+   * their identity as long as they did not change themselves.
    */
   readonly snapshot = (selectedRoomId?: string): MockedRoomData => {
     const key = selectedRoomId ?? "";
@@ -305,8 +307,6 @@ export class DevBackend implements LiveSession {
       snapshot = {
         rooms: this.roomsData,
         userId: this.user,
-        state: content?.state ?? NO_STATE,
-        timeline: content?.timeline ?? NO_TIMELINE,
         scheduled: content?.scheduled ?? NO_SCHEDULED,
         toDevice: this.toDeviceData,
         failSends: this.sendsFail,
@@ -943,9 +943,6 @@ export class DevBackend implements LiveSession {
       members,
       widgetEvents,
       state: stateEvents.map((event) => ({ type: event.eventType, stateKey: event.stateKey ?? "", content: asObject(event.content) })),
-      timeline: timeline
-        .map((event) => ({ eventId: event.eventId, type: event.eventType, sender: event.sender, timestamp: timestamp(event), content: asObject(event.content) }))
-        .reverse(),
       scheduled,
       raw: { state: stateEvents.map(raw), timeline: timeline.map(raw) },
     };

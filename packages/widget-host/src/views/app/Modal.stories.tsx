@@ -25,14 +25,21 @@ export const Confirm: Story = {
       body: "Your 2 room panels are closed and their widgets stop. They are opened again when you switch back to Ada Okafor.",
       confirmLabel: "Switch to the DevBackend",
       danger: false,
-      intent: { type: "devBackend/toggle" },
+      intent: { type: "account/switch", accountId: "devBackend", confirmed: true },
     },
   },
 };
 
-// No leaf: a confirmation of an action that cannot be undone.
+// leaf roomtools/confirm (the modal): changing the configuration of a real room from the Dev tools
 export const ConfirmDanger: Story = {
   args: {
-    modal: { kind: "confirm", title: "Log out Ada Okafor?", body: "The remembered capabilities of all widgets are forgotten.", confirmLabel: "Log out", danger: true, intent: { type: "account/logout", accountId: "ada" } },
+    modal: {
+      kind: "confirm",
+      title: "Change the power levels of Design crit?",
+      body: "This m.room.power_levels event is sent to the room as @ada:example.org and changes who may do what in it, for everyone. Some changes cannot be undone, for example lowering your own level.",
+      confirmLabel: "Send the state event",
+      danger: true,
+      intent: { type: "roomTools/sendState", roomId: "!hGtVzqNmPa:example.org", event: { type: "m.room.power_levels", stateKey: "", content: {} }, confirmed: true },
+    },
   },
 };

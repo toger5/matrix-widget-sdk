@@ -1,7 +1,7 @@
-/** "Send state" of the State section: predefined forms (`../forms/widgetForms`) and raw JSON (mockup functions `sendStateForm`, `formChips`). leaves devbackend/state, devbackend/state-element-call, devbackend/state-raw */
+/** "Send state" of the State section: predefined forms (`../forms/widgetForms`) and raw JSON (mockup functions `sendStateForm`, `formChips`). leaves devbackend/state, devbackend/state-element-call, devbackend/state-raw, roomtools/state */
 import { useState, type FormEvent } from "react";
 
-import type { DevBackendViewModel, MockedStateEvent, RoomId } from "../../appViewModel";
+import type { MockedStateEvent, RoomId, RoomToolsViewModel } from "../../appViewModel";
 import type { StateEvent } from "../../widgetStateEvent";
 import { useDispatch } from "../env";
 import { ElementCallFields, NEW_ELEMENT_CALL, WidgetFields, buildElementCallEvent, buildWidgetEvent, freeWidgetId, newWidgetDraft } from "../forms/widgetForms";
@@ -9,7 +9,7 @@ import { Field } from "../ui/atoms";
 import { FormChips, FormError, JsonArea, parseJsonObject, pretty } from "../ui/forms";
 import { DelayRow, NO_DELAY, Sub, delayOf } from "./parts";
 
-type StateForm = DevBackendViewModel["stateForm"];
+type StateForm = RoomToolsViewModel["stateForm"];
 
 const FORMS: { form: StateForm; label: string }[] = [
   { form: "widget", label: "Widget" },
@@ -17,9 +17,9 @@ const FORMS: { form: StateForm; label: string }[] = [
   { form: "raw", label: "Raw JSON" },
 ];
 
-/** The DevBackend's state as the state events the widget forms look at. */
+/** The room's state as the state events the widget forms look at. */
 const asStateEvents = (state: MockedStateEvent[]): StateEvent[] => state.map((e) => ({ type: e.type, state_key: e.stateKey, content: e.content }));
-/** A built state event as the DevBackend takes it; a string (what is wrong with the draft) stays. */
+/** A built state event as `roomTools/sendState` takes it; a string (what is wrong with the draft) stays. */
 const asMocked = (event: StateEvent | string): MockedStateEvent | string => (typeof event === "string" ? event : { type: event.type, stateKey: event.state_key, content: event.content });
 
 interface Props {
@@ -27,7 +27,7 @@ interface Props {
   form: StateForm;
   /** The room's current state: the free widget ID and the raw form's prefill come from it. */
   state: MockedStateEvent[];
-  /** The DevBackend user: `creatorUserId` of legacy widgets. */
+  /** The DevBackend user or the account: `creatorUserId` of legacy widgets. */
   userId?: string;
 }
 
@@ -60,11 +60,11 @@ export function SendStateForm({ roomId, form, state, userId }: Props) {
     const problem = typeof event === "string" ? event : delayed.error;
     setError(problem);
     if (problem || typeof event === "string") return;
-    dispatch({ type: "mock/sendState", roomId, event, ...(delayed.delayMs === undefined ? {} : { delayMs: delayed.delayMs }) });
+    dispatch({ type: "roomTools/sendState", roomId, event, ...(delayed.delayMs === undefined ? {} : { delayMs: delayed.delayMs }) });
   };
   const selectForm = (next: StateForm) => {
     setError(undefined);
-    dispatch({ type: "mock/setStateForm", form: next });
+    dispatch({ type: "roomTools/setStateForm", form: next });
   };
 
   return (

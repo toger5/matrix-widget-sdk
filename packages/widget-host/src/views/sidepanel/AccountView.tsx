@@ -75,6 +75,22 @@ function SwitchRow({ account }: { account: AccountViewModel }) {
   );
 }
 
+/** The DevBackend in the switch list of a Matrix account, while it is enabled: switching to it activates it (confirmed if room panels are open). leaf sidepanel/account-several */
+function DevSwitchRow({ account }: { account: AccountViewModel }) {
+  const dispatch = useDispatch();
+  return (
+    <button type="button" className="switch-acc" data-account-id={account.id} onClick={() => dispatch({ type: "account/switch", accountId: account.id })}>
+      <DevAvatar size={30} />
+      <span className="switch-txt">
+        <small>switch to</small>
+        <b>DevBackend</b>
+        <em>mocked rooms, no homeserver</em>
+      </span>
+      <Icon name="arrowRight" size={16} className="end" />
+    </button>
+  );
+}
+
 /** The DevBackend is the active account: its card and the full list of Matrix accounts. leaf sidepanel/account-dev */
 function DevAccountBody({ account, others }: { account: AccountViewModel; others: AccountViewModel[] }) {
   const dispatch = useDispatch();
@@ -120,7 +136,7 @@ function DevAccountBody({ account, others }: { account: AccountViewModel; others
   );
 }
 
-function MatrixAccountBody({ account, others, initialRecoveryKey }: { account: AccountViewModel; others: AccountViewModel[]; initialRecoveryKey?: string }) {
+function MatrixAccountBody({ account, others, dev, initialRecoveryKey }: { account: AccountViewModel; others: AccountViewModel[]; dev?: AccountViewModel; initialRecoveryKey?: string }) {
   const dispatch = useDispatch();
   const accountId = account.id;
   const hasDetails = !!account.homeserver || !!account.deviceId || account.verified !== undefined;
@@ -198,6 +214,7 @@ function MatrixAccountBody({ account, others, initialRecoveryKey }: { account: A
         {others.map((a) => (
           <SwitchRow key={a.id} account={a} />
         ))}
+        {dev && <DevSwitchRow account={dev} />}
         <AddAccountRow />
       </div>
     </>
@@ -207,12 +224,13 @@ function MatrixAccountBody({ account, others, initialRecoveryKey }: { account: A
 /** leaves sidepanel/account-one, account-several, account-dev; with the "Verify this device" box sidepanel/verify-*. */
 export function AccountView({ accounts, activeAccountId, initialRecoveryKey }: AccountViewProps) {
   const active = accounts.find((a) => a.id === activeAccountId);
-  // The DevBackend account is never a switch target: it is entered with the LeftBar button.
   const others = accounts.filter((a) => a.id !== activeAccountId && a.kind === "matrix");
+  // Listed while the DevBackend is enabled.
+  const devAccount = accounts.find((a) => a.kind === "devBackend");
   const dev = active?.kind === "devBackend";
   return (
     <SideBox title="Account" className={dev ? "acc-dev" : "acc"} testId="account-view">
-      {active && (dev ? <DevAccountBody account={active} others={others} /> : <MatrixAccountBody account={active} others={others} initialRecoveryKey={initialRecoveryKey} />)}
+      {active && (dev ? <DevAccountBody account={active} others={others} /> : <MatrixAccountBody account={active} others={others} dev={devAccount} initialRecoveryKey={initialRecoveryKey} />)}
     </SideBox>
   );
 }

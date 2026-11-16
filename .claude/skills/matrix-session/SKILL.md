@@ -21,7 +21,7 @@ change depends on real SDK behaviour; the open questions are in `implementation_
 |---|---|
 | `src/session.ts` | the seam: `SessionProvider`, `PendingLogin`, `LiveSession`, `EmojiVerification`, `RoomBackend`, `StoredLoginInvalidError`; `sessions` loads one SDK lazily (`VITE_MATRIX_SDK=js`: matrix-js-sdk, else matrix-rust-sdk; `npm run dev:js`) |
 | `src/matrix_session/rust/session.ts` | matrix-rust-sdk (`matrix-sdk-uniffi-js`): provider, pending login, `RustSdkSession` (native sliding sync, room list, widget events of all rooms) |
-| `src/matrix_session/rust/roomData.ts`, `verification.ts` | free functions of the client: account and room details, "Copy to DevBackend"; device verification |
+| `src/matrix_session/rust/roomData.ts`, `verification.ts` | free functions of the client: account and room details, the whole room state (`roomState`: the Dev tools, "Copy to DevBackend"), the timeline; device verification |
 | `src/matrix_session/rust/backend/` | `RustSdkBackend` (`MatrixBackend` of one room), `roomFeed.ts`, `events.ts`, `turnServer.ts` |
 | `src/matrix_session/js/session.ts` | matrix-js-sdk: provider, pending login, `JsSdkSession` (`/sync` v2, in-memory store, rust crypto in IndexedDB) |
 | `src/matrix_session/js/roomData.ts`, `verification.ts`, `fetchGate.ts` | free functions of the client; device verification; the `fetch` that is closed while suspended |

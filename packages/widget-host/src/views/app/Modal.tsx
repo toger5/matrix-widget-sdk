@@ -22,7 +22,7 @@ function activeElementOf(node: Node): Element | null {
 const SOURCE_URL = "https://github.com/toger5/matrix-widget-sdk";
 const DOCS_URL = `${SOURCE_URL}#readme`;
 
-/** leaves app/info-modal, app/confirm: scrim + dialog, focus trap, Escape closes (modal/close). A confirm dispatches its `intent`, then closes. */
+/** leaves app/info-modal, app/confirm, roomtools/confirm (`danger`: the alert icon and a danger button): scrim + dialog, focus trap, Escape closes (modal/close). A confirm dispatches its `intent`, then closes. */
 export function Modal({ modal, version = "0.1.0" }: ModalProps) {
   const dispatch = useDispatch();
   const ref = useRef<HTMLDivElement>(null);
@@ -69,7 +69,6 @@ export function Modal({ modal, version = "0.1.0" }: ModalProps) {
         <div className="scrim" onMouseDown={(e) => e.preventDefault()} />
         <div ref={ref} className="modal sm" role="alertdialog" aria-modal="true" aria-labelledby={titleId} tabIndex={-1} onKeyDown={onKeyDown} data-testid="modal">
           <header>
-            {/* TODO-FINDING confirm-modal-icon - the mockup only draws the DevBackend confirmation (cone icon) and `ModalViewModel` has no icon. For now: the alert icon if `danger`, else the cone. */}
             <Icon name={modal.danger ? "alert" : "cone"} size={22} className={modal.danger ? "danger" : "dev"} />
             <div>
               <h2 id={titleId}>{modal.title}</h2>

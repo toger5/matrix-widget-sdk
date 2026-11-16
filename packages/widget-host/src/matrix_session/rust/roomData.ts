@@ -4,7 +4,7 @@ import type { AccountInfo, RawEvent, RoomDetails, RoomExport, RoomMember } from 
 import { WIDGET_EVENT_TYPES } from "../../widgetStateEvent";
 
 /**
- * What the AccountView, the RoomOverview, the RoomTimeline and "Copy to DevBackend" read from a matrix-rust-sdk
+ * What the AccountView, the RoomOverview, the RoomTimeline, the Dev tools and "Copy to DevBackend" read from a matrix-rust-sdk
  * client. Functions of the client and the room, apart from the session, so they can be tested
  * with faked ones. `online: false` (the session is suspended) keeps them to what the SDK has in
  * its store, as far as the bindings say which calls make a request.
@@ -20,7 +20,7 @@ const EXPORT_PAGE_SIZE = 100;
 const EXPORT_MAX_PAGES = 20;
 
 /**
- * The state event types `exportRoom` reads from the SDK's store when the homeserver cannot be
+ * The state event types `roomState` reads from the SDK's store when the homeserver cannot be
  * asked for the whole state: the store can only be read by type.
  */
 export const KNOWN_STATE_TYPES = [
@@ -154,6 +154,24 @@ async function storedState(room: RoomLike, types: Iterable<string>): Promise<Raw
   return perType.flat();
 }
 
+/**
+ * The whole current state of a room (the Dev tools, "Copy to DevBackend"): from the homeserver, or
+ * (suspended, or the request failed) what the SDK has stored of `KNOWN_STATE_TYPES` and of the
+ * state types among the events of its event cache.
+ */
+export async function roomState(client: ClientLike, room: RoomLike, online = true): Promise<RawEvent[]> {
+  // TODO-FINDING rust-export-state - the bindings read state by event type only (`Room::state_events`), there is no "all current state". Options: (a) ask the homeserver directly with the session's access token (`GET /rooms/{id}/state`, like the TURN request in backend/turnServer.ts; bypasses the SDK, so an expired token is not refreshed), (b) read a fixed list of types from the store (incomplete: unknown custom types are missed, and rooms without the full-state subscription have little state stored), (c) add `Room::state_raw` to the Rust patches. Done: (a), and (b) plus the state types seen in the event cache when the request fails or the session is suspended. The Dev tools read it again on every state event of the timeline, which is a request each time.
+  if (online) {
+    const state = await fetchState(client, room.id()).catch((e: unknown) => {
+      console.warn("reading the room state from the homeserver failed, using what the SDK has stored", e);
+      return undefined;
+    });
+    if (state) return state;
+  }
+  const cached = await timelineEvents(room).catch(() => [] as RawEvent[]);
+  return storedState(room, [...KNOWN_STATE_TYPES, ...cached.filter((event) => typeof event.state_key === "string").map((event) => event.type)]);
+}
+
 export async function exportRoom(client: ClientLike, room: RoomLike, lastEvents: number, online = true): Promise<RoomExport> {
   const roomId = room.id();
 
@@ -171,16 +189,5 @@ export async function exportRoom(client: ClientLike, room: RoomLike, lastEvents:
     }
   }
   const timeline = lastEvents > 0 ? cached.slice(-lastEvents).map((json) => JSON.parse(json) as RawEvent) : [];
-
-  // TODO-FINDING rust-export-state - the bindings read state by event type only (`Room::state_events`), there is no "all current state". Options: (a) ask the homeserver directly with the session's access token (`GET /rooms/{id}/state`, like the TURN request in backend/turnServer.ts; bypasses the SDK, so an expired token is not refreshed), (b) read a fixed list of types from the store (incomplete: unknown custom types are missed, and rooms without the full-state subscription have little state stored), (c) add `Room::state_raw` to the Rust patches. Done: (a), and (b) plus the state types seen in the exported timeline when the request fails or the session is suspended.
-  let state: RawEvent[] | undefined;
-  if (online) {
-    state = await fetchState(client, roomId).catch((e: unknown) => {
-      console.warn("reading the room state from the homeserver failed, exporting what the SDK has stored", e);
-      return undefined;
-    });
-  }
-  state ??= await storedState(room, [...KNOWN_STATE_TYPES, ...timeline.filter((event) => typeof event.state_key === "string").map((event) => event.type)]);
-
-  return { roomId, name: room.displayName() ?? roomId, state, timeline };
+  return { roomId, name: room.displayName() ?? roomId, state: await roomState(client, room, online), timeline };
 }

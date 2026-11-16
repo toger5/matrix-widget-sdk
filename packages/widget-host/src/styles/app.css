@@ -333,6 +333,12 @@ mark { background: var(--highlight-soft); color: var(--highlight); border-radius
 .ev.sched { border-style: dashed; border-color: var(--border-strong); }
 .ev.sched .ev-time { color: var(--warning); }
 .ev-acts { grid-column: 1 / -1; display: flex; gap: 4px; margin-top: 4px; }
+/* The Dev tools of a Matrix account: everything goes to a real room, as the account. */
+.rt-hint { flex: none; display: flex; align-items: flex-start; gap: 6px; padding: 8px 12px; border-bottom: 1px solid var(--border); color: var(--text-muted); font-size: 12px; line-height: 1.4; }
+.rt-hint .ico { flex: none; margin-top: 1px; }
+.rt-hint b { color: var(--text); font-weight: 500; }
+.input[aria-readonly="true"] { background: transparent; border-style: dashed; color: var(--text-muted); }
+.ev-more { display: flex; justify-content: center; padding-top: 4px; }
 
 .tool-btn { margin-top: 8px; height: 44px; flex: none; display: flex; align-items: center; gap: 10px; padding: 0 14px; border-radius: var(--r-4); border: 1px solid var(--border); background: var(--surface); font-weight: 500; }
 .tool-btn > span { flex: 1; }
@@ -883,6 +889,8 @@ mark { background: var(--highlight-soft); color: var(--highlight); border-radius
 .sidebox.devb input.input, .sidebox.devb select.input { width: 100%; font: inherit; color: inherit; }
 .sidebox.devb input.input.mono, .sidebox.devb select.input.mono { font-family: var(--font-mono); font-size: 11.5px; }
 .sidebox.devb input.input.narrow { width: 56px; }
+/* the account's sender (the Dev tools of a Matrix account): read-only, muted as in the mockup */
+.sidebox.devb input.input[aria-readonly="true"] { color: var(--text-muted); }
 .sidebox.devb .input.search > input { flex: 1; min-width: 0; padding: 0; border: 0; outline: 0; background: none; font: inherit; color: inherit; }
 .sidebox.devb .input.search:focus-within, .sidebox.devb textarea:focus-visible, .sidebox.devb select:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 .sidebox.devb ::placeholder { color: var(--text-faint); opacity: 1; }

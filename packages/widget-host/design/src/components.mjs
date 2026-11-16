@@ -16,8 +16,9 @@ export const btn = (label, o = {}) =>
 export const toggle = (on, label, disabled = false) =>
   `<button class="toggle ${on ? "on" : ""}" role="switch" aria-checked="${on}" aria-label="${esc(label)}"${disabled ? " disabled" : ""}><i></i></button>`;
 
+/** o.readonly: a read-only text field (the app's `<input readOnly>`). */
 const field = (label, value, o = {}) =>
-  `<label class="field ${o.cls ?? ""}"><span class="field-l">${label}</span><span class="input ${o.mono ? "mono" : ""} ${o.select ? "select" : ""}">${value}${o.select ? icon("chevDown", 14) : ""}</span></label>`;
+  `<label class="field ${o.cls ?? ""}"><span class="field-l">${label}</span><span class="input ${o.mono ? "mono" : ""} ${o.select ? "select" : ""}"${o.readonly ? ' aria-readonly="true"' : ""}>${value}${o.select ? icon("chevDown", 14) : ""}</span></label>`;
 
 /** Pretty-printed, lightly highlighted JSON. */
 const json = (value) =>
@@ -74,20 +75,19 @@ export function widget(kind, { compact = false } = {}) {
 const devAv = (size) => `<span class="av dev-av" style="--s:${size}px" aria-hidden="true">${icon("cone", Math.round(size * 0.55))}</span>`;
 
 /**
- * devBackend: the DevBackend is enabled in the Settings (its button is shown). devActive: the
- * DevBackend is active. tooltip: draw the tooltip of the active DevBackend button (the hover state).
+ * devTools: dev tools are enabled in the Settings. devActive: the DevBackend is active. Either shows
+ * the Dev tools button, which opens and closes the Dev tools and never switches accounts (highlighted
+ * while the DevBackend is active). tooltip: draw its tooltip (the hover state).
  */
-export function leftBar({ devBackend = false, devActive = false, active = null, tooltip = false } = {}) {
+export function leftBar({ devTools = false, devActive = false, active = null, tooltip = false } = {}) {
   const b = (ico, title, key, cls = "") =>
     `<button class="lb-btn ${active === key ? "on" : ""} ${cls}" title="${esc(title)}" aria-label="${esc(title)}"${active === key ? ' aria-pressed="true"' : ""}>${icon(ico, 18)}</button>`;
-  // While the DevBackend is active the button opens and closes the DevBackendView; it does not leave.
-  const devTitle = devActive ? "DevBackend panel" : "Activate the DevBackend";
-  const devBtn = `<span class="lb-wrap">${b("cone", devTitle, "devbackend", devActive ? "dev-on" : "")}${tooltip ? `<span class="tooltip" role="tooltip">${devTitle}</span>` : ""}</span>`;
+  const devBtn = `<span class="lb-wrap">${b("cone", "Dev tools", "devtools", devActive ? "dev-on" : "")}${tooltip ? `<span class="tooltip" role="tooltip">Dev tools</span>` : ""}</span>`;
   return `<nav class="leftbar" aria-label="App">
     <button class="lb-logo" title="About this app" aria-label="About this app">${logo()}</button>
     ${b("plus", "New room panel (Alt+N) · with the same room: Alt+Shift+N", "new")}
     ${b("list", "Room list", "rooms")}
-    ${devBackend ? devBtn : ""}
+    ${devTools || devActive ? devBtn : ""}
     ${devActive ? `<span class="lb-badge" title="Widgets only see the DevBackend">DevBackend</span>` : ""}
     <span class="sp"></span>
     ${b("settings", "Settings", "settings")}
@@ -109,6 +109,10 @@ const switchRow = (key) => {
   const a = ACCOUNTS[key];
   return `<button class="switch-acc">${userAv(key, 30)}<span class="switch-txt"><small>switch to</small><b>${a.name}</b><em>${a.id}</em></span>${icon("arrowRight", 16, "end")}</button>`;
 };
+
+/** The DevBackend in the switch list of a Matrix account, while it is enabled: switching to it activates it. */
+const devSwitchRow = () =>
+  `<button class="switch-acc">${devAv(30)}<span class="switch-txt"><small>switch to</small><b>DevBackend</b><em>mocked rooms, no homeserver</em></span>${icon("arrowRight", 16, "end")}</button>`;
 
 const addAccountRow = () =>
   `<button class="switch-acc add"><span class="av ghost" style="--s:30px" aria-hidden="true">${icon("userPlus", 14)}</span><span class="switch-txt"><b>Add account</b></span>${icon("external", 14, "end")}</button>`;
@@ -154,9 +158,10 @@ function verifyBox(state) {
 
 /**
  * mode: "one" | "several" | "dev". verify: a state of `verifyBox` (not set: this device is
- * verified). While a step runs, the box replaces the device details and the menu.
+ * verified). While a step runs, the box replaces the device details and the menu. devBackend: the
+ * DevBackend is enabled, so the switch list of a Matrix account offers it.
  */
-export function accountView({ mode = "one", verify } = {}) {
+export function accountView({ mode = "one", verify, devBackend = false } = {}) {
   if (mode === "dev") {
     const body = `<div class="acc-card dev">${devAv(44)}<div><b>DevBackend</b><small>@alice:dev.local</small><span class="pill dev">in-memory · no Matrix requests</span></div></div>
       <p class="hint">The DevBackend is its own account. Switch to one of your Matrix accounts to leave it. The mocked rooms are kept.</p>
@@ -179,7 +184,7 @@ export function accountView({ mode = "one", verify } = {}) {
   const body = `<div class="acc-card">${userAv("ada", 56)}<div><b>${a.name}</b><small>${a.id}</small></div></div>${verify ? `\n    ${verifyBox(verify)}` : ""}
     ${VERIFY_RUNNING.includes(verify) ? "" : details}
     <span class="sp"></span>
-    <div class="switch-list">${mode === "several" ? switchRow("work") + switchRow("bot") : ""}${addAccountRow()}</div>`;
+    <div class="switch-list">${mode === "several" ? switchRow("work") + switchRow("bot") : ""}${devBackend ? devSwitchRow() : ""}${addAccountRow()}</div>`;
   return sideBox(sideTitle("Account"), body, "acc");
 }
 
@@ -195,10 +200,10 @@ export function settingsView({ devTools = false, devBackend = devTools, locked =
     <div class="seg" role="radiogroup" aria-label="Theme"><span class="on" role="radio" aria-checked="true">System</span><span role="radio" aria-checked="false">Light</span><span role="radio" aria-checked="false">Dark</span></div>
     <h4 class="side-h">Developer</h4>
     <div class="set-row"><div><b>Enable dev tools</b><small>Inspect what a widget sees, and add your own widgets to a room.</small></div>${toggle(devTools, "Enable dev tools")}</div>
-    ${devTools ? list([["dots", "Widget dev tools", "via the ⋯ button of a widget tab"], ["plus", "Add widget", "in the room overview"]]) : ""}
+    ${devTools ? list([["cone", "Dev tools", "button in the left bar: state and timeline of the open rooms"], ["dots", "Widget dev tools", "via the ⋯ button of a widget tab"], ["plus", "Add widget", "in the room overview"]]) : ""}
     <div class="set-row"><div><b>Enable the DevBackend</b><small>Mocked rooms in memory, without a homeserver.</small></div>${toggle(devBackend, "Enable the DevBackend", locked)}</div>
     ${locked ? `<p class="hint set-locked">${icon("lock", 13)}The DevBackend cannot be turned off while it is active</p>` : ""}
-    ${devBackend ? list([["cone", "DevBackend", "button in the left bar"], ["copy", "Copy to DevBackend", "in the room overview"]]) : ""}
+    ${devBackend ? list([["users", "DevBackend", "in the account list and at the bottom of the dev tools"], ["copy", "Copy to DevBackend", "in the room overview"]]) : ""}
     ${devTools || devBackend ? "" : `<p class="hint">While both are off, no dev tool is shown anywhere in the app.</p>`}`;
   return sideBox(sideTitle("Settings"), body);
 }
@@ -213,19 +218,20 @@ const sub = (title, tools = "") => `<div class="sub-h"><span>${title}</span>${to
 const delayRow = (on) =>
   `<div class="inline-row">${toggle(on, "Send delayed")}<span>Delayed</span>${on ? `<span class="input mono narrow">5000</span><span class="muted">ms</span>` : ""}<span class="sp"></span>${btn(on ? "Schedule" : "Send", { kind: "primary", sm: true, ico: on ? "clock" : "send" })}</div>`;
 
-const stateTree = (editing) => {
+/** users: the three members of the tree; the second one is expanded (or edited). */
+const stateTree = (editing, users = ["@alice:dev.local", "@bob:dev.local", "@carol:dev.local"]) => {
   const row = (type, n, open = false) => `<div class="tree-row lvl0">${icon(open ? "chevDown" : "chevRight", 12)}<span class="mono">${type}</span><em>${n}</em></div>`;
   const key = (k, sel = false) => `<div class="tree-row lvl1 ${sel ? "sel" : ""}"><span class="mono">${k}</span>${ibtn("edit", "Edit this state event", "xs")}</div>`;
   const content = { membership: "join", displayname: "Bob" };
   return `<div class="tree">
     ${row("m.room.create", 1)}${row("m.room.name", 1)}${row("m.room.topic", 1)}
-    ${row("m.room.member", 3, true)}${key("@alice:dev.local")}${key("@bob:dev.local", true)}
+    ${row("m.room.member", 3, true)}${key(users[0])}${key(users[1], true)}
     ${
       editing
-        ? `<div class="editor"><div class="editor-h"><span class="mono">m.room.member · @bob:dev.local</span><span class="pill">editing</span></div><pre class="code edit">${json({ membership: "leave", displayname: "Bob" })}<span class="caret"></span></pre><div class="inline-row"><span class="muted">Saving sends a new state event.</span><span class="sp"></span>${btn("Cancel", { sm: true })}${btn("Save", { kind: "primary", sm: true })}</div></div>`
+        ? `<div class="editor"><div class="editor-h"><span class="mono">m.room.member · ${users[1]}</span><span class="pill">editing</span></div><pre class="code edit">${json({ membership: "leave", displayname: "Bob" })}<span class="caret"></span></pre><div class="inline-row"><span class="muted">Saving sends a new state event.</span><span class="sp"></span>${btn("Cancel", { sm: true })}${btn("Save", { kind: "primary", sm: true })}</div></div>`
         : `<pre class="code">${json(content)}</pre>`
     }
-    ${key("@carol:dev.local")}
+    ${key(users[2])}
     ${row("org.matrix.msc4411.widget", 3)}${row("m.room.power_levels", 1)}
   </div>`;
 };
@@ -255,27 +261,43 @@ const sendStateForm = (form) => {
   return `${sub("Send state")}${formChips(STATE_FORMS, form, "State form")}<div class="form">${body}${delayRow(false)}</div>`;
 };
 
-/** form: one of STATE_FORMS; editing: the editor of one state event is open */
-const stateSection = ({ form = "Widget", editing = false } = {}) =>
-  `${sub("Shortcuts")}<div class="chips">${btn("Edit name", { sm: true, ico: "edit" })}${btn("Edit description", { sm: true, ico: "edit" })}${btn("Add member", { sm: true, ico: "userPlus" })}</div>
+/** The members of a real room in the Dev tools of a Matrix account (Ada is the account). */
+const REAL_USERS = [ACCOUNTS.ada.id, "@bob:example.org", "@carol:example.org"];
+
+/** form: one of STATE_FORMS; editing: the editor of one state event is open; account: a real room (no "Add member": that needs an invite) */
+const stateSection = ({ form = "Widget", editing = false, account = false } = {}) =>
+  `${sub("Shortcuts")}<div class="chips">${btn("Edit name", { sm: true, ico: "edit" })}${btn("Edit description", { sm: true, ico: "edit" })}${account ? "" : btn("Add member", { sm: true, ico: "userPlus" })}</div>
    ${sendStateForm(form)}
-   ${sub("Current state", `<span class="input search sm">${icon("search", 12)}<span class="ph">Filter by type or key</span></span>`)}${stateTree(editing)}`;
+   ${sub("Current state", `<span class="input search sm">${icon("search", 12)}<span class="ph">Filter by type or key</span></span>`)}${stateTree(editing, account ? REAL_USERS : undefined)}`;
 
 const EVENT_FORMS = ["Message", "Sticker", "RTC member", "Image / audio", "Raw JSON"];
 
-const eventList = () => {
-  const rows = [
-    ["m.room.message", "@bob:dev.local", "“Can you hear me?”", "12:04:33"],
-    ["org.matrix.msc4143.rtc.member", "@alice:dev.local", "joined · device ALICEDEV", "12:04:31"],
-    ["m.sticker", "@carol:dev.local", "party parrot", "12:03:02"],
-    ["m.room.message", "@alice:dev.local", "“Starting the call now”", "12:02:47"],
-    ["m.room.member", "@carol:dev.local", "joined", "12:01:10"],
-  ];
+const EVENTS_MOCKED = [
+  ["m.room.message", "@bob:dev.local", "“Can you hear me?”", "12:04:33"],
+  ["org.matrix.msc4143.rtc.member", "@alice:dev.local", "joined · device ALICEDEV", "12:04:31"],
+  ["m.sticker", "@carol:dev.local", "party parrot", "12:03:02"],
+  ["m.room.message", "@alice:dev.local", "“Starting the call now”", "12:02:47"],
+  ["m.room.member", "@carol:dev.local", "joined", "12:01:10"],
+];
+const EVENTS_REAL = [
+  ["com.example.board.stroke", ACCOUNTS.ada.id, "{ “color”: “#e5484d”, “points”: 14 }", "12:06:12"],
+  ["m.room.message", "@bob:example.org", "“Can you see the board?”", "12:04:33"],
+  ["m.reaction", "@carol:example.org", "👍", "12:04:02"],
+  ["im.vector.modular.widgets", "@bob:example.org", "Whiteboard · https://board.example.org/…", "12:03:40"],
+  ["m.room.member", "@carol:example.org", "joined", "12:01:10"],
+];
+
+const eventList = (rows = EVENTS_MOCKED) => {
   return `<div class="ev-list">${rows.map(([t, s, p, time]) => `<div class="ev"><span class="mono ev-t">${t}</span><span class="ev-time">${time}</span><span class="ev-p">${p}</span><span class="ev-s">${s}</span></div>`).join("")}</div>`;
 };
 
-/** form: "Message" | "Raw JSON"; delayed: show the delayed-event state */
-const timelineSection = ({ form = "Message", delayed = false } = {}) => {
+/**
+ * form: "Message" | "Raw JSON"; delayed: show the delayed-event state. account: a real room: the
+ * sender is the account (read-only), "Scheduled" lists what was scheduled here, the list ends with
+ * "Load older events".
+ */
+const timelineSection = ({ form = "Message", delayed = false, account = false } = {}) => {
+  if (account) return accountTimelineSection();
   const formBody =
     form === "Raw JSON"
       ? `<pre class="code edit tall">${json({ type: "m.room.message", sender: "@bob:dev.local", content: { msgtype: "m.text", body: "Can you hear me?" } })}<span class="caret"></span></pre>`
@@ -287,6 +309,15 @@ const timelineSection = ({ form = "Message", delayed = false } = {}) => {
       </div>`
     : "";
   return `${sub("Send event")}${formChips(EVENT_FORMS, form, "Event form")}<div class="form">${formBody}${delayRow(delayed)}</div>${scheduled}${sub("Events", "<em class='count'>5 of 128</em>")}${eventList()}`;
+};
+
+/** The Timeline section of a real room: the delayed event the user just scheduled from here, the events the session holds. */
+const accountTimelineSection = () => {
+  const formBody = `${field("Sender", ACCOUNTS.ada.id, { mono: true, readonly: true })}${field("Body", "Does the widget see this?")}`;
+  const scheduled = `${sub("Scheduled", "<em class='count'>1</em>")}<p class="hint">Only the delayed events you scheduled here: the homeserver does not list the others.</p><div class="ev-list">
+      <div class="ev sched"><span class="mono ev-t">org.matrix.msc3401.call.member</span><span class="ev-time">${icon("clock", 11)} in 27.4 s</span><span class="ev-p">state · _${ACCOUNTS.ada.id}_${ACCOUNTS.ada.device}</span><span class="ev-acts">${btn("Send now", { sm: true })}${btn("Restart", { sm: true })}${btn("Cancel", { sm: true })}</span></div>
+    </div>`;
+  return `${sub("Send event")}${formChips(EVENT_FORMS, "Message", "Event form")}<div class="form">${formBody}${delayRow(false)}</div>${scheduled}${sub("Events", "<em class='count'>42</em>")}${eventList(EVENTS_REAL)}<div class="ev-more">${btn("Load older events", { sm: true })}</div>`;
 };
 
 const behaviorSection = () =>
@@ -374,7 +405,7 @@ export function devBackendView({ state = "state", tool = null, toolHeight } = {}
   const tail = toolBoxes(tool, toolHeight) + leave;
   if (state === "none") {
     const head = `<div class="room-pick none"><span class="av sq ghost" style="--s:28px">${icon("hash", 14)}</span><div class="side-title"><b>No mocked room</b><small>DevBackend</small></div>${icon("chevDown", 14, "end")}</div>`;
-    const body = `<div class="empty">${icon("cone", 28)}<b>No mocked rooms yet</b><p>Create an empty room, or copy a real one from its room overview (Dev tools › Copy to DevBackend).</p>${btn("Create a room", { kind: "primary", ico: "plus" })}</div>`;
+    const body = `<div class="empty">${icon("cone", 28)}<b>No mocked rooms yet</b><p>Create an empty room, or copy a real one from its room overview (DevBackend › Copy to DevBackend).</p>${btn("Create a room", { kind: "primary", ico: "plus" })}</div>`;
     return sideBox(head, body, "devb") + tail;
   }
   const head = `<button class="room-pick ${state === "dropdown" ? "open" : ""}" aria-haspopup="listbox" aria-expanded="${state === "dropdown"}">${roomAv("lab", 28)}<div class="side-title"><b>Widget lab</b><small class="mono">!lab:dev.local</small></div>${icon("chevDown", 14, "end")}</button>${state === "dropdown" ? roomMenu() : ""}`;
@@ -382,6 +413,45 @@ export function devBackendView({ state = "state", tool = null, toolHeight } = {}
   const body =
     acc("State", Object.hasOwn(STATE_PAGES, s), stateSection(STATE_PAGES[s]), "9 types") +
     acc("Timeline", s.startsWith("timeline"), timelineSection({ form: s === "timeline-raw" ? "Raw JSON" : "Message", delayed: s === "timeline-delayed" }), "128 events");
+  return sideBox(head, body, "devb") + tail;
+}
+
+// --- Dev tools of a Matrix account (the DevBackendView above while the DevBackend is active) ------
+
+/** The rooms open in the room panels (Design crit and Platform team, as in `roomtools/app`), left to right. */
+const openRoomsMenu = () =>
+  `<div class="dropdown" role="listbox" aria-label="Open rooms">
+     <div class="dd-row on" role="option" aria-selected="true">${roomAv("design", 22)}<span><b>${ROOMS.design.name}</b><small class="mono">${ROOMS.design.id}</small></span>${icon("check", 14, "end")}</div>
+     <div class="dd-row" role="option">${roomAv("platform", 22)}<span><b>${ROOMS.platform.name}</b><small class="mono">${ROOMS.platform.id}</small></span></div>
+   </div>`;
+
+/** Above the sections of a real room. */
+const sentAs = () => `<p class="rt-hint">${icon("info", 13)}<span>Sent to the room as <b class="mono">${ACCOUNTS.ada.id}</b>. Everyone in it sees it.</span></p>`;
+
+/** The bottom of the Dev tools while the DevBackend is enabled and not active (where "Leave DevBackend" is while it is active). */
+const switchToDevBackend = () =>
+  `<button class="leave-link" title="Mocked rooms in memory, without a homeserver. Your room panels close and come back when you leave the DevBackend.">Switch to the DevBackend${icon("cone", 14)}</button>`;
+
+/**
+ * The Dev tools of a Matrix account. state: "none" (no room open) | "dropdown" | "state" |
+ * "timeline" | "loading" (the state is being read, the timeline failed) | "closed" (both sections
+ * closed). devBackend: the DevBackend is enabled, so "Switch to the DevBackend" is at the bottom.
+ */
+export function roomToolsView({ state = "state", devBackend = false } = {}) {
+  const tail = devBackend ? switchToDevBackend() : "";
+  if (state === "none") {
+    const head = `<div class="room-pick none"><span class="av sq ghost" style="--s:28px">${icon("hash", 14)}</span><div class="side-title"><b>No room open</b><small>Dev tools</small></div>${icon("chevDown", 14, "end")}</div>`;
+    const body = `<div class="empty">${icon("grid", 28)}<b>No room open</b><p>Open a room in a room panel to explore its state and send events to it.</p>${btn("New room panel", { kind: "primary", ico: "plus" })}</div>`;
+    return sideBox(head, body, "devb") + tail;
+  }
+  const open = state === "dropdown";
+  const head = `<button class="room-pick ${open ? "open" : ""}" aria-haspopup="listbox" aria-expanded="${open}">${roomAv("design", 28)}<div class="side-title"><b>${ROOMS.design.name}</b><small class="mono">${ROOMS.design.id}</small></div>${icon("chevDown", 14, "end")}</button>${open ? openRoomsMenu() : ""}`;
+  const body =
+    state === "loading"
+      ? sentAs() +
+        acc("State", true, `<div class="empty" role="status"><span class="spinner"></span><b>Reading the room state…</b></div>`) +
+        acc("Timeline", true, `<div class="empty" role="alert">${icon("alert", 28, "danger")}<b>The timeline could not be loaded</b><p>The homeserver did not answer (example.org, timeout after 30 s).</p>${btn("Try again", { kind: "primary", ico: "refresh" })}</div>`)
+      : sentAs() + acc("State", state === "state", stateSection({ account: true }), "11 types") + acc("Timeline", state === "timeline", timelineSection({ account: true }), "42 events");
   return sideBox(head, body, "devb") + tail;
 }
 
@@ -995,10 +1065,16 @@ export function app(o) {
   </div>`;
 }
 
-export const confirmModal = () =>
-  `<div class="modal sm" role="alertdialog" aria-modal="true" aria-labelledby="confirm-t"><header>${icon("cone", 22, "dev")}<div><h2 id="confirm-t">Switch to the DevBackend?</h2></div></header>
-    <p>Your <b>2 room panels</b> are closed and their widgets stop. They are opened again when you switch back to <b>Ada Okafor</b>.</p>
-    <footer><span class="sp"></span>${btn("Cancel")}${btn("Switch to the DevBackend", { kind: "primary" })}</footer></div>`;
+/** The confirmation of an action that loses state. Default: activating the DevBackend; danger: an alert icon and a danger button (`ModalViewModel.danger`). */
+export const confirmModal = ({
+  title = "Switch to the DevBackend?",
+  body = "Your <b>2 room panels</b> are closed and their widgets stop. They are opened again when you switch back to <b>Ada Okafor</b>.",
+  confirm = "Switch to the DevBackend",
+  danger = false,
+} = {}) =>
+  `<div class="modal sm" role="alertdialog" aria-modal="true" aria-labelledby="confirm-t"><header>${danger ? icon("alert", 22, "danger") : icon("cone", 22, "dev")}<div><h2 id="confirm-t">${title}</h2></div></header>
+    <p>${body}</p>
+    <footer><span class="sp"></span>${btn("Cancel")}${btn(confirm, { kind: danger ? "danger" : "primary" })}</footer></div>`;
 
 export const infoModal = () =>
   `<div class="modal" role="dialog" aria-modal="true" aria-labelledby="about-t"><header>${logo(32)}<div><h2 id="about-t">Widget Host</h2><small>version 0.1.0 · matrix-js-sdk</small></div><span class="sp"></span>${ibtn("x", "Close")}</header>

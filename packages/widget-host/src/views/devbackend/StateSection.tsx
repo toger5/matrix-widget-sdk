@@ -1,11 +1,12 @@
-/** The "State" section of a mocked room (mockup functions `stateSection`, `stateTree`). leaves devbackend/state, devbackend/state-element-call, devbackend/state-raw, devbackend/state-edit */
+/** The "State" section of the room box (mockup functions `stateSection`, `stateTree`). leaves devbackend/state, devbackend/state-element-call, devbackend/state-raw, devbackend/state-edit, roomtools/state */
 import { useMemo, useState, type FormEvent } from "react";
 
-import type { DevBackendViewModel, MockedStateEvent, RoomId } from "../../appViewModel";
+import type { MockedStateEvent, RoomId, RoomToolsViewModel } from "../../appViewModel";
 import { useDispatch } from "../env";
 import { Button, Field, Icon, IconButton, Json } from "../ui/atoms";
 import { FormError, JsonArea, parseJsonObject, pretty } from "../ui/forms";
 import { Sub } from "./parts";
+import type { RoomBoxMode } from "./RoomBox";
 import { SendStateForm } from "./SendStateForm";
 
 type Shortcut = "name" | "topic" | "member";
@@ -18,16 +19,19 @@ const SHORTCUTS: Record<Shortcut, { button: string; label: string; save: string 
 const entryId = (e: { type: string; stateKey: string }) => `${e.type}\u0000${e.stateKey}`;
 
 interface Props {
+  /** "account": a real room, where "Add member" would need an invite: not offered. */
+  mode: RoomBoxMode;
   roomId: RoomId;
   state: MockedStateEvent[];
-  stateForm: DevBackendViewModel["stateForm"];
-  /** The DevBackend user. */
+  stateForm: RoomToolsViewModel["stateForm"];
+  /** The DevBackend user, or the account. */
   userId?: string;
 }
 
-export function StateSection({ roomId, state, stateForm, userId }: Props) {
+export function StateSection({ mode, roomId, state, stateForm, userId }: Props) {
   const dispatch = useDispatch();
-  const send = (event: MockedStateEvent) => dispatch({ type: "mock/sendState", roomId, event });
+  const send = (event: MockedStateEvent) => dispatch({ type: "roomTools/sendState", roomId, event });
+  const shortcuts = (Object.keys(SHORTCUTS) as Shortcut[]).filter((kind) => kind !== "member" || mode === "devBackend");
   const contentOf = (type: string, stateKey = "") => state.find((e) => e.type === type && e.stateKey === stateKey)?.content;
 
   // --- shortcuts
@@ -81,7 +85,7 @@ export function StateSection({ roomId, state, stateForm, userId }: Props) {
     <>
       <Sub title="Shortcuts" />
       <div className="chips">
-        {(Object.keys(SHORTCUTS) as Shortcut[]).map((kind) => (
+        {shortcuts.map((kind) => (
           <Button key={kind} sm icon={kind === "member" ? "userPlus" : "edit"} aria-expanded={shortcut?.kind === kind} onClick={() => openShortcut(kind)}>
             {SHORTCUTS[kind].button}
           </Button>

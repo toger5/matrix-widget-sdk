@@ -64,7 +64,7 @@ grep -rlE '(from |import\()"(matrix-js-sdk|matrix-sdk-uniffi-js)' src | grep -vE
   `capabilitiesRequested`, `openIdRequested`, `alwaysOnScreen`, `activity`); the controller turns
   them into view model changes. These are controller events, not intents.
 - High-frequency data is not in the view model: `WidgetRuntime.devTools` (a `Store` per widget),
-  `DevBackend.subscribe` / `snapshot()`, `LiveSession.roomDetails`. Views read it with the hooks of
+  `DevBackend.subscribe` / `snapshot()`, `LiveSession.roomDetails` / `timeline` / `roomState`. Views read it with the hooks of
   `useViewEnv()`, implemented in `viewEnv()` of `src/app/AppRoot.tsx` and faked in
   `src/views/storyEnv.tsx`. A new hook needs both, plus its default in `src/views/env.tsx`.
 - State only one view needs (a draft, a hover, an open menu) stays in `useState`.
@@ -126,7 +126,14 @@ their tests) is the `matrix-session` skill (`.claude/skills/matrix-session/SKILL
 - The DevBackend is an account (`DEV_ACCOUNT_ID`); activating it switches `activeAccountId`. Its
   content lives in memory only, so its workspace (and its local widgets) are not persisted. It is
   listed while `settings.devBackend` is on (`syncDevAccount`), which is independent of
-  `settings.devTools` (the widget dev tools and "Add widget", for any account).
+  `settings.devTools` (the Dev tools, the widget dev tools and "Add widget", for any account).
+- The Dev tools (`sidePanel.view` "roomTools", `RoomToolsViewModel`, `src/views/devbackend/`) are
+  one panel in two modes: while the DevBackend is active the DevBackendView (`roomTools/*` intents
+  go to the DevBackend, any sender), else the rooms of the account's room panels (`roomTools/*` go
+  to the room's backend as the account, `withRoomBackend` in the controller; what asks first is
+  `roomChangeConfirmation` in `src/app/roomTools.ts`). Both read a room with `useRoomTimeline` and
+  `useRoomState` (`LiveSession.roomState`), so the e2e tests of the DevBackendView cover the
+  account's read path too.
 - One `InMemoryBackend` per mocked room. Account-scoped data (media, to-device, "fail sends", TURN, RTC
   transports) is mirrored across them in `devBackend.ts`. The backend has no change notification:
   the controller calls `refresh()` after every widget message, so keep `refresh()` cheap;
@@ -165,7 +172,8 @@ their tests) is the `matrix-session` skill (`.claude/skills/matrix-session/SKILL
   `widget-api-change`) → its data in `MockedRoomData` (bottom of `appViewModel.ts`), `snapshot()`,
   `EMPTY_MOCKED_ROOM_DATA` (`src/views/env.tsx`) and `MOCKED_ROOM_DATA` (fixtures) → a `mock/*` or
   `media/*` intent and its case → the section in `src/views/devbackend/` (a new collapsible section
-  also needs `DevBackendSection` and maybe the `openSections` default in `defaultDevBackendVm`) →
+  also needs `RoomToolsSection` and maybe the `openSections` default in `defaultRoomToolsVm`,
+  `src/app/roomTools.ts`) →
   seed support (validation in `seed.ts`, `DevBackend.toSeed`) if tests should set it up →
   `test/devBackend.test.ts` → `e2e/devbackend*.spec.ts`.
 - **A dev tools panel**: `DevToolPanel` → its data in `WidgetDevToolsData`, recorded by
