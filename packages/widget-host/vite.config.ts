@@ -4,7 +4,8 @@ import { join } from "node:path";
 import { brotliCompressSync, constants, gzipSync } from "node:zlib";
 
 import react from "@vitejs/plugin-react";
-import { defineConfig, type Connect, type Plugin } from "vite";
+import type { Connect, Plugin } from "vite";
+import { defineConfig } from "vitest/config";
 
 /**
  * Serve .wasm files compressed from the dev and the preview server, neither of which compresses anything: with
@@ -70,6 +71,8 @@ export default defineConfig({
   plugins: [react(), compressWasm()],
   server: { port: 5173, strictPort: true },
   preview: { port: 5173, strictPort: true },
+  // Unit tests only; `e2e/` holds the Playwright tests (`npm run e2e`).
+  test: { include: ["test/**/*.test.ts"] },
   // Both bindings packages load their .wasm by URL at runtime; keep them out of dependency pre-bundling.
   optimizeDeps: { exclude: ["@matrix-widget-tools/widget-host-bindings", "matrix-sdk-uniffi-js"] },
   build: {

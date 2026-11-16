@@ -1,0 +1,61 @@
+/**
+ * What a view gets besides its props. The MVVM split of the host:
+ *
+ * - **Model**: sessions, backends, drivers, iframes (`src/app/runtime`, `src/matrix_session`).
+ * - **View model**: `AppViewModel` (`src/appViewModel.ts`), held by the `AppController`.
+ * - **View**: the components in `src/views`. A view gets its slice of the view model as props,
+ *   and everything else through this context: `dispatch` to send an `AppIntent`, and hooks for
+ *   the data that is deliberately not in the view model (it changes too often).
+ *
+ * Views never import `src/app`, a session or the bindings. That keeps them renderable in
+ * Storybook: `StoryEnv` (`src/views/storyEnv.tsx`) provides this context from fixtures.
+ */
+import { createContext, useContext, type ReactNode } from "react";
+
+import type { AccountId, AppIntent, Loadable, MockedRoomData, RoomId, WidgetDevToolsData, WidgetInstanceId } from "../appViewModel";
+import type { RoomDetails } from "../session";
+
+export interface ViewEnv {
+  /** Send an intent to the controller. Stable for the lifetime of the app. */
+  dispatch: (intent: AppIntent) => void;
+  /** The window is narrower than ~900px: the SidePanel overlays, one room panel is visible. */
+  narrow: boolean;
+  /** Hook: the dev tools data of one widget (messages, stats, capabilities, console). */
+  useDevToolsData: (widgetId: WidgetInstanceId) => WidgetDevToolsData;
+  /** Hook: the content of the DevBackend, with `state` / `timeline` / `scheduled` of the selected mocked room. */
+  useMockedRoomData: () => MockedRoomData;
+  /** Hook: what the RoomOverviewTab shows beyond the `RoomSummary` (topic, members, encryption). */
+  useRoomDetails: (roomId: RoomId) => Loadable<RoomDetails>;
+  /** Resolve an `mxc://` avatar to a URL an `<img>` can show (`LiveSession.avatar`). */
+  avatar: (mxcUrl: string) => Promise<string | undefined>;
+  /**
+   * The device verification flow (emoji or recovery key) of an account whose `verified` is `false`.
+   * It is a self-contained view on the account's session, so it is not driven by the view model.
+   */
+  renderVerification?: (accountId: AccountId) => ReactNode;
+}
+
+export const EMPTY_DEV_TOOLS_DATA: WidgetDevToolsData = {
+  messages: [],
+  stats: { actionsFromWidget: 0, actionsToWidget: 0, eventsSharedWithWidget: 0, eventsSentFromWidget: 0, characters: [] },
+  capabilities: { approved: [], autoApproved: [], denied: [] },
+  console: [],
+};
+
+export const EMPTY_MOCKED_ROOM_DATA: MockedRoomData = { rooms: [], state: [], timeline: [], scheduled: [], toDevice: [], media: [] };
+
+const LOADING: Loadable<RoomDetails> = { status: "loading" };
+
+export const DEFAULT_VIEW_ENV: ViewEnv = {
+  dispatch: (intent) => console.info("intent", intent),
+  narrow: false,
+  useDevToolsData: () => EMPTY_DEV_TOOLS_DATA,
+  useMockedRoomData: () => EMPTY_MOCKED_ROOM_DATA,
+  useRoomDetails: () => LOADING,
+  avatar: async () => undefined,
+};
+
+export const ViewEnvContext = createContext<ViewEnv>(DEFAULT_VIEW_ENV);
+
+export const useViewEnv = () => useContext(ViewEnvContext);
+export const useDispatch = () => useContext(ViewEnvContext).dispatch;

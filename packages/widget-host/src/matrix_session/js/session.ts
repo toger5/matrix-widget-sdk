@@ -14,10 +14,24 @@ import {
 } from "matrix-js-sdk";
 import { decodeRecoveryKey, VerificationPhase, VerificationRequestEvent, VerifierEvent, type ShowSasCallbacks, type VerificationRequest } from "matrix-js-sdk/lib/crypto-api";
 
+import { AccountStore } from "./accountStore";
 import { JsSdkBackend } from "./backend/jsSdkBackend";
+import { FetchGate } from "./fetchGate";
+import { accountInfo, exportRoom, roomDetails } from "./roomData";
 import { AVATAR_SIZE, AvatarCache } from "../../lib/avatarCache";
 import { describesWidget, WIDGET_EVENT_TYPES, type StateEvent } from "../../widgetStateEvent";
-import { StoredLoginInvalidError, type EmojiVerification, type LiveSession, type LoginOptions, type PendingLogin, type RoomSummary, type SessionProvider } from "../../session";
+import {
+  StoredLoginInvalidError,
+  type AccountInfo,
+  type EmojiVerification,
+  type LiveSession,
+  type LoginOptions,
+  type PendingLogin,
+  type RoomDetails,
+  type RoomExport,
+  type RoomSummary,
+  type SessionProvider,
+} from "../../session";
 
 /**
  * The matrix-js-sdk implementation of `../../session`. With `./backend` it is the only code that
@@ -25,9 +39,17 @@ import { StoredLoginInvalidError, type EmojiVerification, type LiveSession, type
  *
  * Sync is classic `/sync` v2 with the SDK's in-memory store, so every start does an initial sync;
  * the crypto store is in IndexedDB and survives reloads.
+ *
+ * Several logins are stored side by side (`./accountStore`): each has its own `localStorage`
+ * entry and its own crypto store (`cryptoDatabasePrefix`).
  */
 
-const STORAGE_KEY = "widget_host_session_v1";
+/** One `localStorage` entry per login: this prefix followed by the account id. */
+export const STORAGE_PREFIX = "widget_host_session_v2:";
+/** Where the one login was stored before multi-account. */
+export const LEGACY_STORAGE_KEY = "widget_host_session_v1";
+/** The account id of the login taken over from the old layout: the one in the SDK's default crypto store. */
+export const LEGACY_ACCOUNT_ID = "legacy";
 const CLIENT_NAME = "Widget host";
 
 /** What is needed to restore a login after a reload. */
@@ -39,27 +61,30 @@ interface Stored {
   refreshToken?: string;
   /** Set for an OAuth login: the SDK needs it to refresh and revoke the tokens. */
   oauthClientId?: string;
+  /**
+   * The name of this login's crypto store in IndexedDB. Not set for the login taken over from
+   * the old layout, which keeps using the SDK's default store (so it stays the same device).
+   */
+  cryptoDatabasePrefix?: string;
 }
 
-function loadStored(): Stored | undefined {
-  const raw = localStorage.getItem(STORAGE_KEY);
-  if (!raw) return undefined;
-  try {
-    return JSON.parse(raw) as Stored;
-  } catch {
-    return undefined;
-  }
+/** The login of the old single-key layout as an account of the new one, unchanged. */
+export function migrateLegacyLogin(legacy: unknown): { accountId: string; record: Stored } | undefined {
+  const stored = legacy as Partial<Stored> | null;
+  if (!stored || typeof stored.homeserverUrl !== "string" || typeof stored.userId !== "string" || typeof stored.accessToken !== "string") return undefined;
+  return { accountId: LEGACY_ACCOUNT_ID, record: stored as Stored };
 }
 
-const saveStored = (stored: Stored) => localStorage.setItem(STORAGE_KEY, JSON.stringify(stored));
+const store = new AccountStore<Stored>({ prefix: STORAGE_PREFIX, legacyKey: LEGACY_STORAGE_KEY, migrate: migrateLegacyLogin });
 
-/**
- * Delete the SDK's stores. There is one crypto store per origin and it belongs to one device, so
- * it has to go before another device logs in: the SDK refuses to open the store of another device.
- */
-const clearSdkStores = (baseUrl: string) =>
+// TODO-FINDING account-id-choice - what identifies a stored login? Options: a random id per login (done: a UUID, which also names the crypto store; "legacy" for the migrated login), or `userId` + `deviceId` (readable and stable, but not known before the login completes and it leaks into storage names). The rust provider uses its store id (a UUID too).
+const newAccountId = () => crypto.randomUUID();
+const cryptoPrefixFor = (accountId: string) => `widget-host-js-${accountId}`;
+
+/** Delete the SDK's stores of one login: its crypto store (the default one when `cryptoDatabasePrefix` is not set). */
+const clearSdkStores = (baseUrl: string, cryptoDatabasePrefix: string | undefined) =>
   createClient({ baseUrl })
-    .clearStores()
+    .clearStores({ cryptoDatabasePrefix })
     .catch((e: unknown) => console.warn("clearing the stores failed", e));
 
 const redirectUri = () => `${location.origin}/oidc-callback.html`;
@@ -162,35 +187,31 @@ class JsSdkPendingLogin implements PendingLogin {
     this.oauth = undefined;
   }
 
-  private async finish(stored: Stored): Promise<JsSdkSession> {
-    // A login is always a new device; whatever an earlier one left behind cannot be used by it.
-    await clearSdkStores(stored.homeserverUrl);
-    saveStored(stored);
-    return (await activate(JsSdkSession.start(stored)))!;
+  private async finish(login: Omit<Stored, "cryptoDatabasePrefix">): Promise<JsSdkSession> {
+    // A login is always a new device, and gets a crypto store of its own, next to the stored logins'.
+    const accountId = newAccountId();
+    const stored: Stored = { ...login, cryptoDatabasePrefix: cryptoPrefixFor(accountId) };
+    store.save(accountId, stored);
+    return activate(accountId, JsSdkSession.start(accountId, stored));
   }
 }
 
 /**
- * The one client of this page, or its start in progress. There must never be two: they would
- * share the crypto store, and each would upload its own one-time keys under the same ids (the
- * homeserver then answers "One time key … already exists" and encryption is broken for good).
- * `restore()` is called twice in a row by React's strict mode, for one.
+ * The client of each account of this page, or its start in progress. There must never be two for
+ * one account: they would share the crypto store, and each would upload its own one-time keys
+ * under the same ids (the homeserver then answers "One time key … already exists" and encryption
+ * is broken for good). `restore()` is called twice in a row by React's strict mode, for one.
  */
-let active: Promise<JsSdkSession | undefined> | undefined;
+// TODO-FINDING concurrent-sessions - the provider lets clients of several accounts run at once (each has its own stores); whether the UI keeps the inactive accounts syncing or restores only the active one is the UI's choice. Not verified against a homeserver with two clients on one page.
+const active = new Map<string, Promise<JsSdkSession>>();
 
-/** Make `start` the page's client, unless it fails or finds no login. */
-function activate(start: Promise<JsSdkSession | undefined>): Promise<JsSdkSession | undefined> {
-  const tracked: Promise<JsSdkSession | undefined> = start.then(
-    (session) => {
-      if (!session && active === tracked) active = undefined;
-      return session;
-    },
-    (e: unknown) => {
-      if (active === tracked) active = undefined;
-      throw e;
-    },
-  );
-  active = tracked;
+/** Make `start` the account's client, unless it fails. */
+function activate(accountId: string, start: Promise<JsSdkSession>): Promise<JsSdkSession> {
+  const tracked: Promise<JsSdkSession> = start.catch((e: unknown) => {
+    if (active.get(accountId) === tracked) active.delete(accountId);
+    throw e;
+  });
+  active.set(accountId, tracked);
   return tracked;
 }
 
@@ -228,22 +249,31 @@ class JsSdkSession implements LiveSession {
     const url = this.client.mxcUrlToHttp(mxcUrl, AVATAR_SIZE, AVATAR_SIZE, "crop", false, true, true);
     if (!url) throw new Error("not an mxc:// URI");
     // Authenticated media: the access token goes in a header, so an `<img src>` cannot load it.
-    const response = await fetch(url, { headers: { Authorization: `Bearer ${this.client.getAccessToken() ?? ""}` } });
+    const response = await this.gate.fetch(url, { headers: { Authorization: `Bearer ${this.client.getAccessToken() ?? ""}` } });
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     return response.blob();
   });
 
-  private constructor(private readonly client: MatrixClient) {}
+  private constructor(
+    readonly accountId: string,
+    private readonly client: MatrixClient,
+    /** Every request of the client goes through it: closed while the session is suspended. */
+    private readonly gate: FetchGate,
+    private readonly cryptoDatabasePrefix: string | undefined,
+  ) {}
 
-  /** Restore the stored login, if there is one. */
-  static async restore(): Promise<JsSdkSession | undefined> {
-    const stored = loadStored();
-    return stored ? JsSdkSession.start(stored) : undefined;
+  /** Restore a stored login. */
+  static async restore(accountId: string): Promise<JsSdkSession> {
+    const stored = store.get(accountId);
+    if (!stored) throw new Error(`No login is stored for the account ${accountId}.`);
+    return JsSdkSession.start(accountId, stored);
   }
 
-  static async start(stored: Stored): Promise<JsSdkSession> {
+  static async start(accountId: string, stored: Stored): Promise<JsSdkSession> {
     let session: JsSdkSession | undefined;
+    const gate = new FetchGate();
     const client = createClient({
+      fetchFn: gate.fetch,
       baseUrl: stored.homeserverUrl,
       userId: stored.userId,
       deviceId: stored.deviceId,
@@ -251,10 +281,7 @@ class JsSdkSession implements LiveSession {
       refreshToken: stored.refreshToken,
       oauthClientId: stored.oauthClientId,
       // Without this a reload would restore tokens the server has already replaced.
-      onTokenRefresh: (tokens) => {
-        const current = loadStored();
-        if (current?.userId === stored.userId) saveStored({ ...current, accessToken: tokens.accessToken, refreshToken: tokens.refreshToken });
-      },
+      onTokenRefresh: (tokens) => store.update(accountId, (current) => ({ ...current, accessToken: tokens.accessToken, refreshToken: tokens.refreshToken })),
       cryptoCallbacks: {
         getSecretStorageKey: async ({ keys }) => {
           const keyId = Object.keys(keys)[0];
@@ -274,15 +301,42 @@ class JsSdkSession implements LiveSession {
     }
 
     try {
-      await client.initRustCrypto();
+      await client.initRustCrypto({ cryptoDatabasePrefix: stored.cryptoDatabasePrefix });
       await client.startClient({ lazyLoadMembers: true });
     } catch (e) {
       // Nothing may keep running (or keep the crypto store open) when the start is tried again.
       client.stopClient();
       throw e;
     }
-    session = new JsSdkSession(client);
+    session = new JsSdkSession(accountId, client, gate, stored.cryptoDatabasePrefix);
     return session;
+  }
+
+  account(): Promise<AccountInfo> {
+    return accountInfo(this.client);
+  }
+
+  roomDetails(roomId: string): Promise<RoomDetails> {
+    return roomDetails(this.client, roomId);
+  }
+
+  exportRoom(roomId: string, lastEvents: number): Promise<RoomExport> {
+    return exportRoom(this.client, roomId, lastEvents);
+  }
+
+  /**
+   * No request reaches the homeserver until `resume()` (`./fetchGate`). The client, its crypto
+   * module and the room backends on it stay as they are; what they try to send meanwhile fails.
+   */
+  async suspend(): Promise<void> {
+    this.gate.suspend();
+  }
+
+  async resume(): Promise<void> {
+    if (!this.gate.suspended) return;
+    this.gate.resume();
+    // The sync loop is waiting to probe the connection again: do it now.
+    this.client.retryImmediately();
   }
 
   get userId(): string {
@@ -298,6 +352,7 @@ class JsSdkSession implements LiveSession {
         id: room.roomId,
         name: room.name || room.roomId,
         avatarUrl: room.getMxcAvatarUrl() ?? undefined,
+        memberCount: room.getJoinedMemberCount(),
         // With `/sync` v2 the state of every room is local.
         widgetEvents: widgetStateEvents(room),
       }))
@@ -430,29 +485,35 @@ class JsSdkSession implements LiveSession {
     };
   }
 
-  /** Log out (for an OAuth login this revokes the tokens) and delete the SDK's stores. */
+  /** Log out (for an OAuth login this revokes the tokens) and delete this login's entry and its SDK stores. */
   async logout(): Promise<void> {
-    active = undefined;
+    active.delete(this.accountId);
     this.avatars.clear();
+    // The logout request has to get through, suspended or not.
+    this.gate.resume();
     await this.client.logout(true).catch((e: unknown) => console.warn("logout request failed", e));
     this.client.stopClient();
-    localStorage.removeItem(STORAGE_KEY);
-    await this.client.clearStores().catch((e: unknown) => console.warn("clearing the stores failed", e));
+    store.remove(this.accountId);
+    await this.client.clearStores({ cryptoDatabasePrefix: this.cryptoDatabasePrefix }).catch((e: unknown) => console.warn("clearing the stores failed", e));
   }
 }
 
 export const jsSdkSessions: SessionProvider = {
   startLogin: (server) => JsSdkPendingLogin.start(server),
-  restore: async () => active ?? activate(JsSdkSession.restore()),
-  async clearStored() {
-    const stored = loadStored();
+  stored: async () => store.list().map(({ accountId, record }) => ({ accountId, userId: record.userId, homeserver: record.homeserverUrl })),
+  restore: async (accountId) => active.get(accountId) ?? activate(accountId, JsSdkSession.restore(accountId)),
+  async clearStored(accountId) {
+    // A running client of this login ends it itself: a second client must not open its crypto store.
+    const running = await active.get(accountId)?.catch(() => undefined);
+    if (running) return running.logout();
+    const stored = store.get(accountId);
     if (!stored) return;
     const { homeserverUrl: baseUrl, userId, deviceId, accessToken, refreshToken, oauthClientId } = stored;
     // Fails when the homeserver has already ended the login, which is as good.
     await createClient({ baseUrl, userId, deviceId, accessToken, refreshToken, oauthClientId })
       .logout(true)
       .catch((e: unknown) => console.warn("logout request failed", e));
-    localStorage.removeItem(STORAGE_KEY);
-    await clearSdkStores(baseUrl);
+    store.remove(accountId);
+    await clearSdkStores(baseUrl, stored.cryptoDatabasePrefix);
   },
 };

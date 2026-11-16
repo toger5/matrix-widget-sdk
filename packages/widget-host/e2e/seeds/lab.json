@@ -1,0 +1,40 @@
+{
+  "userId": "@alice:dev.local",
+  "demoMedia": true,
+  "rooms": [
+    {
+      "id": "!lab:dev.local",
+      "name": "Widget lab",
+      "topic": "Both test widgets, a few people and something to read",
+      "members": [
+        { "userId": "@alice:dev.local", "displayName": "Alice" },
+        { "userId": "@bob:dev.local", "displayName": "Bob" },
+        { "userId": "@carol:dev.local", "displayName": "Carol" }
+      ],
+      "widgets": [
+        {
+          "type": "m.widget",
+          "state_key": "widget-1",
+          "content": { "name": "New test widget", "url": "http://localhost:5175/new/", "uses_widget_api": true }
+        },
+        {
+          "type": "im.vector.modular.widgets",
+          "state_key": "widget-1",
+          "content": {
+            "type": "m.custom",
+            "name": "Legacy test widget",
+            "url": "http://localhost:5175/legacy/?title=$title&widgetId=$matrix_widget_id&userId=$matrix_user_id&baseUrl=$org.matrix.msc4039.matrix_base_url&theme=$org.matrix.msc2873.client_theme",
+            "waitForIframeLoad": true,
+            "creatorUserId": "@alice:example.org",
+            "data": { "title": "Notes & more" }
+          }
+        }
+      ],
+      "timeline": [
+        { "type": "m.room.message", "sender": "@bob:dev.local", "content": { "msgtype": "m.text", "body": "Is the new widget up?" } },
+        { "type": "m.room.message", "content": { "msgtype": "m.text", "body": "Yes, both of them. Try the legacy one too." } },
+        { "type": "m.room.message", "sender": "@carol:dev.local", "content": { "msgtype": "m.text", "body": "The landscape picture is in the media repository." } }
+      ]
+    }
+  ]
+}

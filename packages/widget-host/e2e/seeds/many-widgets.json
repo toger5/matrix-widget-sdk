@@ -1,0 +1,94 @@
+{
+  "userId": "@alice:dev.local",
+  "rooms": [
+    {
+      "id": "!many:dev.local",
+      "name": "Design crit",
+      "topic": "A room with more widgets than fit in the tab bar",
+      "members": [
+        {
+          "userId": "@alice:dev.local",
+          "displayName": "Alice"
+        },
+        {
+          "userId": "@bob:dev.local",
+          "displayName": "Bob"
+        }
+      ],
+      "widgets": [
+        {
+          "type": "m.widget",
+          "state_key": "w1",
+          "content": {
+            "name": "Element Call",
+            "url": "http://localhost:5175/new/?n=1",
+            "uses_widget_api": false
+          }
+        },
+        {
+          "type": "m.widget",
+          "state_key": "w2",
+          "content": {
+            "name": "Whiteboard",
+            "url": "http://localhost:5175/new/?n=2",
+            "uses_widget_api": false
+          }
+        },
+        {
+          "type": "m.widget",
+          "state_key": "w3",
+          "content": {
+            "name": "Quick poll",
+            "url": "http://localhost:5175/new/?n=3",
+            "uses_widget_api": false
+          }
+        },
+        {
+          "type": "m.widget",
+          "state_key": "w4",
+          "content": {
+            "name": "Shared notes",
+            "url": "http://localhost:5175/new/?n=4",
+            "uses_widget_api": false
+          }
+        },
+        {
+          "type": "m.widget",
+          "state_key": "w5",
+          "content": {
+            "name": "Standup timer",
+            "url": "http://localhost:5175/new/?n=5",
+            "uses_widget_api": false
+          }
+        },
+        {
+          "type": "m.widget",
+          "state_key": "w6",
+          "content": {
+            "name": "Retro board",
+            "url": "http://localhost:5175/new/?n=6",
+            "uses_widget_api": false
+          }
+        },
+        {
+          "type": "m.widget",
+          "state_key": "w7",
+          "content": {
+            "name": "Stream deck",
+            "url": "http://localhost:5175/new/?n=7",
+            "uses_widget_api": false
+          }
+        },
+        {
+          "type": "m.widget",
+          "state_key": "w8",
+          "content": {
+            "name": "Etherpad",
+            "url": "http://localhost:5175/new/?n=8",
+            "uses_widget_api": false
+          }
+        }
+      ]
+    }
+  ]
+}

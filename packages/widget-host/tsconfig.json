@@ -19,6 +19,9 @@
   "include": [
     "src",
     "widget_compatibility_wrapper",
-    "vite.config.ts"
+    "vite.config.ts",
+    ".storybook",
+    "e2e",
+    "playwright.config.ts"
   ]
 }

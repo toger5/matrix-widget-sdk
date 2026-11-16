@@ -1,0 +1,90 @@
+{
+  "userId": "@alice:dev.local",
+  "rooms": [
+    {
+      "id": "!lab:dev.local",
+      "name": "Widget lab",
+      "topic": "Six copies of the new test widget, for the PictureInPicturePanel",
+      "members": [
+        {
+          "userId": "@alice:dev.local",
+          "displayName": "Alice"
+        },
+        {
+          "userId": "@bob:dev.local",
+          "displayName": "Bob"
+        }
+      ],
+      "widgets": [
+        {
+          "type": "m.widget",
+          "state_key": "w1",
+          "content": {
+            "name": "Widget 1",
+            "url": "http://localhost:5175/new/?n=1",
+            "uses_widget_api": true
+          }
+        },
+        {
+          "type": "m.widget",
+          "state_key": "w2",
+          "content": {
+            "name": "Widget 2",
+            "url": "http://localhost:5175/new/?n=2",
+            "uses_widget_api": true
+          }
+        },
+        {
+          "type": "m.widget",
+          "state_key": "w3",
+          "content": {
+            "name": "Widget 3",
+            "url": "http://localhost:5175/new/?n=3",
+            "uses_widget_api": true
+          }
+        },
+        {
+          "type": "m.widget",
+          "state_key": "w4",
+          "content": {
+            "name": "Widget 4",
+            "url": "http://localhost:5175/new/?n=4",
+            "uses_widget_api": true
+          }
+        },
+        {
+          "type": "m.widget",
+          "state_key": "w5",
+          "content": {
+            "name": "Widget 5",
+            "url": "http://localhost:5175/new/?n=5",
+            "uses_widget_api": true
+          }
+        },
+        {
+          "type": "m.widget",
+          "state_key": "w6",
+          "content": {
+            "name": "Widget 6",
+            "url": "http://localhost:5175/new/?n=6",
+            "uses_widget_api": true
+          }
+        }
+      ],
+      "timeline": [
+        {
+          "type": "m.room.message",
+          "sender": "@bob:dev.local",
+          "content": {
+            "msgtype": "m.text",
+            "body": "Six widgets, all of them can stay on screen."
+          }
+        }
+      ]
+    }
+  ],
+  "sidePanel": null,
+  "behavior": {
+    "autoApproveCapabilities": true
+  }
+}

@@ -1,0 +1,97 @@
+import type { AccountViewModel, LeftBarViewModel, SidePanelViewModel } from "../../appViewModel";
+import { useDispatch } from "../env";
+import { Avatar, DevAvatar, Icon, Logo, type IconName } from "../ui/atoms";
+
+export interface LeftBarProps {
+  leftBar: LeftBarViewModel;
+  /** `settings.devTools`: shows the DevBackend button. */
+  devTools: boolean;
+  devBackendActive: boolean;
+  /** The open SidePanel view, to mark its button. */
+  sidePanelView?: SidePanelViewModel["view"];
+  /** The active account (its avatar opens the AccountView). */
+  account?: AccountViewModel;
+}
+
+interface LbButtonProps {
+  icon: IconName;
+  title: string;
+  /** `undefined`: not a toggle (no `aria-pressed`). */
+  pressed?: boolean;
+  className?: string;
+  /** A drawn tooltip replaces the native one. */
+  noTitle?: boolean;
+  onClick?: () => void;
+}
+
+function LbButton({ icon, title, pressed, className = "", noTitle, onClick }: LbButtonProps) {
+  return (
+    <button
+      type="button"
+      className={`lb-btn ${pressed ? "on" : ""} ${className}`}
+      title={noTitle ? undefined : title}
+      aria-label={title}
+      aria-pressed={pressed}
+      aria-disabled={className.includes("placeholder") ? true : undefined}
+      onClick={onClick}
+    >
+      <Icon name={icon} size={18} />
+    </button>
+  );
+}
+
+/** leaves leftbar/*. Renders nothing while collapsed (the AppShell shows the expand button and the toast). */
+export function LeftBar({ leftBar, devTools, devBackendActive, sidePanelView, account }: LeftBarProps) {
+  const dispatch = useDispatch();
+  if (leftBar.collapsed) return null;
+
+  // Decided after the mockups: while the DevBackend is active the button does not leave it, it
+  // opens and closes the DevBackendView. Leaving is the text button at the bottom of that view.
+  // TODO-FINDING leftbar-devbackend-tooltip-outdated - appDesign.md (LeftBar), designFeedback.md ("Decided": Leaving the DevBackend) and the leaves leftbar/devbackend(-hover) still say that pressing the button again leaves the DevBackend (tooltip "Leave DevBackend").
+  const devTitle = devBackendActive ? "DevBackend panel" : "Activate the DevBackend";
+
+  return (
+    <nav className="leftbar" aria-label="App" data-testid="leftbar">
+      <button type="button" className="lb-logo" title="About this app" aria-label="About this app" onClick={() => dispatch({ type: "modal/open", modal: { kind: "appInfo" } })}>
+        <Logo />
+      </button>
+      <LbButton icon="plus" title="New room panel (Alt+N) · with the same room: Alt+Shift+N" onClick={() => dispatch({ type: "panel/new" })} />
+      {/* A placeholder (appDesign.md): it does nothing; the room list is reachable through a new, empty room panel. */}
+      <LbButton icon="list" title="Room list (coming soon: use a new panel)" className="placeholder" />
+      {devTools && (
+        <span className="lb-wrap">
+          <LbButton
+            icon="cone"
+            title={devTitle}
+            noTitle
+            pressed={devBackendActive ? sidePanelView === "devBackend" : undefined}
+            className={devBackendActive ? "dev-on" : ""}
+            onClick={() => dispatch({ type: "devBackend/toggle" })}
+          />
+          {/* TODO-FINDING tooltip-component - only this button has a drawn tooltip (as in leaf leftbar/devbackend-hover; shown on hover and on keyboard focus). All other buttons still rely on `title`, which a keyboard user never sees. */}
+          <span className="tooltip" aria-hidden="true">
+            {devTitle}
+          </span>
+        </span>
+      )}
+      {devBackendActive && (
+        <span className="lb-badge" title="Widgets only see the DevBackend">
+          DevBackend
+        </span>
+      )}
+      <span className="sp" />
+      <LbButton icon="settings" title="Settings" pressed={sidePanelView === "settings"} onClick={() => dispatch({ type: "sidePanel/toggle", view: "settings" })} />
+      <button
+        type="button"
+        className={`lb-avatar ${sidePanelView === "account" ? "on" : ""}`}
+        title="Account"
+        aria-label={`Account${devBackendActive ? ": DevBackend" : ""}`}
+        aria-pressed={sidePanelView === "account"}
+        onClick={() => dispatch({ type: "sidePanel/toggle", view: "account" })}
+      >
+        {devBackendActive || !account ? <DevAvatar size={26} /> : <Avatar name={account.displayName ?? account.userId} id={account.userId} size={26} mxc={account.avatarUrl} />}
+      </button>
+      <LbButton icon="panelLeft" title="Collapse the bar" onClick={() => dispatch({ type: "leftBar/collapse" })} />
+    </nav>
+  );
+}

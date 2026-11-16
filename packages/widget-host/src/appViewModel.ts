@@ -112,9 +112,9 @@ export interface MainViewModel {
   leftBar: LeftBarViewModel;
   sidePanel: SidePanelViewModel;
   /**
-   * The Matrix account that was active before the DevBackend. Leaving the DevBackend (pressing its
-   * LeftBar button again, or "Leave DevBackend" at the bottom of the DevBackendView) switches back to it.
-   * `undefined` if the login was skipped: then leaving shows the login screen.
+   * The Matrix account that was active before the DevBackend. "Leave DevBackend" at the bottom of
+   * the DevBackendView switches back to it. `undefined` if the login was skipped: then there is
+   * nothing to go back to and the leave button is not shown (`canLeaveDevBackend`).
    */
   returnAccountId?: AccountId;
   /** UI state of the DevBackendView. Kept while the SidePanel shows something else. */
@@ -319,6 +319,11 @@ export interface WidgetInstanceViewModel {
   widget: ResolvedWidget;
   load: { state: "loading" } | { state: "ready" } | { state: "failed"; error: string };
   /**
+   * Counts the starts of this widget ("retry" starts it again). `undefined` until its driver
+   * exists: only then is the iframe rendered, so no message of the widget is lost.
+   */
+  generation?: number;
+  /**
    * Set and cleared by the widget. Its tab gets the pin icon; the widget keeps running, and is
    * shown in the PictureInPicturePanel, whenever its tab is not shown. leaf tabs/pinned
    */
@@ -334,6 +339,9 @@ const mainOf = (vm: AppViewModel) => (vm.screen.kind === "main" ? vm.screen.main
 
 export const activeAccount = (m: MainViewModel) => m.accounts.find((a) => a.id === m.activeAccountId);
 export const activeWorkspace = (m: MainViewModel): WorkspaceLayout | undefined => m.workspaces[m.activeAccountId];
+
+/** "Leave DevBackend" is only offered when there is an account to go back to (not after "skip login"). */
+export const canLeaveDevBackend = (m: MainViewModel) => m.accounts.some((a) => a.kind === "matrix");
 
 /** Construction-fence background + DevBackend badge. leaves app/devbackend* */
 export const devBackendActive = (vm: AppViewModel) => {
@@ -412,13 +420,14 @@ export type AppIntent =
   | { type: "modal/close" }
   | { type: "toast/dismiss"; id: string }
   // accounts
-  | { type: "account/switch"; accountId: AccountId } // to the DevBackend account: confirmed first
-  | { type: "devBackend/toggle" } // the LeftBar button: activates the DevBackend, or leaves it (back to `returnAccountId`); also "Leave DevBackend"
+  | { type: "account/switch"; accountId: AccountId; confirmed?: boolean } // to the DevBackend account: confirmed first (the modal sends it again with `confirmed`)
+  | { type: "devBackend/toggle" } // the LeftBar button: activates the DevBackend (confirmed if panels are open); while it is active it only opens and closes the DevBackendView
+  | { type: "devBackend/leave" } // "Leave DevBackend": back to `returnAccountId`. The DevBackend's workspace is kept, so activating it again shows the same rooms and widgets (the widgets start again)
   | { type: "account/add" }
   | { type: "account/retryRestore"; accountId: AccountId }
   | { type: "account/manage"; accountId: AccountId } // opens the MAS account page
   | { type: "account/copyMatrixUri"; accountId: AccountId }
-  | { type: "account/logout"; accountId: AccountId } // confirmed; also forgets the remembered capabilities
+  | { type: "account/logout"; accountId: AccountId; confirmed?: boolean } // confirmed; also forgets the remembered capabilities
   // left bar and side panel
   | { type: "leftBar/collapse" }
   | { type: "leftBar/revealExpandButton" } // Escape, or the mouse at the left edge
@@ -433,6 +442,7 @@ export type AppIntent =
   | { type: "panel/resize"; panelId: PanelId; widthShare: number }
   | { type: "picker/setMode"; panelId: PanelId; mode: RoomPickerViewModel["mode"] }
   | { type: "panel/openRoom"; panelId: PanelId; roomId: RoomId; widgetKey?: WidgetKey }
+  | { type: "picker/reloadRooms" } // "Try again" of the room picker's error state (`data.rooms.status === "error"`, leaf panel/error): asks the session for the rooms again
   // tabs
   | { type: "tab/new"; panelId: PanelId }
   | { type: "tab/openWidget"; panelId: PanelId; tabId?: TabId; widgetKey: WidgetKey } // already running: jumps to its tab
@@ -446,16 +456,17 @@ export type AppIntent =
   | { type: "widget/answerCapabilities"; widgetId: WidgetInstanceId; approved: string[] }
   | { type: "widget/answerOpenId"; widgetId: WidgetInstanceId; allow: boolean }
   | { type: "widget/jumpToTab"; widgetId: WidgetInstanceId } // activates its tab, which takes it out of the PiP panel; opens the room panel again if it was closed
-  | { type: "widget/close"; widgetId: WidgetInstanceId } // the close button in the PiP panel: stops (kills) the widget and closes its tab. The way to stop an always-on-screen widget.
+  | { type: "widget/close"; widgetId: WidgetInstanceId; confirmed?: boolean } // the close button in the PiP panel: stops (kills) the widget and closes its tab. The way to stop an always-on-screen widget. Asks first (confirm modal), because the widget still wants to stay on screen; the modal sends it again with `confirmed`
   // widget dev tools
   | { type: "devTools/toggle"; widgetId: WidgetInstanceId }
   | { type: "devTools/dock"; widgetId: WidgetInstanceId; dock: WidgetDevToolsLayout["dock"] }
   | { type: "devTools/togglePanel"; widgetId: WidgetInstanceId; panel: DevToolPanel } // opening a fourth panel closes the oldest
   | { type: "devTools/resize"; widgetId: WidgetInstanceId; size?: number; shares?: number[] }
   | { type: "devTools/clear"; widgetId: WidgetInstanceId; what: "messages" | "console" }
-  | { type: "devTools/revokeCapabilities"; widgetId: WidgetInstanceId; capabilities: string[] | "all" } // confirmed
+  | { type: "devTools/revokeCapabilities"; widgetId: WidgetInstanceId; capabilities: string[] | "all"; confirmed?: boolean } // confirmed
   | { type: "devTools/grantCapability"; widgetId: WidgetInstanceId; capability: string } // needs a new driver method
   | { type: "devTools/mockHostAction"; widgetId: WidgetInstanceId; action: "updateTheme" | "updateLanguage" | "updateVisibility"; value: string } // TODO: more actions
+  | { type: "devTools/copyMessage"; widgetId: WidgetInstanceId; messageId: string } // "Copy as JSON" of an expanded message of the MessagesPanel: request and response to the clipboard (added by the widget views)
   // picture in picture
   | { type: "pip/move"; position: PipViewModel["position"] }
   | { type: "pip/resize"; boxSize: PipViewModel["boxSize"] }
@@ -472,6 +483,7 @@ export type AppIntent =
   | { type: "mock/updateScheduled"; roomId: RoomId; delayId: string; update: "send" | "restart" | "cancel" }
   | { type: "mock/sendToDevice"; message: Omit<ToDeviceMessage, "direction"> }
   | { type: "mock/setBehavior"; roomId: RoomId; behavior: Partial<WidgetHostBehavior> }
+  | { type: "mock/clearRoom"; roomId: RoomId } // drops all events of the mocked room
   | { type: "media/toggleBox" }
   | { type: "media/resizeBox"; heightShare: number }
   | { type: "media/upload"; files: File[] }
@@ -517,16 +529,18 @@ export interface WidgetStats {
 /** The content of the DevBackend, read from its store. leaves devbackend/* */
 export interface MockedRoomData {
   rooms: { id: RoomId; name: string; avatarUrl?: string; copiedFrom?: { accountId: AccountId; roomId: RoomId } }[];
+  /** The user the DevBackend acts as: the default sender of the send forms. */
+  userId?: string;
   /** Of the selected room. */
   state: MockedStateEvent[];
   /** Newest first; the view virtualizes it. */
   timeline: MockedTimelineEvent[];
   /** Delayed events (state and timeline) that are scheduled but not sent yet. */
-  scheduled: { delayId: string; type: string; stateKey?: string; delayMs: number; restarts: number }[];
+  scheduled: { delayId: string; type: string; stateKey?: string; delayMs: number; restarts: number; scheduledAt?: number }[];
   /** Account-scoped, not per room. */
   toDevice: ToDeviceMessage[];
   /** Not per room. `name` and `uploadedBy` need the store to record them. */
-  media: { mxcUri: string; mimetype?: string; bytes: number; name?: string; uploadedBy?: WidgetInstanceId }[];
+  media: { mxcUri: string; mimetype?: string; bytes: number; name?: string; uploadedBy?: WidgetInstanceId; /** An object URL for a preview or a download. */ url?: string }[];
 }
 
 export interface MockedStateEvent {
@@ -543,6 +557,8 @@ export interface MockedTimelineEvent {
 }
 export interface ToDeviceMessage {
   direction: "toWidget" | "fromWidget";
+  /** When the DevBackend first saw the message. */
+  timestamp?: number;
   type: string;
   userId: string;
   deviceId: string;

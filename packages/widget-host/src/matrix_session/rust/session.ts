@@ -23,17 +23,36 @@ import {
 } from "matrix-sdk-uniffi-js";
 
 import { RustSdkBackend } from "./backend/rustSdkBackend";
+import { accountInfo, exportRoom, roomDetails } from "./roomData";
+import { AccountStore } from "../js/accountStore";
 import { AVATAR_SIZE, AvatarCache } from "../../lib/avatarCache";
 import { describesWidget, WIDGET_EVENT_TYPES, type StateEvent } from "../../widgetStateEvent";
-import { StoredLoginInvalidError, type EmojiVerification, type LiveSession, type LoginOptions, type PendingLogin, type RoomSummary, type SessionProvider, type VerificationEmoji } from "../../session";
+import {
+  StoredLoginInvalidError,
+  type AccountInfo,
+  type EmojiVerification,
+  type LiveSession,
+  type LoginOptions,
+  type PendingLogin,
+  type RoomDetails,
+  type RoomExport,
+  type RoomSummary,
+  type SessionProvider,
+  type VerificationEmoji,
+} from "../../session";
 
 /**
  * The matrix-rust-sdk implementation of `../../session` (`matrix-sdk-uniffi-js`). With
  * `./backend` it is the only code that knows which SDK the app runs on.
+ *
+ * Several logins are stored side by side (`../js/accountStore`): each has its own `localStorage`
+ * entry and its own IndexedDB stores, named after its store id, which is also its account id.
  */
 
-/** Not the key of the matrix-js-sdk implementation: the two store different things. */
-const STORAGE_KEY = "widget_host_rust_session_v1";
+/** One `localStorage` entry per login: this prefix followed by the account id. Not the prefix of the matrix-js-sdk implementation: the two store different things. */
+export const STORAGE_PREFIX = "widget_host_rust_session_v2:";
+/** Where the one login was stored before multi-account. */
+export const LEGACY_STORAGE_KEY = "widget_host_rust_session_v1";
 const ROOM_LIST_PAGE_SIZE = 500;
 /** How long the signature of the verifying device may take to arrive after an emoji verification. */
 const VERIFIED_TIMEOUT_MS = 20_000;
@@ -46,42 +65,52 @@ interface Stored {
   session: SdkSession;
   /** Encrypts the IndexedDB stores of this login. */
   passphrase: string;
+  /** Names the IndexedDB stores of this login. It is the account id as well. */
   storeId: string;
 }
 
+/** The login of the old single-key layout as an account of the new one: the record is unchanged, its store id becomes the account id. */
+export function migrateLegacyLogin(legacy: unknown): { accountId: string; record: Stored } | undefined {
+  const stored = legacy as Partial<Stored> | null;
+  if (!stored || typeof stored.storeId !== "string" || !stored.storeId || typeof stored.passphrase !== "string" || !stored.session) return undefined;
+  return { accountId: stored.storeId, record: stored as Stored };
+}
+
+const store = new AccountStore<Stored>({ prefix: STORAGE_PREFIX, legacyKey: LEGACY_STORAGE_KEY, migrate: migrateLegacyLogin });
+
 const storeName = (storeId: string) => `widget-host-store-${storeId}`;
 
-function loadStored(): Stored | undefined {
-  const raw = localStorage.getItem(STORAGE_KEY);
-  if (!raw) return undefined;
+function loadStored(accountId: string): Stored | undefined {
+  const stored = store.get(accountId);
+  if (!stored) return undefined;
   try {
-    const stored = JSON.parse(raw) as Stored;
     return { ...stored, session: SdkSession.create(stored.session) };
   } catch {
     return undefined;
   }
 }
 
-const saveStored = (stored: Stored) => localStorage.setItem(STORAGE_KEY, JSON.stringify(stored));
-
-/** The SDK reports refreshed tokens through this; without it a reload would restore stale ones. */
-const sessionDelegate: ClientSessionDelegate = {
+/**
+ * The SDK reports refreshed tokens through this; without it a reload would restore stale ones.
+ * One per client: the SDK only names the user, and two stored logins may be of the same user.
+ */
+const sessionDelegate = (accountId: string): ClientSessionDelegate => ({
   retrieveSessionFromKeychain(userId) {
-    const stored = loadStored();
+    const stored = loadStored(accountId);
     if (!stored || stored.session.userId !== userId) throw new Error(`no stored session for ${userId}`);
     return stored.session;
   },
   saveSessionInKeychain(session) {
-    const stored = loadStored();
-    if (stored && stored.session.userId === session.userId) saveStored({ ...stored, session });
+    // Nothing is stored yet while the login is still pending.
+    store.update(accountId, (stored) => (stored.session.userId === session.userId ? { ...stored, session } : stored));
   },
-};
+});
 
 function builder(storeId: string, passphrase: string) {
   return new ClientBuilder()
     .indexeddbStore(new IndexedDbStoreBuilder(storeName(storeId)).passphrase(passphrase))
     .autoEnableCrossSigning(true)
-    .setSessionDelegate(sessionDelegate);
+    .setSessionDelegate(sessionDelegate(storeId));
 }
 
 function randomPassphrase(): string {
@@ -193,30 +222,26 @@ class RustSdkPendingLogin implements PendingLogin {
       await deleteStore(this.storeId);
       throw new Error("This homeserver does not support native sliding sync, which the matrix-rust-sdk room list needs.");
     }
-    saveStored({ session: this.client.session(), passphrase: this.passphrase, storeId: this.storeId });
-    return (await activate(RustSdkSession.start(this.client, this.storeId)))!;
+    // Only now is the login stored: one that is never completed does not show up in `stored()`.
+    store.save(this.storeId, { session: this.client.session(), passphrase: this.passphrase, storeId: this.storeId });
+    return activate(this.storeId, RustSdkSession.start(this.client, this.storeId));
   }
 }
 
 /**
- * The one client of this page, or its start in progress. There must never be two on the same
- * stores. `restore()` is called twice in a row by React's strict mode, for one.
+ * The client of each account of this page, or its start in progress. There must never be two on
+ * the same stores. `restore()` is called twice in a row by React's strict mode, for one.
  */
-let active: Promise<RustSdkSession | undefined> | undefined;
+// TODO-FINDING concurrent-sessions - the provider lets clients of several accounts run at once (each has its own stores); whether the UI keeps the inactive accounts syncing or restores only the active one is the UI's choice. Not verified against a homeserver with two clients on one page.
+const active = new Map<string, Promise<RustSdkSession>>();
 
-/** Make `start` the page's client, unless it fails or finds no login. */
-function activate(start: Promise<RustSdkSession | undefined>): Promise<RustSdkSession | undefined> {
-  const tracked: Promise<RustSdkSession | undefined> = start.then(
-    (session) => {
-      if (!session && active === tracked) active = undefined;
-      return session;
-    },
-    (e: unknown) => {
-      if (active === tracked) active = undefined;
-      throw e;
-    },
-  );
-  active = tracked;
+/** Make `start` the account's client, unless it fails. */
+function activate(accountId: string, start: Promise<RustSdkSession>): Promise<RustSdkSession> {
+  const tracked: Promise<RustSdkSession> = start.catch((e: unknown) => {
+    if (active.get(accountId) === tracked) active.delete(accountId);
+    throw e;
+  });
+  active.set(accountId, tracked);
   return tracked;
 }
 
@@ -250,7 +275,12 @@ class RustSdkSession implements LiveSession {
   private readonly widgetEvents = new Map<string, StateEvent[]>();
   private readingWidgets: "idle" | "running" | "again" = "idle";
   private stopped = false;
-  private readonly avatars = new AvatarCache((mxcUrl) => this.client.getMediaThumbnail(MediaSource.fromUrl(mxcUrl), BigInt(AVATAR_SIZE), BigInt(AVATAR_SIZE)));
+  /** Between `suspend()` and `resume()`: the sync is stopped and this session makes no requests. */
+  private suspended = false;
+  private readonly avatars = new AvatarCache(async (mxcUrl) => {
+    if (this.suspended) throw new Error("the session is suspended");
+    return this.client.getMediaThumbnail(MediaSource.fromUrl(mxcUrl), BigInt(AVATAR_SIZE), BigInt(AVATAR_SIZE));
+  });
 
   private constructor(
     private readonly client: ClientLike,
@@ -260,10 +290,10 @@ class RustSdkSession implements LiveSession {
     this.roomListService = sync.roomListService();
   }
 
-  /** Restore the stored login, if there is one. */
-  static async restore(): Promise<RustSdkSession | undefined> {
-    const stored = loadStored();
-    if (!stored) return undefined;
+  /** Restore a stored login. */
+  static async restore(accountId: string): Promise<RustSdkSession> {
+    const stored = loadStored(accountId);
+    if (!stored) throw new Error(`No login is stored for the account ${accountId}.`);
     const client = await restoredClient(stored);
     // A token the server no longer knows cannot be restored; anything else (being offline, say)
     // is left to the sync, which keeps retrying. The ffi has no `whoami`, so this asks for the
@@ -298,8 +328,60 @@ class RustSdkSession implements LiveSession {
     return session;
   }
 
+  /** The store id: chosen when the login was started, and what its IndexedDB stores are named after. */
+  // TODO-FINDING account-id-choice - what identifies a stored login? Options: a random id per login (done: the store id, a UUID that existed before multi-account, so the migrated login needs no renaming), or `userId` + `deviceId` (readable, but not known before the login completes, when the stores are already created).
+  get accountId(): string {
+    return this.storeId;
+  }
+
   get userId(): string {
     return this.client.userId();
+  }
+
+  account(): Promise<AccountInfo> {
+    return accountInfo(this.client, !this.suspended);
+  }
+
+  /** From what the SDK has of the room; does not need (or change) the full-state subscription of `open`. */
+  async roomDetails(roomId: string): Promise<RoomDetails> {
+    return roomDetails(this.knownRoom(roomId), !this.suspended);
+  }
+
+  async exportRoom(roomId: string, lastEvents: number): Promise<RoomExport> {
+    return exportRoom(this.client, this.knownRoom(roomId), lastEvents, !this.suspended);
+  }
+
+  private knownRoom(roomId: string): RoomLike {
+    const room = this.client.getRoom(roomId);
+    if (!room) throw new Error(`unknown room ${roomId}`);
+    return room;
+  }
+
+  /**
+   * Stop both sliding syncs and the send queues. The client, its stores and the room backends on
+   * it stay as they are: reads from the store keep working, and the subscriptions of the backends
+   * deliver again once `resume()` has restarted the sync.
+   */
+  // TODO-FINDING rust-suspend-explicit-requests - the bindings offer no way to refuse requests, so suspend() only stops what runs by itself (sync, send queues, this session's own requests). A request a room backend makes for a widget while suspended (a send, the TURN server poll of backend/turnServer.ts, media) still reaches the homeserver. Options: the UI disposes or detaches the backends of a suspended session, or RustSdkBackend gets a gate like the js provider's FetchGate. `Client::pause()` was not used: it also closes the stores, which the backends read from, and is untested on IndexedDB.
+  async suspend(): Promise<void> {
+    if (this.suspended) return;
+    this.suspended = true;
+    await this.sync.stop().catch((e: unknown) => console.warn("stopping the sync failed", e));
+    await this.client.enableAllSendQueues(false).catch(() => undefined);
+  }
+
+  async resume(): Promise<void> {
+    if (!this.suspended) return;
+    this.suspended = false;
+    await this.client.enableAllSendQueues(true).catch(() => undefined);
+    await this.sync.start();
+    // TODO-FINDING rust-resume-room-subscription - could not be verified without a homeserver: whether the full-state subscription of the open room survives SyncService stop/start. It is asked for again here, which is what switching rooms back and forth does too.
+    const opened = this.opened;
+    if (opened) {
+      const ready = this.roomListService.subscribeToRoomWithFullState(opened.roomId, FULL_STATE_TIMEOUT_MS).catch((e: unknown) => console.warn("subscribing to the open room again failed", e));
+      if (this.opened === opened) this.opened = { roomId: opened.roomId, ready };
+    }
+    this.readWidgetEvents();
   }
 
   /** Joined rooms, by name. The room list stream only says "something changed"; this reads the result. */
@@ -307,7 +389,13 @@ class RustSdkSession implements LiveSession {
     return this.client
       .rooms()
       .filter((room) => room.membership() === Membership.Joined)
-      .map((room) => ({ id: room.id(), name: room.displayName() ?? room.id(), avatarUrl: room.avatarUrl(), widgetEvents: this.widgetEvents.get(room.id()) }))
+      .map((room) => ({
+        id: room.id(),
+        name: room.displayName() ?? room.id(),
+        avatarUrl: room.avatarUrl(),
+        widgetEvents: this.widgetEvents.get(room.id()),
+        memberCount: Number(room.joinedMembersCount()),
+      }))
       .sort((a, b) => a.name.localeCompare(b.name));
   }
 
@@ -470,28 +558,36 @@ class RustSdkSession implements LiveSession {
     };
   }
 
+  /** Log out and delete this login's entry and its IndexedDB stores. */
   async logout(): Promise<void> {
-    active = undefined;
+    active.delete(this.accountId);
     this.stopped = true;
     this.avatars.clear();
     await this.sync.stop().catch(() => undefined);
     await this.client.logout().catch((e: unknown) => console.warn("logout request failed", e));
-    localStorage.removeItem(STORAGE_KEY);
+    store.remove(this.accountId);
     await deleteStore(this.storeId);
   }
 }
 
 export const rustSdkSessions: SessionProvider = {
   startLogin: (server) => RustSdkPendingLogin.start(server),
-  restore: async () => active ?? activate(RustSdkSession.restore()),
-  async clearStored() {
-    const stored = loadStored();
-    if (!stored) return;
+  stored: async () => store.list().map(({ accountId, record }) => ({ accountId, userId: record.session.userId, homeserver: record.session.homeserverUrl })),
+  restore: async (accountId) => active.get(accountId) ?? activate(accountId, RustSdkSession.restore(accountId)),
+  async clearStored(accountId) {
+    // A running client of this login ends it itself: a second client must not open its stores.
+    const running = await active.get(accountId)?.catch(() => undefined);
+    if (running) return running.logout();
+    const raw = store.get(accountId);
+    if (!raw) return;
+    const stored = loadStored(accountId);
     // Fails when the homeserver has already ended the login, which is as good.
-    await restoredClient(stored)
-      .then((client) => client.logout())
-      .catch((e: unknown) => console.warn("logout request failed", e));
-    localStorage.removeItem(STORAGE_KEY);
-    await deleteStore(stored.storeId);
+    if (stored) {
+      await restoredClient(stored)
+        .then((client) => client.logout())
+        .catch((e: unknown) => console.warn("logout request failed", e));
+    }
+    store.remove(accountId);
+    await deleteStore(raw.storeId);
   },
 };

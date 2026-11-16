@@ -248,6 +248,8 @@ A simple fullscreen login. It allows skipping the login, which immediately ends 
   - The room header stays: it is important information.
   - The + button of the tab bar is not shown by default.
   - The tab is not shown, as only one widget is open.
+  - no close button shown
+  - also the header spreads to the full page size (no rounded corners on the header as well, no padding for the room view)
 
 # Required visualisations
 

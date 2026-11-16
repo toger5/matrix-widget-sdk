@@ -1,0 +1,76 @@
+# Design leaves and the tests that reach them
+
+Every leaf of `design/index.html` (`design/src/leaves.mjs`), with the test in which `host.leaf("<id>")` marks the screen, or why the leaf cannot be reached in DevBackend mode. The screenshots of a run are in `leaf-screenshots/<id>.png`.
+
+## App shell, LeftBar, SidePanel
+
+| Leaf | Reached by |
+| --- | --- |
+| `app/login`, `app/devbackend-empty` | `shell.spec.ts` › a fresh browser without a stored login (a second browser context; "Skip login" leads into the DevBackend) |
+| `app/devbackend`, `leftbar/devbackend` | `shell.spec.ts` › the DevBackend is signalled by the fence |
+| `leftbar/devbackend-hover` | `shell.spec.ts` › the DevBackend button only opens and closes the panel. The tooltip is "DevBackend panel", not the leaf's "Leave DevBackend" (later decision) |
+| `leftbar/collapsed-toast`, `leftbar/collapsed-expand`, `app/devbackend-collapsed` | `shell.spec.ts` › collapse → toast → Escape |
+| `app/fullscreen`, `app/fullscreen-hover` | `shell.spec.ts` › with exactly one widget tab; also `rooms.spec.ts` |
+| `app/info-modal` | `shell.spec.ts` › the app info modal closes |
+| `app/confirm` | `shell.spec.ts` › stopping an always-on-screen widget is confirmed. The leaf's text (activating the DevBackend) needs a Matrix account |
+| `app/narrow` | `shell.spec.ts` › narrow window (the AccountView is the DevBackend one) |
+| `sidepanel/closed` | `sidepanel.spec.ts` › the LeftBar buttons show one view at a time |
+| `roomsarea/shifted` | `sidepanel.spec.ts` › the open panel shifts the RoomsArea |
+| `sidepanel/settings-on` | `sidepanel.spec.ts` › settings: the dev tools are on and cannot be turned off |
+| `sidepanel/account-dev` | `sidepanel.spec.ts` › account: the DevBackend is the account |
+| `complete/workspace`, `complete/devbackend`, `complete/light` | `sidepanel.spec.ts` › complete views |
+| `app/default`, `leftbar/expanded`, `leftbar/devtools`, `sidepanel/settings-off`, `sidepanel/account-one`, `sidepanel/account-several` | **not reachable**: they need a Matrix account (DevBackend inactive). Stories: `app-appshell--default`, `app-leftbar--expanded`, `app-leftbar--dev-tools`, `sidepanel-settingsview--dev-tools-off`, `sidepanel-accountview--one-account`, `--several-accounts` |
+
+## Rooms, tabs, overview
+
+| Leaf | Reached by |
+| --- | --- |
+| `roomsarea/one` | `rooms.spec.ts` › Alt+Shift+N opens the same room in a second panel |
+| `roomsarea/several`, `roomview2/different` | `rooms.spec.ts` › two panels with different rooms: the separator resizes them |
+| `roomview2/same` | `widgetMove.spec.ts` › move widget here |
+| `panel/no-recents`, `panel/all-rooms`, `roomview/header`, `roomview/tiles` | `rooms.spec.ts` › a new panel shows the picker: no recents, all rooms with search |
+| `panel/recents` | `rooms.spec.ts` › Alt+N opens a panel with the recent widgets |
+| `panel/loading` | **not reachable**: the DevBackend's room list is always ready (story `rooms-roompicker--loading`) |
+| `panel/error` | **not reachable**: `DevBackend.rooms()` never fails (story `rooms-roompicker--load-error`) |
+| `app/fullscreen`, `app/fullscreen-hover` | `rooms.spec.ts` › fullscreen: LeftBar collapsed and one widget tab |
+| `tabs/widget-active`, `tabs/native-active`, `roomview/new-tab` | `tabs.spec.ts` › widget and native tabs; the + button opens a new tab |
+| `tabs/pinned` | `widgetMove.spec.ts` › always on screen |
+| `tabs/overflow` | `tabs.spec.ts` › more tabs than fit |
+| `overview/plain` | `overview.spec.ts` › the room header opens the Room overview tab |
+| `overview/devtools` | **partly**: `overview.spec.ts` › with dev tools enabled a DevBackend room still has no "Copy to DevBackend" card. The card needs a Matrix room (story `rooms-roomoverview--dev-tools`) |
+
+## DevBackendView
+
+"Leave DevBackend" is in no screenshot: without a Matrix account there is nothing to go back to, so the button is not shown.
+
+| Leaf | Reached by |
+| --- | --- |
+| `devbackend/none`, `app/devbackend-empty` | `devbackend.spec.ts` › no rooms yet: the RoomsArea is empty, "Create a room" adds and selects the first room |
+| `devbackend/dropdown` | `devbackend.spec.ts` › room dropdown: select a room, add a room and open it in a new room panel |
+| `devbackend/behavior` | `devbackend.spec.ts` › widget host behavior: without auto-approve the widget asks for permissions |
+| `devbackend/todevice` | `devbackend.spec.ts` › to-device: a message sent from the view reaches the widget, one sent by the widget is listed |
+| `devbackend/media-collapsed`, `devbackend/media-open` | `devbackend.spec.ts` › media box: open, upload a file, copy its MXC URI, minimise |
+| `devbackend/state` | `devbackendState.spec.ts` › send state and the state explorer |
+| `devbackend/state-edit` | `devbackendState.spec.ts` › edit state: saving the editor sends a new state event |
+| `devbackend/timeline` | `devbackendTimeline.spec.ts` › message form: the event is added to the timeline and forwarded to the widget |
+| `devbackend/timeline-raw` | `devbackendTimeline.spec.ts` › raw JSON form: invalid JSON shows an error and sends nothing |
+| `devbackend/timeline-delayed` | `devbackendTimeline.spec.ts` › delayed event: listed under "Scheduled"; "Cancel" drops it and "Send now" sends it |
+
+## WidgetView, dev tools, PictureInPicturePanel
+
+| Leaf | Reached by |
+| --- | --- |
+| `widgetview/loading`, `widgetview/plain` | `widget.spec.ts` › a widget is loading until it sends notify_ready |
+| `widgetview/failed` | `widget.spec.ts` › a widget that never answers fails: retry starts it again, close tab gives up |
+| `widgetview/prompt` | `widget.spec.ts` › capability prompt: deny all, then approve a subset |
+| `devtools/one-panel`, `devtools/bar-top`, `devtools/bar-left`, `devtools/bar-right` | `devtools.spec.ts` › the ⋯ button of the tab opens the bar with the messages panel; the bar docks top, left and right |
+| `devtools/two-panels`, `devtools/three-panels`, `devtools/fourth-panel`, `devtools/side-panels` | `devtools.spec.ts` › panels open next to each other; the fourth closes the oldest; docked to a side they stack |
+| `devtools/messages` | `devtools.spec.ts` › messages panel |
+| `devtools/stats` | `devtools.spec.ts` › stats panel |
+| `devtools/driver` | `devtools.spec.ts` › driver panel: revoke one capability and all (confirm modal), add a capability |
+| `devtools/console` | `devtools.spec.ts` › console panel |
+| `pip/idle-1`, `pip/hover` | `widgetMove.spec.ts` › always on screen |
+| `pip/idle-4` | `pip.spec.ts` › four always-on-screen widgets |
+| `pip/vertical`, `pip/hover-vertical` | `pip.spec.ts` › the stacking switch puts the boxes below each other |
+| `pip/overflow`, `pip/overflow-menu` | `pip.spec.ts` › more widgets than boxes |
+| `pip/enlarged-devtools` | `pip.spec.ts` › the dev tools of a widget stay open inside its PiP box |
