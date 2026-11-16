@@ -3,9 +3,11 @@ import type { Meta, StoryObj } from "@storybook/react-vite";
 import { Avatar, Button, DevAvatar, Icon, IconButton, Logo, Toggle } from "./atoms";
 import { ICONS, type IconName } from "./icons";
 
+/** The atoms every view is built from (`src/views/ui/atoms.tsx`). */
 const meta: Meta = { title: "UI/Atoms" };
 export default meta;
 
+/** Logo, avatars, buttons, icon buttons, toggles and every icon. */
 export const Atoms: StoryObj = {
   render: () => (
     <div style={{ padding: 24, display: "grid", gap: 16, justifyItems: "start" }}>

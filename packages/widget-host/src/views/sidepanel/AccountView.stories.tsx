@@ -5,23 +5,31 @@ import { ACCOUNTS } from "../fixtures";
 import { SideStage } from "../storyEnv";
 import { AccountView } from "./AccountView";
 
-const meta: Meta<typeof AccountView> = { title: "SidePanel/AccountView", component: AccountView, decorators: [SideStage] };
+/** The AccountView: the current account, its buttons, and the list to switch accounts (ending with "Add account"). */
+const meta: Meta<typeof AccountView> = { title: "SidePanel/AccountView", component: AccountView, decorators: [SideStage], parameters: { size: [348, 620] } };
 export default meta;
 type Story = StoryObj<typeof AccountView>;
 
 const suspended = (a: AccountViewModel): AccountViewModel => ({ ...a, status: "suspended" });
 
+/** One account. */
 // leaf sidepanel/account-one
 export const OneAccount: Story = { args: { accounts: [ACCOUNTS.ada], activeAccountId: "ada" } };
 
-// leaf sidepanel/account-several (the QA bot's restore failed: marker in the switch list; the DevBackend is enabled, so it is listed)
-export const SeveralAccounts: Story = { args: { accounts: [ACCOUNTS.ada, ACCOUNTS.work, ACCOUNTS.bot, ACCOUNTS.dev], activeAccountId: "ada" }, parameters: { stageHeight: 680 } };
+/**
+ * Several accounts, DevBackend enabled: the switch list at the bottom with the DevBackend, ending
+ * with "Add account". Switching to the DevBackend activates it (confirmed if room panels are open).
+ * The QA bot's restore failed: a marker in the switch list.
+ */
+// leaf sidepanel/account-several
+export const SeveralAccounts: Story = { args: { accounts: [ACCOUNTS.ada, ACCOUNTS.work, ACCOUNTS.bot, ACCOUNTS.dev], activeAccountId: "ada" }, parameters: { size: [348, 680] } };
 
-// leaf sidepanel/account-dev (the Matrix accounts are suspended while the DevBackend is active)
+/** DevBackend mode: the full account list (the Matrix accounts are suspended while the DevBackend is active). */
+// leaf sidepanel/account-dev
 export const DevBackendMode: Story = {
   args: { accounts: [suspended(ACCOUNTS.ada), suspended(ACCOUNTS.work), ACCOUNTS.bot, ACCOUNTS.dev], activeAccountId: ACCOUNTS.dev.id },
   parameters: { fence: true },
 };
 
-// No leaf: the active account could not be restored ("Try again" / "Log out").
+/** The active account could not be restored: "Try again" / "Log out" (finding `restore-failed-actions`). */
 export const RestoreFailed: Story = { args: { accounts: [ACCOUNTS.bot, { ...ACCOUNTS.ada, status: "restoring" }], activeAccountId: "bot" } };

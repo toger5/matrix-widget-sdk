@@ -1,47 +1,76 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 
-import { FakeWidget } from "../storyEnv";
+import type { WidgetInstanceViewModel } from "../../appViewModel";
+import { ROOMS, byId, widgetVm } from "../fixtures";
+import { storySize } from "../storyEnv";
+import { WidgetView } from "../widget/WidgetView";
 import { PipPanel, type PipItem, type PipPanelProps } from "./PipPanel";
 
-const item = (roomName: string, widgetName: string, devToolsOpen = false): PipItem => ({ widgetId: `${roomName}|${widgetName}`, widgetName, roomName, devToolsOpen });
+/** An always-on-screen widget of a fixture room, as a PiP item. */
+const item = (room: keyof typeof ROOMS, widget: Parameters<typeof widgetVm>[1], devToolsOpen = false): PipItem & { vm: WidgetInstanceViewModel } => {
+  const vm = widgetVm(room, widget, { alwaysOnScreen: true });
+  return { widgetId: vm.id, widgetName: vm.widget.name, roomName: ROOMS[room].name, devToolsOpen, vm };
+};
 
-const BOARD = item("Design sync", "Whiteboard");
-const TIMER = item("MatrixRTC working group", "Focus timer");
-const POLL = item("Platform team", "Lunch poll");
-const NOTES = item("Family", "Shared notes");
-const MORE = [item("Platform team", "Retro board"), item("Widget lab", "Stream deck")];
+const BOARD = item("design", "board");
+const TIMER = item("rtc", "timer");
+const POLL = item("platform", "poll");
+const NOTES = item("family", "notes");
+const MORE = [item("platform", "retro"), item("lab", "stream")];
+const WIDGETS = byId([BOARD, TIMER, POLL, NOTES, ...MORE].map((i) => i.vm));
 
 const PIP: PipPanelProps["pip"] = { stacking: "horizontal", position: { x: 20, y: 20 }, boxSize: { width: 224, height: 140 } };
-/** The mockup moves the boxes by the padding of the surround (11px) when it appears; the view does not. So the hover stories start 11px further in to line up with their leaves. */
+/** The mockup moves the boxes by the padding of the surround (11px) when it appears; the view does not. So the hover stories start 11px further in to line up with the mockups. */
 const HOVER_PIP: PipPanelProps["pip"] = { ...PIP, position: { x: 31, y: 31 } };
 
+/**
+ * The PictureInPicturePanel: the floating container of the always-on-screen widgets whose tab is not
+ * shown, at the bottom right of the app (the story). Borderless boxes; on hover an opaque box around
+ * them with the room and widget names, the buttons and the drag area.
+ */
 const meta: Meta<typeof PipPanel> = {
   title: "App/PipPanel",
   component: PipPanel,
-  args: { pip: PIP, more: [], renderWidget: (id) => <FakeWidget name={id.split("|")[1]} /> },
-  // The panel is positioned inside the app shell. The max sizes let a screenshot at the size of a leaf show it.
+  args: { pip: PIP, more: [], renderWidget: (id, options) => WIDGETS[id] && <WidgetView widget={WIDGETS[id]} compact={options?.compact} /> },
+  // The panel is positioned inside the app shell.
   decorators: [
-    (Story) => (
-      <div className="app" style={{ width: 1100, height: 700, maxWidth: "100vw", maxHeight: "100vh", position: "relative" }}>
-        <Story />
-      </div>
-    ),
+    (Story, { parameters }) => {
+      const [width, height] = storySize(parameters);
+      return (
+        <div className="app" style={{ width, height, position: "relative" }}>
+          <Story />
+        </div>
+      );
+    },
   ],
 };
 export default meta;
 type Story = StoryObj<typeof PipPanel>;
 
-/** leaf pip/idle-1 */
-export const Idle: Story = { args: { items: [BOARD] } };
+/** Idle: a borderless box, 1 widget. */
+// leaf pip/idle-1
+export const Idle: Story = { args: { items: [BOARD] }, parameters: { size: [560, 360] } };
 
-/** leaf pip/hover (the leaf shows three widgets; idle it is leaf pip/idle-4) */
-export const Hover: Story = { args: { items: [BOARD, TIMER, { ...POLL, devToolsOpen: true }, NOTES], pip: HOVER_PIP, forceHover: true } };
+/** Idle: borderless boxes, 4 widgets, stacked horizontal. */
+// leaf pip/idle-4
+export const IdleFour: Story = { args: { items: [BOARD, TIMER, POLL, NOTES] }, parameters: { size: [1040, 360] } };
 
-/** leaf pip/overflow-menu */
-export const OverflowMenu: Story = { args: { items: [BOARD, TIMER, POLL, NOTES], more: MORE, pip: HOVER_PIP, forceHover: true, defaultMenuOpen: true } };
+/** Stacked vertical. */
+// leaf pip/vertical
+export const VerticalIdle: Story = { args: { pip: { ...PIP, stacking: "vertical" }, items: [BOARD, TIMER, POLL] }, parameters: { size: [480, 560] } };
 
-/** leaf pip/hover-vertical (idle: leaf pip/vertical) */
-export const Vertical: Story = { args: { pip: { ...HOVER_PIP, stacking: "vertical" }, items: [BOARD, TIMER], forceHover: true } };
+/** Hover: the surrounding box with room name, widget name and buttons. */
+// leaf pip/hover
+export const Hover: Story = { args: { items: [BOARD, TIMER, POLL], pip: HOVER_PIP, forceHover: true }, parameters: { size: [860, 360] } };
 
-/** leaf pip/vertical */
-export const VerticalIdle: Story = { args: { pip: { ...PIP, stacking: "vertical" }, items: [BOARD, TIMER, POLL] } };
+/** Hover, stacked vertical. */
+// leaf pip/hover-vertical
+export const Vertical: Story = { args: { pip: { ...HOVER_PIP, stacking: "vertical" }, items: [BOARD, TIMER], forceHover: true }, parameters: { size: [480, 500] } };
+
+/** More widgets than fit: "+2" at the end. There is no limit on always-on-screen widgets. The panel shows four boxes; the rest is one press away. */
+// leaf pip/overflow
+export const Overflow: Story = { args: { items: [BOARD, TIMER, POLL, NOTES], more: MORE }, parameters: { size: [1100, 360] } };
+
+/** The overflow menu open. */
+// leaf pip/overflow-menu
+export const OverflowMenu: Story = { args: { items: [BOARD, TIMER, POLL, NOTES], more: MORE, pip: HOVER_PIP, forceHover: true, defaultMenuOpen: true }, parameters: { size: [1100, 420] } };

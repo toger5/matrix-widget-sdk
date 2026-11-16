@@ -3,12 +3,12 @@ import { useEffect, useRef, type ReactNode } from "react";
 
 import type { CapabilityPromptViewModel } from "../../appViewModel";
 import { widgetVm } from "../fixtures";
-import { FakeWidget } from "../storyEnv";
+import { InDesignPanel } from "../rooms/storyFrame";
 import { WidgetView } from "./WidgetView";
 
 const X = "org.matrix.mscXXXX.";
 
-// What the leaves request (`CAP_REQUESTS` of design/src/lib.mjs).
+// What the prompts request (`CAP_REQUESTS` of the mockups).
 const SHORT = [
   `widget:org.matrix.msc2876.read_events.timeline:m.room.message`,
   `host:${X}forward_event.timeline:m.room.message`,
@@ -83,48 +83,71 @@ function ScrolledToEnd({ children }: { children: ReactNode }) {
   );
 }
 
+/** One running widget in its tab body (here in the room panel of "Design crit"): the widget, or what covers it (loading, failed, the capability prompt). */
 const meta: Meta<typeof WidgetView> = {
   title: "Widget/WidgetView",
   component: WidgetView,
-  args: { standIn: <FakeWidget name="Element Call" />, tab: { panelId: "panel-design", tabId: "tab-design-call" } },
-  // The view fills its tab body: the wrapper stands in for it (the screenshot viewport sets the size).
-  decorators: [
-    (Story) => (
-      <div style={{ width: "100%", height: "100vh", minHeight: 300, display: "flex" }}>
-        <Story />
-      </div>
-    ),
-  ],
+  args: { tab: { panelId: "panel-design", tabId: "tab-design-call" } },
+  // The view fills its tab body: the stories show it in the room panel of "Design crit".
+  render: (args) => (
+    <InDesignPanel widget={args.widget}>
+      <WidgetView {...args} />
+    </InDesignPanel>
+  ),
 };
 export default meta;
 type Story = StoryObj<typeof WidgetView>;
 
-/** leaf widgetview/plain */
-export const Ready: Story = { args: { widget: widgetVm("design", "call") } };
+/** Dev tools: no (full widget). The widget fills its tab body, without padding. */
+// leaf widgetview/plain
+export const Ready: Story = { args: { widget: widgetVm("design", "call") }, parameters: { size: [900, 560] } };
 
-/** leaf widgetview/loading */
-export const Loading: Story = { args: { widget: widgetVm("design", "call", { load: { state: "loading" } }) } };
+/** Loading: until the widget reports that it is ready (`notify_ready`). */
+// leaf widgetview/loading
+export const Loading: Story = { args: { widget: widgetVm("design", "call", { load: { state: "loading" } }) }, parameters: { size: [700, 440] } };
 
-/** leaf widgetview/failed */
-export const Failed: Story = { args: { widget: widgetVm("design", "call", { load: { state: "failed", error: "The widget did not answer within 15 seconds." } }) } };
-
-/** leaf widgetview/prompt */
-export const CapabilityPrompt: Story = {
-  args: { widget: widgetVm("design", "call", { load: { state: "loading" }, prompts: { capabilities: capabilities(SHORT) } }) },
+/** Failed to load: the error, "Retry" and "Close tab". */
+// leaf widgetview/failed
+export const Failed: Story = {
+  args: { widget: widgetVm("design", "call", { load: { state: "failed", error: "The widget did not answer within 15 seconds." } }) },
+  parameters: { size: [700, 440] },
 };
 
-/** leaf widgetview/prompt-long: one row of "This app" unchecked, scrolled to the end */
+/** Capability prompt: summary and sections. Everything is checked at first. The risky parts of the summary come first, in bold; a warning icon marks risky rows and their section. */
+// leaf widgetview/prompt
+export const CapabilityPrompt: Story = {
+  args: { widget: widgetVm("design", "call", { prompts: { capabilities: capabilities(SHORT) } }) },
+  parameters: { size: [700, 640] },
+};
+
+/**
+ * Capability prompt: a long list. The MSC4412 test widget's 33 capabilities plus one this app does
+ * not know, scrolled to the end of the list. Only the sections scroll; the header and the buttons
+ * stay, and the header of the section in view sticks to the top. One row of "This app" is
+ * unchecked, so its checkbox is mixed.
+ */
+// leaf widgetview/prompt-long
 export const CapabilityPromptLong: Story = {
+  parameters: { size: [700, 560] },
   args: { widget: widgetVm("design", "call", { prompts: { capabilities: capabilities(LONG, { unknown: [UNKNOWN] }) } }), initialUnchecked: [`widget:org.matrix.msc2931.navigate`] },
   render: (args) => (
-    <ScrolledToEnd>
-      <WidgetView {...args} />
-    </ScrolledToEnd>
+    <InDesignPanel widget={args.widget}>
+      <ScrolledToEnd>
+        <WidgetView {...args} />
+      </ScrolledToEnd>
+    </InDesignPanel>
   ),
 };
 
-/** leaf widgetview/prompt-merged: a second request joined, one earlier row unchecked, "Approve" blocked */
+/**
+ * Capability prompt: a second request joined, "Approve" blocked. The widget asked again while the
+ * card was open: its two capabilities joined their sections, checked and marked "New"; the row the
+ * user had unchecked stays unchecked. "Approve" is blocked for 3 s after the card appeared or a
+ * request added to it; "Deny all" never is.
+ */
+// leaf widgetview/prompt-merged
 export const CapabilityPromptMerged: Story = {
+  parameters: { size: [700, 840] },
   args: {
     widget: widgetVm("design", "call", { prompts: { capabilities: capabilities([...SHORT, ...MORE], { added: MORE, blocked: true }) } }),
     initialUnchecked: [`widget:${X}send_event.delayed`],
@@ -132,17 +155,27 @@ export const CapabilityPromptMerged: Story = {
 };
 
 /**
- * leaf widgetview/prompt-openid: one OpenID capability, "Once", "Approve" blocked. Variants through
- * the args: `initialAlways: [OPENID]` (set to "Always"), `initialUnchecked: [OPENID]` (the choice disabled).
+ * Capability prompt: one OpenID capability, "Once", "Approve" blocked. The host grants an OpenID
+ * token for one use. "Once" (the default): the widget asks again for the next token. "Always": it
+ * gets every token without this card, remembered with the other approvals (else while the widget
+ * runs). The choice is disabled while its row is unchecked. Variants through the args:
+ * `initialAlways: [OPENID]` (set to "Always"), `initialUnchecked: [OPENID]` (the choice disabled).
  */
+// leaf widgetview/prompt-openid
 export const CapabilityPromptOpenId: Story = {
+  parameters: { size: [700, 440] },
   args: { widget: widgetVm("design", "call", { prompts: { capabilities: capabilities([OPENID], { blocked: true }) } }), initialAlways: [], initialUnchecked: [] },
   // The card reads the initial choices once: a changed arg starts it again.
-  render: (args) => <WidgetView key={JSON.stringify([args.initialAlways, args.initialUnchecked])} {...args} />,
+  render: (args) => (
+    <InDesignPanel widget={args.widget}>
+      <WidgetView key={JSON.stringify([args.initialAlways, args.initialUnchecked])} {...args} />
+    </InDesignPanel>
+  ),
 };
 
-/** No leaf: the compact strip of a PiP box (224×140). */
+/** The capability prompt in a PiP box (224×140): one line and "Open to answer" (the mockups do not draw it: finding `compact-failed-state`). */
 export const CompactPrompt: Story = {
+  parameters: { size: [256, 172] },
   render: (args) => (
     <div style={{ width: 224, height: 140, flex: "none", display: "flex", alignSelf: "center", margin: 16 }}>
       <WidgetView {...args} compact widget={widgetVm("design", "board", { prompts: { capabilities: capabilities([`widget:${X}get_matrix_context`]) } })} />

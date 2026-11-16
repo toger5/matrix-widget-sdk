@@ -1,7 +1,7 @@
-import { useEffect, useId, useRef, useState, type CSSProperties, type KeyboardEvent, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, type CSSProperties, type KeyboardEvent } from "react";
 
 import { approveBlockedUntil, CAPABILITY_APPROVE_DELAY_MS, type CapabilityPromptViewModel, type PanelId, type TabId, type WidgetDevToolsLayout, type WidgetInstanceViewModel } from "../../appViewModel";
-import { useDispatch } from "../env";
+import { useDispatch, useViewEnv } from "../env";
 import { Avatar, Button, Icon } from "../ui/atoms";
 import { WidgetSlot } from "../ui/WidgetSlot";
 import { DevTools } from "./DevTools";
@@ -16,8 +16,6 @@ export interface WidgetViewProps {
   compact?: boolean;
   /** The tab that shows the widget, for the "Close tab" button of the failed state. */
   tab?: { panelId: PanelId; tabId: TabId };
-  /** Story only: what the `WidgetSlot` shows outside the app's shadow root. */
-  standIn?: ReactNode;
   /** Story only: the message of the MessagesPanel that starts expanded. */
   initialExpandedMessage?: string;
   /** Story only: the graph the StatsPanel shows first. */
@@ -35,13 +33,14 @@ export interface WidgetViewProps {
  * The slot is always rendered (the iframe must never lose its place); a state that the user has
  * to see or answer is a layer that covers it.
  */
-export function WidgetView({ widget, devTools, compact = false, tab, standIn, initialExpandedMessage, initialStatsSeries, initialUnchecked, initialAlways }: WidgetViewProps) {
+export function WidgetView({ widget, devTools, compact = false, tab, initialExpandedMessage, initialStatsSeries, initialUnchecked, initialAlways }: WidgetViewProps) {
+  const { widgetStandIn } = useViewEnv();
   const dev = devTools?.open ? devTools : undefined;
   return (
     <div className={`wv dock-${dev?.dock ?? "none"}`} data-testid="widget-view" data-widget-id={widget.id}>
       {dev && <DevTools widget={widget} layout={dev} initialExpandedMessage={initialExpandedMessage} initialStatsSeries={initialStatsSeries} />}
       <div className="wv-widget">
-        <WidgetSlot widgetId={widget.id}>{standIn}</WidgetSlot>
+        <WidgetSlot widgetId={widget.id}>{widgetStandIn?.(widget, compact)}</WidgetSlot>
         <WidgetState widget={widget} compact={compact} tab={tab} initialUnchecked={initialUnchecked} initialAlways={initialAlways} />
       </div>
     </div>

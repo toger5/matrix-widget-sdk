@@ -8,8 +8,11 @@ import { StoryEnv } from "../storyEnv";
 import { RoomTimeline } from "./RoomTimeline";
 import { SoloPanel } from "./storyFrame";
 
-// The timeline is what the Timeline tab shows, so the stories show it inside its room panel.
-const meta: Meta<typeof RoomTimeline> = { title: "Rooms/RoomTimeline", component: RoomTimeline };
+/**
+ * The RoomTimeline: what the Timeline tab shows (so the stories show it inside its room panel). The
+ * events of the room for debugging, oldest at the top, a heading per day, no composer.
+ */
+const meta: Meta<typeof RoomTimeline> = { title: "Rooms/RoomTimeline", component: RoomTimeline, parameters: { size: [700, 440] } };
 export default meta;
 type Story = StoryObj<typeof RoomTimeline>;
 
@@ -20,11 +23,20 @@ const hook = (timeline: TimelineHook["timeline"]): (() => TimelineHook) => {
   return () => value;
 };
 
-// leaf timeline/events: events of every kind (the default fixture `ROOM_TIMELINE`), one showing its JSON, "Load older events"
 const design = roomPanel("design", [widgetTab("design", "call"), timelineTab("design")], timelineTab("design").id);
+/**
+ * Events of every kind (the fixture `ROOM_TIMELINE`), one showing its JSON ("Starting the call
+ * now"), "Load older events". Oldest at the top, newest at the bottom; scrolled to the bottom, it
+ * stays there while new events arrive. One line per event: time, sender, what happened, event type.
+ * State events are muted; undecryptable and deleted events, reactions, edits and unknown types (a
+ * content preview) get a line too. Pressing a line shows the event's JSON. "Load older events"
+ * first shows loaded events that are not rendered (the newest 200 are), then asks the session for
+ * 50 more; while it loads it reads "Loading older events…" and is disabled.
+ */
+// leaf timeline/events
 export const Events: Story = {
   render: () => <SoloPanel main={vm(design)} panel={design} />,
-  // the leaf shows the event "Starting the call now" open
+  parameters: { size: [900, 800] },
   play: async ({ canvasElement }) => {
     await new Promise((resolve) => setTimeout(resolve, 100));
     Array.from(canvasElement.querySelectorAll<HTMLButtonElement>(".tl-h"))
@@ -33,7 +45,6 @@ export const Events: Story = {
   },
 };
 
-// leaf timeline/start: a mocked room, every event is there; the last two were sent by a widget
 const LAB: RoomTimelineData = {
   atStart: true,
   loadingOlder: false,
@@ -51,7 +62,14 @@ const LAB: RoomTimelineData = {
   ],
 };
 const lab = roomPanel("lab", [timelineTab("lab")]);
+/**
+ * Start of the room reached. A mocked room: the DevBackend holds every event, so the start is
+ * always reached there. The last events were sent by a widget (the RTC member event and a custom
+ * type).
+ */
+// leaf timeline/start
 export const Start: Story = {
+  parameters: { size: [900, 640] },
   render: () => (
     <StoryEnv env={{ useRoomTimeline: hook({ status: "ready", value: LAB }) }}>
       <SoloPanel main={devMainVm({ workspaces: { [ACCOUNTS.dev.id]: workspace([lab]) }, widgets: {} })} panel={lab} />
@@ -59,8 +77,9 @@ export const Start: Story = {
   ),
 };
 
-// leaf timeline/loading
 const alone = roomPanel("design", [timelineTab("design")]);
+/** Loading. */
+// leaf timeline/loading
 export const Loading: Story = {
   render: () => (
     <StoryEnv env={{ useRoomTimeline: hook({ status: "loading" }) }}>
@@ -69,7 +88,8 @@ export const Loading: Story = {
   ),
 };
 
-// leaf timeline/error: "Try again" loads it again
+/** Failed to load: "Try again" loads the timeline again. */
+// leaf timeline/error
 export const LoadError: Story = {
   render: () => (
     <StoryEnv env={{ useRoomTimeline: hook({ status: "error", error: "The homeserver did not answer (example.org, timeout after 30 s)." }) }}>

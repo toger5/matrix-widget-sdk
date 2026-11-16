@@ -1,12 +1,13 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
+import { within } from "storybook/test";
 
 import type { MainViewModel, RoomToolsViewModel } from "../../appViewModel";
 import type { RoomStateData, RoomTimelineData } from "../env";
 import { mainVm, ROOM_TOOLS_TIMELINE, ROOMS, roomPanel, roomToolsVm, widgetTab, workspace } from "../fixtures";
-import { SideStage, StoryEnv } from "../storyEnv";
+import { SideStage, StoryEnv, fillIn } from "../storyEnv";
 import { RoomToolsView } from "./RoomToolsView";
 
-/** Ada's account with "Design crit" and "Platform team" in two room panels (as in leaf roomtools/app), the Dev tools open. */
+/** Ada's account with "Design crit" and "Platform team" in two room panels (as in `app-appshell--room-tools`), the Dev tools open. */
 const main = (roomTools: Partial<RoomToolsViewModel> = {}, o: Partial<MainViewModel> = {}): MainViewModel =>
   mainVm({
     sidePanel: { view: "roomTools", width: 324 },
@@ -18,32 +19,43 @@ const main = (roomTools: Partial<RoomToolsViewModel> = {}, o: Partial<MainViewMo
 /** The props for the view model `m`. */
 const props = (m: MainViewModel, canSwitchToDevBackend = false) => ({ main: m, roomTools: m.roomTools!, canSwitchToDevBackend });
 
-const meta: Meta<typeof RoomToolsView> = { title: "SidePanel/RoomToolsView", component: RoomToolsView, decorators: [SideStage] };
+/**
+ * The Dev tools of a Matrix account: the rooms of the room panels in a dropdown, their state and
+ * timeline read like a mocked room's, everything sent as the account.
+ */
+const meta: Meta<typeof RoomToolsView> = { title: "SidePanel/RoomToolsView", component: RoomToolsView, decorators: [SideStage], parameters: { size: [348, 620] } };
 export default meta;
 type Story = StoryObj<typeof RoomToolsView>;
 
 const click = (root: HTMLElement, selector: string, text: string) => Array.from(root.querySelectorAll<HTMLElement>(selector)).find((el) => el.textContent?.includes(text))?.click();
 const nextFrame = () => new Promise((resolve) => setTimeout(resolve, 50));
 
-/** leaf roomtools/none: no room panel shows a room; the DevBackend is enabled, so its switch link is at the bottom */
+/**
+ * No room open (no room panel shows a room). "New room panel" opens a room panel with the room
+ * picker; the Dev tools stay open and show the room picked there. The DevBackend is enabled, so its
+ * switch link is at the bottom.
+ */
+// leaf roomtools/none
 export const NoRoomOpen: Story = {
   args: props(main({}, { workspaces: { ada: workspace([]) } }), true),
-  parameters: { stageHeight: 520 },
+  parameters: { size: [348, 520] },
 };
 
-/** leaf roomtools/dropdown: the rooms of the room panels, left to right; no "Add room" */
+/** Room dropdown open: the rooms of the room panels, left to right. No "Add room". It starts on the room of the focused panel; a picked room stays while it is open. */
+// leaf roomtools/dropdown
 export const RoomDropdown: Story = {
   args: props(main({ openSections: [] })),
-  parameters: { stageHeight: 520 },
+  parameters: { size: [348, 520] },
   play: ({ canvasElement }) => {
     canvasElement.querySelector<HTMLElement>(".room-pick")?.click();
   },
 };
 
-/** leaf roomtools/state: "sent as you", no "Add member", one member's content shown */
+/** State: "sent as you", the shortcuts without "Add member", send state, the state explorer (one member's content shown). */
+// leaf roomtools/state
 export const State: Story = {
   args: props(main({ openSections: ["state"] })),
-  parameters: { stageHeight: 1040 },
+  parameters: { size: [348, 1040] },
   play: async ({ canvasElement }) => {
     click(canvasElement, ".tree-row.lvl0", "m.room.member");
     await nextFrame();
@@ -51,7 +63,8 @@ export const State: Story = {
   },
 };
 
-/** leaf roomtools/timeline: the sender is the account, a delayed event scheduled here, "Load older events" */
+/** Timeline: the sender is the account, a delayed event scheduled here, "Load older events". The events are the ones the session holds, newest first. */
+// leaf roomtools/timeline
 export const Timeline: Story = {
   args: props(
     main({
@@ -59,21 +72,22 @@ export const Timeline: Story = {
       scheduled: { ada: { [ROOMS.design.id]: [{ delayId: "syd_dSbxDqCGhJ", type: "org.matrix.msc3401.call.member", stateKey: "_@ada:example.org_KJQWPLXBTA", delayMs: 30_000, restarts: 0, scheduledAt: Date.now() - 2_600 }] } },
     }),
   ),
-  parameters: { stageHeight: 1000 },
+  parameters: { size: [348, 1000] },
   render: (args) => (
     <StoryEnv env={{ useRoomTimeline: () => ({ timeline: { status: "ready", value: ROOM_TOOLS_TIMELINE }, retry: () => {} }) }}>
       <RoomToolsView {...props(args.main!)} />
     </StoryEnv>
   ),
+  play: ({ canvasElement }) => fillIn(within(canvasElement).getByLabelText("Body"), "Does the widget see this?"),
 };
 
 const READING: RoomStateData = { state: { status: "loading" }, retry: () => {} };
 const TIMELINE_FAILED: RoomTimelineData = { timeline: { status: "error", error: "The homeserver did not answer (example.org, timeout after 30 s)." }, retry: () => console.info("retry the timeline") };
 
-/** leaf roomtools/loading-failed: the state is being read, the timeline failed */
+/** Reading the room: the state is loading, the timeline failed. */
+// leaf roomtools/loading-failed
 export const LoadingFailed: Story = {
   args: props(main({ openSections: ["state", "timeline"] })),
-  parameters: { stageHeight: 620 },
   render: (args) => (
     <StoryEnv env={{ useRoomState: () => READING, useRoomTimeline: () => TIMELINE_FAILED }}>
       <RoomToolsView {...props(args.main!)} />

@@ -3,14 +3,17 @@
 //   node e2e/tools/shot.mjs story <story id, e.g. app-leftbar--expanded> <out.png> [width] [height] [light]
 //   node e2e/tools/shot.mjs url   <url> <out.png> [width] [height]
 //   node e2e/tools/shot.mjs all   <out dir> [light]
-// A leaf is rendered at its own size (design/leaves/<id>.html). Stories need `npm run storybook` (port 6006).
+// A leaf is rendered at its own size (design/leaves/<id>.html). Stories need `npm run storybook` (port 6006); a
+// story is rendered at its own size (`parameters.size`, which the preview writes to `<html data-story-size>`;
+// 1280x800 by default) unless a width and height are given.
 //
 // `all` is the regression check of a change that should not change any pixel (a CSS refactor): it writes every
-// leaf (`<dir>/<theme>/leaves/<id>.png`, at its own size) and every story (`<dir>/<theme>/stories/<id>.png`,
-// 1280x800; skipped when Storybook does not run), each with `.styles.txt`, a hash of the computed style of every
-// element, which also shows changes that draw nothing (cursor, pointer-events). Animations are off (reduced
-// motion). The theme is dark, with `light` light (leaves with a fixed theme are left out). Run it before and after
-// the change into two directories and compare them with `diff -rq <before> <after>`.
+// leaf (`<dir>/<theme>/leaves/<id>.png`, at its own size) and every story (`<dir>/<theme>/stories/<id>.png`, at
+// its own size; skipped when Storybook does not run), each with `.styles.txt`, a hash of the computed style of
+// every element, which also shows changes that draw nothing (cursor, pointer-events). Animations are off (reduced
+// motion). The theme is dark, with `light` light (leaves with a fixed theme are left out; a story with a fixed theme
+// keeps it). Run it before and after the change into two directories and compare them with
+// `diff -rq <before> <after>`.
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -45,8 +48,12 @@ const browser = await chromium.launch();
 const page = await browser.newPage({ viewport: size });
 page.on("pageerror", (e) => console.error("page error:", e.message));
 page.on("console", (m) => m.type() === "error" && console.error("console error:", m.text()));
-await page.goto(url, { waitUntil: "load" });
-if (kind === "story") await page.waitForSelector("#storybook-root > *", { timeout: 15000 }).catch(() => console.error("the story rendered nothing"));
+if (kind === "story") {
+  const own = await openStory(page, url, { resize: !(w && h) });
+  if (!(w && h) && own) size = own;
+} else {
+  await page.goto(url, { waitUntil: "load" });
+}
 await page.waitForTimeout(400);
 await page.screenshot({ path: out });
 await browser.close();
@@ -54,6 +61,28 @@ console.log(`${out} ${size.width}x${size.height}`);
 
 function storyUrl(storyId, lightTheme) {
   return `http://localhost:6006/iframe.html?id=${storyId}&viewMode=story&globals=theme:${lightTheme ? "light" : "dark"}`;
+}
+
+/**
+ * Opens a story and returns its size (`<html data-story-size>`, written by the preview). If the viewport has
+ * another size, the story is opened again at its own size, so it lays out (and measures) at that size from the
+ * start.
+ */
+async function openStory(page, url, { resize = true } = {}) {
+  const load = async () => {
+    await page.goto(url, { waitUntil: "load" });
+    await page.waitForSelector("#storybook-root > *", { timeout: 15000 }).catch(() => console.error(`${url}: the story rendered nothing`));
+  };
+  await load();
+  const attr = await page.evaluate(() => document.documentElement.dataset.storySize);
+  const [width, height] = (attr ?? "").split("x").map(Number);
+  if (!width || !height) return undefined;
+  const viewport = page.viewportSize();
+  if (resize && (viewport?.width !== width || viewport?.height !== height)) {
+    await page.setViewportSize({ width, height });
+    await load();
+  }
+  return { width, height };
 }
 
 /** One line per element (and per drawn ::before / ::after): its path and a hash of its computed style. */
@@ -100,15 +129,18 @@ async function all(dir, lightTheme) {
   } catch {
     console.error("Storybook does not run on port 6006: only the leaves");
   }
-  for (const s of stories) shots.push({ file: join(dir, "stories", s), url: storyUrl(s, lightTheme), size: { width: 1280, height: 800 }, story: true });
+  for (const s of stories) shots.push({ file: join(dir, "stories", s), url: storyUrl(s, lightTheme), story: true });
 
   const browser = await chromium.launch();
   const page = await browser.newPage({ reducedMotion: "reduce" });
   page.on("pageerror", (e) => console.error("page error:", e.message));
   for (const shot of shots) {
-    await page.setViewportSize(shot.size);
-    await page.goto(shot.url, { waitUntil: "load" });
-    if (shot.story) await page.waitForSelector("#storybook-root > *", { timeout: 15000 }).catch(() => console.error(`${shot.file}: the story rendered nothing`));
+    if (shot.story) {
+      await openStory(page, shot.url);
+    } else {
+      await page.setViewportSize(shot.size);
+      await page.goto(shot.url, { waitUntil: "load" });
+    }
     await page.evaluate(() => document.fonts.ready);
     await page.waitForTimeout(shot.story ? 300 : 50);
     mkdirSync(dirname(shot.file), { recursive: true });

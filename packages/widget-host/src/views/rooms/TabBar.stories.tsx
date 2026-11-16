@@ -1,11 +1,12 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 
 import type { MainViewModel, RoomPanelViewModel, WidgetInstanceViewModel } from "../../appViewModel";
-import { devToolsLayout, mainVm, roomPanel, timelineTab, widgetTab, widgetVm, workspace } from "../fixtures";
-import { DEV_SETTINGS, HeadOnly, SETTINGS, SoloPanel } from "./storyFrame";
+import { Screen } from "../app/storyScreen";
+import { appVm, devToolsLayout, mainVm, roomPanel, timelineTab, widgetTab, widgetVm, workspace } from "../fixtures";
+import { DEV_SETTINGS, HeadOnly } from "./storyFrame";
 import { TabBar } from "./TabBar";
 
-// The tab bar is a part of the room panel's header, so the stories show the header of a panel.
+/** The tab bar is a part of the room panel's header (the room name, then the tabs), so the stories show the header of a panel. */
 const meta: Meta<typeof TabBar> = { title: "Rooms/TabBar", component: TabBar };
 export default meta;
 type Story = StoryObj<typeof TabBar>;
@@ -16,19 +17,32 @@ const vm = (panel: RoomPanelViewModel, widgets: WidgetInstanceViewModel[], devTo
     widgets: Object.fromEntries(widgets.map((w) => [w.id, w])),
   });
 
-// leaf tabs/widget-active: WidgetTab active, the other WidgetTab and the room name inactive
 const plain = roomPanel("design", [widgetTab("design", "call"), widgetTab("design", "board")]);
-export const WidgetActive: Story = { render: () => <HeadOnly main={vm(plain, [widgetVm("design", "call"), widgetVm("design", "board")])} panel={plain} /> };
+/** WidgetTab active, the other WidgetTab and the room name inactive. */
+// leaf tabs/widget-active
+export const WidgetActive: Story = { render: () => <HeadOnly main={vm(plain, [widgetVm("design", "call"), widgetVm("design", "board")])} panel={plain} />, parameters: { size: [860, 72] } };
 
-// leaf tabs/overview-active: the room name selected; dev tools enabled, the whiteboard's dev tools are open
 const overview = roomPanel("design", [widgetTab("design", "call"), widgetTab("design", "board")], null);
+/**
+ * Room name selected (dev tools enabled: ⋯ on the widget tabs; the whiteboard's dev tools are open).
+ * The room name looks like the active tab; the body is the RoomOverview. The + button selects the
+ * room name too.
+ */
+// leaf tabs/overview-active
 export const OverviewActive: Story = {
+  parameters: { size: [860, 72] },
   render: () => <HeadOnly main={vm(overview, [widgetVm("design", "call"), widgetVm("design", "board")], [widgetVm("design", "board").id])} panel={overview} settings={DEV_SETTINGS} />,
 };
 
-// leaf tabs/pinned: two always-on-screen widgets (pin icon), one of them active
 const pinned = roomPanel("design", [widgetTab("design", "call"), widgetTab("design", "board"), widgetTab("design", "poll")]);
+/**
+ * Tabs marked as always on screen (pin icon). Element Call is pinned and active: it is shown in its
+ * tab. The whiteboard is pinned and not active: it is shown in the PictureInPicturePanel until its
+ * tab is pressed.
+ */
+// leaf tabs/pinned
 export const Pinned: Story = {
+  parameters: { size: [960, 72] },
   render: () => (
     <HeadOnly
       main={vm(pinned, [widgetVm("design", "call", { alwaysOnScreen: true }), widgetVm("design", "board", { alwaysOnScreen: true }), widgetVm("design", "poll")])}
@@ -37,24 +51,39 @@ export const Pinned: Story = {
   ),
 };
 
-// leaf tabs/timeline-active: the Timeline tab is active (dev tools enabled: ⋯ on the widget tabs only)
 const timeline = roomPanel("design", [widgetTab("design", "call"), widgetTab("design", "board"), timelineTab("design")], timelineTab("design").id);
+/**
+ * Timeline tab active (dev tools enabled: ⋯ on the widget tabs only). The timeline is a host tab: a
+ * message icon, "Timeline" and ×, but no ⋯ and no pin. A room view has at most one; it goes at the
+ * end when it is opened. Alt+W closes it like a widget tab.
+ */
+// leaf tabs/timeline-active
 export const TimelineActive: Story = {
+  parameters: { size: [860, 72] },
   render: () => <HeadOnly main={vm(timeline, [widgetVm("design", "call"), widgetVm("design", "board")])} panel={timeline} settings={DEV_SETTINGS} />,
 };
 
-// leaf tabs/overflow: more tabs than fit; the widget tabs scroll and the "all tabs" button opens the menu
 const MANY = ["call", "board", "poll", "notes", "timer", "retro", "stream"] as const;
 const many = roomPanel("design", MANY.map((w) => widgetTab("design", w)), widgetTab("design", "poll").id);
+/**
+ * More tabs than fit: the widget tabs scroll (the room name stays) and the "all tabs" button opens
+ * the menu of all tabs (open here). Element Call is always on screen and not the active tab, so it
+ * is in the floating panel.
+ */
+// leaf tabs/overflow
 export const Overflow: Story = {
-  render: () => (
-    <SoloPanel
-      main={vm(many, MANY.map((w) => widgetVm("design", w, { alwaysOnScreen: w === "call" })))}
-      panel={many}
-      settings={SETTINGS}
+  parameters: { size: [860, 360] },
+  // The whole app (LeftBar collapsed), so the PiP panel shows the call.
+  render: (_, { globals }) => (
+    <Screen
+      vm={appVm({
+        ...vm(many, MANY.map((w) => widgetVm("design", w, { alwaysOnScreen: w === "call" }))),
+        leftBar: { collapsed: true, expandButtonVisible: false },
+        workspaces: { ada: workspace([many], { pip: { stacking: "horizontal", position: { x: 608, y: 24 }, boxSize: { width: 224, height: 140 } } }) },
+      })}
+      theme={globals.theme}
     />
   ),
-  // the leaf shows the menu open
   play: async ({ canvasElement }) => {
     await new Promise((resolve) => setTimeout(resolve, 100));
     canvasElement.querySelector<HTMLButtonElement>(".tab-all")?.click();

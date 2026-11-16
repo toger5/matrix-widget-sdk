@@ -49,6 +49,7 @@
 .stage.float > .pip { right: 20px; bottom: 20px; }
 .roompanel.cut { flex: none; width: 100%; height: 100%; border-bottom: 0; border-radius: var(--r-4) var(--r-4) 0 0; }
 .roompanel.cut .rp-body { background: linear-gradient(var(--surface-2), var(--surface)); }
+.roompanel.cut .rp-body > * { visibility: hidden; } /* a story's cut-off body (the RoomOverview, a timeline) shows nothing */
 
 /* fake timer widget (PiP leaves) */
 .w-timer { background: #1f1512; color: #ffd9cc; display: grid; place-items: center; text-align: center; container-type: size; }

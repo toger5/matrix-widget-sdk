@@ -1,58 +1,86 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 
-import { DEV_TOOLS_DATA, devToolsLayout, widgetVm } from "../fixtures";
-import { FakeWidget, StoryEnv } from "../storyEnv";
+import type { DevToolPanel, WidgetDevToolsLayout } from "../../appViewModel";
+import { devToolsLayout, widgetVm } from "../fixtures";
+import { InDesignPanel } from "../rooms/storyFrame";
 import { WidgetView } from "./WidgetView";
 
-/** The dev tools are part of the WidgetView (it puts them at the dock position), so the stories render the whole view. The stats panel has its own file. */
+/**
+ * The WidgetDevToolBar of a widget with its panels. The dev tools are part of the WidgetView (it
+ * puts them at the dock position), so the stories render the whole view, in the room panel of
+ * "Design crit". The bar is at the outer edge, the panels between it and the widget. The stats
+ * panel has its own file.
+ */
 const meta: Meta<typeof WidgetView> = {
   title: "Widget/DevTools",
   component: WidgetView,
-  args: { widget: widgetVm("design", "call"), standIn: <FakeWidget name="Element Call" /> },
-  decorators: [
-    (Story) => (
-      // The run duration counts from `runningSince`: keep it at the mockup's "3 m 12 s" instead of the fixture's fixed date.
-      <StoryEnv env={{ useDevToolsData: () => STORY_DATA }}>
-        <div style={{ width: "100%", height: "100vh", minHeight: 300, display: "flex" }}>
-          <Story />
-        </div>
-      </StoryEnv>
-    ),
-  ],
+  args: { widget: widgetVm("design", "call") },
+  render: (args) => (
+    <InDesignPanel widget={args.widget} devTools={args.devTools}>
+      <WidgetView {...args} />
+    </InDesignPanel>
+  ),
+  parameters: { size: [1000, 640] },
 };
 export default meta;
 type Story = StoryObj<typeof WidgetView>;
 
-const STORY_DATA = { ...DEV_TOOLS_DATA, stats: { ...DEV_TOOLS_DATA.stats, runningSince: Date.now() - 192_000 } };
+/** The dev tools docked at `dock` with `panels` open, oldest first, `size` px high (docked top or bottom) or wide (left or right). */
+const layout = (dock: WidgetDevToolsLayout["dock"], panels: DevToolPanel[], size?: number): WidgetDevToolsLayout =>
+  devToolsLayout({
+    dock,
+    panels: panels.map((panel) => ({ panel, share: 1 })),
+    size: { top: dock === "top" || dock === "bottom" ? (size ?? 250) : 250, side: dock === "left" || dock === "right" ? (size ?? 340) : 340 },
+  });
 
-/** leaf devtools/bottom-panel (the bar without panels is in leaves devtools/bar-*) */
-export const DockedBottom: Story = { args: { devTools: devToolsLayout({ dock: "bottom", size: { top: 250, side: 340 } }) } };
+/** Bar only, docked top (the default). */
+// leaf devtools/bar-top
+export const BarTop: Story = { args: { devTools: layout("top", []) }, parameters: { size: [900, 560] } };
 
-/** leaf devtools/two-panels */
-export const TwoPanels: Story = {
-  args: {
-    devTools: devToolsLayout({
-      panels: [
-        { panel: "messages", share: 1 },
-        { panel: "stats", share: 1 },
-      ],
-      size: { top: 250, side: 340 },
-    }),
-  },
-};
+/** Bar only, docked bottom. */
+// leaf devtools/bar-bottom
+export const BarBottom: Story = { args: { devTools: layout("bottom", []) }, parameters: { size: [900, 560] } };
 
-/** leaf devtools/messages */
-export const MessagesExpanded: Story = { args: { devTools: devToolsLayout({ size: { top: 420, side: 340 } }), initialExpandedMessage: "m4" } };
+/** Bar only, docked left. The vertical bar needs about 600px for its labels; a shorter one shows icons only (see `SidePanels`). */
+// leaf devtools/bar-left
+export const BarLeft: Story = { args: { devTools: layout("left", []) }, parameters: { size: [900, 680] } };
 
-/** leaves devtools/driver and devtools/console, as in leaf devtools/fourth-panel */
-export const DriverAndConsole: Story = {
-  args: {
-    devTools: devToolsLayout({
-      panels: [
-        { panel: "driver", share: 1 },
-        { panel: "console", share: 1 },
-      ],
-      size: { top: 330, side: 340 },
-    }),
-  },
-};
+/** Bar only, docked right. */
+// leaf devtools/bar-right
+export const BarRight: Story = { args: { devTools: layout("right", []) }, parameters: { size: [900, 680] } };
+
+/** One panel open (full width): the messages. */
+// leaf devtools/one-panel
+export const OnePanel: Story = { args: { devTools: layout("top", ["messages"]) } };
+
+/** Two panels next to each other. */
+// leaf devtools/two-panels
+export const TwoPanels: Story = { args: { devTools: layout("top", ["messages", "stats"]) } };
+
+/** Three panels next to each other: the maximum. */
+// leaf devtools/three-panels
+export const ThreePanels: Story = { args: { devTools: layout("top", ["messages", "stats", "driver"], 290) }, parameters: { size: [1280, 680] } };
+
+/** Fourth panel opened: the oldest one closes. Messages, Stats and Driver were open; pressing Console closed Messages, the oldest. Three panels are the maximum. */
+// leaf devtools/fourth-panel
+export const FourthPanel: Story = { args: { devTools: layout("top", ["stats", "driver", "console"], 290) }, parameters: { size: [1280, 680] } };
+
+/** Docked right with two panels: they stack. At this height the vertical bar shows icons only. */
+// leaf devtools/side-panels
+export const SidePanels: Story = { args: { devTools: layout("right", ["messages", "driver"], 400) } };
+
+/** Docked bottom with one panel: the bar stays at the edge, the panels sit between the widget and the bar, the separator above them (as when docked right). */
+// leaf devtools/bottom-panel
+export const DockedBottom: Story = { args: { devTools: layout("bottom", ["messages"]) } };
+
+/** WidgetDevToolMessagesPanel: the list, one message expanded. */
+// leaf devtools/messages
+export const MessagesExpanded: Story = { args: { devTools: layout("top", ["messages"], 420), initialExpandedMessage: "m4" }, parameters: { size: [1000, 720] } };
+
+/** WidgetDevToolDriverPanel: the capabilities (approved, auto-approved, denied; the one-use one marked "once") and the mocked driver actions. */
+// leaf devtools/driver
+export const Driver: Story = { args: { devTools: layout("top", ["driver"], 356) }, parameters: { size: [1000, 720] } };
+
+/** WidgetDevToolConsolePanel: the log about the widget. */
+// leaf devtools/console
+export const Console: Story = { args: { devTools: layout("top", ["console"]) } };

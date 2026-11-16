@@ -9,6 +9,7 @@ import {
   type AppViewModel,
   type MainViewModel,
   type MockedRoomData,
+  type ModalViewModel,
   type RecentRoom,
   type RecentWidget,
   type RoomPanelViewModel,
@@ -140,6 +141,16 @@ export function workspace(panels: RoomPanelViewModel[], o: Partial<WorkspaceLayo
   };
 }
 
+/** The running widgets of a view model, by id. */
+export const byId = (widgets: WidgetInstanceViewModel[]): Record<string, WidgetInstanceViewModel> => Object.fromEntries(widgets.map((w) => [w.id, w]));
+
+/**
+ * `mainVm` with Ada's workspace showing `panels` (laid out with `layout`: dev tools, PiP) and
+ * `widgets` running: the screens of the `App/AppShell` and `App/Complete` stories.
+ */
+export const panelsVm = (panels: RoomPanelViewModel[], widgets: WidgetInstanceViewModel[], o: Partial<MainViewModel> = {}, layout: Partial<WorkspaceLayout> = {}): MainViewModel =>
+  mainVm({ workspaces: { ada: workspace(panels, layout) }, widgets: byId(widgets), ...o });
+
 /** Recent widgets (`[room, widget]`) and rooms, newest first, as in the room picker of the mockups (`pickerBody`). */
 export const recentWidgets = (...widgets: [RoomKey, WidgetName][]): RecentWidget[] =>
   widgets.map(([room, widget], i) => ({ roomId: ROOMS[room].id, widgetKey: wk(widget), lastOpened: 1_763_300_000_000 - i * 3_600_000 }));
@@ -193,6 +204,26 @@ export function devMainVm(o: Partial<MainViewModel> = {}): MainViewModel {
     ...o,
   });
 }
+
+/** The confirmation of activating the DevBackend (leaf app/confirm). */
+export const SWITCH_TO_DEV_BACKEND: ModalViewModel = {
+  kind: "confirm",
+  title: "Switch to the DevBackend?",
+  body: "Your 2 room panels are closed and their widgets stop. They are opened again when you switch back to Ada Okafor.",
+  confirmLabel: "Switch to the DevBackend",
+  danger: false,
+  intent: { type: "account/switch", accountId: ACCOUNTS.dev.id, confirmed: true },
+};
+
+/** The confirmation of a change of a real room's configuration from the Dev tools (leaf roomtools/confirm). */
+export const CHANGE_POWER_LEVELS: ModalViewModel = {
+  kind: "confirm",
+  title: "Change the power levels of Design crit?",
+  body: "This m.room.power_levels event is sent to the room as @ada:example.org and changes who may do what in it, for everyone. Some changes cannot be undone, for example lowering your own level.",
+  confirmLabel: "Send the state event",
+  danger: true,
+  intent: { type: "roomTools/sendState", roomId: ROOMS.design.id, event: { type: "m.room.power_levels", stateKey: "", content: {} }, confirmed: true },
+};
 
 /** `devTools` and `devBackend`: the two developer switches of the Settings. */
 export const appVm = (main: MainViewModel = mainVm(), devTools = false, devBackend = devTools): AppViewModel => ({ settings: { devTools, devBackend, theme: "system" }, screen: { kind: "main", main } });

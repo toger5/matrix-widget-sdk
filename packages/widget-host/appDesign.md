@@ -106,9 +106,9 @@ A room view is a tabbed container, shown inside a room panel. Its first tab is t
 
 ## Tabs
 
-- **Room name**: avatar, room name and the number of widgets and users. It cannot be closed. Unselected it is plain header text; selected it looks like an active tab.
+- **Room name**: avatar, room name and the number of widgets and users (visible text with tooltips). It cannot be closed. Unselected it is plain header text; selected it looks like an active tab.
 - **WidgetTab**: contains the full widget. The tab name is the widget name, with the widget icon/avatar if available. It has a close button and, with dev tools enabled, an overflow button (three dots) that opens the [WidgetDevToolBar](#widgetdevtoolbar). An always-on-screen widget gets a pin icon (see [PictureInPicturePanel](#pictureinpicturepanel)).
-- **Timeline**: the [RoomTimeline](#roomtimeline), at most one per room view. A message icon, "Timeline" and a close button.
+- **Timeline**: the [RoomTimeline](#roomtimeline), at most one per room view. A message icon, "Timeline" and a close button; no overflow button, no pin.
 
 ## RoomOverview
 
@@ -119,7 +119,7 @@ A room view is a tabbed container, shown inside a room panel. Its first tab is t
 - "Add widget" (dev tools) opens a form at the top of the widget list: the widget or Element Call form of the Dev tools, or a pasted state event. It adds the widget, it does not open it:
   - only in this host (the default): a local widget, kept in this browser for this account and room and never sent. The same type and ID replaces it.
   - to the room: sends the state event as you. Replacing a widget of the room asks first; a refusal (no permission) is shown in the form, the draft stays.
-- Local widgets follow the room's widgets, marked "Local", with edit (dev tools; the form with type and ID fixed) and remove (asks first). They are listed and run also with dev tools disabled.
+- Local widgets follow the room's widgets, marked "Local", with edit (dev tools; the widget form without the target, type and ID fixed, "Save") and remove (asks first). They are listed and run also with dev tools disabled.
 - Encryption status and member list
 - DevBackend card (DevBackend enabled, not in a DevBackend room): "Copy to DevBackend". It does not copy local widgets.
 
@@ -130,7 +130,7 @@ The events of the room, for debugging. No composer.
 - Oldest at the top, newest at the bottom. New events (also the ones widgets send) appear live; while scrolled to the bottom, it stays there.
 - One line per event, under a heading per day: time, sender (user ID), what happened in words, event type. State events are muted. Nothing is hidden: undecryptable and deleted events, reactions and edits get a line too.
 - Pressing a line shows the event's JSON.
-- At the top: "Load older events", or "Start of the room" once it is reached.
+- At the top: "Load older events", or "Start of the room" once it is reached. It first shows loaded events that are not rendered yet, then asks the session for more; it is disabled while loading.
 
 ## Capability prompt
 
@@ -140,8 +140,8 @@ A widget's request for capabilities covers its WidgetTab with a permission card 
 - The capabilities in sections, in this order: Read this room, Send as you, Change the room, Direct messages to devices, You and your account, Files, Calls, This app, Unknown to this app (with a note that the app does not act on them; approving them is not remembered).
 - A section header: a checkbox for all its rows (mixed if only some are checked), the title, "N of M" and a warning icon if a row is risky. A row: checkbox, label, the full capability string (wrapping) and a warning icon if it acts in your name, changes the room for everyone, is hidden from the room or proves your identity.
 - Everything is checked at first. Capabilities the widget holds already or gets without asking are not listed.
-- A capability the host grants for one use (an OpenID token: the widget asks again for the next one) has "Once" (default) / "Always" in its row, disabled while the row is unchecked. "Always" grants it whenever the widget asks, without the card: remembered when remembering is on, else while the widget runs.
-- The header and the buttons ("Deny all", "Approve N selected") stay in place; only the sections scroll.
+- A capability the host grants for one use (an OpenID token: the widget asks again for the next one) has "Once" (default) / "Always" in its row, disabled while the row is unchecked; choosing never toggles the row. "Always" grants it whenever the widget asks, without the card: remembered when remembering is on, else while the widget runs.
+- The header and the buttons ("Deny all", "Approve N selected") stay in place; only the sections scroll, and the title of the section in view sticks.
 - A request that arrives while the card is open joins it: its capabilities are added checked and marked "New"; the choices made so far stay.
 - "Approve" is blocked for 3 s after the card appeared or a request added to it (a status line counts down). "Deny all" is never blocked.
 
@@ -150,7 +150,7 @@ A widget's request for capabilities covers its WidgetTab with a permission card 
 A toolbar for a single widget, with information like the driver state (approved capabilities) and a log of the messages.
 
 - It looks technical, like Photoshop, Godot and the browser devtools: less rounded corners and a technical font (not monospace).
-- It is docked at the top of the widget by default and can be moved to the bottom, left or right, with the bar at the outer edge.
+- It is docked at the top of the widget by default and can be moved to the bottom, left or right, with the bar at the outer edge. A vertical bar too short for its labels shows icons only.
 - A reload button restarts the widget like "Retry" (new iframe and driver); its panels start empty.
 - The other buttons open and close panels: the first opens at full width, the second next to it, the third next to those. Opening a fourth closes the oldest one.
 - Panels are resized by dragging between them.
@@ -168,7 +168,8 @@ A toolbar for a single widget, with information like the driver state (approved 
 - Tiles: actions sent, run duration, events shared with the widget, events sent from the widget.
 - Characters sent over the widget API since the widget started: total, to widget and from widget. Pressing one of the three numbers shows its graph.
 - The graph has one bar per 5 s up to now, as many as fit (at most 5 minutes), in one color per graph.
-- A bar's value is written along it (rotated), above the bar where it fits, else inside it, else only in the hover tooltip, which shows both directions.
+- A bar's value is written along it (rotated), above the bar where it fits, else inside it, else only in the hover tooltip, which shows both directions; the hovered bar is outlined.
+- Numbers are short (970, 4.4k, 12k, 1.2M). The y axis has at most 4 steps of 1, 2, 2.5 or 5 × 10ⁿ, at least 22px apart.
 - No text overlaps at any panel size; the chart header wraps in narrow panels.
 
 ### WidgetDevToolDriverPanel
@@ -259,7 +260,7 @@ A simple fullscreen login. It allows skipping the login, which immediately ends 
 # Custom behavior
 
 - Collapsing the LeftBar while the only tab open is a widget, and shown, renders the widget fullscreen: no rounded containers anymore.
-  - The room header stays (it is important information); the tab, the + button and the close button are not shown.
+  - The room header stays (it is important information); the tab, the + button and the close button are not shown. Selecting the room name ends it.
   - The header spans the full page: no rounded corners, no padding for the room view.
 
 # Required visualisations
@@ -374,7 +375,7 @@ Notes for the implementation. They add to the design above, they do not change i
 - Define semantic color tokens (surface, border, text, primary, highlight, danger, ...) as CSS variables; components never use raw colors. Follow `prefers-color-scheme`, with a manual override.
 - Widgets get the theme too: the widget iframe uses the theme's color scheme (so `prefers-color-scheme` inside a widget is the theme), and a theme change is pushed as `update_theme` to widgets that hold that capability.
 - Use one spacing scale and one radius scale. The dev tools use a smaller radius from the same scale.
-- Keep the construction-fence background low contrast and static. Add a persistent "DevBackend" badge, so the mode is not signalled by the background alone.
+- Keep the construction-fence background low contrast and static. Add a persistent "DevBackend" badge (in the LeftBar; floating at the top while it is collapsed, also in fullscreen), so the mode is not signalled by the background alone.
 
 **Accessibility**
 
@@ -396,8 +397,8 @@ Notes for the implementation. They add to the design above, they do not change i
 - Every list has an empty, a loading and an error state.
 - Long room and widget names are truncated, with the full name in a tooltip.
 - A widget that fails to load shows the error and a retry button inside its tab.
-- Confirm actions that lose state: activating the DevBackend (closes all panels; restore them when switching back), logging out, revoking capabilities.
-- The recovery key is a secret: it is never stored, logged or kept in the view model.
+- Confirm actions that lose state: activating the DevBackend (closes all panels; restore them when switching back), logging out, revoking capabilities. One that cannot be undone (a change of a real room's configuration) gets an alert icon and a danger button.
+- The recovery key is a secret: its field has no autocomplete and no spell check, and it is never stored, logged or kept in the view model.
 
 **Performance**
 

@@ -10,9 +10,9 @@
  * Views never import `src/app`, a session or the bindings. That keeps them renderable in
  * Storybook: `StoryEnv` (`src/views/storyEnv.tsx`) provides this context from fixtures.
  */
-import { createContext, useContext } from "react";
+import { createContext, useContext, type ReactNode } from "react";
 
-import { loggableIntent, type AppIntent, type Loadable, type MockedRoomData, type RoomId, type WidgetDevToolsData, type WidgetInstanceId } from "../appViewModel";
+import { loggableIntent, type AppIntent, type Loadable, type MockedRoomData, type RoomId, type WidgetDevToolsData, type WidgetInstanceId, type WidgetInstanceViewModel } from "../appViewModel";
 import type { RawEvent, RoomDetails, RoomTimeline } from "../session";
 import type { WidgetEventParser } from "../widgetStateEvent";
 
@@ -42,6 +42,12 @@ export interface ViewEnv {
    * widgets, what their iframe loads, the URL check of the widget forms. Pass it to `roomWidgets`.
    */
   widgetEvents: WidgetEventParser;
+  /**
+   * Stories only: what a `WidgetSlot` shows in place of the widget's iframe (outside the app's
+   * shadow root a `<slot>` shows its children). `compact`: inside a PiP box. The app leaves it
+   * undefined: its iframes are slotted in.
+   */
+  widgetStandIn?: (widget: WidgetInstanceViewModel, compact: boolean) => ReactNode;
 }
 
 /** What `useRoomState` returns. */

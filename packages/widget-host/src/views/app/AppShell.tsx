@@ -32,6 +32,8 @@ export type RenderWidget = (widgetId: WidgetInstanceId, options?: { compact?: bo
 
 export interface AppShellProps {
   vm: AppViewModel;
+  /** Stories only: draw in this theme instead of the one `settings.theme` resolves to (the Settings still show their choice). */
+  storyTheme?: "light" | "dark";
 }
 
 const CLOSED_DEV_TOOLS: WidgetDevToolsLayout = { open: false, dock: "top", panels: [], size: { top: 240, side: 360 } };
@@ -51,8 +53,9 @@ function useResolvedTheme(theme: SettingsViewModel["theme"]): "light" | "dark" {
 }
 
 /** The root view: the restoring screen, the login page, or the main screen (LeftBar, SidePanel, RoomsArea, PiP, modal, toasts). */
-export function AppShell({ vm }: AppShellProps) {
-  const theme = useResolvedTheme(vm.settings.theme);
+export function AppShell({ vm, storyTheme }: AppShellProps) {
+  const resolved = useResolvedTheme(vm.settings.theme);
+  const theme = storyTheme ?? resolved;
   const { screen } = vm;
   return (
     <div className="app-root" data-theme={theme}>

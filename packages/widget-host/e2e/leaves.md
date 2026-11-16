@@ -56,7 +56,7 @@ The Dev tools of a Matrix account are **not reachable**: the tests run on the De
 | --- | --- |
 | `roomtools/none`, `roomtools/dropdown`, `roomtools/state`, `roomtools/timeline`, `roomtools/loading-failed` | **not reachable** (a Matrix account). Stories: `sidepanel-roomtoolsview--no-room-open`, `--room-dropdown`, `--state`, `--timeline`, `--loading-failed` |
 | `roomtools/app` | **not reachable** (a Matrix account). Story: `app-appshell--room-tools` |
-| `roomtools/confirm` | **not reachable** (a Matrix account). Stories: `app-modal--confirm-danger` (the modal) and `sidepanel-roomtoolsview--state` (behind it) |
+| `roomtools/confirm` | **not reachable** (a Matrix account). Story: `app-appshell--room-tools-confirm` |
 
 While the DevBackend is active they are the DevBackendView. "Leave DevBackend" is in no screenshot: without a Matrix account there is nothing to go back to, so the button is not shown.
 
