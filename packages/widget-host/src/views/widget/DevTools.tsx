@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useRef, useState, type KeyboardEvent, type PointerEvent, type ReactNode, type RefObject } from "react";
+import { Fragment, useLayoutEffect, useRef, useState, type KeyboardEvent, type PointerEvent, type ReactNode, type RefObject } from "react";
 
 import type { DevToolPanel, WidgetDevToolsLayout, WidgetInstanceViewModel } from "../../appViewModel";
 import { useDispatch, useViewEnv } from "../env";
@@ -104,13 +104,19 @@ function Separator({ className, orientation, label, value, min, max, step, value
   );
 }
 
-/** The size of an element's parent along one axis, kept up to date. */
+/**
+ * The size of an element's parent along one axis, kept up to date. Measured before the first paint:
+ * a ResizeObserver reports one frame later, and until then the separator's maximum is the current size.
+ */
 function useParentLength(ref: RefObject<HTMLElement | null>, axis: "width" | "height"): number | undefined {
   const [length, setLength] = useState<number | undefined>();
-  useEffect(() => {
+  useLayoutEffect(() => {
     const parent = ref.current?.parentElement;
-    if (!parent || typeof ResizeObserver === "undefined") return;
-    const observer = new ResizeObserver(() => setLength(parent.getBoundingClientRect()[axis]));
+    if (!parent) return;
+    const measure = () => setLength(parent.getBoundingClientRect()[axis]);
+    measure();
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(measure);
     observer.observe(parent);
     return () => observer.disconnect();
   }, [ref, axis]);
