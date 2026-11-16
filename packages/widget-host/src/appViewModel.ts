@@ -18,7 +18,8 @@
  * └─ screen
  *    ├─ restoring | login
  *    └─ main                       MainViewModel
- *       ├─ accounts, activeAccountId   multi-account; the DevBackend is one of the accounts
+ *       ├─ accounts, activeAccountId   multi-account; the DevBackend is one of the accounts;
+ *       │                              each Matrix account with its device verification
  *       ├─ addAccount?                 the login form while a second account is added
  *       ├─ leftBar                     LeftBar
  *       ├─ sidePanel                   SidePanel: AccountView | Settings | DevBackendView
@@ -49,7 +50,7 @@
  * the comments refer to them. `designFeedback.md` lists what the current `LiveSession`,
  * `SessionProvider` and `InMemoryBackend` cannot provide yet.
  */
-import type { RoomSummary } from "./session";
+import type { RoomSummary, VerificationEmoji } from "./session";
 import type { ResolvedWidget } from "./widgetStateEvent";
 
 export type AccountId = string;
@@ -146,11 +147,32 @@ export interface AccountViewModel {
   avatarUrl?: string;
   homeserver?: string;
   deviceId?: string;
-  /** `false`: the AccountView shows the verification flow (emoji or recovery key), a self-contained view on the account's session. */
+  /**
+   * Whether this device is verified (`LiveSession.needsVerification`), following the session.
+   * `false`: the AccountView shows the "Verify this device" box. leaf sidepanel/verify-start
+   */
   verified?: boolean;
+  /** The verification of this device that is running, or how the last one ended. Not set: none. */
+  verification?: VerificationViewModel;
   /** The MAS account page ("Manage account & devices"), if the homeserver has one. */
   manageUrl?: string;
 }
+
+/**
+ * The steps of verifying this device in the AccountView. While one of the first three runs, the
+ * box replaces the device details and the menu. The recovery key itself is never in the view model.
+ */
+export type VerificationViewModel =
+  /** The request went to the account's other devices; none has accepted yet. leaf sidepanel/verify-waiting */
+  | { step: "waiting" }
+  /** Both devices show `emoji`. `confirming`: "They match" was pressed, the other device has not confirmed yet. leaves sidepanel/verify-emoji, verify-confirming */
+  | { step: "emoji"; emoji: VerificationEmoji[]; confirming: boolean }
+  /** The recovery key form. `checking`: submitted. `error`: the key was refused. leaves sidepanel/verify-recovery-key, verify-recovery-checking, verify-recovery-wrong */
+  | { step: "recoveryKey"; checking: boolean; error?: string }
+  /** It ended without success (cancelled, timed out, the emoji differ, an error): the "Verify this device" box again, with the reason. leaf sidepanel/verify-failed */
+  | { step: "failed"; error: string }
+  /** This device was verified; shown until "Done". leaf sidepanel/verify-done */
+  | { step: "done" };
 
 /** What the session of the active account knows. Views derive room lists and widget tiles from it. */
 export interface AccountDataViewModel {
@@ -437,6 +459,11 @@ export type AppIntent =
   | { type: "account/manage"; accountId: AccountId } // opens the MAS account page
   | { type: "account/copyMatrixUri"; accountId: AccountId }
   | { type: "account/logout"; accountId: AccountId; confirmed?: boolean } // confirmed; also forgets the remembered capabilities
+  | { type: "verification/startEmoji"; accountId: AccountId } // "Verify with another device": asks the account's other devices (step waiting)
+  | { type: "verification/startRecoveryKey"; accountId: AccountId } // "Use recovery key": shows the form
+  | { type: "verification/submitRecoveryKey"; accountId: AccountId; recoveryKey: string } // checks the key; it goes into no state and no log
+  | { type: "verification/answerEmoji"; accountId: AccountId; match: boolean } // "They match" (wait for the other device) / "They don't match" (ends it as a mismatch)
+  | { type: "verification/cancel"; accountId: AccountId } // ends the running step (back to the box); "Done" closes the success box
   // left bar and side panel
   | { type: "leftBar/collapse" }
   | { type: "leftBar/revealExpandButton" } // Escape, or the mouse at the left edge
@@ -498,6 +525,13 @@ export type AppIntent =
   | { type: "media/resizeBox"; heightShare: number }
   | { type: "media/upload"; files: File[] }
   | { type: "media/copyMxcUri"; mxcUri: string };
+
+/** An intent as it may be logged: the secrets (the recovery key, a password) are left out. */
+export function loggableIntent(intent: AppIntent): Partial<AppIntent> {
+  if (intent.type === "verification/submitRecoveryKey") return { type: intent.type };
+  if (intent.type === "login/withPassword") return { type: intent.type, username: intent.username };
+  return intent;
+}
 
 // ---------------------------------------------------------------------------------------------
 // Data that is NOT part of AppViewModel (see the top of the file): one store per widget / per

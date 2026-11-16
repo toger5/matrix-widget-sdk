@@ -1,4 +1,5 @@
 /** The `ViewEnv` of the stories: intents are logged, the data hooks answer from fixtures. */
+import type { Decorator } from "@storybook/react-vite";
 import type { ReactNode } from "react";
 
 import { DEFAULT_VIEW_ENV, ViewEnvContext, type ViewEnv } from "./env";
@@ -24,3 +25,15 @@ export function FakeWidget({ name = "Widget" }: { name?: string }) {
     </div>
   );
 }
+
+/**
+ * The stage of the side panel leaves: 348 wide with 12px padding, so the column is 324px wide.
+ * `parameters.stageHeight`: the leaf's height (620). `parameters.fence`: the DevBackend background.
+ */
+export const SideStage: Decorator = (Story, context) => (
+  <div className={`stage ${context.parameters.fence ? "fence" : ""}`} style={{ width: 348, height: (context.parameters.stageHeight as number | undefined) ?? 620 }}>
+    <div className="sidecol">
+      <Story />
+    </div>
+  </div>
+);

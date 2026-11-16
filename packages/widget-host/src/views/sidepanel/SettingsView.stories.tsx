@@ -1,20 +1,9 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 
+import { SideStage } from "../storyEnv";
 import { SettingsView } from "./SettingsView";
 
-const meta: Meta<typeof SettingsView> = {
-  title: "SidePanel/SettingsView",
-  component: SettingsView,
-  decorators: [
-    (Story) => (
-      <div className="stage" style={{ width: 348, height: 420 }}>
-        <div className="sidecol">
-          <Story />
-        </div>
-      </div>
-    ),
-  ],
-};
+const meta: Meta<typeof SettingsView> = { title: "SidePanel/SettingsView", component: SettingsView, decorators: [SideStage], parameters: { stageHeight: 420 } };
 export default meta;
 type Story = StoryObj<typeof SettingsView>;
 

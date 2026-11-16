@@ -13,7 +13,6 @@ import { AppShell } from "../views/app/AppShell";
 import { EMPTY_DEV_TOOLS_DATA, EMPTY_MOCKED_ROOM_DATA, ViewEnvContext, type ViewEnv } from "../views/env";
 import { widgetSlotName } from "../views/ui/WidgetSlot";
 import type { AppController } from "./controller";
-import { Verification } from "./Verification";
 
 const NARROW = "(max-width: 900px)";
 const noSubscription = () => () => {};
@@ -65,10 +64,6 @@ function viewEnv(controller: AppController, narrow: boolean): ViewEnv {
       return details;
     },
     avatar: async (mxcUrl) => controller.activeSession()?.avatar(mxcUrl),
-    renderVerification: (accountId) => {
-      const session = controller.session(accountId);
-      return session ? <Verification session={session} /> : null;
-    },
   };
 }
 

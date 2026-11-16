@@ -23,7 +23,7 @@ The app is built as MVVM from the design in [`appDesign.md`](appDesign.md) (mock
 - `src/views/` holds the views, one folder per area (`app`, `sidepanel`, `devbackend`, `rooms`, `widget`, `pip`). A view renders a slice of the view model and sends intents; it imports no session, no bindings and nothing from `src/app`. Rules: [`src/views/README.md`](src/views/README.md). Each view has stories (`npm run storybook`).
 - `src/styles/app.css` is the stylesheet (it started as a copy of `design/mock.css`).
 - `src/session.ts` is what the app needs from a Matrix client, as interfaces (login, several stored logins, room list, the widget state events of a room, a backend per room, account and room details, suspend/resume, device verification). Its `sessions` export picks the SDK and loads it lazily.
-- `src/matrix_session/js/` implements it on matrix-js-sdk: OAuth 2.0 (dynamic client registration, PKCE, in a popup that returns through `oidc-callback.html`) or a password, `/sync` v2, end-to-end encryption, verification with a recovery key. It is the only folder that imports matrix-js-sdk.
+- `src/matrix_session/js/` implements it on matrix-js-sdk: OAuth 2.0 (dynamic client registration, PKCE, in a popup that returns through `oidc-callback.html`) or a password, `/sync` v2, end-to-end encryption, device verification (emoji or recovery key). It is the only folder that imports matrix-js-sdk.
 - `src/matrix_session/rust/` is the same on matrix-rust-sdk (`../matrix-sdk-uniffi-js`, with native sliding sync). A build has one SDK or the other, see "Choosing the Matrix SDK" below. This implementation has not run against a homeserver yet. The SDK API it adds is in [`../matrix-sdk-uniffi-js/README.md`](../matrix-sdk-uniffi-js/README.md) ("API added to the SDK"), its open questions in [`implementation_findings.md`](implementation_findings.md) ("Matrix sessions").
 - `src/matrix_session/memory/devBackend.ts` is the DevBackend: the same `LiveSession` on the crate's `InMemoryBackend`, with several mocked rooms, an editing API for the DevBackendView and a JSON seed format (`seed.ts`).
 - `src/lib/` holds what is neither a view nor a session: the store of approved capabilities, the avatar cache, log formatting and the driver's log.
@@ -33,17 +33,21 @@ The app is built as MVVM from the design in [`appDesign.md`](appDesign.md) (mock
 
 Enter a homeserver, log in, pick a room, open one of its widgets. Widgets come from `m.widget`,
 `org.matrix.msc4411.widget` and `im.vector.modular.widgets` state; the list follows the room
-state. If the account has cross-signing and this device is not verified, the room list offers
-to verify it: by comparing emoji with another device of the account (the host sends the request,
-accept it there), or with the recovery key. Log out revokes the session and deletes the stored login and the crypto store.
+state. If the account has cross-signing and this device is not verified, the AccountView offers
+to verify it ("Verify this device"): by comparing emoji with another device of the account (the
+host sends the request, accept it there), or with the recovery key. Whether the device is verified
+follows the session, also when it was verified elsewhere. Log out revokes the session and deletes
+the stored login and the crypto store.
 
 The login screen only appears when no login is stored or the homeserver has ended the stored
 one. If a stored login cannot be started for another reason (the crypto store cannot be opened,
 say), the host says so and offers **Try again** and **Log out** instead: logging in again would
 create a second device and leave the first one behind.
 
-This mode has been checked up to the login options of matrix.org; everything after the login
-(sync, sending, encryption, verification) is covered by tests against a faked client only.
+This mode has been checked up to the login options of matrix.org. What comes after the login is
+only tested against faked clients: the backends (`test/*SdkBackend.test.ts`), the room and account
+data and the device verification of both SDKs (`test/*SessionData.test.ts`), and the verification
+flows of the AccountView (`test/deviceVerification.test.ts`). Sync and encryption themselves are not.
 
 ## In-memory store
 

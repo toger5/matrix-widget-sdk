@@ -8,6 +8,7 @@
 import {
   activeAccount,
   activeWorkspace,
+  loggableIntent,
   widgetInstanceId,
   type AccountId,
   type AccountViewModel,
@@ -53,6 +54,7 @@ import {
   workspaceWidgetIds,
 } from "./layout";
 import { loadPersisted, savePersisted, type PersistedUi } from "./persistence";
+import { AccountVerification, type AccountVerificationEvents } from "./runtime/deviceVerification";
 import { WidgetRuntime } from "./runtime/widgetRuntime";
 import { Store } from "./store";
 
@@ -60,6 +62,8 @@ import { Store } from "./store";
 export const DEV_ACCOUNT_ID: AccountId = "devBackend";
 const MAX_RECENTS = 12;
 const TOAST_MS = 4000;
+/** Why a running device verification ended when the DevBackend became active. */
+const VERIFICATION_STOPPED = "The DevBackend was activated, which stops the verification.";
 
 const errorText = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
@@ -104,6 +108,8 @@ export class AppController {
   private readonly provider: SessionProvider;
   private persist: boolean;
   private readonly sessions = new Map<AccountId, LiveSession>();
+  /** The device verification of each adopted Matrix session. */
+  private readonly verifications = new Map<AccountId, AccountVerification>();
   private devBackend: DevBackend | undefined;
   private readonly runtimes = new Map<WidgetInstanceId, WidgetRuntime>();
   /** Room backends of the active account, shared by the widgets of a room and released with the last one. */
@@ -153,9 +159,6 @@ export class AppController {
   }
   activeSession(): LiveSession | undefined {
     return this.main && this.sessions.get(this.main.activeAccountId);
-  }
-  session(accountId: AccountId): LiveSession | undefined {
-    return this.sessions.get(accountId);
   }
   getDevBackend(): DevBackend | undefined {
     return this.devBackend;
@@ -309,10 +312,37 @@ export class AppController {
       .account()
       .then((info) => this.setAccount(session.accountId, (a) => ({ ...a, ...info })))
       .catch((e: unknown) => console.warn("reading the account failed", e));
-    void session
-      .needsVerification()
-      .then((needs) => this.setAccount(session.accountId, (a) => ({ ...a, verified: !needs })))
-      .catch(() => undefined);
+    this.followVerification(session);
+  }
+
+  /**
+   * From now on `verified` and `verification` of the session's account follow its
+   * `AccountVerification` (a suspended session may only answer after `resume()`).
+   */
+  private followVerification(session: LiveSession): void {
+    this.dropVerification(session.accountId);
+    this.verifications.set(session.accountId, new AccountVerification(session, this.verificationEvents(session.accountId)));
+  }
+
+  /** Cancel what runs and stop following the account's session. */
+  private dropVerification(accountId: AccountId): void {
+    this.verifications.get(accountId)?.dispose();
+    this.verifications.delete(accountId);
+  }
+
+  /** Where the `AccountVerification` of an account reports to. */
+  private verificationEvents(accountId: AccountId): AccountVerificationEvents {
+    return {
+      changed: ({ verified, verification }) => this.setAccount(accountId, (a) => ({ ...a, verified, verification })),
+      outcome: (outcome) => {
+        // The AccountView shows it; elsewhere a toast says how it ended.
+        const m = this.main;
+        if (!m || (m.sidePanel.view === "account" && m.activeAccountId === accountId)) return;
+        const account = m.accounts.find((a) => a.id === accountId);
+        const name = account?.displayName || account?.userId || accountId;
+        this.toast(outcome.verified ? `This device is verified for ${name}` : `Verifying this device for ${name} failed: ${outcome.error}`);
+      },
+    };
   }
 
   /** Remove an account from the app (it was logged out, or its login is gone). */
@@ -321,6 +351,7 @@ export class AppController {
     if (!m) return;
     const wasActive = m.activeAccountId === accountId;
     if (wasActive) this.stopAllWidgets();
+    this.dropVerification(accountId);
     this.sessions.delete(accountId);
     delete this.recents[accountId];
     const accounts = m.accounts.filter((a) => a.id !== accountId);
@@ -629,10 +660,15 @@ export class AppController {
       accounts: mm.accounts.map((a) => (a.kind === "matrix" && (a.status === "live" || a.status === "suspended") ? { ...a, status: toDev ? "suspended" : "live" } : a)),
       data: { rooms: { status: "loading" }, recents: this.recents[target] ?? [] },
     }));
+    // A verification needs the homeserver: it ends before the sessions are suspended.
+    // TODO-FINDING verification-cancel-on-suspend - the cancel is sent by the session in the background and is likely refused by the suspension that follows at once (js: the FetchGate); the other device then sees the verification time out. Options: wait for the cancel (with a time limit) before suspending, or accept the timeout.
+    if (toDev) for (const verification of this.verifications.values()) verification.stop(VERIFICATION_STOPPED);
     // "Once active, no Matrix CS API calls are made anymore."
     for (const [id, session] of this.sessions) {
       if (id === DEV_ACCOUNT_ID) continue;
       await (toDev ? session.suspend() : session.resume()).catch((e: unknown) => console.warn(`${toDev ? "suspending" : "resuming"} ${id} failed`, e));
+      // What changed while it was suspended, or could not be read then.
+      if (!toDev) this.verifications.get(id)?.refresh();
     }
     this.watchRooms();
   }
@@ -650,13 +686,16 @@ export class AppController {
         intent: { type: "account/logout", accountId, confirmed: true },
       });
     }
+    const session = this.sessions.get(accountId);
     try {
-      const session = this.sessions.get(accountId);
+      // A running verification is cancelled while the client can still tell the other device.
+      this.dropVerification(accountId);
       if (session) await session.logout();
       else await this.provider.clearStored(accountId);
       clearCapabilities(account.userId);
       this.forgetAccount(accountId);
     } catch (e) {
+      if (session && this.sessions.get(accountId) === session) this.followVerification(session);
       this.toast(`Logging out failed: ${errorText(e)}`);
     }
   }
@@ -733,6 +772,7 @@ export class AppController {
    */
   async populate(seed: HostSeed): Promise<void> {
     this.stopOAuth?.();
+    for (const verification of this.verifications.values()) verification.stop(VERIFICATION_STOPPED);
     if (this.main) this.stopAllWidgets();
     this.notifyReadyTimeoutMs = seed.notifyReadyTimeoutMs;
     this.stopWatchingRooms?.();
@@ -793,7 +833,7 @@ export class AppController {
     try {
       this.handle(intent);
     } catch (e) {
-      console.error("intent failed", intent, e);
+      console.error("intent failed", loggableIntent(intent), e);
       this.toast(errorText(e));
     }
   };
@@ -859,6 +899,17 @@ export class AppController {
       }
       case "account/logout":
         return void this.logout(intent.accountId, intent.confirmed === true);
+      case "verification/startEmoji":
+        // A suspended session cannot verify (its AccountView is not shown while the DevBackend is active).
+        return this.devActive ? undefined : this.verifications.get(intent.accountId)?.startEmoji();
+      case "verification/startRecoveryKey":
+        return this.devActive ? undefined : this.verifications.get(intent.accountId)?.startRecoveryKey();
+      case "verification/submitRecoveryKey":
+        return this.verifications.get(intent.accountId)?.submitRecoveryKey(intent.recoveryKey);
+      case "verification/answerEmoji":
+        return this.verifications.get(intent.accountId)?.answerEmoji(intent.match);
+      case "verification/cancel":
+        return this.verifications.get(intent.accountId)?.cancel();
 
       // left bar and side panel
       case "leftBar/collapse":
@@ -1070,7 +1121,7 @@ export class AppController {
       }
       default: {
         const unhandled: never = intent;
-        console.warn("unhandled intent", unhandled);
+        console.warn("unhandled intent", loggableIntent(unhandled));
       }
     }
   }

@@ -12,12 +12,12 @@ import {
   type Room,
   type ValidatedAuthMetadata,
 } from "matrix-js-sdk";
-import { decodeRecoveryKey, VerificationPhase, VerificationRequestEvent, VerifierEvent, type ShowSasCallbacks, type VerificationRequest } from "matrix-js-sdk/lib/crypto-api";
 
 import { AccountStore } from "./accountStore";
 import { JsSdkBackend } from "./backend/jsSdkBackend";
 import { FetchGate } from "./fetchGate";
 import { accountInfo, exportRoom, roomDetails } from "./roomData";
+import { needsVerification, onVerificationChanged, RecoveryKeySlot, startEmojiVerification, verifyWithRecoveryKey } from "./verification";
 import { AVATAR_SIZE, AvatarCache } from "../../lib/avatarCache";
 import { describesWidget, WIDGET_EVENT_TYPES, type StateEvent } from "../../widgetStateEvent";
 import {
@@ -215,25 +215,6 @@ function activate(accountId: string, start: Promise<JsSdkSession>): Promise<JsSd
   return tracked;
 }
 
-/** How long the signature of the verifying device may take to arrive after an emoji verification. */
-const VERIFIED_TIMEOUT_MS = 20_000;
-
-/** Resolves once the other device has accepted `request` (or started verifying right away). */
-function accepted(request: VerificationRequest): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const check = () => {
-      const phase = request.phase;
-      if (phase !== VerificationPhase.Ready && phase !== VerificationPhase.Started && phase !== VerificationPhase.Cancelled && phase !== VerificationPhase.Done) return;
-      request.off(VerificationRequestEvent.Change, check);
-      if (phase === VerificationPhase.Cancelled) reject(new Error("The verification was cancelled or timed out."));
-      else if (phase === VerificationPhase.Done) reject(new Error("The verification ended before the emoji were shown."));
-      else resolve();
-    };
-    request.on(VerificationRequestEvent.Change, check);
-    check();
-  });
-}
-
 /** The state events of the widget event types in the SDK's local copy of the room state. */
 function widgetStateEvents(room: Room): StateEvent[] {
   return WIDGET_EVENT_TYPES.flatMap((type) => room.currentState.getStateEvents(type))
@@ -243,8 +224,6 @@ function widgetStateEvents(room: Room): StateEvent[] {
 
 /** A logged-in, syncing client. */
 class JsSdkSession implements LiveSession {
-  /** Set while verifying: the SDK asks for it through `getSecretStorageKey`. */
-  private recoveryKey: Uint8Array<ArrayBuffer> | undefined;
   private readonly avatars = new AvatarCache(async (mxcUrl) => {
     const url = this.client.mxcUrlToHttp(mxcUrl, AVATAR_SIZE, AVATAR_SIZE, "crop", false, true, true);
     if (!url) throw new Error("not an mxc:// URI");
@@ -260,6 +239,8 @@ class JsSdkSession implements LiveSession {
     /** Every request of the client goes through it: closed while the session is suspended. */
     private readonly gate: FetchGate,
     private readonly cryptoDatabasePrefix: string | undefined,
+    /** Holds the recovery key while `verifyWithRecoveryKey` runs; the client's crypto callback reads it. */
+    private readonly recoveryKey: RecoveryKeySlot,
   ) {}
 
   /** Restore a stored login. */
@@ -270,8 +251,8 @@ class JsSdkSession implements LiveSession {
   }
 
   static async start(accountId: string, stored: Stored): Promise<JsSdkSession> {
-    let session: JsSdkSession | undefined;
     const gate = new FetchGate();
+    const recoveryKey = new RecoveryKeySlot();
     const client = createClient({
       fetchFn: gate.fetch,
       baseUrl: stored.homeserverUrl,
@@ -282,12 +263,7 @@ class JsSdkSession implements LiveSession {
       oauthClientId: stored.oauthClientId,
       // Without this a reload would restore tokens the server has already replaced.
       onTokenRefresh: (tokens) => store.update(accountId, (current) => ({ ...current, accessToken: tokens.accessToken, refreshToken: tokens.refreshToken })),
-      cryptoCallbacks: {
-        getSecretStorageKey: async ({ keys }) => {
-          const keyId = Object.keys(keys)[0];
-          return session?.recoveryKey && keyId ? [keyId, session.recoveryKey] : null;
-        },
-      },
+      cryptoCallbacks: { getSecretStorageKey: recoveryKey.getSecretStorageKey },
       timelineSupport: true,
     });
 
@@ -308,8 +284,7 @@ class JsSdkSession implements LiveSession {
       client.stopClient();
       throw e;
     }
-    session = new JsSdkSession(accountId, client, gate, stored.cryptoDatabasePrefix);
-    return session;
+    return new JsSdkSession(accountId, client, gate, stored.cryptoDatabasePrefix, recoveryKey);
   }
 
   account(): Promise<AccountInfo> {
@@ -399,90 +374,21 @@ class JsSdkSession implements LiveSession {
     return JsSdkBackend.create(this.client, roomId);
   }
 
-  /** True when the account has cross-signing but this device is not signed by it. */
-  async needsVerification(): Promise<boolean> {
-    const crypto = this.client.getCrypto();
-    const deviceId = this.client.getDeviceId();
-    if (!crypto || !deviceId) return false;
-    if (!(await crypto.userHasCrossSigningKeys(this.userId, true))) return false;
-    const status = await crypto.getDeviceVerificationStatus(this.userId, deviceId);
-    return status?.crossSigningVerified !== true;
+  /** Device verification: `./verification`. */
+  needsVerification(): Promise<boolean> {
+    return needsVerification(this.client);
   }
 
-  /**
-   * The recovery key opens the account's secret storage: fetch the cross-signing keys from it
-   * (which signs this device) and the key of the room key backup.
-   */
-  async verifyWithRecoveryKey(recoveryKey: string): Promise<void> {
-    const crypto = this.client.getCrypto();
-    if (!crypto) throw new Error("End-to-end encryption is not set up in this client.");
-    try {
-      this.recoveryKey = decodeRecoveryKey(recoveryKey.trim());
-      await crypto.bootstrapCrossSigning({});
-      await crypto.loadSessionBackupPrivateKeyFromSecretStorage().catch((e: unknown) => console.warn("no room key backup key in secret storage", e));
-      await crypto.checkKeyBackupAndEnable();
-    } finally {
-      this.recoveryKey = undefined;
-    }
-    if (await this.needsVerification()) throw new Error("The recovery key was accepted, but this device is still not verified.");
+  onVerificationChanged(listener: () => void): () => void {
+    return onVerificationChanged(this.client, listener);
   }
 
-  /**
-   * Emoji (SAS) verification, started from here: every other device of the account gets the
-   * request, the one that accepts it compares emoji with this one and then signs this device.
-   * The secrets (cross-signing keys, backup key) follow from that device on their own.
-   */
-  async startEmojiVerification(): Promise<EmojiVerification> {
-    const crypto = this.client.getCrypto();
-    if (!crypto) throw new Error("End-to-end encryption is not set up in this client.");
-    const request = await crypto.requestOwnUserVerification();
-    let sas: ShowSasCallbacks | undefined;
-    let done: Promise<void> | undefined;
+  verifyWithRecoveryKey(recoveryKey: string): Promise<void> {
+    return verifyWithRecoveryKey(this.client, this.recoveryKey, recoveryKey);
+  }
 
-    const emoji = (async () => {
-      await accepted(request);
-      // `Started`: the other device chose emoji already and the verifier exists.
-      const verifier = request.verifier ?? (await request.startVerification("m.sas.v1"));
-      const shown = new Promise<ShowSasCallbacks>((resolve) => {
-        const callbacks = verifier.getShowSasCallbacks();
-        if (callbacks) resolve(callbacks);
-        else verifier.once(VerifierEvent.ShowSas, resolve);
-      });
-      // Runs until both sides have confirmed; rejects when either side cancels.
-      done = verifier.verify();
-      done.catch(() => undefined);
-      sas = await Promise.race([
-        shown,
-        done.then(() => {
-          throw new Error("The verification ended before the emoji were shown.");
-        }),
-      ]);
-      if (!sas.sas.emoji) throw new Error("The other device offers no emoji to compare.");
-      return sas.sas.emoji.map(([symbol, name]) => ({ symbol, name }));
-    })();
-    emoji.catch(() => undefined);
-
-    return {
-      emoji,
-      confirm: async () => {
-        await emoji;
-        await sas!.confirm();
-        await done;
-        // This device is verified once the other device's signature of it has come down the sync.
-        const deadline = Date.now() + VERIFIED_TIMEOUT_MS;
-        while (await this.needsVerification()) {
-          if (Date.now() > deadline) throw new Error("The emoji were confirmed, but this device is still not verified.");
-          await new Promise((resolve) => setTimeout(resolve, 500));
-        }
-        await crypto.checkKeyBackupAndEnable().catch((e: unknown) => console.warn("checking the key backup failed", e));
-      },
-      cancel: (mismatch) => {
-        if (mismatch && sas) sas.mismatch();
-        else if (request.phase !== VerificationPhase.Done && request.phase !== VerificationPhase.Cancelled) {
-          request.cancel().catch((e: unknown) => console.warn("cancelling the verification failed", e));
-        }
-      },
-    };
+  startEmojiVerification(): Promise<EmojiVerification> {
+    return startEmojiVerification(this.client);
   }
 
   /** Log out (for an OAuth login this revokes the tokens) and delete this login's entry and its SDK stores. */

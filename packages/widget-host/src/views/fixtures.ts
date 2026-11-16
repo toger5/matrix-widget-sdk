@@ -11,12 +11,13 @@ import {
   type MockedRoomData,
   type RoomPanelViewModel,
   type TabViewModel,
+  type VerificationViewModel,
   type WidgetDevToolsData,
   type WidgetDevToolsLayout,
   type WidgetInstanceViewModel,
   type WorkspaceLayout,
 } from "../appViewModel";
-import type { RoomDetails, RoomSummary } from "../session";
+import type { RoomDetails, RoomSummary, VerificationEmoji } from "../session";
 import type { StateEvent } from "../widgetStateEvent";
 
 const widgetEvent = (key: string, name: string, host: string): StateEvent => ({
@@ -64,6 +65,26 @@ export const ACCOUNTS = {
   bot: { id: "bot", kind: "matrix", status: "restoreFailed", error: "The crypto store could not be opened.", userId: "@qa-bot:staging.example", displayName: "QA bot", homeserver: "staging.example", deviceId: "BOTDEVICE01" },
   dev: { id: "devBackend", kind: "devBackend", status: "live", userId: "@alice:dev.local", displayName: "DevBackend", homeserver: "in-memory", deviceId: "DEVBACKEND" },
 } satisfies Record<string, AccountViewModel>;
+
+/** The 7 emoji of an emoji verification, as in the mockups (`SAS_EMOJI`). */
+export const SAS_EMOJI: VerificationEmoji[] = [
+  { symbol: "🐶", name: "Dog" },
+  { symbol: "🔑", name: "Key" },
+  { symbol: "🍓", name: "Strawberry" },
+  { symbol: "🎧", name: "Headphones" },
+  { symbol: "🎸", name: "Guitar" },
+  { symbol: "🚀", name: "Rocket" },
+  { symbol: "☂️", name: "Umbrella" },
+];
+
+/** The recovery key of the mockups. */
+export const RECOVERY_KEY = "EsTc LW2K PGiF wKEA 3As5 g5c4 BXwk qeeJ ZJV8 Q9fu gUMN UE4d";
+
+/** The AccountView props of Ada's account while this device is verified (`done`) or not, with `verification` running. */
+export const verifyingAccount = (verification?: VerificationViewModel) => ({
+  accounts: [{ ...ACCOUNTS.ada, verified: verification?.step === "done", verification }],
+  activeAccountId: ACCOUNTS.ada.id,
+});
 
 type RoomKey = keyof typeof ROOMS;
 type WidgetName = keyof typeof WIDGET_EVENTS;

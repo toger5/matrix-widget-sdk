@@ -45,7 +45,7 @@ Not decisions, but statements in the documents that turned out wrong or outdated
 | `account-status-markers` | `AccountView.tsx` (`StatusMark`) | The mockups show no account states in the switch list | (a) pills (b) subtitle line (c) disabled row | (a): "paused", "Restoring…", "restore failed"; rows stay clickable |
 | `devbackend-account-actions` | `AccountView.tsx` (`DevAccountBody`) | Does the DevBackend account offer "Copy Matrix URI" or "Log out"? | yes / no | No, as in the mockup |
 | `narrow-side-panel-width` | `src/views/sidepanel/SidePanel.tsx` | Width of the overlaying SidePanel in a narrow window (no handle there) | (a) the persisted width (b) a fixed one | (a), capped to the window |
-| `verification-not-designed` | `src/app/Verification.tsx` | Device verification has no mockup | design it; drive it from the view model | The old flow with the old markup inside the AccountView; not reachable in DevBackend mode, no story, no test |
+| `verification-methods-always-offered` | `src/views/sidepanel/DeviceVerification.tsx` | The "Verify this device" box offers both ways even when one cannot work (no other device, no recovery key set up) | (a) always both (b) only what the session says can work (needs `LiveSession` to tell) | (a): the session's error says why afterwards |
 
 ### DevBackend
 
@@ -105,7 +105,7 @@ The DevBackend runtime (`src/matrix_session/memory/devBackend.ts`):
 
 ### Matrix sessions (not run against a homeserver)
 
-Login, sync, suspend/resume and the storage migration of both SDKs are only verified by the type checker and by tests with faked clients.
+Login, sync, suspend/resume, device verification and the storage migration of both SDKs are only verified by the type checker and by tests with faked clients.
 
 | Name | Where | Question | Options | Now |
 | --- | --- | --- | --- | --- |
@@ -117,6 +117,8 @@ Login, sync, suspend/resume and the storage migration of both SDKs are only veri
 | `export-decrypted-events` | `js/roomData.ts` | A copied room holds decrypted events or the events as sent | either | Decrypted |
 | `concurrent-sessions` | both `session.ts` | Several accounts run at once, one client each; unverified with real SDK stores | restore all / only the active one | All are restored and kept syncing (suspended while the DevBackend is active) |
 | `rust-resume-room-subscription` | `rust/session.ts` | Whether a room's full-state subscription survives stop/start of the sync service | verify on a homeserver | It is requested again on resume |
+| `verification-incoming-requests` | `rust/verification.ts` (`didReceiveVerificationRequest`) | A verification request that another device of the account sends to this one | (a) ignore it (b) show it in the AccountView (design, view model, both SDKs) | (a): only this device starts a verification |
+| `verification-cancel-on-suspend` | `src/app/controller.ts` (`switchAccount`) | Activating the DevBackend cancels a running verification, but the sessions are suspended right after, so the cancel likely never reaches the other device | (a) wait for the cancel (with a time limit) before suspending (b) let the other device time out | (b) |
 
 ## Trivial
 
@@ -128,7 +130,8 @@ Login, sync, suspend/resume and the storage migration of both SDKs are only veri
 - `escape-in-widget`: no Escape while an iframe has focus (the mouse at the left edge reveals the expand button instead).
 - `alt-shift-n-without-room`: Alt+Shift+N on a picker panel opens another picker.
 - `.btn.danger` has no fill; the scrim closes only the info modal.
-- `unverified-device-row`, `devbackend-no-matrix-account`: small texts added to the AccountView for states the mockup does not have.
+- `devbackend-no-matrix-account`: a small text added to the AccountView for a state the mockup does not have.
+- Device verification: "Verify" is disabled while the recovery key field is empty; the field gets the focus when the form appears and after a refused key; activating the DevBackend (or a seed) ends a running verification like a failure, with the reason in the box and a toast; a failed `needsVerification` read keeps the last answer; the dispatch log leaves out the recovery key and the password of an intent (`loggableIntent`).
 - Avatars without an image derive their color from the id; the mockups use fixed hues.
 - `devbackend-timeline-not-virtualized`: the event list shows the newest 100 plus "Show more".
 - `devbackend-media-uploader-name`: a media row shows the widget key, not its name; `devbackend-add-member-content`: "add member" sends only `{membership: "join"}`.

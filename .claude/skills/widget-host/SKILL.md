@@ -37,13 +37,9 @@ All paths below are relative to `packages/widget-host/`.
 | view model | `src/appViewModel.ts` | types from `src/session.ts`, `src/widgetStateEvent.ts` | anything with runtime state |
 | view | `src/views/**` | `appViewModel`, `views/env` (`useDispatch`, `useViewEnv`), `views/ui`, `views/helpers`, `src/widgetStateEvent.ts` (pure), types from `src/session.ts` | `src/app/**`, `src/lib/**`, `src/matrix_session/**`, the bindings, an SDK |
 | controller | `src/app/controller.ts`; pure helpers `src/app/layout.ts`, `persistence.ts`, `store.ts` | everything below | views (except the pure `views/helpers`) |
-| model / runtime | `src/session.ts`, `src/app/runtime/widgetRuntime.ts`, `src/matrix_session/**`, `src/lib/**`, `src/widgetStateEvent.ts` | bindings, `src/app/store.ts`, view model types; an SDK only inside `src/matrix_session/{js,rust}/` | views, the controller |
+| model / runtime | `src/session.ts`, `src/app/runtime/` (`widgetRuntime.ts`, `deviceVerification.ts`), `src/matrix_session/**`, `src/lib/**`, `src/widgetStateEvent.ts` | bindings, `src/app/store.ts`, view model types; an SDK only inside `src/matrix_session/{js,rust}/` | views, the controller |
 | composition root | `src/main.tsx` (shadow root, bindings init, controller, test hook), `src/app/AppRoot.tsx` (`ViewEnv` on the controller, widget iframes) | all | |
 | data (any layer imports it) | `src/exampleWidgets.ts` (state events of the test widgets) | types only | anything else |
-
-One exception: `src/app/Verification.tsx` (device verification) talks to the session directly and is
-rendered through `ViewEnv.renderVerification` (finding `verification-not-designed`). A redesign
-moves it into a view plus view model.
 
 Check (each prints nothing when the rules hold):
 
@@ -105,6 +101,9 @@ grep -rlE '(from |import\()"(matrix-js-sdk|matrix-sdk-uniffi-js)' src | grep -vE
   capabilities legacy widgets get without asking (`LEGACY_AUTO_APPROVED`).
 
 ## The session seam
+
+The inside of the two SDK implementations (storage, login, suspend/resume, device verification,
+their tests) is the `matrix-session` skill (`.claude/skills/matrix-session/SKILL.md`).
 
 - `src/session.ts` is the whole Matrix client as interfaces (`SessionProvider`, `LiveSession`,
   `RoomBackend` (a `MatrixBackend` with `dispose`), `RoomDetails`, …) plus `sessions`, which loads

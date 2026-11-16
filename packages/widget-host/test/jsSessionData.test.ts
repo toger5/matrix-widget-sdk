@@ -1,13 +1,19 @@
 /**
  * The parts of the matrix-js-sdk session that can run on a faked client: what the AccountView,
- * the RoomOverviewTab and "Copy to DevBackend" read (`src/matrix_session/js/roomData`), and the
- * gate that refuses requests while the session is suspended (`src/matrix_session/js/fetchGate`).
+ * the RoomOverviewTab and "Copy to DevBackend" read (`src/matrix_session/js/roomData`), the
+ * device verification (`src/matrix_session/js/verification`), and the gate that refuses requests
+ * while the session is suspended (`src/matrix_session/js/fetchGate`).
  */
+import { EventEmitter } from "node:events";
+
 import type { MatrixClient } from "matrix-js-sdk";
+import { CryptoEvent, encodeRecoveryKey, VerificationPhase, VerificationRequestEvent } from "matrix-js-sdk/lib/crypto-api";
+import { SECRET_STORAGE_ALGORITHM_V1_AES, ServerSideSecretStorageImpl } from "matrix-js-sdk/lib/secret-storage";
 import { describe, expect, it, vi } from "vitest";
 
 import { FetchGate, SuspendedError } from "../src/matrix_session/js/fetchGate";
 import { accountInfo, exportRoom, LOAD_MEMBERS_UP_TO, MEMBER_LIMIT, roomDetails } from "../src/matrix_session/js/roomData";
+import { needsVerification, onVerificationChanged, RecoveryKeySlot, startEmojiVerification, verifyWithRecoveryKey } from "../src/matrix_session/js/verification";
 
 const ROOM = "!room:example.org";
 const USER = "@alice:example.org";
@@ -207,5 +213,226 @@ describe("FetchGate", () => {
     const sync = gate.fetch(SYNC, { signal: controller.signal });
     controller.abort();
     await expect(sync).rejects.toMatchObject({ name: "AbortError" });
+  });
+});
+
+/** The fakes' account: its secret storage has one key, the default "k", whose recovery key is this. */
+const KEY_ID = "k";
+const KEY_BYTES = new Uint8Array(32).fill(7);
+const RECOVERY_KEY = encodeRecoveryKey(KEY_BYTES)!;
+
+/** The SDK's own secret storage on faked account data: `getDefaultKeyId`, `getKey`, `checkKey` are the real ones. */
+async function fakeSecretStorage(): Promise<ServerSideSecretStorageImpl> {
+  const accountData = new Map<string, unknown>();
+  const adapter = Object.assign(new EventEmitter(), {
+    getAccountDataFromServer: async (type: string) => accountData.get(type) ?? null,
+    setAccountData: async (type: string, content: unknown) => (accountData.set(type, content), {}),
+  });
+  const storage = new ServerSideSecretStorageImpl(adapter as never, {});
+  await storage.addKey(SECRET_STORAGE_ALGORITHM_V1_AES, { key: KEY_BYTES }, KEY_ID);
+  accountData.set("m.secret_storage.default_key", { key: KEY_ID });
+  return storage;
+}
+const SECRET_STORAGE = await fakeSecretStorage();
+
+/** A client with a crypto module and an own-user verification request the test drives. */
+function fakeVerifyingClient() {
+  let verified = false;
+  const calls: string[] = [];
+  const sas = { sas: { emoji: [["🐶", "Dog"], ["🔑", "Key"]] }, confirm: vi.fn(async () => void calls.push("confirm")), mismatch: vi.fn(), cancel: vi.fn() };
+  let finishVerify!: () => void;
+  const verifier = Object.assign(new EventEmitter(), {
+    getShowSasCallbacks: () => sas,
+    verify: () => new Promise<void>((resolve) => (finishVerify = resolve)),
+  });
+  const request = Object.assign(new EventEmitter(), {
+    phase: VerificationPhase.Requested,
+    cancellationCode: null as string | null,
+    verifier: undefined as typeof verifier | undefined,
+    startVerification: async () => verifier,
+    cancel: vi.fn(async () => void calls.push("request.cancel")),
+    /** The other device moves the request on. */
+    move(phase: VerificationPhase, cancellationCode: string | null = null) {
+      this.phase = phase;
+      this.cancellationCode = cancellationCode;
+      this.emit(VerificationRequestEvent.Change);
+    },
+  });
+  const crypto = {
+    /** For the own user the SDK downloads the keys again on every call. */
+    userHasCrossSigningKeys: vi.fn(async () => true),
+    getDeviceVerificationStatus: vi.fn(async () => ({ crossSigningVerified: verified })),
+    requestOwnUserVerification: async () => request,
+    getCrossSigningStatus: vi.fn(async () => ({ publicKeysOnDevice: true, privateKeysInSecretStorage: true, privateKeysCachedLocally: { masterKey: false, selfSigningKey: false, userSigningKey: false } })),
+    bootstrapCrossSigning: vi.fn(async () => {
+      // The SDK asks the client's crypto callback for the secret storage key while it bootstraps.
+      const answer = await slot.getSecretStorageKey({ keys: { [KEY_ID]: {} as never } }, "m.cross_signing.master");
+      if (answer) handedOut.push(answer[1]);
+      calls.push(`key held: ${String(answer !== null)}`);
+      // A secret encrypted for another key only: the callback has no key for it.
+      calls.push(`for another key: ${String(await slot.getSecretStorageKey({ keys: { old: {} as never } }, "m.megolm_backup.v1"))}`);
+      verified = true;
+    }),
+    loadSessionBackupPrivateKeyFromSecretStorage: async () => undefined,
+    checkKeyBackupAndEnable: vi.fn(async () => void calls.push("checkKeyBackupAndEnable")),
+  };
+  /** The keys the crypto callback handed to the SDK. */
+  const handedOut: Uint8Array[] = [];
+  const slot = new RecoveryKeySlot();
+  const client = Object.assign(new EventEmitter(), { getCrypto: () => crypto, getDeviceId: () => "DEVICE", getSafeUserId: () => USER, secretStorage: SECRET_STORAGE }) as unknown as MatrixClient;
+  return { client, crypto, request, sas, slot, calls, handedOut, finishVerify: () => finishVerify(), setVerified: (value: boolean) => (verified = value) };
+}
+
+describe("matrix-js-sdk device verification", () => {
+  it("needsVerification: only when the account has cross-signing keys and this device is not signed by them", async () => {
+    const fake = fakeVerifyingClient();
+    expect(await needsVerification(fake.client)).toBe(true);
+    fake.setVerified(true);
+    expect(await needsVerification(fake.client)).toBe(false);
+    fake.crypto.userHasCrossSigningKeys.mockResolvedValue(false);
+    fake.setVerified(false);
+    expect(await needsVerification(fake.client)).toBe(false);
+  });
+
+  it("onVerificationChanged: trust, key and device changes of the own user call it, other users' do not; unsubscribing stops it", () => {
+    const fake = fakeVerifyingClient();
+    const emitter = fake.client as unknown as EventEmitter;
+    const changed = vi.fn();
+    const unsubscribe = onVerificationChanged(fake.client, changed);
+    emitter.emit(CryptoEvent.UserTrustStatusChanged, "@bob:example.org", {});
+    emitter.emit(CryptoEvent.DevicesUpdated, ["@bob:example.org"], false);
+    expect(changed).not.toHaveBeenCalled();
+    emitter.emit(CryptoEvent.UserTrustStatusChanged, USER, {});
+    emitter.emit(CryptoEvent.KeysChanged, {});
+    emitter.emit(CryptoEvent.DevicesUpdated, ["@bob:example.org", USER], false);
+    expect(changed).toHaveBeenCalledTimes(3);
+
+    unsubscribe();
+    emitter.emit(CryptoEvent.UserTrustStatusChanged, USER, {});
+    expect(changed).toHaveBeenCalledTimes(3);
+    expect(emitter.listenerCount(CryptoEvent.KeysChanged)).toBe(0);
+  });
+
+  it("verifyWithRecoveryKey: the decoded key is held only while the SDK bootstraps, only for the default key; a malformed key is refused before", async () => {
+    const fake = fakeVerifyingClient();
+    await expect(verifyWithRecoveryKey(fake.client, fake.slot, "EsTc LW2K")).rejects.toThrow();
+    expect(fake.crypto.bootstrapCrossSigning).not.toHaveBeenCalled();
+    expect(fake.slot.holds).toBe(false);
+
+    await verifyWithRecoveryKey(fake.client, fake.slot, ` ${RECOVERY_KEY} `);
+    expect(fake.calls).toEqual(["key held: true", "for another key: null", "checkKeyBackupAndEnable"]);
+    expect(fake.slot.holds).toBe(false);
+    expect(await fake.slot.getSecretStorageKey({ keys: { [KEY_ID]: {} as never } }, "m.cross_signing.master")).toBeNull();
+    // The callback handed out the decoded key; its bytes are overwritten afterwards.
+    expect(fake.handedOut).toHaveLength(1);
+    expect(fake.handedOut[0]).toEqual(new Uint8Array(32));
+  });
+
+  it("verifyWithRecoveryKey: a well-formed key that is not the account's default secret storage key is refused before anything is read", async () => {
+    const fake = fakeVerifyingClient();
+    await expect(verifyWithRecoveryKey(fake.client, fake.slot, encodeRecoveryKey(new Uint8Array(32).fill(9))!)).rejects.toThrow(/^This is not the recovery key of this account\.$/);
+    expect(fake.crypto.getCrossSigningStatus).not.toHaveBeenCalled();
+    expect(fake.crypto.bootstrapCrossSigning).not.toHaveBeenCalled();
+    expect(fake.slot.holds).toBe(false);
+  });
+
+  it("verifyWithRecoveryKey: refused before the SDK bootstraps when the secret storage does not hold the cross-signing keys (it would create new ones)", async () => {
+    const fake = fakeVerifyingClient();
+    fake.crypto.getCrossSigningStatus.mockResolvedValueOnce({ publicKeysOnDevice: true, privateKeysInSecretStorage: false, privateKeysCachedLocally: { masterKey: false, selfSigningKey: false, userSigningKey: false } });
+    await expect(verifyWithRecoveryKey(fake.client, fake.slot, RECOVERY_KEY)).rejects.toThrow("does not hold its cross-signing keys");
+    expect(fake.crypto.bootstrapCrossSigning).not.toHaveBeenCalled();
+    expect(fake.slot.holds).toBe(false);
+  });
+
+  it("verifyWithRecoveryKey: a failing backup check does not fail a verification that went through", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const fake = fakeVerifyingClient();
+    fake.crypto.checkKeyBackupAndEnable.mockRejectedValueOnce(new Error("offline"));
+    await verifyWithRecoveryKey(fake.client, fake.slot, RECOVERY_KEY);
+    expect(await needsVerification(fake.client)).toBe(false);
+    vi.restoreAllMocks();
+  });
+
+  it("verifyWithRecoveryKey: a check the user cancelled does not take the key of the next one away", async () => {
+    const fake = fakeVerifyingClient();
+    let releaseFirst!: () => void;
+    fake.crypto.bootstrapCrossSigning.mockImplementationOnce(() => new Promise<void>((resolve) => (releaseFirst = resolve)));
+    const first = verifyWithRecoveryKey(fake.client, fake.slot, RECOVERY_KEY);
+    await vi.waitFor(() => expect(releaseFirst).toBeDefined());
+    let releaseSecond!: () => void;
+    fake.crypto.bootstrapCrossSigning.mockImplementationOnce(async () => {
+      await new Promise<void>((resolve) => (releaseSecond = resolve));
+      const answer = await fake.slot.getSecretStorageKey({ keys: { [KEY_ID]: {} as never } }, "m.cross_signing.master");
+      fake.calls.push(`second sees key: ${String(answer?.[1][0])}`);
+    });
+    const second = verifyWithRecoveryKey(fake.client, fake.slot, RECOVERY_KEY).catch(() => undefined);
+    await vi.waitFor(() => expect(releaseSecond).toBeDefined());
+    releaseFirst();
+    await first.catch(() => undefined);
+    releaseSecond();
+    await second;
+    expect(fake.calls).toContain("second sees key: 7");
+    expect(fake.slot.holds).toBe(false);
+  });
+
+  it("emoji: the other device accepts, both compare and confirm, the signature arrives, the backup is checked", async () => {
+    const fake = fakeVerifyingClient();
+    const verification = await startEmojiVerification(fake.client, { pollMs: 1 });
+    fake.request.move(VerificationPhase.Ready);
+    expect(await verification.emoji).toEqual([
+      { symbol: "🐶", name: "Dog" },
+      { symbol: "🔑", name: "Key" },
+    ]);
+
+    const confirmed = verification.confirm();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(fake.sas.confirm).toHaveBeenCalledOnce();
+    fake.finishVerify();
+    setTimeout(() => fake.setVerified(true), 5);
+    await confirmed;
+    expect(fake.calls).toEqual(["confirm", "checkKeyBackupAndEnable"]);
+    // The wait for the signature reads the client's stored devices: no key download per poll.
+    expect(fake.crypto.getDeviceVerificationStatus.mock.calls.length).toBeGreaterThan(1);
+    expect(fake.crypto.userHasCrossSigningKeys).not.toHaveBeenCalled();
+  });
+
+  it("emoji: × while waiting for the signature stops waiting", async () => {
+    const fake = fakeVerifyingClient();
+    const verification = await startEmojiVerification(fake.client, { pollMs: 1 });
+    fake.request.move(VerificationPhase.Ready);
+    await verification.emoji;
+    const confirmed = verification.confirm();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    fake.finishVerify();
+    fake.request.move(VerificationPhase.Done);
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    verification.cancel();
+    await expect(confirmed).rejects.toThrow("The verification was cancelled.");
+    expect(fake.request.cancel).not.toHaveBeenCalled();
+  });
+
+  it("emoji: a cancel by the other device ends it with the reason of its code, at any step", async () => {
+    const fake = fakeVerifyingClient();
+    const verification = await startEmojiVerification(fake.client);
+    fake.request.move(VerificationPhase.Cancelled, "m.user");
+    await expect(verification.ended).rejects.toThrow("The verification was cancelled on the other device.");
+    await expect(verification.emoji).rejects.toThrow("The verification was cancelled on the other device.");
+    verification.cancel();
+    expect(fake.request.cancel).not.toHaveBeenCalled();
+  });
+
+  it("emoji: “They don't match” reports the mismatch once; × cancels the request", async () => {
+    const fake = fakeVerifyingClient();
+    const verification = await startEmojiVerification(fake.client);
+    fake.request.move(VerificationPhase.Ready);
+    await verification.emoji;
+    verification.cancel(true);
+    verification.cancel(true);
+    expect(fake.sas.mismatch).toHaveBeenCalledOnce();
+
+    const other = fakeVerifyingClient();
+    const waiting = await startEmojiVerification(other.client);
+    waiting.cancel();
+    expect(other.request.cancel).toHaveBeenCalledOnce();
   });
 });

@@ -19,6 +19,7 @@ Every leaf of `design/index.html` (`design/src/leaves.mjs`), with the test in wh
 | `sidepanel/settings-on` | `sidepanel.spec.ts` › settings: the dev tools are on and cannot be turned off |
 | `sidepanel/account-dev` | `sidepanel.spec.ts` › account: the DevBackend is the account |
 | `complete/workspace`, `complete/devbackend`, `complete/light` | `sidepanel.spec.ts` › complete views |
+| `sidepanel/verify-start`, `sidepanel/verify-failed`, `sidepanel/verify-done`, `sidepanel/verify-waiting`, `sidepanel/verify-emoji`, `sidepanel/verify-confirming`, `sidepanel/verify-recovery-key`, `sidepanel/verify-recovery-checking`, `sidepanel/verify-recovery-wrong` | **not reachable**: they need a Matrix account whose device is not verified (the DevBackend's device is). The flows are tested on a faked session in `test/deviceVerification.test.ts`. Stories: `sidepanel-deviceverification--start`, `--failed`, `--done`, `sidepanel-emojiverification--waiting`, `--compare`, `--confirming`, `sidepanel-recoverykeyform--entering`, `--checking`, `--refused` |
 | `app/default`, `leftbar/expanded`, `leftbar/devtools`, `sidepanel/settings-off`, `sidepanel/account-one`, `sidepanel/account-several` | **not reachable**: they need a Matrix account (DevBackend inactive). Stories: `app-appshell--default`, `app-leftbar--expanded`, `app-leftbar--dev-tools`, `sidepanel-settingsview--dev-tools-off`, `sidepanel-accountview--one-account`, `--several-accounts` |
 
 ## Rooms, tabs, overview

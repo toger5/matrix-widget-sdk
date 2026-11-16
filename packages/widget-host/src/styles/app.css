@@ -261,6 +261,32 @@ mark { background: var(--highlight-soft); color: var(--highlight); border-radius
 .switch-acc .end { color: var(--text-muted); }
 .acc-list { display: grid; gap: 6px; }
 .acc-line { display: flex; gap: 10px; align-items: center; margin-top: 8px; }
+.acc-unverified { display: inline-flex; align-items: center; gap: 4px; color: var(--text-muted); }
+
+/* "Verify this device": the box under the account card */
+.verify { display: flex; flex-direction: column; gap: 10px; padding: 12px; border-radius: var(--r-3); border: 1px solid var(--border); background: var(--surface-2); }
+.verify.ok { border-color: transparent; background: var(--highlight-soft); }
+.verify-h { display: flex; align-items: center; gap: 8px; min-height: 24px; font-weight: 600; }
+.verify-h h3 { font-size: 13px; font-weight: 600; }
+.verify-h .ico { flex: none; color: var(--text-muted); }
+.verify.ok .verify-h, .verify.ok .verify-h .ico { color: var(--highlight); }
+.verify-h .ibtn { margin: -4px -6px -4px auto; }
+.verify .hint { line-height: 1.45; }
+.verify .btn:disabled, .verify .input.disabled { opacity: 0.55; cursor: default; }
+.verify .btn .spinner { width: 14px; height: 14px; border-width: 2px; border-top-color: currentColor; }
+.verify .input { font-size: 12px; }
+.input.invalid { border-color: var(--danger); }
+.verify-status { display: flex; align-items: center; gap: 10px; color: var(--text-muted); }
+.verify-status .spinner { flex: none; width: 16px; height: 16px; border-width: 2px; }
+.verify-emoji { list-style: none; margin: 0; padding: 4px 0; display: flex; flex-wrap: wrap; justify-content: center; row-gap: 10px; text-align: center; font-size: 11px; color: var(--text-muted); }
+.verify-emoji li { flex: 0 0 25%; display: grid; justify-items: center; gap: 2px; min-width: 0; }
+.verify-emoji span { font-size: 26px; line-height: 1.15; }
+.verify-emoji.dim { opacity: 0.45; }
+.verify-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.verify-err { display: flex; gap: 8px; padding: 8px 10px; border-radius: var(--r-2); background: color-mix(in srgb, var(--danger) 12%, transparent); color: var(--danger); font-size: 12px; }
+.verify-err .ico { flex: none; margin-top: 1px; }
+.verify-err > span { display: grid; gap: 2px; min-width: 0; }
+.verify-err small { color: var(--text); font-size: 12px; }
 
 .set-row { display: flex; align-items: center; gap: 12px; }
 .set-row > div { display: grid; gap: 2px; flex: 1; }
@@ -737,7 +763,6 @@ button.tile { display: block; text-align: center; }
 .acc-error span { display: grid; gap: 2px; min-width: 0; }
 .acc-error b { font-weight: 600; }
 .acc-error small { color: var(--text); }
-.acc-unverified { display: inline-flex; align-items: center; gap: 4px; color: var(--text-muted); }
 
 /* --- app shell (implementation) --- */
 .app-root { position: relative; }
@@ -919,3 +944,8 @@ button.tile { display: block; text-align: center; }
 #root, .app-mount { display: block; width: 100%; height: 100%; }
 /* a permission is decided on the full capability string: it wraps instead of being cut off */
 .wv-over .perm small { white-space: normal; overflow-wrap: anywhere; }
+
+/* --- AccountView: device verification (implementation) ----------------------------------------- */
+/* The recovery key form adds no box of its own (the `.verify` column lays out its children); its field is a real input. */
+.verify-form { display: contents; }
+.verify input.input { width: 100%; color: inherit; }

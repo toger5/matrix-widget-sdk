@@ -8,10 +8,8 @@ import {
   OAuthPrompt,
   RoomListEntriesDynamicFilterKind,
   Session as SdkSession,
-  SessionVerificationData,
   SlidingSyncVersion,
   SlidingSyncVersionBuilder,
-  VerificationState,
   uniffiInitAsync as initSdk,
   type ClientLike,
   type ClientSessionDelegate,
@@ -24,6 +22,7 @@ import {
 
 import { RustSdkBackend } from "./backend/rustSdkBackend";
 import { accountInfo, exportRoom, roomDetails } from "./roomData";
+import { needsVerification, onVerificationChanged, startEmojiVerification, verifyWithRecoveryKey } from "./verification";
 import { AccountStore } from "../js/accountStore";
 import { AVATAR_SIZE, AvatarCache } from "../../lib/avatarCache";
 import { describesWidget, WIDGET_EVENT_TYPES, type StateEvent } from "../../widgetStateEvent";
@@ -38,7 +37,6 @@ import {
   type RoomExport,
   type RoomSummary,
   type SessionProvider,
-  type VerificationEmoji,
 } from "../../session";
 
 /**
@@ -54,8 +52,6 @@ export const STORAGE_PREFIX = "widget_host_rust_session_v2:";
 /** Where the one login was stored before multi-account. */
 export const LEGACY_STORAGE_KEY = "widget_host_rust_session_v1";
 const ROOM_LIST_PAGE_SIZE = 500;
-/** How long the signature of the verifying device may take to arrive after an emoji verification. */
-const VERIFIED_TIMEOUT_MS = 20_000;
 /** How long to wait for the full state of a room that was just opened. */
 const FULL_STATE_TIMEOUT_MS = 5000;
 /** The least time between two reads of the widget events of all rooms, each of which asks the store once per room and widget event type. */
@@ -483,79 +479,21 @@ class RustSdkSession implements LiveSession {
     return RustSdkBackend.create(this.client, await this.open(roomId));
   }
 
-  /** True when the account has cross-signing but this device is not signed by it. */
-  async needsVerification(): Promise<boolean> {
-    const encryption = this.client.encryption();
-    // Until the SDK has looked at the account's cross-signing keys the state is unknown.
-    await encryption.waitForE2eeInitializationTasks();
-    return encryption.verificationState() === VerificationState.Unverified;
+  /** Device verification: `./verification`. */
+  needsVerification(): Promise<boolean> {
+    return needsVerification(this.client);
   }
 
-  /**
-   * The recovery key opens the account's secret storage: the SDK fetches the cross-signing keys
-   * from it (which signs this device) and the key of the room key backup.
-   */
-  async verifyWithRecoveryKey(recoveryKey: string): Promise<void> {
-    await this.client.encryption().recover(recoveryKey.trim());
-    if (await this.needsVerification()) throw new Error("The recovery key was accepted, but this device is still not verified.");
+  onVerificationChanged(listener: () => void): () => void {
+    return onVerificationChanged(this.client, listener);
   }
 
-  /**
-   * Emoji (SAS) verification, started from here: every other device of the account gets the
-   * request, the one that accepts it compares emoji with this one and then signs this device.
-   */
-  async startEmojiVerification(): Promise<EmojiVerification> {
-    const controller = await this.client.getSessionVerificationController();
-    let showEmoji!: (emoji: VerificationEmoji[]) => void;
-    let finish!: () => void;
-    let end!: (reason: Error) => void;
-    const emoji = new Promise<VerificationEmoji[]>((resolve) => (showEmoji = resolve));
-    const finished = new Promise<void>((resolve) => (finish = resolve));
-    // Rejects when the verification ends without success; both promises below race against it.
-    const ended = new Promise<never>((_, reject) => (end = reject));
-    ended.catch(() => undefined);
-    const failed = (e: unknown) => end(e instanceof Error ? e : new Error(String(e)));
+  verifyWithRecoveryKey(recoveryKey: string): Promise<void> {
+    return verifyWithRecoveryKey(this.client, recoveryKey);
+  }
 
-    controller.setDelegate({
-      didReceiveVerificationRequest: () => {},
-      didAcceptVerificationRequest: () => void controller.startSasVerification().catch(failed),
-      didStartSasVerification: () => {},
-      didReceiveVerificationData: (data) => {
-        if (!SessionVerificationData.Emojis.instanceOf(data)) return end(new Error("The other device offers no emoji to compare."));
-        showEmoji(data.inner.emojis.map((e) => ({ symbol: e.symbol(), name: e.description() })));
-      },
-      didFail: () => end(new Error("The verification failed.")),
-      didCancel: () => end(new Error("The verification was cancelled or timed out.")),
-      didFinish: finish,
-    });
-    await controller.requestDeviceVerification();
-
-    const shown = Promise.race([emoji, ended]);
-    shown.catch(() => undefined);
-    let over = false;
-    void Promise.race([finished, ended])
-      .catch(() => undefined)
-      .then(() => (over = true));
-
-    return {
-      emoji: shown,
-      confirm: async () => {
-        await shown;
-        await controller.approveVerification();
-        await Promise.race([finished, ended]);
-        // This device is verified once the other device's signature of it has come down the sync.
-        const deadline = Date.now() + VERIFIED_TIMEOUT_MS;
-        while (await this.needsVerification()) {
-          if (Date.now() > deadline) throw new Error("The emoji were confirmed, but this device is still not verified.");
-          await new Promise((resolve) => setTimeout(resolve, 500));
-        }
-      },
-      cancel: (mismatch) => {
-        if (over) return;
-        const stop = mismatch ? controller.declineVerification() : controller.cancelVerification();
-        stop.catch((e: unknown) => console.warn("cancelling the verification failed", e));
-      },
-    };
+  startEmojiVerification(): Promise<EmojiVerification> {
+    return startEmojiVerification(this.client);
   }
 
   /** Log out and delete this login's entry and its IndexedDB stores. */

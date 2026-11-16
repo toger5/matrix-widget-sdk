@@ -23,6 +23,7 @@ import {
 const stage = (html, cls = "", style = "") => `<div class="stage ${cls}" style="${style}">${html}</div>`;
 const side = (html, fence = false) => stage(`<div class="sidecol">${html}</div>`, fence ? "fence" : "");
 const TOAST = "Press <kbd>Esc</kbd> to show the expand button";
+const VERIFY = "AccountView: device verification";
 
 const wt = (widgetKey, o = {}) => ({ kind: "widget", widget: widgetKey, ...o });
 const nt = (o = {}) => ({ kind: "native", ...o });
@@ -152,6 +153,15 @@ export const LEAVES = [
   { id: "sidepanel/account-one", section: "SidePanel", group: "AccountView", title: "One account", w: 348, h: 620, html: side(accountView({ mode: "one" })) },
   { id: "sidepanel/account-several", section: "SidePanel", group: "AccountView", title: "Several accounts (switch list at the bottom, ending with “Add account”)", w: 348, h: 620, html: side(accountView({ mode: "several" })) },
   { id: "sidepanel/account-dev", section: "SidePanel", group: "AccountView", title: "DevBackend mode (full account list)", w: 348, h: 620, html: side(accountView({ mode: "dev" }), true) },
+  { id: "sidepanel/verify-start", section: "SidePanel", group: VERIFY, title: "Device not verified: the “Verify this device” box", w: 348, h: 700, note: "Taller than the other AccountView leaves to show the whole panel; in a shorter window its body scrolls.", html: side(accountView({ verify: "start" })) },
+  { id: "sidepanel/verify-failed", section: "SidePanel", group: VERIFY, title: "After a failure: the box again, with the reason", w: 348, h: 700, note: "The reason is the session's error (cancelled, timed out) or, as here, that the emoji did not match. It takes the place of the explanation.", html: side(accountView({ verify: "failed" })) },
+  { id: "sidepanel/verify-waiting", section: "SidePanel", group: VERIFY, title: "With another device: waiting for one to accept the request", w: 348, h: 620, note: "The request goes to every other device of the account. While a step runs, the box replaces the device details and the menu; × cancels the verification.", html: side(accountView({ verify: "waiting" })) },
+  { id: "sidepanel/verify-emoji", section: "SidePanel", group: VERIFY, title: "With another device: comparing the 7 emoji", w: 348, h: 620, html: side(accountView({ verify: "emoji" })) },
+  { id: "sidepanel/verify-confirming", section: "SidePanel", group: VERIFY, title: "With another device: “They match” pressed, waiting for it to confirm", w: 348, h: 620, html: side(accountView({ verify: "confirming" })) },
+  { id: "sidepanel/verify-recovery-key", section: "SidePanel", group: VERIFY, title: "Recovery key: entering it", w: 348, h: 620, note: "A real text field in the app: no autocomplete, no spell check. The key is never kept in the view model.", html: side(accountView({ verify: "recovery-key" })) },
+  { id: "sidepanel/verify-recovery-checking", section: "SidePanel", group: VERIFY, title: "Recovery key: checking it", w: 348, h: 620, html: side(accountView({ verify: "recovery-checking" })) },
+  { id: "sidepanel/verify-recovery-wrong", section: "SidePanel", group: VERIFY, title: "Recovery key: refused", w: 348, h: 620, note: "The key stays in the field. The second line is the session's error.", html: side(accountView({ verify: "recovery-wrong" })) },
+  { id: "sidepanel/verify-done", section: "SidePanel", group: VERIFY, title: "Verified, until “Done”", w: 348, h: 700, note: "The details below already say “This device is verified”.", html: side(accountView({ verify: "done" })) },
   { id: "sidepanel/settings-off", section: "SidePanel", group: "Settings", title: "Dev tools disabled", w: 348, h: 420, html: side(settingsView({ devTools: false })) },
   { id: "sidepanel/settings-on", section: "SidePanel", group: "Settings", title: "Dev tools enabled", w: 348, h: 420, html: side(settingsView({ devTools: true })) },
   { id: "devbackend/none", section: "SidePanel", group: "DevBackendView", title: "No rooms yet", w: 348, h: 520, html: side(devBackendView({ state: "none" }), true) },

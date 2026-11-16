@@ -10,9 +10,9 @@
  * Views never import `src/app`, a session or the bindings. That keeps them renderable in
  * Storybook: `StoryEnv` (`src/views/storyEnv.tsx`) provides this context from fixtures.
  */
-import { createContext, useContext, type ReactNode } from "react";
+import { createContext, useContext } from "react";
 
-import type { AccountId, AppIntent, Loadable, MockedRoomData, RoomId, WidgetDevToolsData, WidgetInstanceId } from "../appViewModel";
+import { loggableIntent, type AppIntent, type Loadable, type MockedRoomData, type RoomId, type WidgetDevToolsData, type WidgetInstanceId } from "../appViewModel";
 import type { RoomDetails } from "../session";
 
 export interface ViewEnv {
@@ -28,11 +28,6 @@ export interface ViewEnv {
   useRoomDetails: (roomId: RoomId) => Loadable<RoomDetails>;
   /** Resolve an `mxc://` avatar to a URL an `<img>` can show (`LiveSession.avatar`). */
   avatar: (mxcUrl: string) => Promise<string | undefined>;
-  /**
-   * The device verification flow (emoji or recovery key) of an account whose `verified` is `false`.
-   * It is a self-contained view on the account's session, so it is not driven by the view model.
-   */
-  renderVerification?: (accountId: AccountId) => ReactNode;
 }
 
 export const EMPTY_DEV_TOOLS_DATA: WidgetDevToolsData = {
@@ -47,7 +42,7 @@ export const EMPTY_MOCKED_ROOM_DATA: MockedRoomData = { rooms: [], state: [], ti
 const LOADING: Loadable<RoomDetails> = { status: "loading" };
 
 export const DEFAULT_VIEW_ENV: ViewEnv = {
-  dispatch: (intent) => console.info("intent", intent),
+  dispatch: (intent) => console.info("intent", loggableIntent(intent)),
   narrow: false,
   useDevToolsData: () => EMPTY_DEV_TOOLS_DATA,
   useMockedRoomData: () => EMPTY_MOCKED_ROOM_DATA,

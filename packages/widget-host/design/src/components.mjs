@@ -2,7 +2,7 @@
 // (or a complete screen) is a composition of these, like the real app will be a composition of
 // React components driven by the AppViewModel (src/appViewModel.ts).
 
-import { ACCOUNTS, MEMBERS, ROOMS, WIDGETS, avatar, esc, icon, logo } from "./lib.mjs";
+import { ACCOUNTS, MEMBERS, ROOMS, SAS_EMOJI, WIDGETS, avatar, esc, icon, logo } from "./lib.mjs";
 
 // ---------------------------------------------------------------------------------------------
 // Atoms
@@ -109,8 +109,50 @@ const switchRow = (key) => {
 const addAccountRow = () =>
   `<button class="switch-acc add"><span class="av ghost" style="--s:30px" aria-hidden="true">${icon("userPlus", 14)}</span><span class="switch-txt"><b>Add account</b></span>${icon("external", 14, "end")}</button>`;
 
-/** mode: "one" | "several" | "dev" */
-export function accountView({ mode = "one" } = {}) {
+const VERIFY_RUNNING = ["waiting", "emoji", "confirming", "recovery-key", "recovery-checking", "recovery-wrong"];
+
+/**
+ * The "Verify this device" box of the AccountView. state: "start" | "failed" (the box again, with
+ * the reason) | "waiting" | "emoji" | "confirming" (another device) | "recovery-key" |
+ * "recovery-checking" | "recovery-wrong" | "done". Every running step has the cancel button.
+ */
+function verifyBox(state) {
+  const head = (ico, title) =>
+    `<div class="verify-h">${icon(ico, 16)}<h3 id="verify-h">${title}</h3>${VERIFY_RUNNING.includes(state) ? ibtn("x", "Cancel verification") : ""}</div>`;
+  const box = (body, cls = "") => `<section class="verify ${cls}" aria-labelledby="verify-h">${body}</section>`;
+  const spinner = `<span class="spinner" aria-hidden="true"></span>`;
+  const status = (text) => `<div class="verify-status" role="status">${spinner}<span>${text}</span></div>`;
+  const error = (text, detail = "") => `<div class="verify-err" role="alert">${icon("alert", 14)}<span>${text}${detail ? `<small>${detail}</small>` : ""}</span></div>`;
+  const emoji = (dim) =>
+    `<ol class="verify-emoji ${dim ? "dim" : ""}" aria-label="Emoji to compare">${SAS_EMOJI.map(([e, name]) => `<li><span aria-hidden="true">${e}</span>${name}</li>`).join("")}</ol>`;
+  const keyField = (cls = "") =>
+    `<label class="field"><span class="field-l">Recovery key</span><span class="input mono ${cls}"${cls === "invalid" ? ' aria-invalid="true"' : ""}>EsTc LW2K PGiF wKEA 3As5 g5c4 BXwk qeeJ ZJV8 Q9fu gUMN UE4d</span></label>`;
+
+  if (state === "start" || state === "failed")
+    return box(`${head("alert", "Verify this device")}
+      ${state === "failed" ? error("The emoji did not match, so this device was not verified.") : `<p class="hint">Your other devices share the keys of encrypted rooms only with verified devices. Until then, widgets cannot read encrypted messages.</p>`}
+      ${btn("Verify with another device", { kind: "primary", ico: "monitor", block: true })}${btn("Use recovery key", { ico: "key", block: true })}`);
+  if (state === "waiting")
+    return box(`${head("monitor", "Verify with another device")}${status("Waiting for another device…")}
+      <p class="hint">Accept the request in another app where you are logged in as ${ACCOUNTS.ada.id}, and choose to compare emoji.</p>`);
+  if (state === "emoji" || state === "confirming")
+    return box(`${head("monitor", "Compare emoji")}<p class="hint">Does the other device show the same emoji, in the same order?</p>${emoji(state === "confirming")}
+      ${state === "emoji" ? `<div class="verify-actions">${btn("They don't match")}${btn("They match", { kind: "primary" })}</div>` : status("Waiting for the other device to confirm…")}`);
+  if (state.startsWith("recovery-"))
+    return box(`${head("key", "Use recovery key")}
+      <p class="hint">The key you saved when encryption was set up for this account: 12 groups of four characters.</p>
+      ${keyField(state === "recovery-checking" ? "disabled" : state === "recovery-wrong" ? "invalid" : "")}
+      ${state === "recovery-wrong" ? error("This recovery key was not accepted.", "The key does not open the secret storage of this account.") : ""}
+      ${state === "recovery-checking" ? `<button class="btn primary block" disabled>${spinner}<span>Checking…</span></button>` : btn("Verify", { kind: "primary", block: true })}`);
+  return box(`${head("shield", "This device is verified")}
+    <p class="hint">Your other devices share the keys of encrypted rooms with it now. Older messages may take a moment to decrypt.</p>${btn("Done", { block: true })}`, "ok");
+}
+
+/**
+ * mode: "one" | "several" | "dev". verify: a state of `verifyBox` (not set: this device is
+ * verified). While a step runs, the box replaces the device details and the menu.
+ */
+export function accountView({ mode = "one", verify } = {}) {
   if (mode === "dev") {
     const body = `<div class="acc-card dev">${devAv(44)}<div><b>DevBackend</b><small>@alice:dev.local</small><span class="pill dev">in-memory · no Matrix requests</span></div></div>
       <p class="hint">The DevBackend is its own account. Switch to one of your Matrix accounts to leave it. The mocked rooms are kept.</p>
@@ -121,13 +163,17 @@ export function accountView({ mode = "one" } = {}) {
     return sideBox(sideTitle("Account"), body);
   }
   const a = ACCOUNTS.ada;
-  const body = `<div class="acc-card">${userAv("ada", 56)}<div><b>${a.name}</b><small>${a.id}</small></div></div>
-    <dl class="kv"><dt>Homeserver</dt><dd>${a.hs}</dd><dt>Device</dt><dd class="mono">${a.device}</dd><dt>Verified</dt><dd><span class="ok-text">${icon("shield", 13)} This device is verified</span></dd></dl>
+  const verified = !verify || verify === "done";
+  const details = `<dl class="kv"><dt>Homeserver</dt><dd>${a.hs}</dd><dt>Device</dt><dd class="mono">${a.device}</dd><dt>Verified</dt><dd>${
+    verified ? `<span class="ok-text">${icon("shield", 13)} This device is verified</span>` : `<span class="acc-unverified">${icon("alert", 13)} This device is not verified</span>`
+  }</dd></dl>
     <div class="menu">
       ${menuRow("monitor", "Manage account &amp; devices", { end: "external" })}
       ${menuRow("copy", "Copy Matrix URI")}
       ${menuRow("logout", "Log out", { cls: "danger" })}
-    </div>
+    </div>`;
+  const body = `<div class="acc-card">${userAv("ada", 56)}<div><b>${a.name}</b><small>${a.id}</small></div></div>${verify ? `\n    ${verifyBox(verify)}` : ""}
+    ${VERIFY_RUNNING.includes(verify) ? "" : details}
     <span class="sp"></span>
     <div class="switch-list">${mode === "several" ? switchRow("work") + switchRow("bot") : ""}${addAccountRow()}</div>`;
   return sideBox(sideTitle("Account"), body, "acc");

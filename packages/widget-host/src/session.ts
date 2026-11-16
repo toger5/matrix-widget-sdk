@@ -99,9 +99,14 @@ export interface VerificationEmoji {
 export interface EmojiVerification {
   /** The emoji to compare, once the other device has accepted the request. Rejects when the verification ends before that. */
   readonly emoji: Promise<VerificationEmoji[]>;
+  /**
+   * Rejects with the reason as soon as the verification ends without success, at any step: the
+   * other device cancelled it, it timed out, it failed. Never resolves.
+   */
+  readonly ended: Promise<never>;
   /** The user says the emoji match. Resolves when the other device has confirmed too and this device is verified. */
   confirm(): Promise<void>;
-  /** End the verification: the emoji differ (`mismatch`), or the user gave up. */
+  /** End the verification: the emoji differ (`mismatch`), or the user gave up. Once it has ended, it only stops a `confirm()` that still waits. */
   cancel(mismatch?: boolean): void;
 }
 
@@ -136,7 +141,12 @@ export interface LiveSession {
   backendFor(roomId: string): Promise<RoomBackend>;
   /** Whether this device still has to be verified before other devices share encryption keys with it. */
   needsVerification(): Promise<boolean>;
-  /** Verify this device with the account's recovery key. */
+  /**
+   * Call `listener` whenever `needsVerification()` may have changed: this device or the account's
+   * cross-signing keys were verified, reset or arrived. Returns the unsubscribe function.
+   */
+  onVerificationChanged(listener: () => void): () => void;
+  /** Verify this device with the account's recovery key. The key is a secret: it is not stored or logged. */
   verifyWithRecoveryKey(recoveryKey: string): Promise<void>;
   /** Ask the account's other devices to verify this one by comparing emoji. */
   startEmojiVerification(): Promise<EmojiVerification>;

@@ -1,13 +1,16 @@
 import type { CSSProperties } from "react";
 
 import type { AccountId, AccountViewModel } from "../../appViewModel";
-import { useDispatch, useViewEnv } from "../env";
+import { useDispatch } from "../env";
 import { Avatar, Button, DevAvatar, Icon, type IconName } from "../ui/atoms";
+import { DeviceVerification, verificationRunning } from "./DeviceVerification";
 import { SideBox } from "./SideBox";
 
 export interface AccountViewProps {
   accounts: AccountViewModel[];
   activeAccountId: AccountId;
+  /** Story only: the recovery key the verification form starts with. */
+  initialRecoveryKey?: string;
 }
 
 const nameOf = (a: AccountViewModel) => a.displayName || a.userId;
@@ -117,11 +120,13 @@ function DevAccountBody({ account, others }: { account: AccountViewModel; others
   );
 }
 
-function MatrixAccountBody({ account, others }: { account: AccountViewModel; others: AccountViewModel[] }) {
+function MatrixAccountBody({ account, others, initialRecoveryKey }: { account: AccountViewModel; others: AccountViewModel[]; initialRecoveryKey?: string }) {
   const dispatch = useDispatch();
-  const { renderVerification } = useViewEnv();
   const accountId = account.id;
   const hasDetails = !!account.homeserver || !!account.deviceId || account.verified !== undefined;
+  // While a verification step runs, its box replaces the details and the menu.
+  const running = verificationRunning(account.verification);
+  const verifyBox = running || account.verification?.step === "done" || account.verified === false;
   return (
     <>
       <div className="acc-card">
@@ -146,8 +151,8 @@ function MatrixAccountBody({ account, others }: { account: AccountViewModel; oth
           </span>
         </div>
       )}
-      {account.verified === false && renderVerification?.(accountId)}
-      {hasDetails && (
+      {verifyBox && <DeviceVerification accountId={accountId} userId={account.userId} verification={account.verification} initialRecoveryKey={initialRecoveryKey} />}
+      {hasDetails && !running && (
         <dl className="kv">
           {account.homeserver && (
             <>
@@ -170,7 +175,6 @@ function MatrixAccountBody({ account, others }: { account: AccountViewModel; oth
                     <Icon name="shield" size={13} /> This device is verified
                   </span>
                 ) : (
-                  // TODO-FINDING unverified-device-row - the mockups only show the verified state; an unverified device gets a muted "This device is not verified" row (the verification flow is rendered above the details).
                   <span className="acc-unverified">
                     <Icon name="alert" size={13} /> This device is not verified
                   </span>
@@ -180,13 +184,15 @@ function MatrixAccountBody({ account, others }: { account: AccountViewModel; oth
           )}
         </dl>
       )}
-      <div className="menu">
-        {/* TODO-FINDING restore-failed-actions - a failed restore adds "Try again" as the first menu row and keeps the one "Log out" row of the menu, instead of a second pair of buttons next to the error (two "Log out" buttons would be ambiguous for tests and screen readers). */}
-        {account.status === "restoreFailed" && <MenuRow icon="refresh" label="Try again" onClick={() => dispatch({ type: "account/retryRestore", accountId })} />}
-        {account.manageUrl && <MenuRow icon="monitor" label="Manage account & devices" end="external" onClick={() => dispatch({ type: "account/manage", accountId })} />}
-        <MenuRow icon="copy" label="Copy Matrix URI" onClick={() => dispatch({ type: "account/copyMatrixUri", accountId })} />
-        <MenuRow icon="logout" label="Log out" className="danger" onClick={() => dispatch({ type: "account/logout", accountId })} />
-      </div>
+      {!running && (
+        <div className="menu">
+          {/* TODO-FINDING restore-failed-actions - a failed restore adds "Try again" as the first menu row and keeps the one "Log out" row of the menu, instead of a second pair of buttons next to the error (two "Log out" buttons would be ambiguous for tests and screen readers). */}
+          {account.status === "restoreFailed" && <MenuRow icon="refresh" label="Try again" onClick={() => dispatch({ type: "account/retryRestore", accountId })} />}
+          {account.manageUrl && <MenuRow icon="monitor" label="Manage account & devices" end="external" onClick={() => dispatch({ type: "account/manage", accountId })} />}
+          <MenuRow icon="copy" label="Copy Matrix URI" onClick={() => dispatch({ type: "account/copyMatrixUri", accountId })} />
+          <MenuRow icon="logout" label="Log out" className="danger" onClick={() => dispatch({ type: "account/logout", accountId })} />
+        </div>
+      )}
       <span className="sp" />
       <div className="switch-list">
         {others.map((a) => (
@@ -198,15 +204,15 @@ function MatrixAccountBody({ account, others }: { account: AccountViewModel; oth
   );
 }
 
-/** leaves sidepanel/account-one, account-several, account-dev. */
-export function AccountView({ accounts, activeAccountId }: AccountViewProps) {
+/** leaves sidepanel/account-one, account-several, account-dev; with the "Verify this device" box sidepanel/verify-*. */
+export function AccountView({ accounts, activeAccountId, initialRecoveryKey }: AccountViewProps) {
   const active = accounts.find((a) => a.id === activeAccountId);
   // The DevBackend account is never a switch target: it is entered with the LeftBar button.
   const others = accounts.filter((a) => a.id !== activeAccountId && a.kind === "matrix");
   const dev = active?.kind === "devBackend";
   return (
     <SideBox title="Account" className={dev ? "acc-dev" : "acc"} testId="account-view">
-      {active && (dev ? <DevAccountBody account={active} others={others} /> : <MatrixAccountBody account={active} others={others} />)}
+      {active && (dev ? <DevAccountBody account={active} others={others} /> : <MatrixAccountBody account={active} others={others} initialRecoveryKey={initialRecoveryKey} />)}
     </SideBox>
   );
 }

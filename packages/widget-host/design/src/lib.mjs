@@ -113,6 +113,17 @@ export const WIDGETS = {
   stream: { name: "Livestream", label: "LS", hue: 250, host: "stream.example.org" },
 };
 
+/** The 7 emoji of an emoji (SAS) verification, from the spec's list; the long names are the widest. */
+export const SAS_EMOJI = [
+  ["🐶", "Dog"],
+  ["🔑", "Key"],
+  ["🍓", "Strawberry"],
+  ["🎧", "Headphones"],
+  ["🎸", "Guitar"],
+  ["🚀", "Rocket"],
+  ["☂️", "Umbrella"],
+];
+
 export const MEMBERS = [
   ["Ada Okafor", "@ada:example.org", 265, "Admin"],
   ["Mira Köhler", "@mira:example.org", 215, "Moderator"],

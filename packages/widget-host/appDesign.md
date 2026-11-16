@@ -54,13 +54,16 @@ One panel next to the LeftBar, positioned and styled like the "Core product" pan
 
 ### AccountView
 
-- The current account at the top: avatar and the default account information.
-- Buttons:
-  - Manage account & devices (opens the MAS account page)
-  - Copy Matrix URI
-  - Log out
-- At the bottom, a list to switch to the other logged-in accounts: "switch to: `<Avatar>` `<AccName>`", with "switch to" very small above the name and an arrow icon on the right.
-  - The last entry of the list is "Add account" (opens the OIDC login page).
+- The current account at the top: avatar and the default account information, including whether this device is verified. That state follows the session, whatever changes it.
+- Buttons: Manage account & devices (opens the MAS account page), Copy Matrix URI, Log out.
+- At the bottom, a list to switch to the other logged-in accounts: "switch to: `<Avatar>` `<AccName>`", with "switch to" very small above the name and an arrow icon on the right. Its last entry is "Add account" (opens the OIDC login page).
+
+While this device is not verified (other devices share the keys of encrypted rooms only with verified devices), a "Verify this device" box under the account card offers two ways:
+
+- With another device: the request goes to the account's other devices. Once one accepts, both show the same 7 emoji: "They match" / "They don't match". After "They match", wait for the other device.
+- With the recovery key: one field and "Verify". A refused key stays in the form, with the reason.
+- While a step runs, the box replaces the device details and the buttons, and every step can be cancelled. Closing the AccountView does not stop it (a toast reports how it ended); activating the DevBackend does.
+- A verification that fails (cancelled, timed out, the emoji differ) shows the box again, with the reason. One that succeeds says so until "Done".
 
 In DevBackend mode the account icon is the DevBackend icon, and the view shows the full list of accounts with buttons: "switch to `<AccName>`". "Add account" is again the last entry of the list.
 
@@ -265,6 +268,9 @@ The mockups needed to review the full design. Each leaf is one state to draw. Do
     - One account
     - Several accounts (switch list at the bottom, ending with "Add account")
     - DevBackend mode (full account list)
+    - Device not verified: the box / after a failure (with the reason) / verified ("Done")
+      - With another device: waiting for it / comparing the emoji / waiting for it to confirm
+      - Recovery key: entering it / checking it / refused
   - Settings
     - Dev tools disabled / enabled
   - DevBackendView
@@ -370,6 +376,7 @@ Notes for the implementation. They add to the design above, they do not change i
 - Long room and widget names are truncated, with the full name in a tooltip.
 - A widget that fails to load shows the error and a retry button inside its tab.
 - Confirm actions that lose state: activating the DevBackend (closes all panels; restore them when switching back), logging out, revoking capabilities.
+- The recovery key is a secret: it is never stored, logged or kept in the view model.
 
 **Performance**
 

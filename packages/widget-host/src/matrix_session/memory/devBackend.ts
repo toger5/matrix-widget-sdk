@@ -246,6 +246,11 @@ export class DevBackend implements LiveSession {
     return false;
   }
 
+  /** Its device is always verified: nothing to listen to. */
+  onVerificationChanged(): () => void {
+    return () => {};
+  }
+
   async verifyWithRecoveryKey(): Promise<void> {}
 
   async startEmojiVerification(): Promise<never> {

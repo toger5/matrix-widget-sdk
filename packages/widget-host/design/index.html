@@ -41,11 +41,11 @@
 </style>
 </head>
 <body>
-<header class="top"><h1>Widget host mockups</h1><span>84 views from “Required visualisations” in appDesign.md, each at its real size</span><span class="grow"></span>
+<header class="top"><h1>Widget host mockups</h1><span>93 views from “Required visualisations” in appDesign.md, each at its real size</span><span class="grow"></span>
   <div class="switch" role="group" aria-label="Theme of the mockups"><button data-theme="dark" aria-pressed="true">Dark</button><button data-theme="light" aria-pressed="false">Light</button></div>
 </header>
 <div class="layout">
-<nav aria-label="Views"><a class="n1" href="#complete-views">Complete views <i>3</i></a><a class="n1" href="#app">App <i>10</i></a><a class="n1" href="#leftbar">LeftBar <i>6</i></a><a class="n1" href="#sidepanel">SidePanel <i>19</i></a><a class="n2" href="#sidepanel-accountview">AccountView</a><a class="n2" href="#sidepanel-settings">Settings</a><a class="n2" href="#sidepanel-devbackendview">DevBackendView</a><a class="n3" href="#sidepanel-devbackendview-room-page">Room page</a><a class="n3" href="#sidepanel-devbackendview-media-box">Media box</a><a class="n1" href="#pictureinpicturepanel">PictureInPicturePanel <i>8</i></a><a class="n1" href="#roomsarea">RoomsArea <i>38</i></a><a class="n2" href="#roomsarea-layout">Layout</a><a class="n2" href="#roomsarea-room-panel-empty">Room panel (empty)</a><a class="n2" href="#roomsarea-roomview-1">RoomView (1)</a><a class="n3" href="#roomsarea-roomview-1-tab-bar">Tab bar</a><a class="n3" href="#roomsarea-roomview-1-tab-1-new-tab">Tab (1): new tab</a><a class="n3" href="#roomsarea-roomview-1-tab-2-widgettab">Tab (2): WidgetTab</a><a class="n4" href="#roomsarea-roomview-1-tab-2-widgettab-dev-tools">Dev tools</a><a class="n3" href="#roomsarea-roomview-1-tab-3-roomoverviewtab">Tab (3): RoomOverviewTab</a><a class="n2" href="#roomsarea-roomview-2">RoomView (2)</a></nav>
+<nav aria-label="Views"><a class="n1" href="#complete-views">Complete views <i>3</i></a><a class="n1" href="#app">App <i>10</i></a><a class="n1" href="#leftbar">LeftBar <i>6</i></a><a class="n1" href="#sidepanel">SidePanel <i>28</i></a><a class="n2" href="#sidepanel-accountview">AccountView</a><a class="n2" href="#sidepanel-accountview-device-verification">AccountView: device verification</a><a class="n2" href="#sidepanel-settings">Settings</a><a class="n2" href="#sidepanel-devbackendview">DevBackendView</a><a class="n3" href="#sidepanel-devbackendview-room-page">Room page</a><a class="n3" href="#sidepanel-devbackendview-media-box">Media box</a><a class="n1" href="#pictureinpicturepanel">PictureInPicturePanel <i>8</i></a><a class="n1" href="#roomsarea">RoomsArea <i>38</i></a><a class="n2" href="#roomsarea-layout">Layout</a><a class="n2" href="#roomsarea-room-panel-empty">Room panel (empty)</a><a class="n2" href="#roomsarea-roomview-1">RoomView (1)</a><a class="n3" href="#roomsarea-roomview-1-tab-bar">Tab bar</a><a class="n3" href="#roomsarea-roomview-1-tab-1-new-tab">Tab (1): new tab</a><a class="n3" href="#roomsarea-roomview-1-tab-2-widgettab">Tab (2): WidgetTab</a><a class="n4" href="#roomsarea-roomview-1-tab-2-widgettab-dev-tools">Dev tools</a><a class="n3" href="#roomsarea-roomview-1-tab-3-roomoverviewtab">Tab (3): RoomOverviewTab</a><a class="n2" href="#roomsarea-roomview-2">RoomView (2)</a></nav>
 <main><section id="complete-views"><h2>Complete views</h2><p class="intro">Whole screens with several features at once, to judge how the leaves below work together.</p><div class="leaves"><figure class="leaf" id="complete-workspace">
   <figcaption><b>Workspace: two rooms, dev tools, AccountView, PiP</b><span class="meta">1440 × 900</span><a href="leaves/complete/workspace.html" target="_blank" rel="noopener">open ↗</a><p>SidePanel open (RoomsArea shifted), dev tools docked on top with two panels, the whiteboard is always on screen and its tab is not the active one, so it is in the floating panel.</p></figcaption>
   <div class="frame" data-w="1440" data-h="900"><iframe loading="lazy" title="Workspace: two rooms, dev tools, AccountView, PiP" data-leaf="leaves/complete/workspace.html"  src="leaves/complete/workspace.html#theme=dark" width="1440" height="900"></iframe></div>
@@ -133,6 +133,41 @@
 <figure class="leaf" id="sidepanel-account-dev">
   <figcaption><b>DevBackend mode (full account list)</b><span class="meta">348 × 620</span><a href="leaves/sidepanel/account-dev.html" target="_blank" rel="noopener">open ↗</a></figcaption>
   <div class="frame" data-w="348" data-h="620"><iframe loading="lazy" title="DevBackend mode (full account list)" data-leaf="leaves/sidepanel/account-dev.html"  src="leaves/sidepanel/account-dev.html#theme=dark" width="348" height="620"></iframe></div>
+</figure></div><h3 id="sidepanel-accountview-device-verification">AccountView: device verification</h3><div class="leaves"><figure class="leaf" id="sidepanel-verify-start">
+  <figcaption><b>Device not verified: the “Verify this device” box</b><span class="meta">348 × 700</span><a href="leaves/sidepanel/verify-start.html" target="_blank" rel="noopener">open ↗</a><p>Taller than the other AccountView leaves to show the whole panel; in a shorter window its body scrolls.</p></figcaption>
+  <div class="frame" data-w="348" data-h="700"><iframe loading="lazy" title="Device not verified: the “Verify this device” box" data-leaf="leaves/sidepanel/verify-start.html"  src="leaves/sidepanel/verify-start.html#theme=dark" width="348" height="700"></iframe></div>
+</figure>
+<figure class="leaf" id="sidepanel-verify-failed">
+  <figcaption><b>After a failure: the box again, with the reason</b><span class="meta">348 × 700</span><a href="leaves/sidepanel/verify-failed.html" target="_blank" rel="noopener">open ↗</a><p>The reason is the session's error (cancelled, timed out) or, as here, that the emoji did not match. It takes the place of the explanation.</p></figcaption>
+  <div class="frame" data-w="348" data-h="700"><iframe loading="lazy" title="After a failure: the box again, with the reason" data-leaf="leaves/sidepanel/verify-failed.html"  src="leaves/sidepanel/verify-failed.html#theme=dark" width="348" height="700"></iframe></div>
+</figure>
+<figure class="leaf" id="sidepanel-verify-waiting">
+  <figcaption><b>With another device: waiting for one to accept the request</b><span class="meta">348 × 620</span><a href="leaves/sidepanel/verify-waiting.html" target="_blank" rel="noopener">open ↗</a><p>The request goes to every other device of the account. While a step runs, the box replaces the device details and the menu; × cancels the verification.</p></figcaption>
+  <div class="frame" data-w="348" data-h="620"><iframe loading="lazy" title="With another device: waiting for one to accept the request" data-leaf="leaves/sidepanel/verify-waiting.html"  src="leaves/sidepanel/verify-waiting.html#theme=dark" width="348" height="620"></iframe></div>
+</figure>
+<figure class="leaf" id="sidepanel-verify-emoji">
+  <figcaption><b>With another device: comparing the 7 emoji</b><span class="meta">348 × 620</span><a href="leaves/sidepanel/verify-emoji.html" target="_blank" rel="noopener">open ↗</a></figcaption>
+  <div class="frame" data-w="348" data-h="620"><iframe loading="lazy" title="With another device: comparing the 7 emoji" data-leaf="leaves/sidepanel/verify-emoji.html"  src="leaves/sidepanel/verify-emoji.html#theme=dark" width="348" height="620"></iframe></div>
+</figure>
+<figure class="leaf" id="sidepanel-verify-confirming">
+  <figcaption><b>With another device: “They match” pressed, waiting for it to confirm</b><span class="meta">348 × 620</span><a href="leaves/sidepanel/verify-confirming.html" target="_blank" rel="noopener">open ↗</a></figcaption>
+  <div class="frame" data-w="348" data-h="620"><iframe loading="lazy" title="With another device: “They match” pressed, waiting for it to confirm" data-leaf="leaves/sidepanel/verify-confirming.html"  src="leaves/sidepanel/verify-confirming.html#theme=dark" width="348" height="620"></iframe></div>
+</figure>
+<figure class="leaf" id="sidepanel-verify-recovery-key">
+  <figcaption><b>Recovery key: entering it</b><span class="meta">348 × 620</span><a href="leaves/sidepanel/verify-recovery-key.html" target="_blank" rel="noopener">open ↗</a><p>A real text field in the app: no autocomplete, no spell check. The key is never kept in the view model.</p></figcaption>
+  <div class="frame" data-w="348" data-h="620"><iframe loading="lazy" title="Recovery key: entering it" data-leaf="leaves/sidepanel/verify-recovery-key.html"  src="leaves/sidepanel/verify-recovery-key.html#theme=dark" width="348" height="620"></iframe></div>
+</figure>
+<figure class="leaf" id="sidepanel-verify-recovery-checking">
+  <figcaption><b>Recovery key: checking it</b><span class="meta">348 × 620</span><a href="leaves/sidepanel/verify-recovery-checking.html" target="_blank" rel="noopener">open ↗</a></figcaption>
+  <div class="frame" data-w="348" data-h="620"><iframe loading="lazy" title="Recovery key: checking it" data-leaf="leaves/sidepanel/verify-recovery-checking.html"  src="leaves/sidepanel/verify-recovery-checking.html#theme=dark" width="348" height="620"></iframe></div>
+</figure>
+<figure class="leaf" id="sidepanel-verify-recovery-wrong">
+  <figcaption><b>Recovery key: refused</b><span class="meta">348 × 620</span><a href="leaves/sidepanel/verify-recovery-wrong.html" target="_blank" rel="noopener">open ↗</a><p>The key stays in the field. The second line is the session's error.</p></figcaption>
+  <div class="frame" data-w="348" data-h="620"><iframe loading="lazy" title="Recovery key: refused" data-leaf="leaves/sidepanel/verify-recovery-wrong.html"  src="leaves/sidepanel/verify-recovery-wrong.html#theme=dark" width="348" height="620"></iframe></div>
+</figure>
+<figure class="leaf" id="sidepanel-verify-done">
+  <figcaption><b>Verified, until “Done”</b><span class="meta">348 × 700</span><a href="leaves/sidepanel/verify-done.html" target="_blank" rel="noopener">open ↗</a><p>The details below already say “This device is verified”.</p></figcaption>
+  <div class="frame" data-w="348" data-h="700"><iframe loading="lazy" title="Verified, until “Done”" data-leaf="leaves/sidepanel/verify-done.html"  src="leaves/sidepanel/verify-done.html#theme=dark" width="348" height="700"></iframe></div>
 </figure></div><h3 id="sidepanel-settings">Settings</h3><div class="leaves"><figure class="leaf" id="sidepanel-settings-off">
   <figcaption><b>Dev tools disabled</b><span class="meta">348 × 420</span><a href="leaves/sidepanel/settings-off.html" target="_blank" rel="noopener">open ↗</a></figcaption>
   <div class="frame" data-w="348" data-h="420"><iframe loading="lazy" title="Dev tools disabled" data-leaf="leaves/sidepanel/settings-off.html"  src="leaves/sidepanel/settings-off.html#theme=dark" width="348" height="420"></iframe></div>

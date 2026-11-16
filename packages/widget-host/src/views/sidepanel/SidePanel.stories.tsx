@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { useState } from "react";
 
-import type { AppIntent, MainViewModel } from "../../appViewModel";
+import { loggableIntent, type AppIntent, type MainViewModel } from "../../appViewModel";
 import { ACCOUNTS, mainVm } from "../fixtures";
 import { StoryEnv } from "../storyEnv";
 import { SidePanel, type SidePanelProps } from "./SidePanel";
@@ -10,7 +10,7 @@ import { SidePanel, type SidePanelProps } from "./SidePanel";
 function Shell({ main: initial, settings, narrow = false }: SidePanelProps & { narrow?: boolean }) {
   const [main, setMain] = useState<MainViewModel>(initial);
   const dispatch = (intent: AppIntent) => {
-    console.info("intent", intent);
+    console.info("intent", loggableIntent(intent));
     if (intent.type === "sidePanel/resize") setMain((m) => ({ ...m, sidePanel: { ...m.sidePanel, width: intent.width } }));
     if (intent.type === "sidePanel/close") setMain((m) => ({ ...m, sidePanel: { ...m.sidePanel, view: undefined } }));
   };
