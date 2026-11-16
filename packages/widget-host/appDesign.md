@@ -345,6 +345,7 @@ Notes for the implementation. They add to the design above, they do not change i
 **Theming**
 
 - Define semantic color tokens (surface, border, text, primary, highlight, danger, ...) as CSS variables; components never use raw colors. Follow `prefers-color-scheme`, with a manual override.
+- Widgets get the theme too: the widget iframe uses the theme's color scheme (so `prefers-color-scheme` inside a widget is the theme), and a theme change is pushed as `update_theme` to widgets that hold that capability.
 - Use one spacing scale and one radius scale. The dev tools use a smaller radius from the same scale.
 - Keep the construction-fence background low contrast and static. Add a persistent "DevBackend" badge, so the mode is not signalled by the background alone.
 

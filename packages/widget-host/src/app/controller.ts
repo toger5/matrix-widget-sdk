@@ -116,6 +116,10 @@ export class AppController {
   private saveQueued = false;
   /** `HostSeed.notifyReadyTimeoutMs` of the last `populate`. */
   private notifyReadyTimeoutMs: number | undefined;
+  /** The OS preference, for the theme "system". Kept in a field: the listener must live as long as the controller. */
+  private readonly darkScheme = globalThis.matchMedia?.("(prefers-color-scheme: dark)");
+  /** The theme the running widgets were last told about (`pushTheme`). */
+  private theme: "light" | "dark";
 
   constructor(options: ControllerOptions = {}) {
     this.provider = options.provider ?? sessions;
@@ -125,6 +129,9 @@ export class AppController {
     this.persisted = persisted;
     this.store = new Store<AppViewModel>({ settings: { devTools: false, theme: "system", ...persisted?.settings }, screen: { kind: "restoring" } });
     this.store.subscribe(() => this.queueSave());
+    this.theme = this.resolvedTheme();
+    // The OS scheme matters while the setting is "system". (The AppShell listens itself for the page's `data-theme`.)
+    this.darkScheme?.addEventListener("change", () => this.pushTheme());
   }
 
   private readonly persisted: PersistedUi | undefined;
@@ -514,7 +521,20 @@ export class AppController {
 
   resolvedTheme(): "light" | "dark" {
     const { theme } = this.vm.settings;
-    return theme === "system" ? (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light") : theme;
+    return theme === "system" ? (this.darkScheme?.matches ? "dark" : "light") : theme;
+  }
+
+  /**
+   * Tell the running widgets when the resolved theme changed (the setting, or the OS while it is
+   * "system"): `update_theme`, which the driver sends only to widgets holding `host:…update_theme`.
+   * Widgets that start later ask with `get_client_context`. The iframes follow by CSS on their own
+   * (docs/widget-color-scheme.md).
+   */
+  private pushTheme(): void {
+    const theme = this.resolvedTheme();
+    if (theme === this.theme) return;
+    this.theme = theme;
+    for (const runtime of this.runtimes.values()) runtime.updateTheme(theme);
   }
 
   private addRecent(roomId: RoomId, widgetKey: WidgetKey): void {
@@ -729,6 +749,7 @@ export class AppController {
     const matrixAccounts = (this.main?.accounts ?? []).filter((a) => a.kind === "matrix");
     // TODO-FINDING seed-dev-tools-off-in-devbackend - a seed with `settings: { devTools: false }` wins over the rule "dev tools cannot be turned off while the DevBackend is active" (`settings/set` enforces it). The result is a state no user can reach: the DevBackend account is not listed (`syncDevAccount`), so `devBackendActive` is false: no fence, no badge, no DevBackend button, although the DevBackend's rooms are shown. Options: force `devTools: true` here too, or keep it as the only way for tests to see the "dev tools disabled" views.
     this.store.update((vm) => ({ ...vm, settings: { ...vm.settings, devTools: true, ...seed.settings } }));
+    this.pushTheme(); // no widget runs now; only remembers the theme
     this.showMain(matrixAccounts, DEV_ACCOUNT_ID, {
       returnAccountId: matrixAccounts[0]?.id,
       leftBar: { collapsed: seed.leftBarCollapsed === true, expandButtonVisible: false },
@@ -801,6 +822,7 @@ export class AppController {
         const settings = { ...this.vm.settings, ...intent.settings };
         if (this.devActive) settings.devTools = true;
         this.store.update((vm) => ({ ...vm, settings }));
+        this.pushTheme();
         return this.syncDevAccount();
       }
       case "modal/open":

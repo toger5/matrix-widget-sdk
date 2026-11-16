@@ -110,6 +110,13 @@ hands it to the driver of each widget of that room like any other `MatrixBackend
   push `update_theme`, `update_language` and `update_visibility`) and **Console** (this host's and
   the driver's log about the widget). **Reload** starts the widget again like Retry: a new iframe
   and driver, the current URL of its state event, empty panels; capabilities are negotiated again.
+- **Widget theme**: a widget follows the host's theme, also one that does not use the widget API.
+  The iframe gets the theme's `color-scheme`, so `prefers-color-scheme` inside the widget is
+  the theme (Chromium, Firefox, WebKit 27.2) and a page that opted into `color-scheme` gets
+  dark system colours on a backdrop of its own `Canvas` colour. A theme change (the setting, or the
+  OS while it is "System") is also pushed as `update_theme` to widgets holding that capability;
+  `get_client_context` answers the current theme. A loading widget is laid out but invisible, so it
+  already sees the theme. Details and measurements: [`docs/widget-color-scheme.md`](../../docs/widget-color-scheme.md).
 - **Remembered capabilities** (logged-in mode): what you approve is stored in `localStorage` per
   account, room and widget, and granted without a prompt the next time the widget is opened; only
   capabilities it has not been given before are prompted for. Logging out forgets them. In the
@@ -194,5 +201,7 @@ Open the host with the URL parameters above (or `?seed=<url of a seed json>`), t
 A widget id is `<room id>|<widget key>`, e.g. `!room:example.org|m.widget/widget-1`. No Matrix SDK code is loaded on this path. The message log and the driver panel of the dev tools show the same data, but collapsed and capped, so assert on the hook. Why the driver refused or dropped something is in the widget's console panel and in the browser console (see `log=` above). Widget-side assertions are available in the test widgets' own log.
 
 The host's own Playwright tests are in `e2e/` ([`e2e/README.md`](e2e/README.md)): `npm run e2e`.
+
+Playwright's colour scheme emulation (a context's `colorScheme`, `"light"` by default) overrides, in Chromium, the scheme a widget iframe passes on: inside the widget `prefers-color-scheme` is then the emulated value, whatever the host's theme. Call `page.emulateMedia({ colorScheme: null })` to test what a widget sees ([`docs/widget-color-scheme.md`](../../docs/widget-color-scheme.md), section 4).
 
 Ports are fixed (`strictPort`): host 5173 (including the compat wrapper), widgets 5175.

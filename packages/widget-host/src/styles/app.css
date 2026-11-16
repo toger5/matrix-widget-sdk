@@ -700,9 +700,18 @@ button.tile { display: block; text-align: center; }
 
 /* --- real widgets ---------------------------------------------------------------------------
    Every widget iframe is a light-DOM child of the app's host element and is rendered where the
-   shadow tree has a <slot name="widget-<id>"> (see src/views/ui/WidgetSlot.tsx). */
-::slotted(iframe) { display: block; width: 100%; height: 100%; border: 0; background: #fff; }
-::slotted(iframe[hidden]) { display: none; }
+   shadow tree has a <slot name="widget-<id>"> (see src/views/ui/WidgetSlot.tsx).
+   The iframe's `color-scheme` is the theme's, and that becomes the widget's `prefers-color-scheme`
+   (css-color-adjust-1 §2.1). It is set on the iframe itself, not only inherited: WebKit passes on
+   only a scheme set on the iframe. A widget in the same scheme has a transparent canvas (§2.4):
+   `Canvas` is the backdrop it would get on its own. See docs/widget-color-scheme.md. */
+::slotted(iframe) { display: block; width: 100%; height: 100%; border: 0; background: Canvas; }
+[data-theme="dark"] ::slotted(iframe) { color-scheme: dark; }
+[data-theme="light"] ::slotted(iframe) { color-scheme: light; }
+/* Hidden until notify_ready (the loading layer covers it). Laid out, so the widget already has its
+   size and the scheme of the theme, but not painted and not reached by a click or Tab. (In
+   Chromium a widget can still focus itself by script, as a shown one can.) */
+::slotted(iframe[hidden]) { visibility: hidden; }
 .app-root { width: 100%; height: 100%; font: 13px/1.4 var(--font-ui); color: var(--text); }
 
 /* --- side panel (implementation) --- */

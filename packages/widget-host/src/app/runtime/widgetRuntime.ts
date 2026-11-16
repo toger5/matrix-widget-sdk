@@ -216,9 +216,14 @@ export class WidgetRuntime {
     this.refreshCapabilities();
   }
 
+  /** Tell the widget the host's theme (`update_theme`). The driver sends it only if the widget holds `host:…update_theme`. */
+  updateTheme(theme: "light" | "dark"): void {
+    this.driver.updateTheme({ name: theme, is_dark: theme === "dark" });
+  }
+
   // TODO: more host actions (update_turn_servers is pushed by the backend; add the ones the driver gains).
   mockHostAction(action: "updateTheme" | "updateLanguage" | "updateVisibility", value: string): void {
-    if (action === "updateTheme") this.driver.updateTheme({ name: value, is_dark: value === "dark" });
+    if (action === "updateTheme") this.updateTheme(value === "dark" ? "dark" : "light");
     else if (action === "updateLanguage") this.driver.updateLanguage(value);
     else this.driver.updateVisibility(value === "true");
   }
