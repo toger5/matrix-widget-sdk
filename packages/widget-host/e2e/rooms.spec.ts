@@ -102,7 +102,7 @@ test("two panels with different rooms: the separator resizes them, double click 
   expect(Object.keys((await host.main()).widgets)).toContain(NEW);
 });
 
-test("Alt+Shift+N opens the same room in a second panel, where the running widget is grayed out", async ({ host }) => {
+test("Alt+Shift+N opens the same room in a second panel, where the running widget is grayed out; Alt+W closes it again", async ({ host }) => {
   await host.populate("lab", { sidePanel: null, behavior: { autoApproveCapabilities: true }, open: [{ room: LAB, widgets: [NEW_WIDGET, LEGACY_WIDGET], overview: true, active: LEGACY_WIDGET }] });
   await expect(host.panels).toHaveCount(1);
   await expect(host.tab(/Legacy test widget/)).toHaveAttribute("aria-selected", "true");
@@ -115,6 +115,13 @@ test("Alt+Shift+N opens the same room in a second panel, where the running widge
   await expect(host.panels.nth(1)).toHaveAttribute("data-focused", "true");
   await expect(host.panels.nth(1).getByRole("button", { name: "Jump to the tab of New test widget" })).toBeVisible();
   // A widget runs once per account.
+  expect(Object.keys((await host.main()).widgets)).toHaveLength(2);
+
+  // The second panel has no widget tab: Alt+W closes it, the widgets of the same room in the first panel keep running.
+  await host.page.keyboard.press("Alt+KeyW");
+  await expect(host.panels).toHaveCount(1);
+  await expect(host.panels.first()).toHaveAttribute("data-focused", "true");
+  await expect(host.tab(/Legacy test widget/)).toHaveAttribute("aria-selected", "true");
   expect(Object.keys((await host.main()).widgets)).toHaveLength(2);
 });
 

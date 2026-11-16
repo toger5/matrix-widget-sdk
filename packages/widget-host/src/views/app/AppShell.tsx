@@ -6,6 +6,7 @@ import {
   activeWorkspace,
   devBackendActive,
   fullscreenWidget,
+  hasWidgetTab,
   pipWidgetIds,
   widgetTab,
   type AppViewModel,
@@ -75,6 +76,15 @@ function toastText(text: string): ReactNode {
   return text.split(/\b(Esc|Alt|Shift|Ctrl)\b/).map((part, i) => (i % 2 ? <kbd key={i}>{part}</kbd> : <Fragment key={i}>{part}</Fragment>));
 }
 
+const NOT_TEXT_INPUTS = new Set(["button", "checkbox", "color", "file", "image", "radio", "range", "reset", "submit"]);
+
+/** The Alt shortcuts are off while typing: on macOS Option+letter types a character. */
+function isTextField(target: EventTarget | undefined): boolean {
+  if (!(target instanceof HTMLElement)) return false;
+  if (target instanceof HTMLInputElement) return !NOT_TEXT_INPUTS.has(target.type);
+  return target instanceof HTMLTextAreaElement || target instanceof HTMLSelectElement || target.isContentEditable;
+}
+
 function MainScreen({ vm, main }: { vm: AppViewModel; main: MainViewModel }) {
   const dispatch = useDispatch();
   const { narrow } = useViewEnv();
@@ -107,6 +117,7 @@ function MainScreen({ vm, main }: { vm: AppViewModel; main: MainViewModel }) {
 
   // Keyboard shortcuts (appDesign.md, Details > Keyboard). `code`, not `key`: Alt changes `key` on macOS.
   const activeTabId = focusedPanel?.content.kind === "room" ? focusedPanel.content.activeTabId : undefined;
+  const altWClosesPanel = !!focusedPanel && !hasWidgetTab(focusedPanel);
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.defaultPrevented) return;
@@ -116,19 +127,23 @@ function MainScreen({ vm, main }: { vm: AppViewModel; main: MainViewModel }) {
         return;
       }
       if (!e.altKey || e.ctrlKey || e.metaKey || modalOpen) return;
+      // The UI is in a shadow root: `composedPath()[0]` is the focused element, `e.target` is the host element.
+      if (isTextField(e.composedPath()[0])) return;
       if (e.code === "KeyN") {
         e.preventDefault();
         // TODO-FINDING alt-shift-n-without-room - Alt+Shift+N sends `sameRoomAs` = the focused panel also when that panel is a picker (no room); without a focused panel it is a plain `panel/new`.
         dispatch(e.shiftKey && focusedPanelId ? { type: "panel/new", sameRoomAs: focusedPanelId } : { type: "panel/new" });
       } else if (e.code === "KeyW" && !e.shiftKey) {
         e.preventDefault();
-        // TODO-FINDING alt-w-without-tab - Alt+W in a panel without an active tab (picker, widget tiles) does nothing; should it close the panel?
-        if (focusedPanelId && activeTabId) dispatch({ type: "tab/close", panelId: focusedPanelId, tabId: activeTabId });
+        // One press, one close: holding the keys would close tab after tab and then the panels too.
+        if (e.repeat) return;
+        if (focusedPanelId && altWClosesPanel) dispatch({ type: "panel/close", panelId: focusedPanelId });
+        else if (focusedPanelId && activeTabId) dispatch({ type: "tab/close", panelId: focusedPanelId, tabId: activeTabId });
       }
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [dispatch, collapsed, expandButtonVisible, modalOpen, focusedPanelId, activeTabId]);
+  }, [dispatch, collapsed, expandButtonVisible, modalOpen, focusedPanelId, activeTabId, altWClosesPanel]);
 
   // "Also reveal the LeftBar expand button when the mouse reaches the screen edge."
   useEffect(() => {

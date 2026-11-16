@@ -273,14 +273,15 @@ export function devBackendView({ state = "state", media = "collapsed" } = {}) {
 
 /**
  * t: { kind: "widget" | "native" | "new", widget?: key, label?, active?, pinned?, devOpen? }
- * devTools adds the overflow (⋯) button to widget tabs.
+ * devTools adds the overflow (⋯) button to widget tabs. altW: the panel has a widget tab, so Alt+W
+ * closes the active tab and its × names the shortcut (else Alt+W closes the panel).
  */
-export function tab(t, devTools = false) {
+export function tab(t, devTools = false, altW = true) {
   const cls = `tab ${t.kind} ${t.active ? "active" : ""} ${t.pinned ? "pinned" : ""}`;
   const name = t.kind === "widget" ? WIDGETS[t.widget].name : (t.label ?? (t.kind === "new" ? "New tab" : "Room overview"));
   const main = (inner) => `<button class="tab-main" role="tab" aria-selected="${!!t.active}" tabindex="${t.active ? 0 : -1}" title="${name}${t.pinned ? " · always on screen" : ""}">${inner}<span class="tab-label">${name}</span>${t.pinned ? `<span class="tab-pin">${icon("pin", 13)}</span><span class="vh">, always on screen</span>` : ""}</button>`;
   // ⋯ and × are shown on the active tab; on the others they appear on hover and keyboard focus.
-  const close = t.active ? `<button class="tab-btn" title="Close ${name} (Alt+W)" aria-label="Close ${name}">${icon("x", 12)}</button>` : "";
+  const close = t.active ? `<button class="tab-btn" title="Close ${name}${altW ? " (Alt+W)" : ""}" aria-label="Close ${name}">${icon("x", 12)}</button>` : "";
   if (t.kind === "widget") {
     const av = wico(t.widget, 16);
     const dev = devTools && (t.active || t.devOpen) ? `<button class="tab-btn ${t.devOpen ? "on" : ""}" title="Dev tools of ${name}" aria-label="Dev tools of ${name}" aria-pressed="${!!t.devOpen}">${icon("dots", 14)}</button>` : "";
@@ -303,10 +304,13 @@ export function roomPanel(o) {
   const tabs = o.tabs ?? [];
   const quiet = o.fs && !o.hover;
   const showTabs = !(quiet && tabs.length <= 1);
-  const tabBar = showTabs ? `<span class="rp-div"></span><div class="tabs ${o.overflow ? "overflowing" : ""}" role="tablist" aria-label="Tabs of ${ROOMS[o.room]?.name}">${tabs.map((t) => tab(t, o.devTools)).join("")}</div>` : "";
+  // Alt+W closes the active tab while the panel has a widget tab, else the panel.
+  const altWClosesTab = tabs.some((t) => t.kind === "widget");
+  const tabBar = showTabs ? `<span class="rp-div"></span><div class="tabs ${o.overflow ? "overflowing" : ""}" role="tablist" aria-label="Tabs of ${ROOMS[o.room]?.name}">${tabs.map((t) => tab(t, o.devTools, altWClosesTab)).join("")}</div>` : "";
+  const close = `<button class="ibtn " title="Close panel${altWClosesTab ? "" : " (Alt+W)"}" aria-label="Close panel">${icon("x", 16)}</button>`;
   const head = o.room
-    ? `${roomHeader(o.room)}${tabBar}${quiet ? "" : ibtn("plus", "New tab", "tab-add")}${o.overflow ? ibtn("chevDown", `All ${tabs.length} tabs`, `tab-all ${o.menu ? "on" : ""}`) : ""}<span class="sp"></span>${ibtn("x", "Close panel")}`
-    : `<span class="sp"></span>${ibtn("x", "Close panel")}`;
+    ? `${roomHeader(o.room)}${tabBar}${quiet ? "" : ibtn("plus", "New tab", "tab-add")}${o.overflow ? ibtn("chevDown", `All ${tabs.length} tabs`, `tab-all ${o.menu ? "on" : ""}`) : ""}<span class="sp"></span>${close}`
+    : `<span class="sp"></span>${close}`;
   return `<section class="roompanel ${o.cls ?? ""}" style="${o.style ?? ""}"><header class="rp-head">${head}</header><div class="rp-body">${o.body ?? ""}</div>${o.menu ?? ""}</section>`;
 }
 

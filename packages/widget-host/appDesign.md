@@ -85,8 +85,8 @@ The RoomsArea is the main area of the logged-in view. It allows opening multiple
     - no title however
     - tiles for the recent rooms similar to the `reference_image` (but a bit mroe spaceing + centered)
 - By default there is one panel per room.
-- Ctrl+N opens a new panel on the right with the same initial view (list of recents).
-- Ctrl+Shift+N opens a new panel on the right showing the same room.
+- Ctrl+N opens a new panel on the right with the list of recents, Ctrl+Shift+N one showing the same room.
+- Ctrl+W closes the active tab of the focused panel; in a panel without a widget tab it closes the panel.
 
 ## RoomView
 
@@ -107,7 +107,7 @@ There are two kinds of tabs with slightly different designs:
 - **WidgetTab**: contains a widget. The default view is just the full widget. The tab name is the widget name, and the tab shows the widget icon/avatar if available.
 - **NativeTab**: a view rendered by the host instead of a widget, like the RoomOverviewTab (and devtools or a timeline in the future). Native tabs get slightly transparent labels.
 
-Every tab has a close button (equivalent to Ctrl+W). With dev tools enabled, a WidgetTab also has an overflow button (three dots) that opens the [WidgetDevToolBar](#widgetdevtoolbar).
+Every tab has a close button. With dev tools enabled, a WidgetTab also has an overflow button (three dots) that opens the [WidgetDevToolBar](#widgetdevtoolbar).
 
 A widget that is set to always on screen gets a marker on its tab: a pin icon (see [PictureInPicturePanel](#pictureinpicturepanel)).
 
@@ -336,7 +336,7 @@ Notes for the implementation. They add to the design above, they do not change i
 
 **Keyboard**
 
-- The host is a browser app, and browsers do not let a page override Ctrl+N, Ctrl+Shift+N or Ctrl+W. Bind alternatives that work in a tab (suggestion: Alt+N, Alt+Shift+N, Alt+W) and show the shortcut in the button tooltips.
+- The host is a browser app, and browsers do not let a page override Ctrl+N, Ctrl+Shift+N or Ctrl+W. Bind alternatives that work in a tab (suggestion: Alt+N, Alt+Shift+N, Alt+W), ignored while typing in a text field, and show the shortcut in the button tooltips.
 - While a widget iframe has focus, the host does not receive key events (including Escape). Also reveal the LeftBar expand button when the mouse reaches the screen edge.
 
 **Widgets are iframes**

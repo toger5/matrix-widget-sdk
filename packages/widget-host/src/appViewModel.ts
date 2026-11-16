@@ -403,6 +403,9 @@ export function fullscreenWidget(vm: AppViewModel): WidgetInstanceId | undefined
   return tab.kind === "widget" ? tab.widgetId : undefined;
 }
 
+/** Alt+W closes the active tab of a panel that has a widget tab, and else the panel itself. */
+export const hasWidgetTab = (panel: RoomPanelViewModel): boolean => panel.content.kind === "room" && panel.content.tabs.some((t) => t.kind === "widget");
+
 // ---------------------------------------------------------------------------------------------
 // Intents: what a user can ask for. A controller turns an intent into model changes and effects
 // (open a URL, copy to the clipboard, call the session or the driver). What comes back from the
@@ -437,7 +440,7 @@ export type AppIntent =
   | { type: "sidePanel/resize"; width: number }
   // rooms area
   | { type: "panel/new"; sameRoomAs?: PanelId } // Alt+N / Alt+Shift+N
-  | { type: "panel/close"; panelId: PanelId } // closes its tabs (see tab/close: always-on-screen widgets keep running in the PiP panel)
+  | { type: "panel/close"; panelId: PanelId } // its ×, and Alt+W in a panel without a widget tab; closes its tabs (see tab/close: always-on-screen widgets keep running in the PiP panel)
   | { type: "panel/focus"; panelId: PanelId }
   | { type: "panel/resize"; panelId: PanelId; widthShare: number }
   | { type: "picker/setMode"; panelId: PanelId; mode: RoomPickerViewModel["mode"] }
@@ -450,7 +453,7 @@ export type AppIntent =
   | { type: "tab/openRoomOverview"; panelId: PanelId } // or switch to it if it is open
   | { type: "tab/activate"; panelId: PanelId; tabId: TabId } // the tab of an always-on-screen widget: takes it out of the PiP panel; the tab left behind may enter it
   | { type: "tab/move"; panelId: PanelId; tabId: TabId; toIndex: number }
-  | { type: "tab/close"; panelId: PanelId; tabId: TabId } // Alt+W; stops the widget, unless it is always on screen: then it keeps running in the PiP panel (assumption, see designFeedback.md)
+  | { type: "tab/close"; panelId: PanelId; tabId: TabId } // Alt+W in a panel with a widget tab; stops the widget, unless it is always on screen: then it keeps running in the PiP panel (assumption, see designFeedback.md)
   // widgets
   | { type: "widget/retry"; widgetId: WidgetInstanceId }
   | { type: "widget/answerCapabilities"; widgetId: WidgetInstanceId; approved: string[] }

@@ -39,21 +39,42 @@ test.describe("lab room with both widgets and the overview open", () => {
     expect(await widgets(host)).toHaveLength(2);
   });
 
-  test("closing a tab stops its widget and activates the neighbour; Alt+W and a middle click close too", async ({ host }) => {
+  test("closing a tab stops its widget and activates the neighbour; Alt+W closes the tab, and the panel once no widget tab is left (the tab's own close keeps the panel)", async ({ host }) => {
     await host.button("Close New test widget").click();
     await expect(host.tab(/New test widget/)).toHaveCount(0);
     await expect(host.tab(/Legacy test widget/)).toHaveAttribute("aria-selected", "true");
     await expect.poll(() => widgets(host)).toEqual([LEGACY]);
     await expect(host.iframe(NEW)).toHaveCount(0);
+    // The tooltips name Alt+W where it applies: the active tab.
+    await expect(host.button("Close panel")).toHaveAttribute("title", "Close panel");
+    await expect(host.button("Close Legacy test widget")).toHaveAttribute("title", "Close Legacy test widget (Alt+W)");
+    await expect(host.button("Close Room overview")).toHaveAttribute("title", "Close Room overview");
 
-    await host.page.keyboard.press("Alt+KeyW");
+    // Held down, Alt+W closes one tab: the repeated keydown (autoRepeat) would close the panel, which now has no widget tab.
+    await host.page.keyboard.down("Alt");
+    await host.page.keyboard.down("KeyW");
+    await host.page.keyboard.down("KeyW");
+    await host.page.keyboard.up("KeyW");
+    await host.page.keyboard.up("Alt");
     await expect(host.tab(/Legacy test widget/)).toHaveCount(0);
     await expect(host.tab("Room overview")).toHaveAttribute("aria-selected", "true");
     await expect.poll(() => widgets(host)).toEqual([]);
+    await expect(host.panels).toHaveCount(1);
 
+    // Only a native tab is left: Alt+W would close the panel; the tab's own close (here a middle click) closes the tab only.
+    await expect(host.button("Close panel")).toHaveAttribute("title", "Close panel (Alt+W)");
+    await expect(host.button("Close Room overview")).toHaveAttribute("title", "Close Room overview");
     await host.tab("Room overview").click({ button: "middle" });
     await expect(host.page.getByRole("tab")).toHaveCount(0);
     await expect(host.page.getByTestId("widget-tiles")).toBeVisible();
+    await expect(host.panels).toHaveCount(1);
+
+    // The room header opens the overview again; Alt+W closes the panel, the overview tab with it.
+    await host.page.getByTitle("Widget lab · open the room overview").click();
+    await expect(host.tab("Room overview")).toHaveAttribute("aria-selected", "true");
+    await host.page.keyboard.press("Alt+KeyW");
+    await expect(host.panels).toHaveCount(0);
+    await expect(host.page.getByText("No room panel open")).toBeVisible();
   });
 
   test("a middle click closes an inactive tab without activating it", async ({ host }) => {

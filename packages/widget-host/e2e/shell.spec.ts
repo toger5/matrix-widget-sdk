@@ -42,11 +42,28 @@ test.describe("LeftBar while the DevBackend is active", () => {
     await expect(host.button("Leave DevBackend")).toHaveCount(0);
   });
 
-  test("the + button and Alt+N open a new room panel; the room list button is a placeholder", async ({ host }) => {
+  test("the + button and Alt+N open a new room panel, Alt+W closes it unless a text field has the focus; the room list button is a placeholder", async ({ host }) => {
     await host.button(/^New room panel/).click();
     await expect(host.panels).toHaveCount(2);
     await host.page.keyboard.press("Alt+KeyN");
     await expect(host.panels).toHaveCount(3);
+
+    // The new picker panel is focused and has no widget tab: Alt+W closes it, but not while typing in its search field.
+    const picker = host.page.locator('[data-testid="room-panel"][data-focused="true"]');
+    await expect(picker).toHaveAccessibleName("Room panel: choose a room");
+    await expect(picker.getByRole("button", { name: "Close panel" })).toHaveAttribute("title", "Close panel (Alt+W)");
+    await picker.getByRole("switch", { name: "Show all rooms" }).click();
+    const search = picker.getByRole("searchbox", { name: "Search rooms" });
+    await search.click();
+    await host.page.keyboard.press("Alt+KeyW");
+    await expect(host.panels).toHaveCount(3);
+    await expect(search).toBeFocused();
+    await search.blur();
+    // AltGr arrives as Ctrl+Alt on Windows: not the shortcut.
+    await host.page.keyboard.press("Control+Alt+KeyW");
+    await expect(host.panels).toHaveCount(3);
+    await host.page.keyboard.press("Alt+KeyW");
+    await expect(host.panels).toHaveCount(2);
 
     const before = await host.state();
     await expect(host.button(/^Room list/)).toHaveAttribute("aria-disabled", "true");
@@ -140,6 +157,8 @@ test.describe("modals", () => {
 
     // The shortcuts of the app are off while a modal is open.
     await host.page.keyboard.press("Alt+KeyN");
+    await expect(host.panels).toHaveCount(1);
+    await host.page.keyboard.press("Alt+KeyW"); // the panel has no widget tab: Alt+W would close it
     await expect(host.panels).toHaveCount(1);
 
     await host.page.keyboard.press("Escape");

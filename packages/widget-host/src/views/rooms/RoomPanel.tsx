@@ -1,6 +1,6 @@
 import { useRef } from "react";
 
-import type { MainViewModel, RoomPanelViewModel, SettingsViewModel } from "../../appViewModel";
+import { hasWidgetTab, type MainViewModel, type RoomPanelViewModel, type SettingsViewModel } from "../../appViewModel";
 import type { RenderWidget } from "../app/AppShell";
 import { useDispatch } from "../env";
 import { roomOf } from "../helpers";
@@ -33,7 +33,16 @@ export function RoomPanel({ main, settings, panel, focused, fullscreen = false, 
   const endPress = () => {
     pressing.current = false;
   };
-  const close = <IconButton icon="x" title="Close panel" className="rp-close" onClick={() => dispatch({ type: "panel/close", panelId: panel.id })} />;
+  // Alt+W closes the panel only when it has no widget tab (else the active tab).
+  const close = (
+    <IconButton
+      icon="x"
+      title={hasWidgetTab(panel) ? "Close panel" : "Close panel (Alt+W)"}
+      aria-label="Close panel"
+      className="rp-close"
+      onClick={() => dispatch({ type: "panel/close", panelId: panel.id })}
+    />
+  );
   const label = content.kind === "room" ? `Room panel: ${roomOf(main, content.roomId)?.name ?? content.roomId}` : "Room panel: choose a room";
 
   return (

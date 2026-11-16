@@ -124,6 +124,8 @@ export function TabBar({ main, settings, panelId, room, roomName, tabs, activeTa
 
   // The tab that can be reached with the Tab key: the active one, or the first one.
   const tabStop = tabs.some((t) => t.id === activeTabId) ? activeTabId : tabs[0]?.id;
+  // Alt+W closes the active tab while the panel has a widget tab, else the panel (`hasWidgetTab`).
+  const altWClosesTab = tabs.some((t) => t.kind === "widget");
 
   return (
     <>
@@ -212,7 +214,7 @@ export function TabBar({ main, settings, panelId, room, roomName, tabs, activeTa
                   <Icon name="dots" size={14} />
                 </button>
               )}
-              <button type="button" className="tab-btn tab-close" title={`Close ${info.name} (Alt+W)`} aria-label={`Close ${info.name}`} onClick={close}>
+              <button type="button" className="tab-btn tab-close" title={active && altWClosesTab ? `Close ${info.name} (Alt+W)` : `Close ${info.name}`} aria-label={`Close ${info.name}`} onClick={close}>
                 <Icon name="x" size={12} />
               </button>
             </div>
