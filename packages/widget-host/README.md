@@ -151,7 +151,7 @@ URL parameters for scripted runs (e2e tests):
 | `mode=memory` | Starts in the in-memory mode without opening a widget. |
 | `seed=<url>` | Starts in the in-memory mode with the content and screen of this seed JSON (`e2e/seeds/*.json`). |
 | `room=<id>` / `user=<id>` | Ids of the in-memory room and its user. |
-| `wrapper=<url>` | Base URL of the compat wrapper, used for legacy events only (both modes). Default: the copy this host serves itself at `/widget_compatibility_wrapper/`. Set it to test a wrapper hosted elsewhere, e.g. `../widget-compat-wrapper`'s own dev server on `http://localhost:5174/`. |
+| `wrapper=<url>` | Base URL of the compat wrapper, used for legacy events only (both modes). Default: the copy this host serves itself at `widget_compatibility_wrapper/` next to its own page (`/widget_compatibility_wrapper/` on the dev server). Set it to test a wrapper hosted elsewhere, e.g. `../widget-compat-wrapper`'s own dev server on `http://localhost:5174/`. |
 | `log=<level>` | Level of the driver's own log: `error`, `warn` (default), `info`, `debug`, `trace`. The records appear in the browser console and in the **Console** panel of the dev tools. |
 | `logFilter=<spec>` | `RUST_LOG`-style overrides per module, e.g. `widget_host_driver::driver::requests=trace`. |
 
@@ -176,7 +176,18 @@ into a second page, `/widget_compatibility_wrapper/` (`widget_compatibility_wrap
 in the dev server and in `dist/` alike, and loads legacy widgets through it. That page has the
 host's origin, unlike a wrapper deployed for a real client.
 
-`npm run build` writes a static site to `dist/` that can be served by any web server.
+`npm run build` writes a static site to `dist/` that can be served by any web server. Two
+build-time settings:
+
+- **Sub-path:** `npx vite build --base /some/path/` builds it for `https://example.org/some/path/`.
+  The compat wrapper, the OAuth redirect (`oidc-callback.html`) and the demo media follow the
+  base.
+- **`VITE_TEST_WIDGETS_URL`:** where the test widgets are served, with a trailing slash; an
+  absolute URL, or a path resolved against the host's base URL. Their state events
+  (`src/exampleWidgets.ts`: the room of `mode=memory`, the DevBackend's widget form) point there.
+  Default: `http://localhost:5175/`, the dev server.
+
+The [dev site](../../README.md#dev-site-github-pages) is built that way (`scripts/build-dev-site.mjs`).
 
 ### Choosing the Matrix SDK
 

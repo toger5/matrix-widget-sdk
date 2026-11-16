@@ -5,11 +5,20 @@
 # wasm32 upstream, so the checkout needs a few edits before it compiles. Each one is explained
 # where it is applied. Run from anywhere: `npm run bindings -w packages/matrix-sdk-uniffi-js`.
 #
-# Needs: the wasm32-unknown-unknown target (the matching `wasm-bindgen` CLI is installed locally),
-# and binaryen's `wasm-opt`.
+# Needs: the wasm32-unknown-unknown target (the matching `wasm-bindgen` CLI is installed locally).
+# Optional: binaryen's `wasm-opt` for a last size pass (about 6% smaller). Without it the pass is
+# skipped with a warning; `REQUIRE_WASM_OPT=1` makes a missing `wasm-opt` an error instead.
 set -euo pipefail
 
-command -v wasm-opt > /dev/null || { echo "wasm-opt not found: install binaryen (brew install binaryen)" >&2; exit 1; }
+WASM_OPT=1
+if ! command -v wasm-opt > /dev/null; then
+    if [ "${REQUIRE_WASM_OPT:-}" = 1 ]; then
+        echo "wasm-opt not found: install binaryen (brew install binaryen), or unset REQUIRE_WASM_OPT to skip the size pass" >&2
+        exit 1
+    fi
+    WASM_OPT=0
+    echo "warning: wasm-opt not found: skipping the size pass, ~6% larger module (install binaryen to run it)" >&2
+fi
 
 cd "$(dirname "$0")/.."
 SDK=rust_modules/matrix-rust-sdk
@@ -99,15 +108,19 @@ echo "==> Pointing the generated code at this package's ubrn runtime"
 sed -i.bak -E "s#(['\"])@ubjs/core['\"]#\1uniffi-bindgen-react-native\1#" src/generated/*.ts
 rm src/generated/*.bak
 
-echo "==> Optimising the wasm binary (takes a few minutes)"
-# The features are listed because `strip` removes the target_features section wasm-opt would
-# otherwise read them from; they are the ones rustc enables for wasm32-unknown-unknown.
-ls -lh "$WASM_FILE"
-wasm-opt -Oz \
-    --enable-bulk-memory --enable-nontrapping-float-to-int --enable-sign-ext \
-    --enable-mutable-globals --enable-reference-types --enable-multivalue \
-    "$WASM_FILE" -o "$WASM_FILE.tmp"
-mv "$WASM_FILE.tmp" "$WASM_FILE"
+if [ "$WASM_OPT" = 1 ]; then
+    echo "==> Optimising the wasm binary (takes a few minutes)"
+    # The features are listed because `strip` removes the target_features section wasm-opt would
+    # otherwise read them from; they are the ones rustc enables for wasm32-unknown-unknown.
+    ls -lh "$WASM_FILE"
+    wasm-opt -Oz \
+        --enable-bulk-memory --enable-nontrapping-float-to-int --enable-sign-ext \
+        --enable-mutable-globals --enable-reference-types --enable-multivalue \
+        "$WASM_FILE" -o "$WASM_FILE.tmp"
+    mv "$WASM_FILE.tmp" "$WASM_FILE"
+else
+    echo "==> Skipping the wasm-opt size pass (wasm-opt not found, see above)"
+fi
 
 ls -lh "$WASM_FILE"
 echo "==> Done"

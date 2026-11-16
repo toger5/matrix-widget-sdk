@@ -346,6 +346,81 @@ receive → read → state update). It is the best place to see the whole protoc
 
 Proposed changes to MSC4411/MSC4412 and drafts of new MSCs live in [`spec/patch`](spec/patch/README.md).
 
+### Dev site (GitHub Pages)
+
+CI builds a static site of the widget host and the test widgets (`npm run build:dev-site`,
+[`scripts/build-dev-site.mjs`](scripts/build-dev-site.mjs)) and, once it is turned on, deploys it
+from `main` to GitHub Pages: `https://<owner>.github.io/<repository>/`, for this repository
+`https://toger5.github.io/matrix-widget-sdk/`. With it, the host and the test widgets can be tried
+without a local setup.
+
+| path | what |
+|---|---|
+| `/` | landing page with these links; `version.json`: commit, ref, build date, CI run |
+| `host/` | the widget host on matrix-rust-sdk (the default build). `host/?mode=memory` opens the DevBackend with both test widgets |
+| `host-js/` | the same on matrix-js-sdk |
+| `widgets/new/`, `widgets/legacy/` | the test widgets. The hosts' examples and the DevBackend's widget form point here (`VITE_TEST_WIDGETS_URL`, see [the host's README](packages/widget-host/README.md#running)) |
+| `host/widget_compatibility_wrapper/` | the compat wrapper, part of the host build |
+
+The `web` job of [`.github/workflows/ci.yml`](.github/workflows/ci.yml) builds the site on every
+run, after the tests. Once turned on (below), the `deploy-dev-site` job deploys it after `test` and
+`web` passed, on a push to `main` and on Actions → CI → Run workflow on `main`. A pull request gets
+the site as the artifact `dev-site` of its run (kept 7 days). It is built for the deployed path,
+`/<repository>/` unless `DEV_SITE_BASE` (below) says otherwise, so unzip it into a folder of that
+name: `unzip dev-site.zip -d /tmp/site/matrix-widget-sdk`, `python3 -m http.server 8088 -d /tmp/site`,
+then open `http://localhost:8088/matrix-widget-sdk/`.
+
+**Turning it on** (by hand, once; no secrets, nothing else to set up):
+
+1. Settings → Pages → Build and deployment → Source: **GitHub Actions**. GitHub creates the
+   environment `github-pages`, which only accepts deployments from the default branch; keep that.
+2. Settings → Secrets and variables → Actions → Variables → New repository variable:
+   `DEPLOY_DEV_SITE` = `true`. Only after step 1: without Pages the deploy job fails.
+3. Push to `main` or run the workflow. The `deploy-dev-site` job shows the URL.
+
+Until the variable is set, the deploy job is skipped and the workflow only builds (in forks too).
+Deleting the variable turns deploying off again; Settings → Pages unpublishes the site. Optional:
+the variable `DEV_SITE_BASE`, the path the site is served under (default `/<repository>/`); set it
+to `/` when Pages has a custom domain.
+
+**Locally:** after `npm run wasm`, `npm run bindings` and the matrix-rust-sdk bindings
+(`npm run bindings -w packages/matrix-sdk-uniffi-js`):
+
+```sh
+npm run build:dev-site                          # dist/dev-site, served at /
+python3 -m http.server 8088 -d dist/dev-site    # http://localhost:8088/
+# as on Pages, under a sub-path:
+SITE_BASE=/matrix-widget-sdk/ SITE_OUT=/tmp/site/matrix-widget-sdk npm run build:dev-site
+python3 -m http.server 8088 -d /tmp/site        # http://localhost:8088/matrix-widget-sdk/
+```
+
+**What to know about it:**
+
+- **Do not log in with an account you care about.** The host and the test widgets share one
+  origin (the widgets run with `allow-same-origin`), and on `*.github.io` the site also shares it
+  with every other GitHub Pages site of the same owner. Any page of that origin can read what the
+  host stores in the browser: the access token and the encryption keys of a logged-in account. Use
+  the DevBackend or a test account, or give the site a domain of its own. The landing page says
+  the same.
+- **Login** works as locally: the client registers itself with the homeserver's authorization
+  server at login, with `host/oidc-callback.html` (or `host-js/…`) as redirect URI. Nothing is
+  registered beforehand.
+- **Compression:** GitHub Pages compresses `.wasm` with gzip on the fly (measured: a 14 KB
+  `application/wasm` file on `mdn.github.io` is served with `content-encoding: gzip`, 14,139 →
+  5,998 bytes). There is no brotli, and precompressed files do not help: Pages sets no custom
+  headers. CDNs may skip compression above a size limit, so check the matrix-rust-sdk module (about
+  20 MB; its name is in the browser's network panel) after the first deploy:
+  `curl -sI -H 'Accept-Encoding: gzip, br' https://toger5.github.io/matrix-widget-sdk/host/assets/index_bg-<hash>.wasm | grep -iE '^content-(type|encoding|length)'`.
+  It should say `application/wasm`; without compression a first visit downloads 20 MB.
+- **No custom headers** are needed: nothing uses `SharedArrayBuffer`, so no COOP/COEP. Pages
+  caches every file for 10 minutes.
+- **Size:** about 36 MB per deployment (Pages allows 1 GB per site and about 100 GB of traffic a
+  month). CI installs no binaryen, so its matrix-rust-sdk module skips the optional `wasm-opt` pass
+  and is about 6% larger ([its README](packages/matrix-sdk-uniffi-js/README.md#build)).
+- **Build time:** the matrix-rust-sdk bindings are cached. A change to the pin, the SDK additions
+  or the build script rebuilds the whole SDK in CI, which takes long (not measured on GitHub's
+  runners yet); the result is cached right after that step.
+
 ## Not (yet) covered
 
 * **`screenshot`** (host → widget, `m.capability.screenshot`): **intentionally not supported**

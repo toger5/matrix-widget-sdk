@@ -4,6 +4,12 @@ on:
   push:
     branches: [main]
   pull_request:
+  # Run by hand (Actions → CI → Run workflow). On `main` this also deploys the dev site again.
+  workflow_dispatch:
+
+# Read only; the deploy job below asks for what GitHub Pages needs.
+permissions:
+  contents: read
 
 env:
   CARGO_TERM_COLOR: always
@@ -45,14 +51,22 @@ jobs:
       - run: npm run bindings
       # matrix-rust-sdk for the browser (packages/matrix-sdk-uniffi-js). Building it compiles the
       # whole SDK twice, so the generated output is cached and only rebuilt when the pin, the
-      # SDK additions or the build script change.
+      # SDK additions or the build script change. binaryen is not installed: the build skips its
+      # optional wasm-opt pass (a module about 6% larger, see the package's README).
       - id: sdk-bindings
-        uses: actions/cache@v4
+        uses: actions/cache/restore@v4
         with:
           path: packages/matrix-sdk-uniffi-js/src/generated
           key: matrix-sdk-uniffi-js-${{ hashFiles('packages/matrix-sdk-uniffi-js/ubrn.config.yaml', 'packages/matrix-sdk-uniffi-js/scripts/**', 'packages/matrix-sdk-uniffi-js/sdk-additions/**', 'packages/matrix-sdk-uniffi-js/package.json') }}
       - if: steps.sdk-bindings.outputs.cache-hit != 'true'
         run: npm run bindings -w packages/matrix-sdk-uniffi-js
+      # Saved at once, not at the end of the job: a later failing step would otherwise throw the
+      # long build away.
+      - if: steps.sdk-bindings.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: packages/matrix-sdk-uniffi-js/src/generated
+          key: ${{ steps.sdk-bindings.outputs.cache-primary-key }}
       - if: steps.sdk-bindings.outputs.cache-hit != 'true'
         run: npm pack -w packages/matrix-sdk-uniffi-js --pack-destination "$RUNNER_TEMP"
       - if: steps.sdk-bindings.outputs.cache-hit != 'true'
@@ -62,3 +76,41 @@ jobs:
           path: ${{ runner.temp }}/matrix-sdk-uniffi-js-*.tgz
       - run: npm run build --workspaces --if-present
       - run: npm test
+      # The dev site: both host builds and the test widgets under one path (scripts/build-dev-site.mjs).
+      # Built on every run, so a pull request also checks that the sub-path build works.
+      - name: Build the dev site
+        run: npm run build:dev-site
+        env:
+          SITE_BASE: ${{ vars.DEV_SITE_BASE || format('/{0}/', github.event.repository.name) }}
+      - name: Upload the dev site (download it from the run's summary page)
+        if: github.event_name == 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: dev-site
+          path: dist/dev-site
+          retention-days: 7
+      - name: Upload the dev site for GitHub Pages
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && vars.DEPLOY_DEV_SITE == 'true'
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: dist/dev-site
+
+  # Deploys the dev site to GitHub Pages. Off until the maintainer turns it on: it runs only on
+  # `main` and only when the repository variable DEPLOY_DEV_SITE is `true` (README.md, "Dev site").
+  deploy-dev-site:
+    needs: [test, web]
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && vars.DEPLOY_DEV_SITE == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    # One deployment at a time; one that started is finished, a newer waiting run replaces an older one.
+    concurrency:
+      group: dev-site-pages
+      cancel-in-progress: false
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v5

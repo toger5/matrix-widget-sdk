@@ -19,7 +19,10 @@ npm run bindings -w packages/matrix-sdk-uniffi-js
 Needs:
 
 - the Rust target `wasm32-unknown-unknown`
-- binaryen's `wasm-opt` (`brew install binaryen`); the script stops without it
+- optional: binaryen's `wasm-opt` (`brew install binaryen`) for the last size pass. Without it
+  the script prints a warning, skips the pass and the module is about 6% larger (20 MB instead
+  of 18.9 MB). `REQUIRE_WASM_OPT=1` makes a missing `wasm-opt` an error. CI does not install
+  binaryen, so its builds (and the dev site) carry the larger module.
 
 The `wasm-bindgen` CLI has to match the SDK's `Cargo.lock` exactly, so the script installs that
 version into `rust_modules/tools` instead of relying on the one on `PATH`.
@@ -67,7 +70,8 @@ are.
 ## Wasm size
 
 Measured at the pin below. "Without" is what `ubrn build web --release` produces on its own:
-cargo's default release profile and no post-processing.
+cargo's default release profile and no post-processing. "With" includes the optional
+`wasm-opt` pass; without it (no binaryen installed, as in CI) the file is 20 MB.
 
 | | Without optimisations | With |
 |---|---|---|
@@ -89,7 +93,7 @@ this repository's `Cargo.toml` does not apply to it. `scripts/build.sh` sets the
 | link-time optimisation | `lto = "fat"` | optimises all crates as one unit, which merges those duplicated generics and removes code nothing reaches |
 | one codegen unit | `codegen-units = 1` | the default of 16 splits each crate into parts that are optimised separately |
 | strip | `strip = true` | drops the name section. Build scripts and proc macros are left unstripped (`build-override`), as stripped proc-macro dylibs can fail to load on recent macOS |
-| `wasm-opt -Oz` | binaryen, after `wasm-bindgen` | a wasm-level size pass over the finished module |
+| `wasm-opt -Oz` | binaryen, after `wasm-bindgen`; skipped when `wasm-opt` is not installed | a wasm-level size pass over the finished module |
 
 The profile and the strip take the file from 72.2 MB to 20 MB; `wasm-opt` takes it to 18.9 MB.
 The price is build time (the wasm pass takes about 5 minutes) and Rust panics that show function

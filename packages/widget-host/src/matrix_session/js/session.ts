@@ -87,7 +87,9 @@ const clearSdkStores = (baseUrl: string, cryptoDatabasePrefix: string | undefine
     .clearStores({ cryptoDatabasePrefix })
     .catch((e: unknown) => console.warn("clearing the stores failed", e));
 
-const redirectUri = () => `${location.origin}/oidc-callback.html`;
+/** This app's URL, also when it is served under a sub-path (Vite's `base`, e.g. the dev site's `/<repo>/host/`). */
+const appUrl = () => new URL(import.meta.env.BASE_URL, location.origin).href;
+const redirectUri = () => `${appUrl()}oidc-callback.html`;
 
 /** `matrix.org` → its homeserver URL from `.well-known`; a URL is used as it is. */
 async function homeserverUrl(server: string): Promise<string> {
@@ -141,7 +143,7 @@ class JsSdkPendingLogin implements PendingLogin {
     const loopback = ["localhost", "127.0.0.1", "[::1]"].includes(location.hostname);
     const clientId = await OAuth2.registerClient(this.authMetadata, {
       client_name: CLIENT_NAME,
-      client_uri: loopback ? "https://element.io" : location.origin,
+      client_uri: loopback ? "https://element.io" : appUrl(),
       application_type: loopback ? "native" : "web",
       redirect_uris: [redirectUri()],
       grant_types: ["authorization_code", "refresh_token"],

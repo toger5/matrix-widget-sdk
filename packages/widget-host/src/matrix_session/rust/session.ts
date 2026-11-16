@@ -178,12 +178,14 @@ class RustSdkPendingLogin implements PendingLogin {
   /** The URL to send the user to; `completeOAuth` takes the URL the server redirects back to. */
   async oauthUrl(): Promise<string> {
     const origin = location.origin;
+    // This app's URL, also when it is served under a sub-path (Vite's `base`, e.g. the dev site's `/<repo>/host/`).
+    const appUrl = new URL(import.meta.env.BASE_URL, origin).href;
     this.authData = await this.client.urlForOauth(
       {
         clientName: "Widget host",
-        redirectUri: `${origin}/oidc-callback.html`,
+        redirectUri: `${appUrl}oidc-callback.html`,
         // Authorization servers reject a localhost client URI.
-        clientUri: origin.includes("localhost") ? "https://element.io" : origin,
+        clientUri: origin.includes("localhost") ? "https://element.io" : appUrl,
         logoUri: undefined,
         tosUri: undefined,
         policyUri: undefined,

@@ -62,4 +62,8 @@ npm run build            # static multi-page build in dist/
 
 The pages share `shared/ui.ts` (a few DOM helpers) and `shared/style.css`.
 
+The pages refer to each other and to their files with relative paths, so the build can be served
+under a sub-path (`npx vite build --base /some/path/`). The [dev site](../../README.md#dev-site-github-pages) serves
+both pages at `widgets/new/` and `widgets/legacy/`, next to a widget host that uses them.
+
 [matrix-widget-api]: https://github.com/matrix-org/matrix-widget-api
