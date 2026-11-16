@@ -44,7 +44,7 @@ export const RoomDropdown: Story = {
   },
 };
 
-/** leaf devbackend/state: `m.room.member` expanded, the content of one member shown */
+/** leaf devbackend/state: the widget form, `m.room.member` expanded, the content of one member shown */
 export const State: Story = {
   args: { devBackend: devBackend({ openSections: ["state"] }) },
   play: async ({ canvasElement }) => {

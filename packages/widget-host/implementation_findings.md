@@ -132,6 +132,7 @@ Login, sync, suspend/resume and the storage migration of both SDKs are only veri
 - Avatars without an image derive their color from the id; the mockups use fixed hues.
 - `devbackend-timeline-not-virtualized`: the event list shows the newest 100 plus "Show more".
 - `devbackend-media-uploader-name`: a media row shows the widget key, not its name; `devbackend-add-member-content`: "add member" sends only `{membership: "join"}`.
+- The widget form's widget ID is the first free `widget-<n>` when the form is shown, so sending twice updates one widget. A legacy widget keeps the legacy test widget's `type`, `waitForIframeLoad` and `data` (`title`), whatever its name and URL.
 - `pip-menu-placement`: the overflow menu always opens above the container; `pip-menu-roles`: its rows have two menu items each instead of nested buttons.
 - `pip-overflow-no-swap`, `pip-dev-tools-close-only`: open points 11 and 12 of designFeedback.md are unchanged.
 - Fonts are self-hosted (`@fontsource`) instead of loaded from Google Fonts: an adopted stylesheet cannot `@import`, and a dev tool should not call a third party.

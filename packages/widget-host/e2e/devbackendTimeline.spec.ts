@@ -107,7 +107,7 @@ test("raw JSON form: invalid JSON shows an error and sends nothing, a valid even
   const count = (await host.store(LAB)).timeline.length;
   const forwarded = await forwards(host);
 
-  await view.getByRole("tab", { name: "Raw JSON" }).click();
+  await view.getByRole("tablist", { name: "Event form" }).getByRole("tab", { name: "Raw JSON" }).click();
   await expect(editor).toHaveValue(/"m.room.message"/);
   await host.leaf("devbackend/timeline-raw");
 

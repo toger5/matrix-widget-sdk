@@ -206,17 +206,12 @@ Each room has these sections:
 
 - State
   - shortcuts: edit name, edit description, add member
-  - send state
-  - send delayed state
-  - current state (explore by type and key)
-  - edit state (via an edit button next to the current state explorer)
+  - send state (also delayed), with a menu of predefined forms like "send event". The default is the widget form; the last option is raw JSON (type, state key, content).
+    - widget: event type (`m.widget`, `org.matrix.msc4411.widget` or legacy `im.vector.modular.widgets`), widget ID, name, URL and, unless legacy, "uses the widget API". Prefilled with the test widget of that kind
+    - Element Call: a legacy `m.call` widget as Element Web describes its call widget, from the Element Call URL (default call.element.io), the call intent and the widget ID
+  - current state (explore by type and key), with an edit button per state event
 - Timeline
-  - send event, with a menu of predefined forms so that users don't need to know the raw JSON. The default is a predefined form; one of the options is raw JSON with a text editor.
-    - message event
-    - sticker event
-    - RTC member event
-    - image/audio event
-  - send delayed events
+  - send event (also delayed), with a menu of predefined forms so that users don't need to know the raw JSON: message, sticker, RTC member, image/audio. The default is a predefined form; the last option is raw JSON with a text editor.
   - show the list of events
 - WidgetHostBehavior
   - auto-approve capabilities
@@ -278,7 +273,7 @@ The mockups needed to review the full design. Each leaf is one state to draw. Do
     - No rooms yet
     - Room dropdown open (rooms + add room)
     - Room page
-      - State: shortcuts, send (delayed) state, state explorer, edit state
+      - State: shortcuts, send state with the widget form / the Element Call form / as raw JSON, state explorer, edit state
       - Timeline: send event with a predefined form, send event as raw JSON, send delayed event, event list
       - WidgetHostBehavior
       - To-device messages
@@ -343,6 +338,10 @@ Notes for the implementation. They add to the design above, they do not change i
 - Moving an iframe in the DOM reloads it, and a shadow DOM does not prevent that. To move a widget between a tab and the PictureInPicturePanel without a reload, keep every iframe mounted in one persistent layer and position it over its current slot.
 - The host cannot read the console of a cross-origin iframe. The WidgetDevToolConsolePanel needs the widget side (SDK or compat wrapper) to forward its logs.
 - To-device messages are account-scoped, not room-scoped. The section may fit better next to the media box than in the per-room page.
+
+**DevBackend forms**
+
+- The Element Call form writes `im.vector.modular.widgets` with `type: "m.call"`, `waitForIframeLoad: false` and the URL `<Element Call URL>#?intent=…&roomId=$matrix_room_id&userId=$matrix_user_id&deviceId=$org.matrix.msc3819.matrix_device_id&baseUrl=$org.matrix.msc4039.matrix_base_url&lang=$org.matrix.msc2873.client_language&theme=$org.matrix.msc2873.client_theme`. The compat wrapper fills in the variables and adds `widgetId` and `parentUrl`.
 
 **Theming**
 

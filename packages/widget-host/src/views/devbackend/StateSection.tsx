@@ -1,10 +1,11 @@
-/** The "State" section of a mocked room (mockup functions `stateSection`, `stateTree`). leaves devbackend/state, devbackend/state-edit */
+/** The "State" section of a mocked room (mockup functions `stateSection`, `stateTree`). leaves devbackend/state, devbackend/state-element-call, devbackend/state-raw, devbackend/state-edit */
 import { useMemo, useState, type FormEvent } from "react";
 
-import type { MockedStateEvent, RoomId } from "../../appViewModel";
+import type { DevBackendViewModel, MockedStateEvent, RoomId } from "../../appViewModel";
 import { useDispatch } from "../env";
 import { Button, Field, Icon, IconButton, Json } from "../ui/atoms";
-import { DelayRow, FormError, JsonArea, NO_DELAY, Sub, delayOf, parseJsonObject, pretty } from "./parts";
+import { FormError, JsonArea, Sub, parseJsonObject, pretty } from "./parts";
+import { SendStateForm } from "./SendStateForm";
 
 type Shortcut = "name" | "topic" | "member";
 const SHORTCUTS: Record<Shortcut, { button: string; label: string; save: string }> = {
@@ -15,9 +16,17 @@ const SHORTCUTS: Record<Shortcut, { button: string; label: string; save: string 
 
 const entryId = (e: { type: string; stateKey: string }) => `${e.type}\u0000${e.stateKey}`;
 
-export function StateSection({ roomId, state }: { roomId: RoomId; state: MockedStateEvent[] }) {
+interface Props {
+  roomId: RoomId;
+  state: MockedStateEvent[];
+  stateForm: DevBackendViewModel["stateForm"];
+  /** The DevBackend user. */
+  userId?: string;
+}
+
+export function StateSection({ roomId, state, stateForm, userId }: Props) {
   const dispatch = useDispatch();
-  const send = (event: MockedStateEvent, delayMs?: number) => dispatch({ type: "mock/sendState", roomId, event, ...(delayMs === undefined ? {} : { delayMs }) });
+  const send = (event: MockedStateEvent) => dispatch({ type: "mock/sendState", roomId, event });
   const contentOf = (type: string, stateKey = "") => state.find((e) => e.type === type && e.stateKey === stateKey)?.content;
 
   // --- shortcuts
@@ -38,20 +47,6 @@ export function StateSection({ roomId, state }: { roomId: RoomId; state: MockedS
     } else if (shortcut.kind === "name") send({ type: "m.room.name", stateKey: "", content: { name: value } });
     else send({ type: "m.room.topic", stateKey: "", content: { topic: value } });
     setShortcut(undefined);
-  };
-
-  // --- send state
-  const [draft, setDraft] = useState(() => ({ type: "m.room.topic", stateKey: "", content: pretty(contentOf("m.room.topic") ?? { topic: "" }) }));
-  const [delay, setDelay] = useState(NO_DELAY);
-  const [error, setError] = useState<string>();
-  const submit = (e: FormEvent) => {
-    e.preventDefault();
-    const content = parseJsonObject(draft.content);
-    const delayed = delayOf(delay);
-    const problem = !draft.type.trim() ? "The event type is missing." : "error" in content ? content.error : delayed.error;
-    setError(problem);
-    if (problem || "error" in content) return;
-    send({ type: draft.type.trim(), stateKey: draft.stateKey, content: content.value }, delayed.delayMs);
   };
 
   // --- current state
@@ -116,18 +111,7 @@ export function StateSection({ roomId, state }: { roomId: RoomId; state: MockedS
         </form>
       )}
 
-      <Sub title="Send state" />
-      <form className="form" aria-label="Send state" onSubmit={submit}>
-        <Field label="Type">
-          <input className="input mono" value={draft.type} onChange={(e) => setDraft({ ...draft, type: e.target.value })} />
-        </Field>
-        <Field label="State key">
-          <input className="input mono" placeholder="empty" value={draft.stateKey} onChange={(e) => setDraft({ ...draft, stateKey: e.target.value })} />
-        </Field>
-        <JsonArea label="State content (JSON)" value={draft.content} onChange={(content) => setDraft({ ...draft, content })} />
-        <FormError error={error} />
-        <DelayRow delay={delay} onChange={setDelay} />
-      </form>
+      <SendStateForm roomId={roomId} form={stateForm} state={state} userId={userId} />
 
       <Sub title="Current state">
         <label className="input search sm">

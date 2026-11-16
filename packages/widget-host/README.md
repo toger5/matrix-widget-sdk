@@ -80,9 +80,12 @@ hands it to the driver of each widget of that room like any other `MatrixBackend
   **auto-approve OpenID tokens** hands tokens out without the Allow / Block prompt.
 - **DevBackendView** (the side panel, opened with the cone button of the left bar): one page per
   mocked room, with a dropdown to switch and add rooms.
-  - **State**: shortcuts (name, description, add member), send a state event (also delayed), and
-    the current state by type and key with an edit button. Sending a widget state event adds a
-    widget to the room; one without `url` removes it.
+  - **State**: shortcuts (name, description, add member), send a state event (also delayed) from
+    a form or as raw JSON, and the current state by type and key with an edit button. Sending a
+    widget state event adds a widget to the room; one without `url` removes it. The **Widget** form
+    starts with a test widget (new or legacy); the **Element Call** form adds Element Call
+    (default `https://call.element.io/room`, loaded from the internet) as Element Web describes its
+    call widget: `im.vector.modular.widgets` of type `m.call`, embedded through the compat wrapper.
   - **Timeline**: send an event from a form (message, sticker, RTC member, image/audio) or as raw
     JSON, also delayed. It is stored as if it came from sync: the driver's subscription delivers
     it to the widget (`forward_event`, and for state events also `update_state`) if the matching

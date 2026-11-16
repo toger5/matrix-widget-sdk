@@ -26,8 +26,9 @@ import {
   type WidgetKey,
   type WorkspaceLayout,
 } from "../appViewModel";
+import { EXAMPLE_LEGACY, EXAMPLE_NEW } from "../exampleWidgets";
 import { capabilityStoreKey, clearCapabilities } from "../lib/capabilityStore";
-import { DevBackend, EXAMPLE_LEGACY, EXAMPLE_NEW } from "../matrix_session/memory/devBackend";
+import { DevBackend } from "../matrix_session/memory/devBackend";
 import type { DevBackendSeed } from "../matrix_session/memory/seed";
 import { sessions, StoredLoginInvalidError, type LiveSession, type PendingLogin, type RoomBackend, type RoomSummary, type SessionProvider } from "../session";
 import { roomWidgets } from "../views/helpers";
@@ -69,6 +70,7 @@ const MATRIX_BEHAVIOR: WidgetHostBehavior = { autoApproveCapabilities: false, au
 const defaultDevBackendVm = (): DevBackendViewModel => ({
   openSections: ["state", "timeline"],
   sendForm: "message",
+  stateForm: "widget",
   media: { open: false, heightShare: 0.4 },
   behavior: {},
 });
@@ -1009,6 +1011,8 @@ export class AppController {
         return this.setDevVm((d) => ({ ...d, openSections: d.openSections.includes(intent.section) ? d.openSections.filter((s) => s !== intent.section) : [...d.openSections, intent.section] }));
       case "mock/setSendForm":
         return this.setDevVm((d) => ({ ...d, sendForm: intent.form }));
+      case "mock/setStateForm":
+        return this.setDevVm((d) => ({ ...d, stateForm: intent.form }));
       case "mock/sendState":
         // The DevBackend refuses some edits (a malformed event, a delayed event of another sender): say so instead of an unhandled rejection.
         return void dev?.sendState(intent.roomId, intent.event, intent.delayMs).catch((e: unknown) => this.toast(`Sending the state event failed: ${errorText(e)}`));

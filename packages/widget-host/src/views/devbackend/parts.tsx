@@ -1,4 +1,4 @@
-/** Shared pieces of the DevBackendView sections (mockup functions `acc`, `sub`, `delayRow`). */
+/** Shared pieces of the DevBackendView sections (mockup functions `acc`, `sub`, `formChips`, `delayRow`). */
 import { useEffect, useRef, useState, type ReactNode } from "react";
 
 import { Button, Icon, Toggle } from "../ui/atoms";
@@ -26,6 +26,32 @@ export function Sub({ title, children }: { title: string; children?: ReactNode }
     <div className="sub-h">
       <span>{title}</span>
       {children}
+    </div>
+  );
+}
+
+/**
+ * The predefined forms of "send state" and "send event" (mockup function `formChips`): a tablist
+ * named `label`. Only the selected chip is in the tab order; the arrow keys, Home and End select
+ * another one.
+ */
+export function FormChips<F extends string>({ forms, active, label, onSelect }: { forms: { form: F; label: string }[]; active: F; label: string; onSelect: (form: F) => void }) {
+  const onKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    const index = forms.findIndex((f) => f.form === active);
+    const next = e.key === "ArrowRight" ? index + 1 : e.key === "ArrowLeft" ? index - 1 : e.key === "Home" ? 0 : e.key === "End" ? forms.length - 1 : undefined;
+    if (next === undefined) return;
+    e.preventDefault();
+    const target = (next + forms.length) % forms.length;
+    onSelect(forms[target].form);
+    e.currentTarget.querySelectorAll<HTMLElement>('[role="tab"]')[target]?.focus();
+  };
+  return (
+    <div className="chips" role="tablist" aria-label={label} onKeyDown={onKeyDown}>
+      {forms.map(({ form, label: text }) => (
+        <button key={form} type="button" className={`chip ${form === active ? "on" : ""}`} role="tab" aria-selected={form === active} tabIndex={form === active ? 0 : -1} onClick={() => onSelect(form)}>
+          {text}
+        </button>
+      ))}
     </div>
   );
 }

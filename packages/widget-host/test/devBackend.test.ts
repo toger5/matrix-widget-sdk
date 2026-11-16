@@ -3,7 +3,8 @@ import { readFileSync } from "node:fs";
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { DevBackend, EXAMPLE_LEGACY, EXAMPLE_NEW, seedDemoMedia, validateSeed, type DevBackendSeed } from "../src/matrix_session/memory/devBackend";
+import { EXAMPLE_LEGACY, EXAMPLE_NEW } from "../src/exampleWidgets";
+import { DevBackend, seedDemoMedia, validateSeed, type DevBackendSeed } from "../src/matrix_session/memory/devBackend";
 import { describeBackendContract } from "./backendContract";
 import { X, behindDriver, tick } from "./harness";
 

@@ -206,6 +206,8 @@ export interface DevBackendViewModel {
   openSections: DevBackendSection[];
   /** Which predefined form "send event" shows. "raw" is the JSON editor. */
   sendForm: "message" | "sticker" | "rtcMember" | "media" | "raw";
+  /** Which predefined form "send state" shows. "raw" is type, state key and a JSON editor. leaves devbackend/state, devbackend/state-element-call, devbackend/state-raw */
+  stateForm: "widget" | "elementCall" | "raw";
   media: {
     /** Closed: only the "Media Backend Tool" button below the room box. leaves devbackend/media-* */
     open: boolean;
@@ -485,6 +487,7 @@ export type AppIntent =
   | { type: "mock/removeRoom"; roomId: RoomId }
   | { type: "mock/toggleSection"; section: DevBackendSection }
   | { type: "mock/setSendForm"; form: DevBackendViewModel["sendForm"] }
+  | { type: "mock/setStateForm"; form: DevBackendViewModel["stateForm"] } // which form "send state" shows
   | { type: "mock/sendState"; roomId: RoomId; event: MockedStateEvent; delayMs?: number } // also "edit state" and the shortcuts
   | { type: "mock/sendEvent"; roomId: RoomId; event: Pick<MockedTimelineEvent, "type" | "sender" | "content">; delayMs?: number }
   | { type: "mock/updateScheduled"; roomId: RoomId; delayId: string; update: "send" | "restart" | "cancel" }

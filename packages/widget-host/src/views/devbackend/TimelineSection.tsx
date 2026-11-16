@@ -4,7 +4,7 @@ import { useId, useState, type FormEvent } from "react";
 import type { DevBackendViewModel, MockedRoomData, MockedTimelineEvent, RoomId } from "../../appViewModel";
 import { useDispatch } from "../env";
 import { Button, Field, Icon, Json, Toggle } from "../ui/atoms";
-import { DelayRow, FormError, JsonArea, NO_DELAY, Sub, delayOf, parseJsonObject, pretty, previewOf, timeOf, useNow } from "./parts";
+import { DelayRow, FormChips, FormError, JsonArea, NO_DELAY, Sub, delayOf, parseJsonObject, pretty, previewOf, timeOf, useNow } from "./parts";
 
 type SendForm = DevBackendViewModel["sendForm"];
 type NewEvent = Pick<MockedTimelineEvent, "type" | "sender" | "content">;
@@ -111,13 +111,7 @@ export function TimelineSection({ roomId, sendForm, timeline, scheduled, userId 
   return (
     <>
       <Sub title="Send event" />
-      <div className="chips" role="tablist" aria-label="Event form">
-        {FORMS.map(({ form, label }) => (
-          <button key={form} type="button" className={`chip ${form === sendForm ? "on" : ""}`} role="tab" aria-selected={form === sendForm} onClick={() => selectForm(form)}>
-            {label}
-          </button>
-        ))}
-      </div>
+      <FormChips forms={FORMS} active={sendForm} label="Event form" onSelect={selectForm} />
       <form className="form" aria-label="Send event" onSubmit={submit}>
         {sendForm === "raw" ? (
           <JsonArea label="Event (JSON)" tall value={draft.raw} onChange={(raw) => set({ raw })} />

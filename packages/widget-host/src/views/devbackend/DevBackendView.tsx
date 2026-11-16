@@ -45,7 +45,7 @@ export function DevBackendView({ devBackend, canLeave }: DevBackendViewProps) {
           {room ? (
             <>
               <Acc id="state" title="State" open={isOpen("state")} count={`${stateTypes} type${stateTypes === 1 ? "" : "s"}`} onToggle={toggle("state")}>
-                <StateSection key={room.id} roomId={room.id} state={data.state} />
+                <StateSection key={room.id} roomId={room.id} state={data.state} stateForm={devBackend.stateForm} userId={data.userId} />
               </Acc>
               <Acc id="timeline" title="Timeline" open={isOpen("timeline")} count={`${data.timeline.length} event${data.timeline.length === 1 ? "" : "s"}`} onToggle={toggle("timeline")}>
                 <TimelineSection key={room.id} roomId={room.id} sendForm={devBackend.sendForm} timeline={data.timeline} scheduled={data.scheduled} userId={data.userId} members={members} />

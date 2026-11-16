@@ -18,26 +18,6 @@ import { base64ToBytes, bytesToBase64, validateSeed, type DevBackendSeed, type S
 export type { DevBackendSeed } from "./seed";
 export { validateSeed } from "./seed";
 
-export const EXAMPLE_NEW: StateEvent = {
-  type: "m.widget",
-  state_key: "widget-1",
-  content: { name: "New test widget", url: "http://localhost:5175/new/", uses_widget_api: true },
-};
-export const EXAMPLE_LEGACY: StateEvent = {
-  type: "im.vector.modular.widgets",
-  state_key: "widget-1",
-  content: {
-    type: "m.custom",
-    name: "Legacy test widget",
-    // Template variables are resolved by the compat wrapper, not by this host. The base url
-    // variable produces a nested `https://` inside the already nested legacy url.
-    url: "http://localhost:5175/legacy/?title=$title&widgetId=$matrix_widget_id&userId=$matrix_user_id&baseUrl=$org.matrix.msc4039.matrix_base_url&theme=$org.matrix.msc2873.client_theme",
-    waitForIframeLoad: true,
-    creatorUserId: "@alice:example.org",
-    data: { title: "Notes & more" },
-  },
-};
-
 /** The `LiveSession.accountId` of the DevBackend: there is one per browser tab. */
 export const DEV_BACKEND_ACCOUNT_ID = "devBackend";
 const DEFAULT_USER_ID = "@alice:dev.local";

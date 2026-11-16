@@ -174,14 +174,28 @@ const stateTree = (editing) => {
   </div>`;
 };
 
-const stateSection = (editing = false) =>
+/** The predefined forms of "send state" and "send event": chips in a tablist named `label`. */
+const formChips = (forms, activeForm, label) =>
+  `<div class="chips" role="tablist" aria-label="${label}">${forms.map((f) => `<span class="chip ${f === activeForm ? "on" : ""}" role="tab" aria-selected="${f === activeForm}">${f}</span>`).join("")}</div>`;
+
+const STATE_FORMS = ["Widget", "Element Call", "Raw JSON"];
+/** form: one of STATE_FORMS */
+const sendStateForm = (form) => {
+  const body = {
+    Widget: `${field("Event type", "m.widget", { mono: true, select: true })}${field("Widget ID", "widget-2", { mono: true })}${field("Name", "New test widget")}${field("URL", "http://localhost:5175/new/", { mono: true })}<div class="inline-row">${toggle(true, "Uses the widget API")}<span>Uses the widget API</span></div>`,
+    "Element Call": `${field("Element Call URL", "https://call.element.io/room", { mono: true })}${field("Intent", "start_call", { mono: true, select: true })}${field("Widget ID", "element-call", { mono: true })}<p class="hint">A legacy <span class="mono">m.call</span> widget, as Element Web describes its call. The compat wrapper fills in the user, device, room, language and theme.</p>`,
+    "Raw JSON": `${field("Type", "m.room.topic", { mono: true })}${field("State key", "<span class='ph'>empty</span>", { mono: true })}<pre class="code edit">${json({ topic: "Mocked room for the call widget." })}</pre>`,
+  }[form];
+  return `${sub("Send state")}${formChips(STATE_FORMS, form, "State form")}<div class="form">${body}${delayRow(false)}</div>`;
+};
+
+/** form: one of STATE_FORMS; editing: the editor of one state event is open */
+const stateSection = ({ form = "Widget", editing = false } = {}) =>
   `${sub("Shortcuts")}<div class="chips">${btn("Edit name", { sm: true, ico: "edit" })}${btn("Edit description", { sm: true, ico: "edit" })}${btn("Add member", { sm: true, ico: "userPlus" })}</div>
-   ${sub("Send state")}<div class="form">${field("Type", "m.room.topic", { mono: true })}${field("State key", "<span class='ph'>empty</span>", { mono: true })}<pre class="code edit">${json({ topic: "Mocked room for the call widget." })}</pre>${delayRow(false)}</div>
+   ${sendStateForm(form)}
    ${sub("Current state", `<span class="input search sm">${icon("search", 12)}<span class="ph">Filter by type or key</span></span>`)}${stateTree(editing)}`;
 
-const FORMS = ["Message", "Sticker", "RTC member", "Image / audio", "Raw JSON"];
-const formChips = (activeForm) =>
-  `<div class="chips" role="tablist" aria-label="Event form">${FORMS.map((f) => `<span class="chip ${f === activeForm ? "on" : ""}" role="tab" aria-selected="${f === activeForm}">${f}</span>`).join("")}</div>`;
+const EVENT_FORMS = ["Message", "Sticker", "RTC member", "Image / audio", "Raw JSON"];
 
 const eventList = () => {
   const rows = [
@@ -206,7 +220,7 @@ const timelineSection = ({ form = "Message", delayed = false } = {}) => {
         <div class="ev sched"><span class="mono ev-t">org.matrix.msc4143.rtc.member</span><span class="ev-time">${icon("clock", 11)} in 7.9 s</span><span class="ev-p">leave · scheduled by Element Call</span><span class="ev-acts">${btn("Send now", { sm: true })}${btn("Restart", { sm: true })}${btn("Cancel", { sm: true })}</span></div>
       </div>`
     : "";
-  return `${sub("Send event")}${formChips(form)}<div class="form">${formBody}${delayRow(delayed)}</div>${scheduled}${sub("Events", "<em class='count'>5 of 128</em>")}${eventList()}`;
+  return `${sub("Send event")}${formChips(EVENT_FORMS, form, "Event form")}<div class="form">${formBody}${delayRow(delayed)}</div>${scheduled}${sub("Events", "<em class='count'>5 of 128</em>")}${eventList()}`;
 };
 
 const behaviorSection = () =>
@@ -246,9 +260,11 @@ const mediaBox = () => {
 };
 
 /**
- * state: "none" | "dropdown" | "state" | "state-edit" | "timeline" | "timeline-raw" | "timeline-delayed" |
- * "behavior" | "todevice". media: "collapsed" | "open".
+ * state: "none" | "dropdown" | "state" | "state-element-call" | "state-raw" | "state-edit" | "timeline" |
+ * "timeline-raw" | "timeline-delayed" | "behavior" | "todevice". media: "collapsed" | "open".
  */
+const STATE_PAGES = { state: {}, "state-element-call": { form: "Element Call" }, "state-raw": { form: "Raw JSON" }, "state-edit": { editing: true } };
+
 export function devBackendView({ state = "state", media = "collapsed" } = {}) {
   const mediaBtn = `<button class="media-btn">${icon("image", 16)}<span>Media Backend Tool</span><em>3 files</em>${icon("chevRight", 14, "end")}</button>`;
   const leave = `<button class="leave-link" title="Back to your Matrix account. The mocked rooms are kept.">Leave DevBackend${icon("logout", 14)}</button>`;
@@ -261,7 +277,7 @@ export function devBackendView({ state = "state", media = "collapsed" } = {}) {
   const head = `<button class="room-pick ${state === "dropdown" ? "open" : ""}" aria-haspopup="listbox" aria-expanded="${state === "dropdown"}">${roomAv("lab", 28)}<div class="side-title"><b>Widget lab</b><small class="mono">!lab:dev.local</small></div>${icon("chevDown", 14, "end")}</button>${state === "dropdown" ? roomMenu() : ""}`;
   const s = state === "dropdown" ? "state-closed" : state;
   const body =
-    acc("State", s === "state" || s === "state-edit", stateSection(s === "state-edit"), "9 types") +
+    acc("State", Object.hasOwn(STATE_PAGES, s), stateSection(STATE_PAGES[s]), "9 types") +
     acc("Timeline", s.startsWith("timeline"), timelineSection({ form: s === "timeline-raw" ? "Raw JSON" : "Message", delayed: s === "timeline-delayed" }), "128 events") +
     acc("Widget host behavior", s === "behavior", behaviorSection()) +
     acc("To-device messages", s === "todevice", toDeviceSection(), "2");

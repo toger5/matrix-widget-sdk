@@ -144,6 +144,7 @@ export function devMainVm(o: Partial<MainViewModel> = {}): MainViewModel {
       selectedRoomId: ROOMS.lab.id,
       openSections: ["state"],
       sendForm: "message",
+      stateForm: "widget",
       media: { open: false, heightShare: 0.4 },
       behavior: { [ROOMS.lab.id]: { autoApproveCapabilities: true, autoApproveOpenId: false, rememberCapabilities: false, failSends: false } },
     },
