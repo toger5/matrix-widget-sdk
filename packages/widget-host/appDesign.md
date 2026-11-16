@@ -89,40 +89,34 @@ The RoomsArea is the main area of the logged-in view. It allows opening multiple
     - tiles for the recent rooms similar to the `reference_image` (but a bit mroe spaceing + centered)
 - By default there is one panel per room.
 - Ctrl+N opens a new panel on the right with the list of recents, Ctrl+Shift+N one showing the same room.
-- Ctrl+W closes the active tab of the focused panel; in a panel without a widget tab it closes the panel.
+- Ctrl+W closes the shown widget tab of the focused panel, and a panel without a widget tab.
 
 ## RoomView
 
-A room view is a tabbed container, shown inside a room panel. Each tab contains an open widget or a native view (see [Tabs](#tabs)). This is the main way to open multiple widgets per room.
+A room view is a tabbed container, shown inside a room panel. Its first tab is the room name, which shows the [RoomOverview](#roomoverview); every other tab holds an open widget (see [Tabs](#tabs)). This is the main way to open multiple widgets per room.
 
-- If no widget is open, the room shows the available widgets as nice, large, centered tiles.
-- Once a widget is selected, it is rendered as the first tab.
-- A + button in the tab bar opens a new tab with the same widget list. Widgets that are already open are grayed out, with buttons overlaying the tile:
-  - "jump to tab"
-  - "move widget here", if the widget is open in another room view: it closes the tab there and opens the widget in this room view.
+- A room opens on its RoomOverview and returns to it when its last widget tab is closed. Closing another tab shows its neighbour.
+- A widget opened from the RoomOverview becomes a new tab at the end.
+- The + button of the tab bar selects the room name.
 - A widget runs only once per account, also when two room views show the same room.
-- The room header contains the room name and the number of widgets and users. Pressing it opens the [RoomOverviewTab](#roomoverviewtab) (or switches to it if it is already open).
 
 ## Tabs
 
-There are two kinds of tabs with slightly different designs:
-
-- **WidgetTab**: contains a widget. The default view is just the full widget. The tab name is the widget name, and the tab shows the widget icon/avatar if available.
-- **NativeTab**: a view rendered by the host instead of a widget, like the RoomOverviewTab (and devtools or a timeline in the future). Native tabs get slightly transparent labels.
-
-Every tab has a close button. With dev tools enabled, a WidgetTab also has an overflow button (three dots) that opens the [WidgetDevToolBar](#widgetdevtoolbar).
+- **Room name**: avatar, room name and the number of widgets and users. It cannot be closed. Unselected it is plain header text; selected it looks like an active tab.
+- **WidgetTab**: contains the full widget. The tab name is the widget name, with the widget icon/avatar if available. It has a close button and, with dev tools enabled, an overflow button (three dots) that opens the [WidgetDevToolBar](#widgetdevtoolbar).
 
 A widget that is set to always on screen gets a marker on its tab: a pin icon (see [PictureInPicturePanel](#pictureinpicturepanel)).
 
-## RoomOverviewTab
+## RoomOverview
 
-A NativeTab with the default room information, in a pretty layout that follows all best practices:
+What the room name shows: the room in a pretty layout that follows all best practices.
 
-- Avatar
-- Member list
-- Description
+- Avatar, name, ID and description
+- Widget list, first and full width. Pressing a widget opens it. A widget that is already open is grayed out, says where it is open and offers:
+  - "jump to tab"
+  - "move widget here", if it is open in another room view: it closes the tab there and opens the widget in this room view.
 - Encryption status
-- Widget list (pressing a widget opens it in a new tab)
+- Member list
 - Devtools (only if dev tools are enabled). For now just one button: copy to DevBackend.
 
 ## WidgetDevToolBar
@@ -192,7 +186,7 @@ The DevBackend is a custom in-memory backend. It is implemented as a separate ac
 - Once active, no Matrix CS API calls are made anymore. Only widget <-> host, with the memory widget driver.
 - The app renders the construction-fence background (see [Design](#design)).
 - The SidePanel opens with the DevBackendView.
-- The RoomsArea keeps the same design, but only shows the rooms that were created in the DevBackendView or copied over from a RoomOverviewTab.
+- The RoomsArea keeps the same design, but only shows the rooms that were created in the DevBackendView or copied over from a RoomOverview.
 - There are three ways to leave it:
   - switching to an account in the AccountView
   - the "Leave DevBackend" text button at the bottom of the DevBackendView
@@ -239,7 +233,7 @@ A simple fullscreen login. It allows skipping the login, which immediately ends 
 
 # Custom behavior
 
-- Collapsing the LeftBar while only one widget is open renders the widget fullscreen: no rounded containers anymore.
+- Collapsing the LeftBar while only one widget is open, and shown, renders the widget fullscreen: no rounded containers anymore.
   - The room header stays: it is important information.
   - The + button of the tab bar is not shown by default.
   - The tab is not shown, as only one widget is open.
@@ -300,15 +294,15 @@ The mockups needed to review the full design. Each leaf is one state to draw. Do
     - No recents yet
     - All rooms, with search bar
   - RoomView (1)
-    - Room header (name, number of widgets and users)
-    - No widget open: widget tiles
     - Tab bar
-      - WidgetTab / NativeTab, active / inactive
+      - Room name selected, no widget tab (name, number of widgets and users)
+      - WidgetTab active / room name selected
       - Tab marked as always on screen (pin icon)
       - More tabs than fit
-    - Tab (1): new tab
-      - Widget list, opened widgets grayed out with "jump to tab"
-    - Tab (2): WidgetTab
+    - RoomOverview
+      - No widget open, dev tools disabled
+      - A widget open in this panel ("jump to tab"), dev tools enabled (copy to DevBackend)
+    - WidgetTab
       - WidgetView
         - Loading / failed to load
         - Dev tools: no (full widget)
@@ -321,11 +315,9 @@ The mockups needed to review the full design. Each leaf is one state to draw. Do
           - WidgetDevToolStatsPanel: total graph / one direction in a narrow panel
           - WidgetDevToolDriverPanel
           - WidgetDevToolConsolePanel
-    - Tab (3): RoomOverviewTab
-      - Dev tools disabled / enabled (copy to DevBackend)
   - RoomView (2)
     - A different room next to RoomView (1)
-    - The same room as RoomView (1) (Ctrl+Shift+N): opened widgets offer "jump to tab" and "move widget here"
+    - The same room as RoomView (1) (Ctrl+Shift+N): its RoomOverview offers "jump to tab" and "move widget here"
 
 # Details
 
@@ -338,8 +330,8 @@ Notes for the implementation. They add to the design above, they do not change i
 
 **Widgets are iframes**
 
-- Moving an iframe in the DOM reloads it, and a shadow DOM does not prevent that. To move a widget between a tab and the PictureInPicturePanel without a reload, keep every iframe mounted in one persistent layer and position it over its current slot.
-- Only absolute `http:` / `https:` widget URLs are embedded, for both widget kinds (a legacy URL is checked as its template, so one starting with `$variable` is refused); any other widget is a disabled tile with the reason.
+- Moving an iframe in the DOM reloads it. To move a widget between a tab and the PictureInPicturePanel without a reload, every iframe stays where it is in one persistent layer and is displayed through a shadow DOM slot where the view shows the widget.
+- Only absolute `http:` / `https:` widget URLs are embedded, for both widget kinds (a legacy URL is checked as its template, so one starting with `$variable` is refused); any other widget is listed disabled, with the reason.
 - The host cannot read the console of a cross-origin iframe. The WidgetDevToolConsolePanel needs the widget side (SDK or compat wrapper) to forward its logs.
 
 **DevBackend forms**
@@ -356,7 +348,7 @@ Notes for the implementation. They add to the design above, they do not change i
 **Accessibility**
 
 - WCAG AA contrast in both themes and visible focus rings.
-- Tabs follow the ARIA tabs pattern (arrow keys switch, middle click closes).
+- Tabs follow the ARIA tabs pattern, the room name being the first tab (arrow keys switch, middle click closes).
 - Icon-only buttons get a tooltip and an `aria-label`.
 - Never rely on color alone (e.g. message direction: icon + color).
 - Respect `prefers-reduced-motion`.
@@ -365,7 +357,7 @@ Notes for the implementation. They add to the design above, they do not change i
 
 - Every resizable panel has a minimum size. Drag handles have a hit area of at least 8px, are keyboard operable and reset on double click.
 - Persist panel sizes, open tabs and the dev tool dock position per account.
-- Tabs that do not fit scroll horizontally, with an overflow menu listing all tabs.
+- Widget tabs that do not fit scroll horizontally behind the room name, with an overflow menu listing them.
 - In narrow windows (below ~900px) the SidePanel overlays the RoomsArea instead of shifting it, and only one room panel is visible at a time.
 
 **States and feedback**

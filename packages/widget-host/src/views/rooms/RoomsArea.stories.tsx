@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 
-import { devMainVm, mainVm, overviewTab, roomPanel, widgetTab, widgetVm, workspace } from "../fixtures";
+import { devMainVm, mainVm, roomPanel, widgetTab, widgetVm, workspace } from "../fixtures";
 import { RoomsArea } from "./RoomsArea";
 import { AppFrame, SETTINGS, fakeWidget } from "./storyFrame";
 
@@ -27,7 +27,7 @@ export const TwoPanels: Story = {
     main: mainVm({
       workspaces: {
         ada: workspace([
-          roomPanel("design", [widgetTab("design", "call"), widgetTab("design", "board"), overviewTab("design")]),
+          roomPanel("design", [widgetTab("design", "call"), widgetTab("design", "board")]),
           roomPanel("rtc", [widgetTab("rtc", "notes"), widgetTab("rtc", "call")]),
         ]),
       },

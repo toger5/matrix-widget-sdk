@@ -189,7 +189,7 @@ test("the legacy widget runs through the compat wrapper: one prompt with the new
   await expect.poll(() => messageBodies(host)).toContain("hello from the legacy widget");
 });
 
-test("a widget URL that is not http(s) is refused, also by a link that opens it at once: the tile is disabled, nothing runs", async ({ browser }) => {
+test("a widget URL that is not http(s) is refused, also by a link that opens it at once: the room overview lists it disabled, nothing runs", async ({ browser }) => {
   const context = await browser.newContext({ viewport: { width: 1280, height: 800 } });
   const fresh = new Host(await context.newPage());
   const pwned = () => fresh.page.evaluate(() => (window as Window & { __pwned?: unknown }).__pwned);

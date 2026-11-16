@@ -1,6 +1,6 @@
 /**
  * The parts of the matrix-js-sdk session that can run on a faked client: what the AccountView,
- * the RoomOverviewTab and "Copy to DevBackend" read (`src/matrix_session/js/roomData`), the
+ * the RoomOverview and "Copy to DevBackend" read (`src/matrix_session/js/roomData`), the
  * device verification (`src/matrix_session/js/verification`), and the gate that refuses requests
  * while the session is suspended (`src/matrix_session/js/fetchGate`).
  */

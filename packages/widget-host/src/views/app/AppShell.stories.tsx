@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 
 import type { MainViewModel, SettingsViewModel } from "../../appViewModel";
-import { appVm, devMainVm, mainVm, overviewTab, roomPanel, widgetTab, widgetVm, workspace } from "../fixtures";
+import { appVm, devMainVm, mainVm, roomPanel, widgetTab, widgetVm, workspace } from "../fixtures";
 import { StoryEnv } from "../storyEnv";
 import { AppShell } from "./AppShell";
 
@@ -23,7 +23,7 @@ const twoRooms = (o: Partial<MainViewModel> = {}): MainViewModel => {
   const widgets = [widgetVm("design", "call"), widgetVm("design", "board"), widgetVm("platform", "poll")];
   return mainVm({
     workspaces: {
-      ada: workspace([roomPanel("design", [widgetTab("design", "call"), widgetTab("design", "board"), overviewTab("design")]), roomPanel("platform", [widgetTab("platform", "poll"), overviewTab("platform")])]),
+      ada: workspace([roomPanel("design", [widgetTab("design", "call"), widgetTab("design", "board")]), roomPanel("platform", [widgetTab("platform", "poll")])]),
     },
     widgets: Object.fromEntries(widgets.map((w) => [w.id, w])),
     ...o,

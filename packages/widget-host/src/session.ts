@@ -46,7 +46,7 @@ export interface RoomMember {
   role?: string;
 }
 
-/** What the RoomOverviewTab shows beyond the `RoomSummary`. */
+/** What the RoomOverview shows beyond the `RoomSummary`. */
 export interface RoomDetails {
   topic?: string;
   encrypted?: boolean;

@@ -29,16 +29,16 @@ Every leaf of `design/index.html` (`design/src/leaves.mjs`), with the test in wh
 | `roomsarea/one` | `rooms.spec.ts` › Alt+Shift+N opens the same room in a second panel |
 | `roomsarea/several`, `roomview2/different` | `rooms.spec.ts` › two panels with different rooms: the separator resizes them |
 | `roomview2/same` | `widgetMove.spec.ts` › move widget here |
-| `panel/no-recents`, `panel/all-rooms`, `roomview/header`, `roomview/tiles` | `rooms.spec.ts` › a new panel shows the picker: no recents, all rooms with search |
+| `panel/no-recents`, `panel/all-rooms`, `roomview/header` | `rooms.spec.ts` › a new panel shows the picker: no recents, all rooms with search, then the room overview |
 | `panel/recents` | `rooms.spec.ts` › Alt+N opens a panel with the recent widgets |
 | `panel/loading` | **not reachable**: the DevBackend's room list is always ready (story `rooms-roompicker--loading`) |
 | `panel/error` | **not reachable**: `DevBackend.rooms()` never fails (story `rooms-roompicker--load-error`) |
-| `app/fullscreen`, `app/fullscreen-hover` | `rooms.spec.ts` › fullscreen: LeftBar collapsed and one widget tab |
-| `tabs/widget-active`, `tabs/native-active`, `roomview/new-tab` | `tabs.spec.ts` › widget and native tabs; the + button opens a new tab |
+| `app/fullscreen`, `app/fullscreen-hover` | `rooms.spec.ts` › fullscreen: LeftBar collapsed and one shown widget tab |
+| `tabs/widget-active`, `tabs/overview-active` | `tabs.spec.ts` › the room name is the first tab: it shows the overview |
 | `tabs/pinned` | `widgetMove.spec.ts` › always on screen |
 | `tabs/overflow` | `tabs.spec.ts` › more tabs than fit |
-| `overview/plain` | `overview.spec.ts` › the room header opens the Room overview tab |
-| `overview/devtools` | **partly**: `overview.spec.ts` › with dev tools enabled a DevBackend room still has no "Copy to DevBackend" card. The card needs a Matrix room (story `rooms-roomoverview--dev-tools`) |
+| `overview/plain` | `overview.spec.ts` › a room opens on its overview |
+| `overview/devtools` | **partly**: `overview.spec.ts` › with dev tools enabled a DevBackend room still has no "Copy to DevBackend" card (a widget open in this panel offers "Jump to tab"). The card needs a Matrix room (story `rooms-roomoverview--dev-tools`) |
 
 ## DevBackendView
 

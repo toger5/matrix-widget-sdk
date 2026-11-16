@@ -34,6 +34,7 @@ import type { DevBackendSeed } from "../matrix_session/memory/seed";
 import { sessions, StoredLoginInvalidError, type LiveSession, type PendingLogin, type RoomBackend, type RoomSummary, type SessionProvider } from "../session";
 import { roomWidgets } from "../views/helpers";
 import {
+  activateTab,
   addPanel,
   emptyWorkspace,
   findWidgetTab,
@@ -50,7 +51,6 @@ import {
   toggleDevToolPanel,
   updateDevTools,
   updatePanel,
-  updateRoom,
   workspaceWidgetIds,
 } from "./layout";
 import { loadPersisted, savePersisted, type PersistedUi } from "./persistence";
@@ -86,7 +86,11 @@ const defaultDevBackendVm = (): DevBackendViewModel => ({
  */
 export interface HostSeed extends DevBackendSeed {
   settings?: Partial<SettingsViewModel>;
-  /** Room panels to open, left to right. `widgets` are `widgetKey`s (`m.widget/<state key>`) or state keys; each gets a tab. */
+  /**
+   * Room panels to open, left to right. `widgets` are `widgetKey`s (`m.widget/<state key>`) or state
+   * keys; each gets a tab, and the last one is shown. `active` shows another one of them, `overview`
+   * the room name (the RoomOverview); a panel without widgets shows the RoomOverview anyway.
+   */
   open?: { room: RoomId; widgets?: string[]; active?: string; overview?: boolean }[];
   /** The SidePanel view; `null` closes it. Default: the DevBackendView, like after activating the DevBackend. */
   sidePanel?: "devBackend" | "settings" | "account" | null;
@@ -427,7 +431,6 @@ export class AppController {
         continue;
       }
       for (const tab of tabs) {
-        if (tab.kind !== "widget") continue;
         const key = tab.widgetId.slice(roomId.length + 1);
         if (m.widgets[tab.widgetId]) continue;
         if (known(roomId, key)) this.startWidget(roomId, key);
@@ -581,27 +584,30 @@ export class AppController {
   // -------------------------------------------------------------------------------------------
   // Panels and tabs
 
-  /** Open a widget in a panel: start it, or bring its tab to the front if it already runs. */
-  private openWidget(panelId: string, widgetKey: WidgetKey, replaceTabId?: string): void {
+  /** Open a widget in a panel as a new tab at the end: start it, or bring its tab to the front if it already runs. */
+  private openWidget(panelId: string, widgetKey: WidgetKey): void {
     const ws = this.workspace;
     const room = ws && roomOfPanel(ws, panelId);
     if (!ws || !room) return;
     const id = widgetInstanceId(room.roomId, widgetKey);
     const existing = findWidgetTab(ws, id);
-    if (existing) return this.setWorkspace((w) => focusPanel(updateRoom(w, existing.panelId, (r) => ({ ...r, activeTabId: existing.tabId })), existing.panelId));
+    if (existing) return this.setWorkspace((w) => activateTab(w, existing.panelId, existing.tabId));
     // Not running, or running without a tab (always on screen, its panel was closed): it gets a tab here.
     if (!this.main?.widgets[id] && !this.startWidget(room.roomId, widgetKey)) return;
-    this.setWorkspace((w) => focusPanel(putTab(w, panelId, { kind: "widget", id: newId("tab"), widgetId: id }, replaceTabId), panelId));
+    this.setWorkspace((w) => focusPanel(putTab(w, panelId, { kind: "widget", id: newId("tab"), widgetId: id }), panelId));
     this.addRecent(room.roomId, widgetKey);
   }
 
-  /** Close a tab. Its widget stops, unless it is always on screen: then it keeps running in the PiP panel. */
+  /**
+   * Close a tab. Its widget stops, unless it is always on screen: then it keeps running in the PiP
+   * panel. The neighbour is shown, and after the last tab the room name (`removeTab`).
+   */
   private closeTab(panelId: string, tabId: string): void {
     const tab = this.workspace && roomOfPanel(this.workspace, panelId)?.tabs.find((t) => t.id === tabId);
     if (!tab) return;
     this.setWorkspace((ws) => removeTab(ws, panelId, tabId));
     // TODO-FINDING close-tab-of-always-on-screen-widget - closing the tab (or the room panel) of an always-on-screen widget keeps it running in the PiP panel; only the PiP close button stops it. This is the reading of designFeedback.md ("How I read four points", 4) and is not in appDesign.md. The alternative: closing the tab stops the widget like any other.
-    if (tab.kind === "widget" && !this.main?.widgets[tab.widgetId]?.alwaysOnScreen) this.stopWidget(tab.widgetId, false);
+    if (!this.main?.widgets[tab.widgetId]?.alwaysOnScreen) this.stopWidget(tab.widgetId, false);
   }
 
   private closePanel(panelId: string): void {
@@ -615,7 +621,7 @@ export class AppController {
     const widget = this.main?.widgets[id];
     if (!ws || !widget) return;
     const tab = findWidgetTab(ws, id);
-    if (tab) return this.setWorkspace((w) => focusPanel(updateRoom(w, tab.panelId, (r) => ({ ...r, activeTabId: tab.tabId })), tab.panelId));
+    if (tab) return this.setWorkspace((w) => activateTab(w, tab.panelId, tab.tabId));
     // Its room panel was closed: open the room again, on the right.
     const tabId = newId("tab");
     this.setWorkspace((w) => addPanel(w, { kind: "room", roomId: widget.roomId, tabs: [{ kind: "widget", id: tabId, widgetId: id }], activeTabId: tabId }).ws);
@@ -805,6 +811,7 @@ export class AppController {
     for (const open of seed.open ?? []) {
       const room = rooms.find((r) => r.id === open.room);
       if (!room) throw new Error(`seed.open: unknown room ${open.room}`);
+      if (open.overview && open.active) throw new Error(`seed.open: room ${open.room} has both \`active\` and \`overview\`; the room name is a tab too`);
       const keyOf = (name: string) => {
         const found = roomWidgets(room).find((w) => w.key === name || w.event.state_key === name);
         if (!found) throw new Error(`seed.open: room ${open.room} has no widget ${name}`);
@@ -817,7 +824,7 @@ export class AppController {
         return added.ws;
       });
       for (const name of open.widgets ?? []) this.openWidget(panelId, keyOf(name));
-      if (open.overview) this.dispatch({ type: "tab/openRoomOverview", panelId });
+      if (open.overview) this.dispatch({ type: "tab/showOverview", panelId });
       if (open.active) {
         const tab = findWidgetTab(this.workspace!, widgetInstanceId(room.id, keyOf(open.active)));
         if (tab) this.dispatch({ type: "tab/activate", panelId: tab.panelId, tabId: tab.tabId });
@@ -952,26 +959,19 @@ export class AppController {
       }
 
       // tabs
-      case "tab/new": {
-        const id = newId("tab");
-        return this.setWorkspace((ws) => focusPanel(putTab(ws, intent.panelId, { kind: "new", id }), intent.panelId));
-      }
+      case "tab/showOverview":
+        return this.setWorkspace((ws) => activateTab(ws, intent.panelId, undefined));
       case "tab/openWidget":
-        return this.openWidget(intent.panelId, intent.widgetKey, intent.tabId);
+        return this.openWidget(intent.panelId, intent.widgetKey);
       case "tab/moveWidgetHere": {
         const from = this.workspace && findWidgetTab(this.workspace, intent.widgetId);
         return this.setWorkspace((ws) => {
           const without = from ? removeTab(ws, from.panelId, from.tabId) : ws;
-          return focusPanel(putTab(without, intent.panelId, { kind: "widget", id: newId("tab"), widgetId: intent.widgetId }, intent.tabId), intent.panelId);
+          return focusPanel(putTab(without, intent.panelId, { kind: "widget", id: newId("tab"), widgetId: intent.widgetId }), intent.panelId);
         });
       }
-      case "tab/openRoomOverview": {
-        const existing = this.workspace && roomOfPanel(this.workspace, intent.panelId)?.tabs.find((t) => t.kind === "native" && t.view === "roomOverview");
-        if (existing) return this.setWorkspace((ws) => updateRoom(ws, intent.panelId, (r) => ({ ...r, activeTabId: existing.id })));
-        return this.setWorkspace((ws) => putTab(ws, intent.panelId, { kind: "native", id: newId("tab"), view: "roomOverview" }));
-      }
       case "tab/activate":
-        return this.setWorkspace((ws) => focusPanel(updateRoom(ws, intent.panelId, (r) => ({ ...r, activeTabId: intent.tabId })), intent.panelId));
+        return this.setWorkspace((ws) => activateTab(ws, intent.panelId, intent.tabId));
       case "tab/move":
         return this.setWorkspace((ws) => moveTab(ws, intent.panelId, intent.tabId, intent.toIndex));
       case "tab/close":
@@ -1053,7 +1053,7 @@ export class AppController {
       case "pip/setStacking":
         return this.setWorkspace((ws) => ({ ...ws, pip: { ...ws.pip, stacking: intent.stacking } }));
 
-      // room overview and DevBackendView
+      // RoomOverview and DevBackendView
       case "room/copyToDevBackend": {
         const session = this.activeSession();
         const accountId = this.main?.activeAccountId;

@@ -1,4 +1,4 @@
-/** DevBackendView › State: the shortcuts, "send state" (widget, Element Call and raw JSON forms), the state explorer and "edit state"; widget state events add and remove widget tiles. */
+/** DevBackendView › State: the shortcuts, "send state" (widget, Element Call and raw JSON forms), the state explorer and "edit state"; widget state events add and remove widgets of the room overview. */
 import { expect, type Host, LAB, test, widgetId } from "./host";
 
 type StateEvent = { eventType: string; stateKey: string; content: Record<string, unknown> };
@@ -98,8 +98,8 @@ test("edit state: saving the editor sends a new state event", async ({ host }) =
 test("the widget form adds a test widget that opens, and a legacy one; a widget state event without url removes it", async ({ host }) => {
   const view = host.page.getByTestId("devbackend-view");
   const form = view.getByRole("form", { name: "Send state" });
-  const tile = host.panels.getByRole("button", { name: "Open Whiteboard" });
-  await expect(host.panels.getByTestId("widget-tiles").getByRole("button")).toHaveCount(2);
+  const openWhiteboard = host.panels.getByRole("button", { name: "Open Whiteboard" });
+  await expect(host.panels.getByTestId("room-overview").getByRole("button")).toHaveCount(2);
 
   // Prefilled with the new test widget under the first free widget ID.
   await expect(form.getByLabel("Event type")).toHaveValue("m.widget");
@@ -112,11 +112,11 @@ test("the widget form adds a test widget that opens, and a legacy one; a widget 
   await form.getByLabel("URL").fill("http://localhost:5175/new/");
   await form.getByLabel("Name").fill("Whiteboard");
   await form.getByRole("button", { name: "Send" }).click();
-  await expect(tile).toBeVisible();
+  await expect(openWhiteboard).toBeVisible();
   await expect(host.panels.getByTitle("3 widgets")).toBeVisible();
   expect(await stateOf(host, "m.widget", "widget-2")).toEqual({ name: "Whiteboard", url: "http://localhost:5175/new/", uses_widget_api: true });
 
-  await tile.click();
+  await openWhiteboard.click();
   await host.ready(widgetId(LAB, "m.widget/widget-2"));
   await expect(host.tab("Whiteboard")).toBeVisible();
 

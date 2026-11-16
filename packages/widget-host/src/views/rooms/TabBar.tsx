@@ -1,34 +1,43 @@
 import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from "react";
 
-import { activeWorkspace, type MainViewModel, type PanelId, type SettingsViewModel, type TabId, type TabViewModel } from "../../appViewModel";
+import { activeWorkspace, type MainViewModel, type PanelId, type RoomId, type SettingsViewModel, type TabId, type TabViewModel } from "../../appViewModel";
 import type { RoomSummary } from "../../session";
 import { useDispatch } from "../env";
+import { roomWidgets } from "../helpers";
 import { Avatar, Icon, initials } from "../ui/atoms";
-import { tabDomId, tabInfo, tabPanelDomId } from "./tabInfo";
+import { roomTabDomId, tabDomId, tabInfo, tabPanelDomId } from "./tabInfo";
 
 export interface TabBarProps {
   main: MainViewModel;
   settings: SettingsViewModel;
   panelId: PanelId;
-  /** `undefined` while the rooms load: widget names then come from the running widgets only. */
+  roomId: RoomId;
+  /** `undefined` while the rooms load: the room name tab shows `roomName` without counts, widget names come from the running widgets only. */
   room: RoomSummary | undefined;
-  /** For the name of the tab list ("Tabs of Design crit"). */
+  /** The room name tab, and the name of the tab list ("Tabs of Design crit"). */
   roomName: string;
+  /** The widget tabs, after the room name. */
   tabs: TabViewModel[];
+  /** `undefined` (or a tab that does not exist): the room name is selected. */
   activeTabId?: TabId;
+  /** The header hides the widget tabs until it is hovered or has the focus inside: the room name is the tab stop then. */
+  fullscreen?: boolean;
 }
 
 /** Room for the fade at the end of an overflowing tab bar: the active tab is scrolled clear of it. */
 const FADE = 36;
 
 /**
- * The tab bar of a room panel, rendered into its header: the tabs, the + button and, when the
- * tabs do not fit, the "all tabs" button with its menu. leaves tabs/*. ARIA tabs pattern: the
- * tab is a button, its ⋯ (dev tools) and × buttons are siblings.
+ * The tab bar of a room panel, rendered into its header: the room name (the first tab, it shows the
+ * RoomOverview), the widget tabs, the + button and, when the widget tabs do not fit, the "all tabs"
+ * button with its menu. leaves roomview/header, tabs/*. ARIA tabs pattern: the tab is a button, its
+ * ⋯ (dev tools) and × buttons are siblings; the tablist wrapper is `display: contents`, so only the
+ * widget tabs (`.tabs`) scroll.
  */
-export function TabBar({ main, settings, panelId, room, roomName, tabs, activeTabId }: TabBarProps) {
+export function TabBar({ main, settings, panelId, roomId, room, roomName, tabs, activeTabId, fullscreen = false }: TabBarProps) {
   const dispatch = useDispatch();
   const devTools = activeWorkspace(main)?.devTools ?? {};
+  const tablistRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const allRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -84,15 +93,32 @@ export function TabBar({ main, settings, panelId, room, roomName, tabs, activeTa
     return () => document.removeEventListener("pointerdown", onPointerDown, true);
   }, [menuOpen]);
 
+  // A tab closed with the keyboard (Delete, or its × pressed with Enter or Space) takes the focus
+  // with it: it goes to the tab that followed, else to the one before (ARIA tabs pattern). The
+  // room name is the first tab, so there always is one.
+  const focusAfterClose = useRef<{ tabId: TabId; index: number } | undefined>(undefined);
+  useLayoutEffect(() => {
+    const pending = focusAfterClose.current;
+    if (!pending || tabs.some((t) => t.id === pending.tabId)) return;
+    focusAfterClose.current = undefined;
+    const all = tablistRef.current?.querySelectorAll<HTMLElement>('[role="tab"]') ?? [];
+    all[Math.min(pending.index, all.length - 1)]?.focus();
+  }, [tabs]);
+  const closeFromKeyboard = (tab: TabViewModel) => {
+    // Its index among the `[role="tab"]` elements, after the room name.
+    focusAfterClose.current = { tabId: tab.id, index: tabs.indexOf(tab) + 1 };
+    dispatch({ type: "tab/close", panelId, tabId: tab.id });
+  };
+
   const closeMenu = (refocus: boolean) => {
     setMenuOpen(false);
     if (refocus) allRef.current?.focus();
   };
 
-  /** Arrow keys move the focus between the tabs; Enter or Space (the button) activates. */
+  /** Arrow keys move the focus between the tabs, the room name first; Enter or Space (the button) activates; Delete closes a widget tab (the focus moves on: `focusAfterClose`). */
   // TODO-FINDING tab-arrow-keys-manual-activation - arrow keys only move the focus, they do not activate the tab ("manual activation" of the ARIA tabs pattern): activating a tab moves widgets in and out of the PiP panel, which is too much for a key that is used to walk through the tabs. appDesign.md says "arrow keys switch".
-  const onTabKeyDown = (e: KeyboardEvent<HTMLButtonElement>, tab: TabViewModel) => {
-    const all = Array.from(listRef.current?.querySelectorAll<HTMLElement>('[role="tab"]') ?? []);
+  const onTabKeyDown = (e: KeyboardEvent<HTMLButtonElement>, tab?: TabViewModel) => {
+    const all = Array.from(tablistRef.current?.querySelectorAll<HTMLElement>('[role="tab"]') ?? []);
     const i = all.indexOf(e.currentTarget);
     const to = { ArrowLeft: i - 1, ArrowRight: i + 1, Home: 0, End: all.length - 1 }[e.key];
     if (to !== undefined) {
@@ -100,9 +126,9 @@ export function TabBar({ main, settings, panelId, room, roomName, tabs, activeTa
       const target = all[(to + all.length) % all.length];
       target?.focus();
       target?.scrollIntoView({ block: "nearest", inline: "nearest" });
-    } else if (e.key === "Delete") {
+    } else if (e.key === "Delete" && tab) {
       e.preventDefault();
-      dispatch({ type: "tab/close", panelId, tabId: tab.id });
+      closeFromKeyboard(tab);
     }
   };
 
@@ -122,106 +148,146 @@ export function TabBar({ main, settings, panelId, room, roomName, tabs, activeTa
     }
   };
 
-  // The tab that can be reached with the Tab key: the active one, or the first one.
-  const tabStop = tabs.some((t) => t.id === activeTabId) ? activeTabId : tabs[0]?.id;
-  // Alt+W closes the active tab while the panel has a widget tab, else the panel (`hasWidgetTab`).
-  const altWClosesTab = tabs.some((t) => t.kind === "widget");
+  const roomSelected = !tabs.some((t) => t.id === activeTabId);
+  // The tab that can be reached with the Tab key: the active widget tab, else the room name (also
+  // while the fullscreen header hides the widget tabs).
+  const tabStop = roomSelected || fullscreen ? undefined : activeTabId;
+  // Alt+W closes the shown tab while the panel has a tab, else the panel (`hasWidgetTab`).
+  const altWClosesTab = tabs.length > 0;
+  const widgetCount = roomWidgets(room).length;
 
   return (
     <>
-      <span className="rp-div" />
-      <div
-        ref={listRef}
-        className={`tabs ${overflow.overflowing ? "overflowing" : ""} ${overflow.scrolled ? "scrolled" : ""} ${overflow.atEnd ? "at-end" : ""}`}
-        role={tabs.length ? "tablist" : undefined}
-        aria-label={tabs.length ? `Tabs of ${roomName}` : undefined}
-        data-testid="tab-bar"
-        onScroll={measure}
-      >
-        {tabs.map((tab) => {
-          const info = tabInfo(main, room, tab);
-          const active = tab.id === activeTabId;
-          const devOpen = tab.kind === "widget" && !!devTools[tab.widgetId]?.open;
-          const close = () => dispatch({ type: "tab/close", panelId, tabId: tab.id });
-          return (
-            <div
-              key={tab.id}
-              className={`tab ${tab.kind} ${active ? "active" : ""} ${info.pinned ? "pinned" : ""}`}
-              // the padding around the button belongs to the tab as well
-              onClick={(e) => e.target === e.currentTarget && dispatch({ type: "tab/activate", panelId, tabId: tab.id })}
-              // middle click closes; without the default (autoscroll)
-              onMouseDown={(e) => e.button === 1 && e.preventDefault()}
-              onAuxClick={(e) => {
-                if (e.button !== 1) return;
-                e.preventDefault();
-                close();
-              }}
-            >
-              <button
-                type="button"
-                className="tab-main"
-                role="tab"
-                id={tabDomId(panelId, tab.id)}
-                aria-selected={active}
-                aria-controls={active ? tabPanelDomId(panelId) : undefined}
-                tabIndex={tab.id === tabStop ? 0 : -1}
-                title={`${info.name}${info.pinned ? " · always on screen" : ""}`}
-                data-tab-id={tab.id}
-                data-widget-id={tab.kind === "widget" ? tab.widgetId : undefined}
-                onClick={() => dispatch({ type: "tab/activate", panelId, tabId: tab.id })}
-                onKeyDown={(e) => onTabKeyDown(e, tab)}
+      <div ref={tablistRef} className="rp-tabs" role="tablist" aria-label={`Tabs of ${roomName}`}>
+        <button
+          type="button"
+          className={`room-chip ${roomSelected ? "active" : ""}`}
+          role="tab"
+          id={roomTabDomId(panelId)}
+          aria-selected={roomSelected}
+          aria-controls={roomSelected ? tabPanelDomId(panelId) : undefined}
+          tabIndex={tabStop === undefined ? 0 : -1}
+          aria-label={roomName}
+          title={`${roomName} · open the room overview`}
+          data-room-id={roomId}
+          onClick={() => dispatch({ type: "tab/showOverview", panelId })}
+          onKeyDown={(e) => onTabKeyDown(e)}
+        >
+          <Avatar name={roomName} id={roomId} size={24} square mxc={room?.avatarUrl} />
+          <span className="room-name">{roomName}</span>
+          {room && (
+            <span className="room-counts">
+              {room.widgetEvents !== undefined && (
+                <span title={`${widgetCount} ${widgetCount === 1 ? "widget" : "widgets"}`}>
+                  <Icon name="grid" size={12} />
+                  {widgetCount}
+                </span>
+              )}
+              {room.memberCount !== undefined && (
+                <span title={`${room.memberCount} ${room.memberCount === 1 ? "member" : "members"}`}>
+                  <Icon name="users" size={12} />
+                  {room.memberCount}
+                </span>
+              )}
+            </span>
+          )}
+        </button>
+        <span className="rp-div" />
+        <div
+          ref={listRef}
+          className={`tabs ${overflow.overflowing ? "overflowing" : ""} ${overflow.scrolled ? "scrolled" : ""} ${overflow.atEnd ? "at-end" : ""}`}
+          data-testid="tab-bar"
+          onScroll={measure}
+        >
+          {tabs.map((tab) => {
+            const info = tabInfo(main, room, tab);
+            const active = tab.id === activeTabId;
+            const devOpen = !!devTools[tab.widgetId]?.open;
+            const close = () => dispatch({ type: "tab/close", panelId, tabId: tab.id });
+            return (
+              <div
+                key={tab.id}
+                className={`tab ${tab.kind} ${active ? "active" : ""} ${info.pinned ? "pinned" : ""}`}
+                // the padding around the button belongs to the tab as well
+                onClick={(e) => e.target === e.currentTarget && dispatch({ type: "tab/activate", panelId, tabId: tab.id })}
+                // middle click closes; without the default (autoscroll)
+                onMouseDown={(e) => e.button === 1 && e.preventDefault()}
+                onAuxClick={(e) => {
+                  if (e.button !== 1) return;
+                  e.preventDefault();
+                  close();
+                }}
               >
-                {tab.kind === "widget" ? (
-                  <Avatar name={info.name} id={info.widgetKey} size={16} square label={initials(info.name)} />
-                ) : (
-                  <Icon name={tab.kind === "new" ? "plus" : "info"} size={14} className="tab-glyph" />
-                )}
-                <span className="tab-label">{info.name}</span>
-                {info.load === "loading" && (
-                  <>
-                    <span className="spinner tab-state" aria-hidden="true" />
-                    <span className="vh">, loading</span>
-                  </>
-                )}
-                {info.load === "failed" && (
-                  <>
-                    <Icon name="alert" size={13} className="tab-state danger" />
-                    <span className="vh">, failed to load</span>
-                  </>
-                )}
-                {info.pinned && (
-                  <>
-                    <span className="tab-pin">
-                      <Icon name="pin" size={13} />
-                    </span>
-                    <span className="vh">, always on screen</span>
-                  </>
-                )}
-              </button>
-              {/* ⋯ and × are shown on the active tab; on the others they appear on hover and keyboard focus (CSS). */}
-              {/* TODO-FINDING inactive-tab-buttons-overlay - on an inactive tab the buttons lie over the end of the label (no layout shift on hover). An inactive tab with open dev tools keeps its ⋯ visible and reserves 22px for the ×, so it is wider than in leaf tabs/native-active. */}
-              {/* TODO-FINDING tab-reorder-not-implemented - `tab/move` exists, but dragging a tab is not drawn and not built. */}
-              {/* TODO-FINDING widget-avatar-initials - the mockups label widget avatars with two letters ("WB"); `initials("Whiteboard")` gives "W", and the hue comes from the widget key, not from the mockup. Widgets have no avatar URL in the view model. */}
-              {tab.kind === "widget" && settings.devTools && (
                 <button
                   type="button"
-                  className={`tab-btn ${devOpen ? "on" : ""}`}
-                  title={`Dev tools of ${info.name}`}
-                  aria-label={`Dev tools of ${info.name}`}
-                  aria-pressed={devOpen}
-                  onClick={() => dispatch({ type: "devTools/toggle", widgetId: tab.widgetId })}
+                  className="tab-main"
+                  role="tab"
+                  id={tabDomId(panelId, tab.id)}
+                  aria-selected={active}
+                  aria-controls={active ? tabPanelDomId(panelId) : undefined}
+                  tabIndex={tab.id === tabStop ? 0 : -1}
+                  title={`${info.name}${info.pinned ? " · always on screen" : ""}`}
+                  data-tab-id={tab.id}
+                  data-widget-id={tab.widgetId}
+                  onClick={() => dispatch({ type: "tab/activate", panelId, tabId: tab.id })}
+                  onKeyDown={(e) => onTabKeyDown(e, tab)}
                 >
-                  <Icon name="dots" size={14} />
+                  <Avatar name={info.name} id={info.widgetKey} size={16} square label={initials(info.name)} />
+                  <span className="tab-label">{info.name}</span>
+                  {info.load === "loading" && (
+                    <>
+                      <span className="spinner tab-state" aria-hidden="true" />
+                      <span className="vh">, loading</span>
+                    </>
+                  )}
+                  {info.load === "failed" && (
+                    <>
+                      <Icon name="alert" size={13} className="tab-state danger" />
+                      <span className="vh">, failed to load</span>
+                    </>
+                  )}
+                  {info.pinned && (
+                    <>
+                      <span className="tab-pin">
+                        <Icon name="pin" size={13} />
+                      </span>
+                      <span className="vh">, always on screen</span>
+                    </>
+                  )}
                 </button>
-              )}
-              <button type="button" className="tab-btn tab-close" title={active && altWClosesTab ? `Close ${info.name} (Alt+W)` : `Close ${info.name}`} aria-label={`Close ${info.name}`} onClick={close}>
-                <Icon name="x" size={12} />
-              </button>
-            </div>
-          );
-        })}
+                {/* ⋯ and × are shown on the active tab; on the others they appear on hover and keyboard focus (CSS). */}
+                {/* TODO-FINDING inactive-tab-buttons-overlay - on an inactive tab the buttons lie over the end of the label (no layout shift on hover). An inactive tab with open dev tools keeps its ⋯ visible and reserves 22px for the ×, so it is wider than in leaf tabs/overview-active. */}
+                {/* TODO-FINDING tab-reorder-not-implemented - `tab/move` exists, but dragging a tab is not drawn and not built. */}
+                {/* TODO-FINDING widget-avatar-initials - the mockups label widget avatars with two letters ("WB"); `initials("Whiteboard")` gives "W", and the hue comes from the widget key, not from the mockup. Widgets have no avatar URL in the view model. */}
+                {settings.devTools && (
+                  <button
+                    type="button"
+                    className={`tab-btn ${devOpen ? "on" : ""}`}
+                    title={`Dev tools of ${info.name}`}
+                    aria-label={`Dev tools of ${info.name}`}
+                    aria-pressed={devOpen}
+                    onClick={() => dispatch({ type: "devTools/toggle", widgetId: tab.widgetId })}
+                  >
+                    <Icon name="dots" size={14} />
+                  </button>
+                )}
+                <button
+                  type="button"
+                  className="tab-btn tab-close"
+                  title={active && altWClosesTab ? `Close ${info.name} (Alt+W)` : `Close ${info.name}`}
+                  aria-label={`Close ${info.name}`}
+                  // `detail` 0: pressed with Enter or Space, not clicked
+                  onClick={(e) => (e.detail === 0 ? closeFromKeyboard(tab) : close())}
+                >
+                  <Icon name="x" size={12} />
+                </button>
+              </div>
+            );
+          })}
+        </div>
       </div>
-      <button type="button" className="ibtn tab-add" title="New tab" aria-label="New tab" onClick={() => dispatch({ type: "tab/new", panelId })}>
+      {/* The + selects the room name, whose RoomOverview opens widgets. */}
+      <button type="button" className="ibtn tab-add" title="Open a widget" aria-label="Open a widget" onClick={() => dispatch({ type: "tab/showOverview", panelId })}>
         <Icon name="plus" />
       </button>
       {overflow.overflowing && (
@@ -229,7 +295,7 @@ export function TabBar({ main, settings, panelId, room, roomName, tabs, activeTa
           ref={allRef}
           type="button"
           className={`ibtn tab-all ${menuOpen ? "on" : ""}`}
-          // TODO-FINDING all-tabs-button-name - the accessible name is the mockup's "All N tabs" (it changes with the number of tabs); tests should match /^All \d+ tabs$/.
+          // TODO-FINDING all-tabs-button-name - the accessible name is the mockup's "All N tabs" (it changes with the number of tabs; N counts the widget tabs, the room name never scrolls away); tests should match /^All \d+ tabs$/.
           title={`All ${tabs.length} tabs`}
           aria-label={`All ${tabs.length} tabs`}
           aria-haspopup="menu"
@@ -263,11 +329,7 @@ export function TabBar({ main, settings, panelId, room, roomName, tabs, activeTa
                   closeMenu(true);
                 }}
               >
-                {tab.kind === "widget" ? (
-                  <Avatar name={info.name} id={info.widgetKey} size={18} square label={initials(info.name)} />
-                ) : (
-                  <Icon name={tab.kind === "new" ? "plus" : "info"} size={16} />
-                )}
+                <Avatar name={info.name} id={info.widgetKey} size={18} square label={initials(info.name)} />
                 <span>
                   <b>{info.name}</b>
                 </span>

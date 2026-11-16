@@ -117,7 +117,7 @@ test.describe("collapsing the LeftBar", () => {
     await host.page.mouse.move(640, 500);
     await expect(host.app).toHaveClass(/fullscreen/);
     await expect(host.tab(/New test widget/)).toBeHidden();
-    await expect(host.button("New tab")).toBeHidden();
+    await expect(host.button("Open a widget")).toBeHidden();
     await expect(host.app.locator(".dev-badge")).toBeVisible();
     // No padding around the only panel: it fills the window.
     expect(await host.panels.boundingBox()).toEqual({ x: 0, y: 0, width: 1280, height: 800 });
@@ -126,11 +126,11 @@ test.describe("collapsing the LeftBar", () => {
 
     await host.page.locator(".rp-head").hover();
     await expect(host.tab(/New test widget/)).toBeVisible();
-    await expect(host.button("New tab")).toBeVisible();
+    await expect(host.button("Open a widget")).toBeVisible();
     await host.leaf("app/fullscreen-hover");
 
-    // A second tab ends the fullscreen view.
-    await host.button("New tab").click();
+    // Selecting the room name (the + does that too) ends the fullscreen view.
+    await host.button("Open a widget").click();
     await expect(host.app).not.toHaveClass(/fullscreen/);
     await expect(host.tab(/New test widget/)).toBeVisible();
   });

@@ -9,8 +9,8 @@ const W = (n: number) => widgetId(LAB, `m.widget/w${n}`);
 const keys = (count: number) => Array.from({ length: count }, (_, i) => `m.widget/w${i + 1}`);
 
 /**
- * Open the first `count` widgets, press `set_always_on_screen true` in each, and move away to the
- * room overview tab: all of them are in the PiP panel then.
+ * Open the first `count` widgets, press `set_always_on_screen true` in each, and select the room
+ * name (the room overview): all of them are in the PiP panel then.
  */
 async function pinned(host: Host, count: number): Promise<void> {
   await host.populate("six-widgets", { open: [{ room: LAB, widgets: keys(count), overview: true }] });
@@ -19,7 +19,7 @@ async function pinned(host: Host, count: number): Promise<void> {
     await host.frame(W(n)).getByRole("button", { name: "set_always_on_screen true" }).click();
     await expect.poll(async () => (await host.main()).widgets[W(n)]?.alwaysOnScreen, { message: `Widget ${n} is always on screen` }).toBe(true);
   }
-  await activate(host, "Room overview");
+  await activate(host, "Widget lab");
   await expect(boxes(host)).toHaveCount(Math.min(count, 4));
 }
 
@@ -246,7 +246,7 @@ test("the dev tools of a widget stay open inside its PiP box, which can be enlar
   await host.button("Dev tools of Widget 1").click();
   await expect(host.page.getByTestId("devtools-messages")).toBeVisible();
   const token = await host.token(W(1));
-  await activate(host, "Room overview");
+  await activate(host, "Widget lab");
 
   // Enlarge with the keyboard: Shift+arrow on the focused panel.
   await host.pip.focus();

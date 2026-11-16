@@ -369,31 +369,34 @@ export function devBackendView({ state = "state", tool = null, toolHeight } = {}
 // Tabs and the room panel
 
 /**
- * t: { kind: "widget" | "native" | "new", widget?: key, label?, active?, pinned?, devOpen? }
- * devTools adds the overflow (⋯) button to widget tabs. altW: the panel has a widget tab, so Alt+W
- * closes the active tab and its × names the shortcut (else Alt+W closes the panel).
+ * A widget tab. t: { widget: key, active?, pinned?, devOpen? }
+ * devTools adds the overflow (⋯) button. altW: the panel has a tab, so Alt+W closes the shown tab
+ * and its × names the shortcut (else Alt+W closes the panel).
  */
 export function tab(t, devTools = false, altW = true) {
-  const cls = `tab ${t.kind} ${t.active ? "active" : ""} ${t.pinned ? "pinned" : ""}`;
-  const name = t.kind === "widget" ? WIDGETS[t.widget].name : (t.label ?? (t.kind === "new" ? "New tab" : "Room overview"));
-  const main = (inner) => `<button class="tab-main" role="tab" aria-selected="${!!t.active}" tabindex="${t.active ? 0 : -1}" title="${name}${t.pinned ? " · always on screen" : ""}">${inner}<span class="tab-label">${name}</span>${t.pinned ? `<span class="tab-pin">${icon("pin", 13)}</span><span class="vh">, always on screen</span>` : ""}</button>`;
+  const cls = `tab widget ${t.active ? "active" : ""} ${t.pinned ? "pinned" : ""}`;
+  const name = WIDGETS[t.widget].name;
+  const main = `<button class="tab-main" role="tab" aria-selected="${!!t.active}" tabindex="${t.active ? 0 : -1}" title="${name}${t.pinned ? " · always on screen" : ""}">${wico(t.widget, 16)}<span class="tab-label">${name}</span>${t.pinned ? `<span class="tab-pin">${icon("pin", 13)}</span><span class="vh">, always on screen</span>` : ""}</button>`;
   // ⋯ and × are shown on the active tab; on the others they appear on hover and keyboard focus.
+  const dev = devTools && (t.active || t.devOpen) ? `<button class="tab-btn ${t.devOpen ? "on" : ""}" title="Dev tools of ${name}" aria-label="Dev tools of ${name}" aria-pressed="${!!t.devOpen}">${icon("dots", 14)}</button>` : "";
   const close = t.active ? `<button class="tab-btn" title="Close ${name}${altW ? " (Alt+W)" : ""}" aria-label="Close ${name}">${icon("x", 12)}</button>` : "";
-  if (t.kind === "widget") {
-    const av = wico(t.widget, 16);
-    const dev = devTools && (t.active || t.devOpen) ? `<button class="tab-btn ${t.devOpen ? "on" : ""}" title="Dev tools of ${name}" aria-label="Dev tools of ${name}" aria-pressed="${!!t.devOpen}">${icon("dots", 14)}</button>` : "";
-    return `<div class="${cls}">${main(av)}${dev}${close}</div>`;
-  }
-  return `<div class="${cls}">${main(icon(t.kind === "new" ? "plus" : "info", 14, "tab-glyph"))}${close}</div>`;
+  return `<div class="${cls}">${main}${dev}${close}</div>`;
 }
 
-export const roomHeader = (room) => {
+/**
+ * The room name: the first tab of a room panel. Selected (no widget tab is shown), it looks like an
+ * active tab and the body is the RoomOverview. It has no close button. Its name is the room name;
+ * the counts are visible text with tooltips.
+ */
+export const roomTab = (room, selected) => {
   const r = ROOMS[room];
-  return `<button class="room-chip" title="${r.name} · open the room overview">${roomAv(room, 24)}<span class="room-name">${r.name}</span><span class="room-counts"><span title="${r.widgets} widgets">${icon("grid", 12)}${r.widgets}</span><span title="${r.members} members">${icon("users", 12)}${r.members}</span></span></button>`;
+  return `<button class="room-chip ${selected ? "active" : ""}" role="tab" aria-selected="${selected}" tabindex="${selected ? 0 : -1}" aria-label="${r.name}" title="${r.name} · open the room overview">${roomAv(room, 24)}<span class="room-name">${r.name}</span><span class="room-counts"><span title="${r.widgets} widgets">${icon("grid", 12)}${r.widgets}</span><span title="${r.members} members">${icon("users", 12)}${r.members}</span></span></button>`;
 };
 
 /**
- * A room panel: header (room chip + tab bar) and a full-bleed body.
+ * A room panel: header (room name tab + widget tabs) and a full-bleed body. The room name is
+ * selected while no widget tab is active. The tablist wrapper is `display: contents`, so the
+ * header lays out its children as one row; only the widget tabs (`.tabs`) scroll.
  * o: { room?: key, tabs?: [], body, devTools?, overflow?: bool, menu?: html,
  *      fs?: fullscreen (no "+" and no tab of a single widget, unless hover is set), hover?: bool }
  */
@@ -401,22 +404,23 @@ export function roomPanel(o) {
   const tabs = o.tabs ?? [];
   const quiet = o.fs && !o.hover;
   const showTabs = !(quiet && tabs.length <= 1);
-  // Alt+W closes the active tab while the panel has a widget tab, else the panel.
-  const altWClosesTab = tabs.some((t) => t.kind === "widget");
-  const tabBar = showTabs ? `<span class="rp-div"></span><div class="tabs ${o.overflow ? "overflowing" : ""}" role="tablist" aria-label="Tabs of ${ROOMS[o.room]?.name}">${tabs.map((t) => tab(t, o.devTools, altWClosesTab)).join("")}</div>` : "";
+  const roomSelected = !tabs.some((t) => t.active);
+  // Alt+W closes the shown tab while the panel has a tab, else the panel.
+  const altWClosesTab = tabs.length > 0;
+  const widgetTabs = showTabs ? `<span class="rp-div"></span><div class="tabs ${o.overflow ? "overflowing" : ""}">${tabs.map((t) => tab(t, o.devTools, altWClosesTab)).join("")}</div>` : "";
+  const tabList = o.room ? `<div class="rp-tabs" role="tablist" aria-label="Tabs of ${ROOMS[o.room].name}">${roomTab(o.room, roomSelected)}${widgetTabs}</div>` : "";
   const close = `<button class="ibtn " title="Close panel${altWClosesTab ? "" : " (Alt+W)"}" aria-label="Close panel">${icon("x", 16)}</button>`;
+  // The + selects the room name, whose RoomOverview opens widgets.
   const head = o.room
-    ? `${roomHeader(o.room)}${tabBar}${quiet ? "" : ibtn("plus", "New tab", "tab-add")}${o.overflow ? ibtn("chevDown", `All ${tabs.length} tabs`, `tab-all ${o.menu ? "on" : ""}`) : ""}<span class="sp"></span>${close}`
+    ? `${tabList}${quiet ? "" : ibtn("plus", "Open a widget", "tab-add")}${o.overflow ? ibtn("chevDown", `All ${tabs.length} tabs`, `tab-all ${o.menu ? "on" : ""}`) : ""}<span class="sp"></span>${close}`
     : `<span class="sp"></span>${close}`;
   return `<section class="roompanel ${o.cls ?? ""}" style="${o.style ?? ""}"><header class="rp-head">${head}</header><div class="rp-body">${o.body ?? ""}</div>${o.menu ?? ""}</section>`;
 }
 
+/** The menu of the "all tabs" button: the widget tabs (the room name never scrolls away). */
 export const tabMenu = (tabs, style = "") =>
   `<div class="dropdown tab-menu" role="menu" style="${style}">${tabs
-    .map((t) => {
-      const name = t.kind === "widget" ? WIDGETS[t.widget].name : t.kind === "new" ? "New tab" : "Room overview";
-      return `<div class="dd-row ${t.active ? "on" : ""}" role="menuitem">${t.kind === "widget" ? wico(t.widget, 18) : icon("info", 16)}<span><b>${name}</b></span>${t.pinned ? icon("pin", 12) : ""}${t.active ? icon("check", 14, "end") : ""}</div>`;
-    })
+    .map((t) => `<div class="dd-row ${t.active ? "on" : ""}" role="menuitem">${wico(t.widget, 18)}<span><b>${WIDGETS[t.widget].name}</b></span>${t.pinned ? icon("pin", 12) : ""}${t.active ? icon("check", 14, "end") : ""}</div>`)
     .join("")}</div>`;
 
 // --- Bodies of an empty room panel (no room chosen yet) ---
@@ -465,34 +469,38 @@ export function allRoomsBody() {
 
 // --- Bodies of a room panel with a room ---
 
-/**
- * opened: { widgetKey: "here" | "other" }: widgets that already have a tab, in this room panel or
- * in another one. They are grayed out and offer "jump to tab"; from another panel also "move here".
- */
-export function tilesBody({ room = "design", opened = {}, newTab = false } = {}) {
-  const keys = ["call", "board", "poll", "notes"];
-  return `<div class="tiles-wrap"><h2>${newTab ? "Open another widget" : `Widgets in ${ROOMS[room].name}`}</h2><p>${newTab ? "Widgets that are already open are grayed out." : "Pick a widget. It opens as the first tab."}</p><div class="tiles">${keys
-    .map((k) => {
-      const w = WIDGETS[k];
-      const where = opened[k];
-      if (!where) return `<button class="tile" aria-label="Open ${w.name}"><span class="tile-in">${wico(k, 48)}<b>${w.name}</b><small>${w.host}</small></span></button>`;
-      const move = where === "other" ? `<button class="btn sm" title="Closes its tab in the other room panel and opens it here. The widget keeps running." aria-label="Move ${w.name} here">${icon("arrowLeft", 14)}<span>Move widget here</span></button>` : "";
-      return `<div class="tile opened ${move ? "two" : ""}"><span class="tile-in">${wico(k, 36)}<b>${w.name}</b><small>${where === "other" ? "open in the other panel" : "open in this panel"}</small></span><span class="tile-acts"><button class="btn sm primary" aria-label="Jump to the tab of ${w.name}">${icon("goToTab", 14)}<span>Jump to tab</span></button>${move}</span></div>`;
-    })
-    .join("")}</div></div>`;
-}
+/** The widgets of the rooms that the mockups open. */
+const ROOM_WIDGETS = { design: ["call", "board", "poll", "notes"], rtc: ["notes", "call", "timer"], lab: ["call", "notes", "board"], empty: [] };
+/** The empty DevBackend room has only its creator. */
+const ROOM_MEMBERS = { empty: [["Alice", "@alice:dev.local", 40, "Admin"]] };
 
-export function overviewBody({ room = "design", devTools = false } = {}) {
+/**
+ * One widget of the RoomOverview's list. where: "here" | "other" (it has a tab in this room panel
+ * or in another one) | undefined. An open widget is grayed out and offers "jump to tab"; from
+ * another panel also "move widget here". The names are the ones of the tests.
+ */
+const overviewWidget = (k, where) => {
+  const w = WIDGETS[k];
+  if (!where) return `<button class="row sm" aria-label="Open ${w.name}" title="Open ${w.name} in a new tab">${wico(k, 26)}<span class="row-main"><b>${w.name}</b><small>${w.host}</small></span>${icon("arrowUpRight", 14, "end")}</button>`;
+  const move = where === "other" ? `<button class="btn sm" title="Closes its tab in the other room panel and opens it here. The widget keeps running." aria-label="Move ${w.name} here">${icon("arrowLeft", 14)}<span>Move widget here</span></button>` : "";
+  return `<div class="row sm opened">${wico(k, 26)}<span class="row-main"><b>${w.name}</b><small>${where === "other" ? "open in the other panel" : "open in this panel"}</small></span><span class="row-acts"><button class="btn sm primary" aria-label="Jump to the tab of ${w.name}">${icon("goToTab", 14)}<span>Jump to tab</span></button>${move}</span></div>`;
+};
+
+/**
+ * The RoomOverview: what the room name tab shows, and where a room opens. The widget list comes
+ * first, then encryption, members and (dev tools enabled) the dev card.
+ * opened: { widgetKey: "here" | "other" }, see `overviewWidget`.
+ */
+export function overviewBody({ room = "design", devTools = false, opened = {} } = {}) {
   const r = ROOMS[room];
-  const widgets = ["call", "board", "poll", "notes"];
+  const widgets = ROOM_WIDGETS[room] ?? ROOM_WIDGETS.design;
+  const members = ROOM_MEMBERS[room] ?? MEMBERS;
   return `<div class="ov"><div class="ov-in">
-    <header class="ov-hero">${roomAv(room, 72)}<div><h1>${r.name}</h1><span class="mono muted">${r.id}</span><p>${r.topic}</p></div></header>
+    <header class="ov-hero">${roomAv(room, 72)}<div><h1>${r.name}</h1><span class="mono muted">${r.id}</span>${r.topic ? `<p>${r.topic}</p>` : ""}</div></header>
     <div class="ov-grid">
-      <section class="card"><h3>${icon("shield", 15)}Encryption</h3><p class="ok-text"><b>End-to-end encrypted</b></p><p class="muted">Messages and widget events in this room are encrypted. This device is verified.</p></section>
-      <section class="card"><h3>${icon("grid", 15)}Widgets <em>${widgets.length}</em></h3><div class="ov-widgets">${widgets
-        .map((k) => `<button class="row sm">${wico(k, 26)}<span class="row-main"><b>${WIDGETS[k].name}</b><small>${WIDGETS[k].host}</small></span>${icon("arrowUpRight", 14, "end")}</button>`)
-        .join("")}</div></section>
-      <section class="card span"><h3>${icon("users", 15)}Members <em>${r.members}</em></h3><div class="ov-members">${MEMBERS.map(([n, id, h, role]) => `<div class="member">${avatar({ name: n, hue: h, size: 30 })}<span class="row-main"><b>${n}</b><small>${id}</small></span>${role ? `<span class="pill">${role}</span>` : ""}</div>`).join("")}</div><button class="link">Show all ${r.members} members</button></section>
+      <section class="card span"><h3>${icon("grid", 15)}Widgets <em>${widgets.length}</em></h3><div class="ov-widgets">${widgets.map((k) => overviewWidget(k, opened[k])).join("") || `<p class="muted">This room has no widgets.</p>`}</div></section>
+      <section class="card span"><h3>${icon("shield", 15)}Encryption</h3><p class="ok-text"><b>End-to-end encrypted</b></p><p class="muted">Messages and widget events in this room are encrypted. This device is verified.</p></section>
+      <section class="card span"><h3>${icon("users", 15)}Members <em>${r.members}</em></h3><div class="ov-members">${members.map(([n, id, h, role]) => `<div class="member">${avatar({ name: n, hue: h, size: 30 })}<span class="row-main"><b>${n}</b><small>${id}</small></span>${role ? `<span class="pill">${role}</span>` : ""}</div>`).join("")}</div>${r.members > members.length ? `<button class="link">Show all ${r.members} members</button>` : ""}</section>
       ${
         devTools
           ? `<section class="card span devcard"><h3>${icon("cone", 15)}Dev tools</h3><div class="inline-row"><div><b>Copy to DevBackend</b><p class="muted">Copies the room state and the last events into a mocked room, to experiment with it offline.</p></div><span class="sp"></span><label class="field inline"><span class="field-l">Last events</span><span class="input mono narrow">50</span></label>${btn("Copy to DevBackend", { ico: "copy", kind: "dev" })}</div></section>`

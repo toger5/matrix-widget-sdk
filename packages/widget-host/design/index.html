@@ -41,11 +41,11 @@
 </style>
 </head>
 <body>
-<header class="top"><h1>Widget host mockups</h1><span>93 views from “Required visualisations” in appDesign.md, each at its real size</span><span class="grow"></span>
+<header class="top"><h1>Widget host mockups</h1><span>91 views from “Required visualisations” in appDesign.md, each at its real size</span><span class="grow"></span>
   <div class="switch" role="group" aria-label="Theme of the mockups"><button data-theme="dark" aria-pressed="true">Dark</button><button data-theme="light" aria-pressed="false">Light</button></div>
 </header>
 <div class="layout">
-<nav aria-label="Views"><a class="n1" href="#complete-views">Complete views <i>3</i></a><a class="n1" href="#app">App <i>10</i></a><a class="n1" href="#leftbar">LeftBar <i>6</i></a><a class="n1" href="#sidepanel">SidePanel <i>28</i></a><a class="n2" href="#sidepanel-accountview">AccountView</a><a class="n2" href="#sidepanel-accountview-device-verification">AccountView: device verification</a><a class="n2" href="#sidepanel-settings">Settings</a><a class="n2" href="#sidepanel-devbackendview">DevBackendView</a><a class="n3" href="#sidepanel-devbackendview-room-page">Room page</a><a class="n3" href="#sidepanel-devbackendview-tools">Tools</a><a class="n1" href="#pictureinpicturepanel">PictureInPicturePanel <i>8</i></a><a class="n1" href="#roomsarea">RoomsArea <i>38</i></a><a class="n2" href="#roomsarea-layout">Layout</a><a class="n2" href="#roomsarea-room-panel-empty">Room panel (empty)</a><a class="n2" href="#roomsarea-roomview-1">RoomView (1)</a><a class="n3" href="#roomsarea-roomview-1-tab-bar">Tab bar</a><a class="n3" href="#roomsarea-roomview-1-tab-1-new-tab">Tab (1): new tab</a><a class="n3" href="#roomsarea-roomview-1-tab-2-widgettab">Tab (2): WidgetTab</a><a class="n4" href="#roomsarea-roomview-1-tab-2-widgettab-dev-tools">Dev tools</a><a class="n3" href="#roomsarea-roomview-1-tab-3-roomoverviewtab">Tab (3): RoomOverviewTab</a><a class="n2" href="#roomsarea-roomview-2">RoomView (2)</a></nav>
+<nav aria-label="Views"><a class="n1" href="#complete-views">Complete views <i>3</i></a><a class="n1" href="#app">App <i>10</i></a><a class="n1" href="#leftbar">LeftBar <i>6</i></a><a class="n1" href="#sidepanel">SidePanel <i>28</i></a><a class="n2" href="#sidepanel-accountview">AccountView</a><a class="n2" href="#sidepanel-accountview-device-verification">AccountView: device verification</a><a class="n2" href="#sidepanel-settings">Settings</a><a class="n2" href="#sidepanel-devbackendview">DevBackendView</a><a class="n3" href="#sidepanel-devbackendview-room-page">Room page</a><a class="n3" href="#sidepanel-devbackendview-tools">Tools</a><a class="n1" href="#pictureinpicturepanel">PictureInPicturePanel <i>8</i></a><a class="n1" href="#roomsarea">RoomsArea <i>36</i></a><a class="n2" href="#roomsarea-layout">Layout</a><a class="n2" href="#roomsarea-room-panel-empty">Room panel (empty)</a><a class="n3" href="#roomsarea-roomview-1-tab-bar">Tab bar</a><a class="n3" href="#roomsarea-roomview-1-widgettab">WidgetTab</a><a class="n4" href="#roomsarea-roomview-1-widgettab-dev-tools">Dev tools</a><a class="n3" href="#roomsarea-roomview-1-roomoverview">RoomOverview</a><a class="n2" href="#roomsarea-roomview-2">RoomView (2)</a></nav>
 <main><section id="complete-views"><h2>Complete views</h2><p class="intro">Whole screens with several features at once, to judge how the leaves below work together.</p><div class="leaves"><figure class="leaf" id="complete-workspace">
   <figcaption><b>Workspace: two rooms, dev tools, AccountView, PiP</b><span class="meta">1440 × 900</span><a href="leaves/complete/workspace.html" target="_blank" rel="noopener">open ↗</a><p>SidePanel open (RoomsArea shifted), dev tools docked on top with two panels, the whiteboard is always on screen and its tab is not the active one, so it is in the floating panel.</p></figcaption>
   <div class="frame" data-w="1440" data-h="900"><iframe loading="lazy" title="Workspace: two rooms, dev tools, AccountView, PiP" data-leaf="leaves/complete/workspace.html"  src="leaves/complete/workspace.html#theme=dark" width="1440" height="900"></iframe></div>
@@ -86,7 +86,7 @@
   <div class="frame" data-w="1280" data-h="800"><iframe loading="lazy" title="App info modal" data-leaf="leaves/app/info-modal.html"  src="leaves/app/info-modal.html#theme=dark" width="1280" height="800"></iframe></div>
 </figure>
 <figure class="leaf" id="app-fullscreen">
-  <figcaption><b>Fullscreen: LeftBar collapsed, one widget</b><span class="meta">1280 × 800</span><a href="leaves/app/fullscreen.html" target="_blank" rel="noopener">open ↗</a><p>No rounded containers. The room header stays. The tab of the only widget is not shown, and the + button is hidden by default.</p></figcaption>
+  <figcaption><b>Fullscreen: LeftBar collapsed, one widget</b><span class="meta">1280 × 800</span><a href="leaves/app/fullscreen.html" target="_blank" rel="noopener">open ↗</a><p>No rounded containers. The room name stays. The tab of the only widget is not shown, and the + button is hidden by default. Selecting the room name ends the fullscreen view.</p></figcaption>
   <div class="frame" data-w="1280" data-h="800"><iframe loading="lazy" title="Fullscreen: LeftBar collapsed, one widget" data-leaf="leaves/app/fullscreen.html"  src="leaves/app/fullscreen.html#theme=dark" width="1280" height="800"></iframe></div>
 </figure>
 <figure class="leaf" id="app-fullscreen-hover">
@@ -285,32 +285,26 @@
 <figure class="leaf" id="panel-all-rooms">
   <figcaption><b>All rooms, with search bar</b><span class="meta">760 × 520</span><a href="leaves/panel/all-rooms.html" target="_blank" rel="noopener">open ↗</a></figcaption>
   <div class="frame" data-w="760" data-h="520"><iframe loading="lazy" title="All rooms, with search bar" data-leaf="leaves/panel/all-rooms.html"  src="leaves/panel/all-rooms.html#theme=dark" width="760" height="520"></iframe></div>
-</figure></div><h3 id="roomsarea-roomview-1">RoomView (1)</h3><div class="leaves"><figure class="leaf" id="roomview-header">
-  <figcaption><b>Room header (name, number of widgets and users)</b><span class="meta">640 × 72</span><a href="leaves/roomview/header.html" target="_blank" rel="noopener">open ↗</a><p>The header is a button: it opens the RoomOverviewTab.</p></figcaption>
-  <div class="frame" data-w="640" data-h="72"><iframe loading="lazy" title="Room header (name, number of widgets and users)" data-leaf="leaves/roomview/header.html"  src="leaves/roomview/header.html#theme=dark" width="640" height="72"></iframe></div>
+</figure></div><h3 id="roomsarea-roomview-1-tab-bar">RoomView (1) › Tab bar</h3><div class="leaves"><figure class="leaf" id="roomview-header">
+  <figcaption><b>Room name selected, no widget tab (name, number of widgets and users)</b><span class="meta">640 × 72</span><a href="leaves/roomview/header.html" target="_blank" rel="noopener">open ↗</a><p>The room name is the first tab. With no widget tab shown it is selected, and the body is the RoomOverview. It has no close button.</p></figcaption>
+  <div class="frame" data-w="640" data-h="72"><iframe loading="lazy" title="Room name selected, no widget tab (name, number of widgets and users)" data-leaf="leaves/roomview/header.html"  src="leaves/roomview/header.html#theme=dark" width="640" height="72"></iframe></div>
 </figure>
-<figure class="leaf" id="roomview-tiles">
-  <figcaption><b>No widget open: widget tiles</b><span class="meta">860 × 520</span><a href="leaves/roomview/tiles.html" target="_blank" rel="noopener">open ↗</a></figcaption>
-  <div class="frame" data-w="860" data-h="520"><iframe loading="lazy" title="No widget open: widget tiles" data-leaf="leaves/roomview/tiles.html"  src="leaves/roomview/tiles.html#theme=dark" width="860" height="520"></iframe></div>
-</figure></div><h3 id="roomsarea-roomview-1-tab-bar">RoomView (1) › Tab bar</h3><div class="leaves"><figure class="leaf" id="tabs-widget-active">
-  <figcaption><b>WidgetTab active, WidgetTab and NativeTab inactive</b><span class="meta">860 × 72</span><a href="leaves/tabs/widget-active.html" target="_blank" rel="noopener">open ↗</a></figcaption>
-  <div class="frame" data-w="860" data-h="72"><iframe loading="lazy" title="WidgetTab active, WidgetTab and NativeTab inactive" data-leaf="leaves/tabs/widget-active.html"  src="leaves/tabs/widget-active.html#theme=dark" width="860" height="72"></iframe></div>
+<figure class="leaf" id="tabs-widget-active">
+  <figcaption><b>WidgetTab active, the other WidgetTab and the room name inactive</b><span class="meta">860 × 72</span><a href="leaves/tabs/widget-active.html" target="_blank" rel="noopener">open ↗</a></figcaption>
+  <div class="frame" data-w="860" data-h="72"><iframe loading="lazy" title="WidgetTab active, the other WidgetTab and the room name inactive" data-leaf="leaves/tabs/widget-active.html"  src="leaves/tabs/widget-active.html#theme=dark" width="860" height="72"></iframe></div>
 </figure>
-<figure class="leaf" id="tabs-native-active">
-  <figcaption><b>NativeTab active (dev tools enabled: ⋯ on widget tabs)</b><span class="meta">860 × 72</span><a href="leaves/tabs/native-active.html" target="_blank" rel="noopener">open ↗</a></figcaption>
-  <div class="frame" data-w="860" data-h="72"><iframe loading="lazy" title="NativeTab active (dev tools enabled: ⋯ on widget tabs)" data-leaf="leaves/tabs/native-active.html"  src="leaves/tabs/native-active.html#theme=dark" width="860" height="72"></iframe></div>
+<figure class="leaf" id="tabs-overview-active">
+  <figcaption><b>Room name selected (dev tools enabled: ⋯ on widget tabs)</b><span class="meta">860 × 72</span><a href="leaves/tabs/overview-active.html" target="_blank" rel="noopener">open ↗</a><p>The room name looks like the active tab; the body is the RoomOverview. The + button selects the room name too.</p></figcaption>
+  <div class="frame" data-w="860" data-h="72"><iframe loading="lazy" title="Room name selected (dev tools enabled: ⋯ on widget tabs)" data-leaf="leaves/tabs/overview-active.html"  src="leaves/tabs/overview-active.html#theme=dark" width="860" height="72"></iframe></div>
 </figure>
 <figure class="leaf" id="tabs-pinned">
   <figcaption><b>Tabs marked as always on screen (pin icon)</b><span class="meta">960 × 72</span><a href="leaves/tabs/pinned.html" target="_blank" rel="noopener">open ↗</a><p>Element Call is pinned and active: it is shown in its tab. The whiteboard is pinned and not active: it is shown in the PictureInPicturePanel until its tab is pressed.</p></figcaption>
   <div class="frame" data-w="960" data-h="72"><iframe loading="lazy" title="Tabs marked as always on screen (pin icon)" data-leaf="leaves/tabs/pinned.html"  src="leaves/tabs/pinned.html#theme=dark" width="960" height="72"></iframe></div>
 </figure>
 <figure class="leaf" id="tabs-overflow">
-  <figcaption><b>More tabs than fit (scroll + menu of all tabs)</b><span class="meta">860 × 360</span><a href="leaves/tabs/overflow.html" target="_blank" rel="noopener">open ↗</a><p>Element Call is always on screen and not the active tab, so it is in the floating panel.</p></figcaption>
+  <figcaption><b>More tabs than fit (scroll + menu of all tabs)</b><span class="meta">860 × 360</span><a href="leaves/tabs/overflow.html" target="_blank" rel="noopener">open ↗</a><p>Element Call is always on screen and not the active tab, so it is in the floating panel. Only the widget tabs scroll; the room name stays.</p></figcaption>
   <div class="frame" data-w="860" data-h="360"><iframe loading="lazy" title="More tabs than fit (scroll + menu of all tabs)" data-leaf="leaves/tabs/overflow.html"  src="leaves/tabs/overflow.html#theme=dark" width="860" height="360"></iframe></div>
-</figure></div><h3 id="roomsarea-roomview-1-tab-1-new-tab">RoomView (1) › Tab (1): new tab</h3><div class="leaves"><figure class="leaf" id="roomview-new-tab">
-  <figcaption><b>Widget list, opened widgets grayed out with “jump to tab”</b><span class="meta">860 × 520</span><a href="leaves/roomview/new-tab.html" target="_blank" rel="noopener">open ↗</a></figcaption>
-  <div class="frame" data-w="860" data-h="520"><iframe loading="lazy" title="Widget list, opened widgets grayed out with “jump to tab”" data-leaf="leaves/roomview/new-tab.html"  src="leaves/roomview/new-tab.html#theme=dark" width="860" height="520"></iframe></div>
-</figure></div><h3 id="roomsarea-roomview-1-tab-2-widgettab">RoomView (1) › Tab (2): WidgetTab</h3><div class="leaves"><figure class="leaf" id="widgetview-loading">
+</figure></div><h3 id="roomsarea-roomview-1-widgettab">RoomView (1) › WidgetTab</h3><div class="leaves"><figure class="leaf" id="widgetview-loading">
   <figcaption><b>Loading</b><span class="meta">700 × 440</span><a href="leaves/widgetview/loading.html" target="_blank" rel="noopener">open ↗</a></figcaption>
   <div class="frame" data-w="700" data-h="440"><iframe loading="lazy" title="Loading" data-leaf="leaves/widgetview/loading.html"  src="leaves/widgetview/loading.html#theme=dark" width="700" height="440"></iframe></div>
 </figure>
@@ -325,7 +319,7 @@
 <figure class="leaf" id="widgetview-plain">
   <figcaption><b>Dev tools: no (full widget)</b><span class="meta">900 × 560</span><a href="leaves/widgetview/plain.html" target="_blank" rel="noopener">open ↗</a></figcaption>
   <div class="frame" data-w="900" data-h="560"><iframe loading="lazy" title="Dev tools: no (full widget)" data-leaf="leaves/widgetview/plain.html"  src="leaves/widgetview/plain.html#theme=dark" width="900" height="560"></iframe></div>
-</figure></div><h3 id="roomsarea-roomview-1-tab-2-widgettab-dev-tools">RoomView (1) › Tab (2): WidgetTab › Dev tools</h3><div class="leaves"><figure class="leaf" id="devtools-bar-top">
+</figure></div><h3 id="roomsarea-roomview-1-widgettab-dev-tools">RoomView (1) › WidgetTab › Dev tools</h3><div class="leaves"><figure class="leaf" id="devtools-bar-top">
   <figcaption><b>Bar only, docked top</b><span class="meta">900 × 560</span><a href="leaves/devtools/bar-top.html" target="_blank" rel="noopener">open ↗</a></figcaption>
   <div class="frame" data-w="900" data-h="560"><iframe loading="lazy" title="Bar only, docked top" data-leaf="leaves/devtools/bar-top.html"  src="leaves/devtools/bar-top.html#theme=dark" width="900" height="560"></iframe></div>
 </figure>
@@ -384,19 +378,19 @@
 <figure class="leaf" id="devtools-console">
   <figcaption><b>WidgetDevToolConsolePanel</b><span class="meta">1000 × 640</span><a href="leaves/devtools/console.html" target="_blank" rel="noopener">open ↗</a></figcaption>
   <div class="frame" data-w="1000" data-h="640"><iframe loading="lazy" title="WidgetDevToolConsolePanel" data-leaf="leaves/devtools/console.html"  src="leaves/devtools/console.html#theme=dark" width="1000" height="640"></iframe></div>
-</figure></div><h3 id="roomsarea-roomview-1-tab-3-roomoverviewtab">RoomView (1) › Tab (3): RoomOverviewTab</h3><div class="leaves"><figure class="leaf" id="overview-plain">
-  <figcaption><b>Dev tools disabled</b><span class="meta">900 × 700</span><a href="leaves/overview/plain.html" target="_blank" rel="noopener">open ↗</a></figcaption>
-  <div class="frame" data-w="900" data-h="700"><iframe loading="lazy" title="Dev tools disabled" data-leaf="leaves/overview/plain.html"  src="leaves/overview/plain.html#theme=dark" width="900" height="700"></iframe></div>
+</figure></div><h3 id="roomsarea-roomview-1-roomoverview">RoomView (1) › RoomOverview</h3><div class="leaves"><figure class="leaf" id="overview-plain">
+  <figcaption><b>No widget open, dev tools disabled</b><span class="meta">900 × 800</span><a href="leaves/overview/plain.html" target="_blank" rel="noopener">open ↗</a><p>A room opens here, and comes back here when its last widget tab is closed. Pressing a widget opens it as a new tab at the end.</p></figcaption>
+  <div class="frame" data-w="900" data-h="800"><iframe loading="lazy" title="No widget open, dev tools disabled" data-leaf="leaves/overview/plain.html"  src="leaves/overview/plain.html#theme=dark" width="900" height="800"></iframe></div>
 </figure>
 <figure class="leaf" id="overview-devtools">
-  <figcaption><b>Dev tools enabled (copy to DevBackend)</b><span class="meta">900 × 800</span><a href="leaves/overview/devtools.html" target="_blank" rel="noopener">open ↗</a></figcaption>
-  <div class="frame" data-w="900" data-h="800"><iframe loading="lazy" title="Dev tools enabled (copy to DevBackend)" data-leaf="leaves/overview/devtools.html"  src="leaves/overview/devtools.html#theme=dark" width="900" height="800"></iframe></div>
+  <figcaption><b>A widget open in this panel (“jump to tab”), dev tools enabled (copy to DevBackend)</b><span class="meta">900 × 940</span><a href="leaves/overview/devtools.html" target="_blank" rel="noopener">open ↗</a><p>Element Call has a tab in this panel: it is grayed out and only offers “jump to tab”. A DevBackend room has no dev card: it is already in the DevBackend.</p></figcaption>
+  <div class="frame" data-w="900" data-h="940"><iframe loading="lazy" title="A widget open in this panel (“jump to tab”), dev tools enabled (copy to DevBackend)" data-leaf="leaves/overview/devtools.html"  src="leaves/overview/devtools.html#theme=dark" width="900" height="940"></iframe></div>
 </figure></div><h3 id="roomsarea-roomview-2">RoomView (2)</h3><div class="leaves"><figure class="leaf" id="roomview2-different">
   <figcaption><b>A different room next to RoomView (1)</b><span class="meta">1280 × 800</span><a href="leaves/roomview2/different.html" target="_blank" rel="noopener">open ↗</a></figcaption>
   <div class="frame" data-w="1280" data-h="800"><iframe loading="lazy" title="A different room next to RoomView (1)" data-leaf="leaves/roomview2/different.html"  src="leaves/roomview2/different.html#theme=dark" width="1280" height="800"></iframe></div>
 </figure>
 <figure class="leaf" id="roomview2-same">
-  <figcaption><b>The same room as RoomView (1) (Ctrl+Shift+N, in a browser tab: Alt+Shift+N)</b><span class="meta">1280 × 800</span><a href="leaves/roomview2/same.html" target="_blank" rel="noopener">open ↗</a><p>Both panels show “Design crit”. A widget runs once. The call and the whiteboard are open on the left, so on the right they offer “jump to tab” and “move widget here” (closes the tab on the left and opens the widget on the right; it keeps running). The poll is open in the right panel itself: only “jump to tab”.</p></figcaption>
+  <figcaption><b>The same room as RoomView (1) (Ctrl+Shift+N, in a browser tab: Alt+Shift+N)</b><span class="meta">1280 × 800</span><a href="leaves/roomview2/same.html" target="_blank" rel="noopener">open ↗</a><p>Both panels show “Design crit”; the right one shows its RoomOverview. A widget runs once. The call and the whiteboard are open on the left, so on the right they offer “jump to tab” and “move widget here” (closes the tab on the left and opens the widget on the right; it keeps running). The poll is open in the right panel itself: only “jump to tab”.</p></figcaption>
   <div class="frame" data-w="1280" data-h="800"><iframe loading="lazy" title="The same room as RoomView (1) (Ctrl+Shift+N, in a browser tab: Alt+Shift+N)" data-leaf="leaves/roomview2/same.html"  src="leaves/roomview2/same.html#theme=dark" width="1280" height="800"></iframe></div>
 </figure></div></section></main>
 </div>

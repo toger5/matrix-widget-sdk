@@ -16,7 +16,6 @@ import {
   roomPanel,
   settingsView,
   tabMenu,
-  tilesBody,
   widgetView,
 } from "./components.mjs";
 
@@ -26,7 +25,6 @@ const TOAST = "Press <kbd>Esc</kbd> to show the expand button";
 const VERIFY = "AccountView: device verification";
 
 const wt = (widgetKey, o = {}) => ({ kind: "widget", widget: widgetKey, ...o });
-const nt = (o = {}) => ({ kind: "native", ...o });
 
 /** The "Design crit" room with the call widget open: the default content of most screens. */
 const designCall = (o = {}) =>
@@ -34,11 +32,11 @@ const designCall = (o = {}) =>
     room: "design",
     devTools: o.devTools,
     overflow: o.overflow,
-    tabs: o.tabs ?? [wt("call", { active: true, devOpen: !!o.dev, pinned: o.pinned }), wt("board"), nt()],
+    tabs: o.tabs ?? [wt("call", { active: true, devOpen: !!o.dev, pinned: o.pinned }), wt("board")],
     body: o.body ?? widgetView({ kind: "call", dev: o.dev, state: o.state }),
   });
 const platformPoll = (o = {}) =>
-  roomPanel({ room: "platform", devTools: o.devTools, tabs: [wt("poll", { active: true }), nt()], body: widgetView({ kind: "poll" }) });
+  roomPanel({ room: "platform", devTools: o.devTools, tabs: [wt("poll", { active: true })], body: widgetView({ kind: "poll" }) });
 const labCall = (o = {}) =>
   roomPanel({ room: "lab", devTools: true, tabs: [wt("call", { active: true, devOpen: !!o.dev }), wt("notes", { pinned: o.pinNotes })], body: widgetView({ kind: "call", dev: o.dev }) });
 
@@ -48,7 +46,7 @@ const solo = (panel) => app({ panels: [panel] });
 const headOnly = (o) => stage(roomPanel({ ...o, cls: "cut", body: "" }), "", "padding-bottom:0");
 const devLeaf = (dev, o = {}) => solo(designCall({ devTools: true, dev, ...o }));
 /** A PiP panel floating over a room. The whiteboard is in the PiP, so its tab carries the pin marker. */
-const floating = (pipHtml, panel = designCall({ tabs: [wt("call", { active: true }), wt("board", { pinned: true }), nt()] })) => stage(`${panel}${pipHtml}`, "float");
+const floating = (pipHtml, panel = designCall({ tabs: [wt("call", { active: true }), wt("board", { pinned: true })] })) => stage(`${panel}${pipHtml}`, "float");
 
 const FULL = { w: 1280, h: 800 };
 const BIG = { w: 1440, h: 900 };
@@ -71,7 +69,7 @@ export const LEAVES = [
       leftBar: { devTools: true, active: "account" },
       side: accountView({ mode: "several" }),
       panels: [
-        roomPanel({ room: "design", devTools: true, style: "flex:1.7 1 0", tabs: [wt("call", { active: true, devOpen: true }), wt("board", { pinned: true }), nt()], body: widgetView({ kind: "call", dev: { dock: "top", panels: ["messages", "stats"], size: 290, stats: { plot: [254, 56], hover: null } } }) }),
+        roomPanel({ room: "design", devTools: true, style: "flex:1.7 1 0", tabs: [wt("call", { active: true, devOpen: true }), wt("board", { pinned: true })], body: widgetView({ kind: "call", dev: { dock: "top", panels: ["messages", "stats"], size: 290, stats: { plot: [254, 56], hover: null } } }) }),
         platformPoll({ devTools: true }),
       ],
       pip: pip({ items: [{ room: "design", widget: "board" }, { room: "rtc", widget: "timer" }] }),
@@ -95,8 +93,8 @@ export const LEAVES = [
       leftBar: { devTools: true, active: "settings" },
       side: settingsView({ devTools: true }),
       panels: [
-        roomPanel({ room: "design", devTools: true, style: "flex:1.5 1 0", tabs: [wt("call", { active: true, devOpen: true }), wt("board", { pinned: true }), nt()], body: widgetView({ kind: "call", dev: { dock: "top", panels: ["messages", "driver"], size: 250 } }) }),
-        roomPanel({ room: "rtc", devTools: true, overflow: true, tabs: [nt({ active: true }), wt("notes")], body: overviewBody({ room: "rtc", devTools: true }) }),
+        roomPanel({ room: "design", devTools: true, style: "flex:1.5 1 0", tabs: [wt("call", { active: true, devOpen: true }), wt("board", { pinned: true })], body: widgetView({ kind: "call", dev: { dock: "top", panels: ["messages", "driver"], size: 250 } }) }),
+        roomPanel({ room: "rtc", devTools: true, tabs: [wt("notes")], body: overviewBody({ room: "rtc", devTools: true, opened: { notes: "here" } }) }),
       ],
       pip: pip({ items: [{ room: "design", widget: "board" }], style: "right:auto;left:392px;bottom:96px" }),
     }),
@@ -113,7 +111,7 @@ export const LEAVES = [
   {
     id: "app/devbackend-collapsed", section: "App", group: "", title: "DevBackend active, LeftBar collapsed: floating badge (extra)", ...FULL,
     note: "Without the LeftBar its badge is gone, so a floating badge takes over. It stays in the fullscreen view, where no fence is visible at all.",
-    html: app({ fence: true, panels: [labCall(), roomPanel({ room: "empty", devTools: true, tabs: [], body: tilesBody({ room: "empty" }) })] }),
+    html: app({ fence: true, panels: [labCall(), roomPanel({ room: "empty", devTools: true, tabs: [], body: overviewBody({ room: "empty" }) })] }),
   },
   {
     id: "app/devbackend-empty", section: "App", group: "", title: "DevBackend just activated: empty RoomsArea (extra)", ...FULL,
@@ -124,7 +122,7 @@ export const LEAVES = [
   { id: "app/info-modal", section: "App", group: "", title: "App info modal", ...FULL, html: app({ leftBar: {}, panels: [designCall()], modal: infoModal() }) },
   {
     id: "app/fullscreen", section: "App", group: "", title: "Fullscreen: LeftBar collapsed, one widget", ...FULL,
-    note: "No rounded containers. The room header stays. The tab of the only widget is not shown, and the + button is hidden by default.",
+    note: "No rounded containers. The room name stays. The tab of the only widget is not shown, and the + button is hidden by default. Selecting the room name ends the fullscreen view.",
     html: app({ cls: "fullscreen", panels: [roomPanel({ room: "design", fs: true, tabs: [wt("call", { active: true })], body: widgetView({ kind: "call" }) })] }),
   },
   {
@@ -189,7 +187,7 @@ export const LEAVES = [
     note: "Hovered, so the extra “close dev tools” button of the first widget is visible. Behind it the whiteboard tab is active: the call is always on screen and was moved away from.",
     html: floating(
       pip({ hover: true, box: [520, 480], items: [{ room: "design", widget: "call", dev: { dock: "top", panels: ["messages"], size: 190 } }, { room: "platform", widget: "poll" }] }),
-      designCall({ devTools: true, tabs: [wt("call", { pinned: true, devOpen: true }), wt("board", { active: true }), nt()], body: widgetView({ kind: "board" }) }),
+      designCall({ devTools: true, tabs: [wt("call", { pinned: true, devOpen: true }), wt("board", { active: true })], body: widgetView({ kind: "board" }) }),
     ),
   },
   (() => {
@@ -202,7 +200,7 @@ export const LEAVES = [
   })(),
 
   // ---- RoomsArea --------------------------------------------------------------------------
-  { id: "roomsarea/one", section: "RoomsArea", group: "Layout", title: "One room panel", ...FULL, html: app({ leftBar: {}, panels: [roomPanel({ room: "design", tabs: [wt("call"), wt("board", { active: true }), nt()], body: widgetView({ kind: "board" }) })] }) },
+  { id: "roomsarea/one", section: "RoomsArea", group: "Layout", title: "One room panel", ...FULL, html: app({ leftBar: {}, panels: [roomPanel({ room: "design", tabs: [wt("call"), wt("board", { active: true })], body: widgetView({ kind: "board" }) })] }) },
   { id: "roomsarea/several", section: "RoomsArea", group: "Layout", title: "Several room panels next to each other", ...FULL, html: app({ leftBar: {}, panels: [designCall({ overflow: true }), platformPoll(), roomPanel({ body: recentsBody() })] }) },
   { id: "roomsarea/shifted", section: "RoomsArea", group: "Layout", title: "Shifted by an open SidePanel", ...FULL, html: app({ leftBar: { active: "settings" }, side: settingsView({ devTools: false }), panels: [designCall({ overflow: true }), platformPoll()] }) },
 
@@ -212,46 +210,54 @@ export const LEAVES = [
   { id: "panel/error", section: "RoomsArea", group: "Room panel (empty)", title: "Error (extra: every list has an error state)", w: 760, h: 520, html: solo(roomPanel({ body: recentsBody({ state: "error" }) })) },
   { id: "panel/all-rooms", section: "RoomsArea", group: "Room panel (empty)", title: "All rooms, with search bar", w: 760, h: 520, html: solo(roomPanel({ body: allRoomsBody() })) },
 
-  { id: "roomview/header", section: "RoomsArea", group: "RoomView (1)", title: "Room header (name, number of widgets and users)", w: 640, h: 72, note: "The header is a button: it opens the RoomOverviewTab.", html: headOnly({ room: "rtc", tabs: [] }) },
-  { id: "roomview/tiles", section: "RoomsArea", group: "RoomView (1)", title: "No widget open: widget tiles", w: 860, h: 520, html: solo(roomPanel({ room: "design", tabs: [], body: tilesBody() })) },
-
-  { id: "tabs/widget-active", section: "RoomsArea", group: "RoomView (1) › Tab bar", title: "WidgetTab active, WidgetTab and NativeTab inactive", w: 860, h: 72, html: headOnly({ room: "design", tabs: [wt("call", { active: true }), wt("board"), nt()] }) },
-  { id: "tabs/native-active", section: "RoomsArea", group: "RoomView (1) › Tab bar", title: "NativeTab active (dev tools enabled: ⋯ on widget tabs)", w: 860, h: 72, html: headOnly({ room: "design", devTools: true, tabs: [wt("call"), wt("board", { devOpen: true }), nt({ active: true })] }) },
-  { id: "tabs/pinned", section: "RoomsArea", group: "RoomView (1) › Tab bar", title: "Tabs marked as always on screen (pin icon)", w: 960, h: 72, note: "Element Call is pinned and active: it is shown in its tab. The whiteboard is pinned and not active: it is shown in the PictureInPicturePanel until its tab is pressed.", html: headOnly({ room: "design", tabs: [wt("call", { active: true, pinned: true }), wt("board", { pinned: true }), wt("poll"), nt()] }) },
+  {
+    id: "roomview/header", section: "RoomsArea", group: "RoomView (1) › Tab bar", title: "Room name selected, no widget tab (name, number of widgets and users)", w: 640, h: 72,
+    note: "The room name is the first tab. With no widget tab shown it is selected, and the body is the RoomOverview. It has no close button.",
+    html: headOnly({ room: "rtc", tabs: [] }),
+  },
+  { id: "tabs/widget-active", section: "RoomsArea", group: "RoomView (1) › Tab bar", title: "WidgetTab active, the other WidgetTab and the room name inactive", w: 860, h: 72, html: headOnly({ room: "design", tabs: [wt("call", { active: true }), wt("board")] }) },
+  { id: "tabs/overview-active", section: "RoomsArea", group: "RoomView (1) › Tab bar", title: "Room name selected (dev tools enabled: ⋯ on widget tabs)", w: 860, h: 72, note: "The room name looks like the active tab; the body is the RoomOverview. The + button selects the room name too.", html: headOnly({ room: "design", devTools: true, tabs: [wt("call"), wt("board", { devOpen: true })] }) },
+  { id: "tabs/pinned", section: "RoomsArea", group: "RoomView (1) › Tab bar", title: "Tabs marked as always on screen (pin icon)", w: 960, h: 72, note: "Element Call is pinned and active: it is shown in its tab. The whiteboard is pinned and not active: it is shown in the PictureInPicturePanel until its tab is pressed.", html: headOnly({ room: "design", tabs: [wt("call", { active: true, pinned: true }), wt("board", { pinned: true }), wt("poll")] }) },
   (() => {
-    const tabs = [wt("call", { pinned: true }), wt("board"), wt("poll", { active: true }), wt("notes"), nt(), wt("timer"), wt("retro"), wt("stream")];
-    return { id: "tabs/overflow", section: "RoomsArea", group: "RoomView (1) › Tab bar", title: "More tabs than fit (scroll + menu of all tabs)", w: 860, h: 360, note: "Element Call is always on screen and not the active tab, so it is in the floating panel.", html: app({ panels: [roomPanel({ room: "design", tabs, overflow: true, body: widgetView({ kind: "poll" }), menu: tabMenu(tabs) })], pip: pip({ items: [{ room: "design", widget: "call" }], style: "right:auto;left:28px;bottom:24px" }) }) };
+    const tabs = [wt("call", { pinned: true }), wt("board"), wt("poll", { active: true }), wt("notes"), wt("timer"), wt("retro"), wt("stream")];
+    return { id: "tabs/overflow", section: "RoomsArea", group: "RoomView (1) › Tab bar", title: "More tabs than fit (scroll + menu of all tabs)", w: 860, h: 360, note: "Element Call is always on screen and not the active tab, so it is in the floating panel. Only the widget tabs scroll; the room name stays.", html: app({ panels: [roomPanel({ room: "design", tabs, overflow: true, body: widgetView({ kind: "poll" }), menu: tabMenu(tabs) })], pip: pip({ items: [{ room: "design", widget: "call" }], style: "right:auto;left:28px;bottom:24px" }) }) };
   })(),
 
-  { id: "roomview/new-tab", section: "RoomsArea", group: "RoomView (1) › Tab (1): new tab", title: "Widget list, opened widgets grayed out with “jump to tab”", w: 860, h: 520, html: solo(roomPanel({ room: "design", tabs: [wt("call"), wt("board"), { kind: "new", active: true }], body: tilesBody({ opened: { call: "here", board: "here" }, newTab: true }) })) },
+  { id: "widgetview/loading", section: "RoomsArea", group: "RoomView (1) › WidgetTab", title: "Loading", w: 700, h: 440, html: solo(designCall({ state: "loading" })) },
+  { id: "widgetview/failed", section: "RoomsArea", group: "RoomView (1) › WidgetTab", title: "Failed to load", w: 700, h: 440, html: solo(designCall({ state: "failed" })) },
+  { id: "widgetview/prompt", section: "RoomsArea", group: "RoomView (1) › WidgetTab", title: "Capability prompt (extra: exists in the app today, not in the list)", w: 700, h: 560, html: solo(designCall({ state: "prompt" })) },
+  { id: "widgetview/plain", section: "RoomsArea", group: "RoomView (1) › WidgetTab", title: "Dev tools: no (full widget)", w: 900, h: 560, html: solo(designCall()) },
+  { id: "devtools/bar-top", section: "RoomsArea", group: "RoomView (1) › WidgetTab › Dev tools", title: "Bar only, docked top", w: 900, h: 560, html: devLeaf({ dock: "top" }) },
+  { id: "devtools/bar-bottom", section: "RoomsArea", group: "RoomView (1) › WidgetTab › Dev tools", title: "Bar only, docked bottom", w: 900, h: 560, html: devLeaf({ dock: "bottom" }) },
+  { id: "devtools/bar-left", section: "RoomsArea", group: "RoomView (1) › WidgetTab › Dev tools", title: "Bar only, docked left", w: 900, h: 680, note: "The vertical bar needs about 600px for its labels; a shorter one shows icons only (see “Docked right with two panels”).", html: devLeaf({ dock: "left" }) },
+  { id: "devtools/bar-right", section: "RoomsArea", group: "RoomView (1) › WidgetTab › Dev tools", title: "Bar only, docked right", w: 900, h: 680, html: devLeaf({ dock: "right" }) },
+  { id: "devtools/one-panel", section: "RoomsArea", group: "RoomView (1) › WidgetTab › Dev tools", title: "One panel open (full width)", w: 1000, h: 640, html: devLeaf({ dock: "top", panels: ["messages"] }) },
+  { id: "devtools/two-panels", section: "RoomsArea", group: "RoomView (1) › WidgetTab › Dev tools", title: "Two panels next to each other", w: 1000, h: 640, html: devLeaf({ dock: "top", panels: ["messages", "stats"], stats: { plot: [421, 65], hover: null } }) },
+  { id: "devtools/three-panels", section: "RoomsArea", group: "RoomView (1) › WidgetTab › Dev tools", title: "Three panels next to each other", w: 1280, h: 680, html: devLeaf({ dock: "top", panels: ["messages", "stats", "driver"], size: 290, stats: { plot: [349, 105], hover: null } }) },
+  { id: "devtools/fourth-panel", section: "RoomsArea", group: "RoomView (1) › WidgetTab › Dev tools", title: "Fourth panel opened: the oldest one closes", w: 1280, h: 680, note: "Messages, Stats and Driver were open. Pressing Console closed Messages, the oldest. Three panels are the maximum.", html: devLeaf({ dock: "top", panels: ["stats", "driver", "console"], size: 290, stats: { plot: [349, 105], hover: null } }) },
+  { id: "devtools/side-panels", section: "RoomsArea", group: "RoomView (1) › WidgetTab › Dev tools", title: "Docked right with two panels (they stack)", w: 1000, h: 640, note: "Not a leaf of the list: shows what “next to each other” becomes when the bar is docked to a side. At this height the vertical bar shows icons only.", html: devLeaf({ dock: "right", panels: ["messages", "driver"], size: 400 }) },
+  { id: "devtools/bottom-panel", section: "RoomsArea", group: "RoomView (1) › WidgetTab › Dev tools", title: "Docked bottom with one panel (the bar stays at the edge)", w: 1000, h: 640, note: "Not a leaf of the list: shows where the panels go when the bar is docked to the bottom. They sit between the widget and the bar, the separator above them, as when docked right.", html: devLeaf({ dock: "bottom", panels: ["messages"] }) },
+  { id: "devtools/messages", section: "RoomsArea", group: "RoomView (1) › WidgetTab › Dev tools", title: "WidgetDevToolMessagesPanel: list, one message expanded", w: 1000, h: 720, html: devLeaf({ dock: "top", panels: ["messages"], expanded: true, size: 420 }) },
+  { id: "devtools/stats", section: "RoomsArea", group: "RoomView (1) › WidgetTab › Dev tools", title: "WidgetDevToolStatsPanel: total graph", w: 1000, h: 640, note: "The bar under the pointer is outlined and its tooltip shows both directions. A number goes above its bar if it fits, else inside it.", html: devLeaf({ dock: "top", panels: ["stats"] }) },
+  { id: "devtools/stats-direction", section: "RoomsArea", group: "RoomView (1) › WidgetTab › Dev tools", title: "WidgetDevToolStatsPanel: one direction in a narrow panel", w: 1000, h: 640, note: "“to widget” is selected. The header wraps; the panel shows as many 5 s bars as fit, numbers only where they fit.", html: devLeaf({ dock: "right", panels: ["stats"], size: 340, stats: { series: "toWidget", plot: [274, 174], hover: null } }) },
+  { id: "devtools/driver", section: "RoomsArea", group: "RoomView (1) › WidgetTab › Dev tools", title: "WidgetDevToolDriverPanel", w: 1000, h: 720, html: devLeaf({ dock: "top", panels: ["driver"], size: 330 }) },
+  { id: "devtools/console", section: "RoomsArea", group: "RoomView (1) › WidgetTab › Dev tools", title: "WidgetDevToolConsolePanel", w: 1000, h: 640, html: devLeaf({ dock: "top", panels: ["console"] }) },
 
-  { id: "widgetview/loading", section: "RoomsArea", group: "RoomView (1) › Tab (2): WidgetTab", title: "Loading", w: 700, h: 440, html: solo(designCall({ state: "loading" })) },
-  { id: "widgetview/failed", section: "RoomsArea", group: "RoomView (1) › Tab (2): WidgetTab", title: "Failed to load", w: 700, h: 440, html: solo(designCall({ state: "failed" })) },
-  { id: "widgetview/prompt", section: "RoomsArea", group: "RoomView (1) › Tab (2): WidgetTab", title: "Capability prompt (extra: exists in the app today, not in the list)", w: 700, h: 560, html: solo(designCall({ state: "prompt" })) },
-  { id: "widgetview/plain", section: "RoomsArea", group: "RoomView (1) › Tab (2): WidgetTab", title: "Dev tools: no (full widget)", w: 900, h: 560, html: solo(designCall()) },
-  { id: "devtools/bar-top", section: "RoomsArea", group: "RoomView (1) › Tab (2): WidgetTab › Dev tools", title: "Bar only, docked top", w: 900, h: 560, html: devLeaf({ dock: "top" }) },
-  { id: "devtools/bar-bottom", section: "RoomsArea", group: "RoomView (1) › Tab (2): WidgetTab › Dev tools", title: "Bar only, docked bottom", w: 900, h: 560, html: devLeaf({ dock: "bottom" }) },
-  { id: "devtools/bar-left", section: "RoomsArea", group: "RoomView (1) › Tab (2): WidgetTab › Dev tools", title: "Bar only, docked left", w: 900, h: 680, note: "The vertical bar needs about 600px for its labels; a shorter one shows icons only (see “Docked right with two panels”).", html: devLeaf({ dock: "left" }) },
-  { id: "devtools/bar-right", section: "RoomsArea", group: "RoomView (1) › Tab (2): WidgetTab › Dev tools", title: "Bar only, docked right", w: 900, h: 680, html: devLeaf({ dock: "right" }) },
-  { id: "devtools/one-panel", section: "RoomsArea", group: "RoomView (1) › Tab (2): WidgetTab › Dev tools", title: "One panel open (full width)", w: 1000, h: 640, html: devLeaf({ dock: "top", panels: ["messages"] }) },
-  { id: "devtools/two-panels", section: "RoomsArea", group: "RoomView (1) › Tab (2): WidgetTab › Dev tools", title: "Two panels next to each other", w: 1000, h: 640, html: devLeaf({ dock: "top", panels: ["messages", "stats"], stats: { plot: [421, 65], hover: null } }) },
-  { id: "devtools/three-panels", section: "RoomsArea", group: "RoomView (1) › Tab (2): WidgetTab › Dev tools", title: "Three panels next to each other", w: 1280, h: 680, html: devLeaf({ dock: "top", panels: ["messages", "stats", "driver"], size: 290, stats: { plot: [349, 105], hover: null } }) },
-  { id: "devtools/fourth-panel", section: "RoomsArea", group: "RoomView (1) › Tab (2): WidgetTab › Dev tools", title: "Fourth panel opened: the oldest one closes", w: 1280, h: 680, note: "Messages, Stats and Driver were open. Pressing Console closed Messages, the oldest. Three panels are the maximum.", html: devLeaf({ dock: "top", panels: ["stats", "driver", "console"], size: 290, stats: { plot: [349, 105], hover: null } }) },
-  { id: "devtools/side-panels", section: "RoomsArea", group: "RoomView (1) › Tab (2): WidgetTab › Dev tools", title: "Docked right with two panels (they stack)", w: 1000, h: 640, note: "Not a leaf of the list: shows what “next to each other” becomes when the bar is docked to a side. At this height the vertical bar shows icons only.", html: devLeaf({ dock: "right", panels: ["messages", "driver"], size: 400 }) },
-  { id: "devtools/bottom-panel", section: "RoomsArea", group: "RoomView (1) › Tab (2): WidgetTab › Dev tools", title: "Docked bottom with one panel (the bar stays at the edge)", w: 1000, h: 640, note: "Not a leaf of the list: shows where the panels go when the bar is docked to the bottom. They sit between the widget and the bar, the separator above them, as when docked right.", html: devLeaf({ dock: "bottom", panels: ["messages"] }) },
-  { id: "devtools/messages", section: "RoomsArea", group: "RoomView (1) › Tab (2): WidgetTab › Dev tools", title: "WidgetDevToolMessagesPanel: list, one message expanded", w: 1000, h: 720, html: devLeaf({ dock: "top", panels: ["messages"], expanded: true, size: 420 }) },
-  { id: "devtools/stats", section: "RoomsArea", group: "RoomView (1) › Tab (2): WidgetTab › Dev tools", title: "WidgetDevToolStatsPanel: total graph", w: 1000, h: 640, note: "The bar under the pointer is outlined and its tooltip shows both directions. A number goes above its bar if it fits, else inside it.", html: devLeaf({ dock: "top", panels: ["stats"] }) },
-  { id: "devtools/stats-direction", section: "RoomsArea", group: "RoomView (1) › Tab (2): WidgetTab › Dev tools", title: "WidgetDevToolStatsPanel: one direction in a narrow panel", w: 1000, h: 640, note: "“to widget” is selected. The header wraps; the panel shows as many 5 s bars as fit, numbers only where they fit.", html: devLeaf({ dock: "right", panels: ["stats"], size: 340, stats: { series: "toWidget", plot: [274, 174], hover: null } }) },
-  { id: "devtools/driver", section: "RoomsArea", group: "RoomView (1) › Tab (2): WidgetTab › Dev tools", title: "WidgetDevToolDriverPanel", w: 1000, h: 720, html: devLeaf({ dock: "top", panels: ["driver"], size: 330 }) },
-  { id: "devtools/console", section: "RoomsArea", group: "RoomView (1) › Tab (2): WidgetTab › Dev tools", title: "WidgetDevToolConsolePanel", w: 1000, h: 640, html: devLeaf({ dock: "top", panels: ["console"] }) },
-
-  { id: "overview/plain", section: "RoomsArea", group: "RoomView (1) › Tab (3): RoomOverviewTab", title: "Dev tools disabled", w: 900, h: 700, html: solo(roomPanel({ room: "design", tabs: [wt("call"), nt({ active: true })], body: overviewBody() })) },
-  { id: "overview/devtools", section: "RoomsArea", group: "RoomView (1) › Tab (3): RoomOverviewTab", title: "Dev tools enabled (copy to DevBackend)", w: 900, h: 800, html: solo(roomPanel({ room: "design", devTools: true, tabs: [wt("call"), nt({ active: true })], body: overviewBody({ devTools: true }) })) },
+  {
+    id: "overview/plain", section: "RoomsArea", group: "RoomView (1) › RoomOverview", title: "No widget open, dev tools disabled", w: 900, h: 800,
+    note: "A room opens here, and comes back here when its last widget tab is closed. Pressing a widget opens it as a new tab at the end.",
+    html: solo(roomPanel({ room: "design", tabs: [], body: overviewBody() })),
+  },
+  {
+    id: "overview/devtools", section: "RoomsArea", group: "RoomView (1) › RoomOverview", title: "A widget open in this panel (“jump to tab”), dev tools enabled (copy to DevBackend)", w: 900, h: 940,
+    note: "Element Call has a tab in this panel: it is grayed out and only offers “jump to tab”. A DevBackend room has no dev card: it is already in the DevBackend.",
+    html: solo(roomPanel({ room: "design", devTools: true, tabs: [wt("call")], body: overviewBody({ devTools: true, opened: { call: "here" } }) })),
+  },
 
   { id: "roomview2/different", section: "RoomsArea", group: "RoomView (2)", title: "A different room next to RoomView (1)", ...FULL, html: app({ leftBar: {}, panels: [designCall(), roomPanel({ room: "rtc", tabs: [wt("notes", { active: true }), wt("call")], body: widgetView({ kind: "notes" }) })] }) },
   {
     id: "roomview2/same", section: "RoomsArea", group: "RoomView (2)", title: "The same room as RoomView (1) (Ctrl+Shift+N, in a browser tab: Alt+Shift+N)", ...FULL,
-    note: "Both panels show “Design crit”. A widget runs once. The call and the whiteboard are open on the left, so on the right they offer “jump to tab” and “move widget here” (closes the tab on the left and opens the widget on the right; it keeps running). The poll is open in the right panel itself: only “jump to tab”.",
-    html: app({ leftBar: {}, panels: [designCall(), roomPanel({ room: "design", tabs: [wt("poll"), { kind: "new", active: true }], body: tilesBody({ opened: { call: "other", board: "other", poll: "here" }, newTab: true }) })] }),
+    note: "Both panels show “Design crit”; the right one shows its RoomOverview. A widget runs once. The call and the whiteboard are open on the left, so on the right they offer “jump to tab” and “move widget here” (closes the tab on the left and opens the widget on the right; it keeps running). The poll is open in the right panel itself: only “jump to tab”.",
+    html: app({ leftBar: {}, panels: [designCall(), roomPanel({ room: "design", tabs: [wt("poll")], body: overviewBody({ opened: { call: "other", board: "other", poll: "here" } }) })] }),
   },
 ].flat(); // an entry may be a group of leaves that share their fixtures

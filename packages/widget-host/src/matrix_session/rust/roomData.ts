@@ -4,7 +4,7 @@ import type { AccountInfo, RawEvent, RoomDetails, RoomExport, RoomMember } from 
 import { WIDGET_EVENT_TYPES } from "../../widgetStateEvent";
 
 /**
- * What the AccountView, the RoomOverviewTab and "Copy to DevBackend" read from a matrix-rust-sdk
+ * What the AccountView, the RoomOverview and "Copy to DevBackend" read from a matrix-rust-sdk
  * client. Functions of the client and the room, apart from the session, so they can be tested
  * with faked ones. `online: false` (the session is suspended) keeps them to what the SDK has in
  * its store, as far as the bindings say which calls make a request.

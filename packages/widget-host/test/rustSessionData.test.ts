@@ -1,5 +1,5 @@
 /**
- * What the AccountView, the RoomOverviewTab and "Copy to DevBackend" read from a matrix-rust-sdk
+ * What the AccountView, the RoomOverview and "Copy to DevBackend" read from a matrix-rust-sdk
  * client (`src/matrix_session/rust/roomData`), and the device verification
  * (`src/matrix_session/rust/verification`), on a faked client and room. The SDK's wasm module
  * is loaded because its enums and event type conversions live there.

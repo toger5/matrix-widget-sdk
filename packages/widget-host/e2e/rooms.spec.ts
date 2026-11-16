@@ -1,4 +1,4 @@
-/** The RoomsArea: room panels, the room picker of an empty panel, widget tiles, resizing, fullscreen and the narrow window. */
+/** The RoomsArea: room panels, the room picker of an empty panel, a room opening on its overview, resizing, fullscreen and the narrow window. */
 import { expect, LAB, LEGACY_WIDGET, NEW_WIDGET, test, widgetId } from "./host";
 
 const STANDUP = "!standup:dev.local";
@@ -7,7 +7,7 @@ const NEW = widgetId(LAB, NEW_WIDGET);
 
 const width = async (panel: import("@playwright/test").Locator) => (await panel.boundingBox())!.width;
 
-test("a new panel shows the picker: no recents, all rooms with search, then the room's widget tiles", async ({ host }) => {
+test("a new panel shows the picker: no recents, all rooms with search, then the room overview", async ({ host }) => {
   await host.populate("two-rooms", { sidePanel: null });
   await expect(host.panels).toHaveCount(0);
 
@@ -28,17 +28,20 @@ test("a new panel shows the picker: no recents, all rooms with search, then the 
 
   await rows.first().click();
   await expect(host.panels.first()).toHaveAttribute("data-room-id", STANDUP);
-  await expect(host.page.getByTitle("Standup · open the room overview")).toContainText("1 widget");
-  await expect(host.page.getByTitle("Standup · open the room overview")).toContainText("2 members");
-  await host.leaf("roomview/header");
-  const tiles = host.page.getByTestId("widget-tiles");
-  await expect(tiles.getByRole("heading", { name: "Widgets in Standup" })).toBeVisible();
-  await expect(host.page.getByRole("tab")).toHaveCount(0);
-  await host.leaf("roomview/tiles");
-
-  // "Once a widget is selected, it is rendered as the first tab."
-  await tiles.getByRole("button", { name: "Open Standup notes" }).click();
+  // The room opens on its room name tab, the only tab: the body is the room overview.
+  const roomTab = host.page.getByRole("tab", { name: "Standup", exact: true });
+  await expect(roomTab).toHaveAttribute("title", "Standup · open the room overview");
+  await expect(roomTab.getByTitle("1 widget")).toHaveText("1");
+  await expect(roomTab.getByTitle("2 members")).toHaveText("2");
+  await expect(roomTab).toHaveAttribute("aria-selected", "true");
   await expect(host.page.getByRole("tab")).toHaveCount(1);
+  await host.leaf("roomview/header");
+  const overview = host.page.getByTestId("room-overview");
+  await expect(overview.getByRole("heading", { name: "Standup", level: 1 })).toBeVisible();
+
+  // A widget opens as a tab after the room name.
+  await overview.getByRole("button", { name: "Open Standup notes" }).click();
+  await expect(host.page.getByRole("tab")).toHaveText([/Standup/, /Standup notes/]);
   await expect(host.tab(/Standup notes/)).toHaveAttribute("aria-selected", "true");
   expect(Object.keys((await host.main()).widgets)).toEqual([NOTES]);
 });
@@ -103,7 +106,7 @@ test("two panels with different rooms: the separator resizes them, double click 
 });
 
 test("Alt+Shift+N opens the same room in a second panel, where the running widget is grayed out; Alt+W closes it again", async ({ host }) => {
-  await host.populate("lab", { sidePanel: null, behavior: { autoApproveCapabilities: true }, open: [{ room: LAB, widgets: [NEW_WIDGET, LEGACY_WIDGET], overview: true, active: LEGACY_WIDGET }] });
+  await host.populate("lab", { sidePanel: null, behavior: { autoApproveCapabilities: true }, open: [{ room: LAB, widgets: [NEW_WIDGET, LEGACY_WIDGET], active: LEGACY_WIDGET }] });
   await expect(host.panels).toHaveCount(1);
   await expect(host.tab(/Legacy test widget/)).toHaveAttribute("aria-selected", "true");
   await host.ready(widgetId(LAB, LEGACY_WIDGET));
@@ -113,7 +116,10 @@ test("Alt+Shift+N opens the same room in a second panel, where the running widge
   await expect(host.panels).toHaveCount(2);
   await expect(host.panels.nth(1)).toHaveAttribute("data-room-id", LAB);
   await expect(host.panels.nth(1)).toHaveAttribute("data-focused", "true");
+  // It opens on the room overview, where both widgets are open in the other panel.
+  await expect(host.panels.nth(1).getByRole("tab", { name: "Widget lab" })).toHaveAttribute("aria-selected", "true");
   await expect(host.panels.nth(1).getByRole("button", { name: "Jump to the tab of New test widget" })).toBeVisible();
+  await expect(host.panels.nth(1).getByRole("button", { name: "Move Legacy test widget here" })).toBeVisible();
   // A widget runs once per account.
   expect(Object.keys((await host.main()).widgets)).toHaveLength(2);
 
@@ -125,7 +131,7 @@ test("Alt+Shift+N opens the same room in a second panel, where the running widge
   expect(Object.keys((await host.main()).widgets)).toHaveLength(2);
 });
 
-test("fullscreen: LeftBar collapsed and one widget tab hide the tab and the + until the header is hovered or focused", async ({ host }) => {
+test("fullscreen: LeftBar collapsed and one shown widget tab hide the tab and the + until the header is hovered or focused", async ({ host }) => {
   await host.populate("lab", { sidePanel: null, leftBarCollapsed: true, behavior: { autoApproveCapabilities: true }, open: [{ room: LAB, widgets: [NEW_WIDGET] }] });
   await host.ready(NEW);
   await host.page.mouse.move(640, 500);
@@ -135,23 +141,25 @@ test("fullscreen: LeftBar collapsed and one widget tab hide the tab and the + un
   await expect(host.panels.first()).toHaveCSS("border-top-left-radius", "0px");
   await expect(host.page.getByTitle("Widget lab · open the room overview")).toBeVisible();
   await expect(host.tab(/New test widget/)).toBeHidden();
-  await expect(host.button("New tab")).toBeHidden();
+  await expect(host.button("Open a widget")).toBeHidden();
   await host.leaf("app/fullscreen");
 
   await host.page.getByTitle("Widget lab · open the room overview").hover();
   await expect(host.tab(/New test widget/)).toBeVisible();
-  await expect(host.button("New tab")).toBeVisible();
+  await expect(host.button("Open a widget")).toBeVisible();
   await host.leaf("app/fullscreen-hover");
 
-  // Keyboard focus inside the header shows them as well.
+  // Keyboard focus inside the header shows them as well. The room name is the tab stop while the widget tab is hidden.
   await host.page.mouse.move(640, 500);
-  await expect(host.button("New tab")).toBeHidden();
+  await expect(host.button("Open a widget")).toBeHidden();
+  await expect(host.page.getByTitle("Widget lab · open the room overview")).toHaveAttribute("tabindex", "0");
   await host.page.getByTitle("Widget lab · open the room overview").focus();
-  await expect(host.button("New tab")).toBeVisible();
+  await expect(host.button("Open a widget")).toBeVisible();
 
-  // A second tab ends the fullscreen view.
-  await host.button("New tab").click();
+  // Selecting the room name (the + does that too) ends the fullscreen view.
+  await host.button("Open a widget").click();
   await expect(host.page.getByTestId("app")).not.toHaveClass(/fullscreen/);
+  await expect(host.tab("Widget lab")).toHaveAttribute("aria-selected", "true");
 });
 
 test("a narrow window shows only the focused panel, with a pager for the others", async ({ host }) => {

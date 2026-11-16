@@ -25,7 +25,8 @@
  *       ├─ sidePanel                   SidePanel: AccountView | Settings | DevBackendView
  *       ├─ devBackend?                 UI state of the DevBackendView
  *       ├─ workspaces[accountId]       WorkspaceLayout: persisted, one per account
- *       │  ├─ roomsArea                RoomsArea → RoomPanel → RoomPicker | RoomView → Tabs
+ *       │  ├─ roomsArea                RoomsArea → RoomPanel → RoomPicker | RoomView → room name
+ *       │  │                           (RoomOverview) + widget Tabs
  *       │  ├─ pip                      PictureInPicturePanel: stacking, position, box size
  *       │  └─ devTools[widgetId]       dock and panels of each widget's WidgetDevToolBar
  *       ├─ data                        what the active account knows: rooms, recents
@@ -174,7 +175,7 @@ export type VerificationViewModel =
   /** This device was verified; shown until "Done". leaf sidepanel/verify-done */
   | { step: "done" };
 
-/** What the session of the active account knows. Views derive room lists and widget tiles from it. */
+/** What the session of the active account knows. Views derive room lists and the widget lists of the RoomOverview from it. */
 export interface AccountDataViewModel {
   /** `LiveSession.rooms()`. The widgets of a room are its `widgetEvents`. */
   rooms: Loadable<RoomSummary[]>;
@@ -290,23 +291,30 @@ export interface RoomPickerViewModel {
   mode: "recents" | "allRooms";
 }
 
-/** A tabbed room. Two panels may show the same room (Alt+Shift+N). leaves roomview/*, tabs/*, roomview2/* */
+/**
+ * A tabbed room. Its first tab is the room name, which shows the RoomOverview; the others are
+ * `tabs`. Two panels may show the same room (Alt+Shift+N). leaves roomview/*, tabs/*, overview/*, roomview2/*
+ */
 export interface RoomViewModel {
   kind: "room";
-  /** The header (name, number of widgets and members) is read from `data.rooms`. */
+  /** The room name tab (name, number of widgets and members) is read from `data.rooms`. */
   roomId: RoomId;
-  /** In tab-bar order. Empty: the body shows the widget tiles (leaf roomview/tiles). */
+  /** The tabs after the room name, in tab-bar order. A new one goes at the end. */
   tabs: TabViewModel[];
+  /**
+   * The shown tab. `undefined`: the room name is selected and the body is the RoomOverview
+   * (leaves roomview/header, tabs/overview-active, overview/*). A room opens there, and returns
+   * there when its last tab is closed; closing another active tab shows its neighbour.
+   */
   activeTabId?: TabId;
 }
 
-export type TabViewModel =
-  /** Shows a widget. Label, icon, load state and pin marker come from the widget (`widgets`). */
-  | { kind: "widget"; id: TabId; widgetId: WidgetInstanceId }
-  /** A view of the host itself. More kinds (timeline, room dev tools) may follow. leaves overview/* */
-  | { kind: "native"; id: TabId; view: "roomOverview" }
-  /** Opened by the + button: the widget tiles. Picking one turns it into a widget tab. leaf roomview/new-tab */
-  | { kind: "new"; id: TabId };
+/**
+ * Shows a widget. Label, icon, load state and pin marker come from the widget (`widgets`). A
+ * union with one member, so that a view of the host (a timeline) can become a tab kind again.
+ * Stored layouts can hold the removed kinds "native" (the overview) and "new": they are dropped on load.
+ */
+export type TabViewModel = { kind: "widget"; id: TabId; widgetId: WidgetInstanceId };
 
 /**
  * The floating container of the always-on-screen widgets whose tab is not shown. Which widgets
@@ -419,9 +427,10 @@ export function widgetSlot(m: MainViewModel, id: WidgetInstanceId, narrow = fals
 }
 
 /**
- * "Collapsing the LeftBar while only one widget is open renders the widget fullscreen": no rounded
- * containers. The room header stays, without the tab and without the + button of the tab bar
- * (both appear while the header is hovered or focused). leaves app/fullscreen*
+ * "Collapsing the LeftBar while only one widget is open, and shown, renders the widget fullscreen":
+ * no rounded containers. The header keeps the room name, without the tab and without the + button
+ * of the tab bar (both appear while the header is hovered or focused). Selecting the room name
+ * ends it. leaves app/fullscreen*
  */
 export function fullscreenWidget(vm: AppViewModel): WidgetInstanceId | undefined {
   const m = mainOf(vm);
@@ -431,14 +440,17 @@ export function fullscreenWidget(vm: AppViewModel): WidgetInstanceId | undefined
   const only = panels.length === 1 ? panels[0].content : undefined;
   if (only?.kind !== "room" || only.tabs.length !== 1) return undefined;
   const tab = only.tabs[0];
-  return tab.kind === "widget" ? tab.widgetId : undefined;
+  return only.activeTabId === tab.id ? tab.widgetId : undefined;
 }
 
 /** Docked left or right: the bar is a vertical strip, the panels stack and the size is `size.side`. */
 export const sideDock = (dock: WidgetDevToolsLayout["dock"]): boolean => dock === "left" || dock === "right";
 
-/** Alt+W closes the active tab of a panel that has a widget tab, and else the panel itself. */
-export const hasWidgetTab = (panel: RoomPanelViewModel): boolean => panel.content.kind === "room" && panel.content.tabs.some((t) => t.kind === "widget");
+/**
+ * Alt+W closes the shown tab of a panel that has a tab, and else the panel itself. While the room
+ * name is selected in a panel with tabs it does nothing.
+ */
+export const hasWidgetTab = (panel: RoomPanelViewModel): boolean => panel.content.kind === "room" && panel.content.tabs.length > 0;
 
 // ---------------------------------------------------------------------------------------------
 // Intents: what a user can ask for. A controller turns an intent into model changes and effects
@@ -479,20 +491,19 @@ export type AppIntent =
   | { type: "sidePanel/resize"; width: number }
   // rooms area
   | { type: "panel/new"; sameRoomAs?: PanelId } // Alt+N / Alt+Shift+N
-  | { type: "panel/close"; panelId: PanelId } // its ×, and Alt+W in a panel without a widget tab; closes its tabs (see tab/close: always-on-screen widgets keep running in the PiP panel)
+  | { type: "panel/close"; panelId: PanelId } // its ×, and Alt+W in a panel without a tab; closes its tabs (see tab/close: always-on-screen widgets keep running in the PiP panel)
   | { type: "panel/focus"; panelId: PanelId }
   | { type: "panel/resize"; panelId: PanelId; widthShare: number }
   | { type: "picker/setMode"; panelId: PanelId; mode: RoomPickerViewModel["mode"] }
-  | { type: "panel/openRoom"; panelId: PanelId; roomId: RoomId; widgetKey?: WidgetKey }
+  | { type: "panel/openRoom"; panelId: PanelId; roomId: RoomId; widgetKey?: WidgetKey } // without a widget: the room opens on its RoomOverview
   | { type: "picker/reloadRooms" } // "Try again" of the room picker's error state (`data.rooms.status === "error"`, leaf panel/error): asks the session for the rooms again
   // tabs
-  | { type: "tab/new"; panelId: PanelId }
-  | { type: "tab/openWidget"; panelId: PanelId; tabId?: TabId; widgetKey: WidgetKey } // already running: jumps to its tab
-  | { type: "tab/moveWidgetHere"; panelId: PanelId; tabId?: TabId; widgetId: WidgetInstanceId } // "move widget here": closes its tab in the other room panel and opens it in this one; the widget keeps running
-  | { type: "tab/openRoomOverview"; panelId: PanelId } // or switch to it if it is open
+  | { type: "tab/showOverview"; panelId: PanelId } // the room name tab and the + button of the tab bar: selects the room name, the body shows the RoomOverview; the tab left behind may enter the PiP panel
+  | { type: "tab/openWidget"; panelId: PanelId; widgetKey: WidgetKey } // a widget of the RoomOverview: a new tab at the end; already running: jumps to its tab
+  | { type: "tab/moveWidgetHere"; panelId: PanelId; widgetId: WidgetInstanceId } // "move widget here" of the RoomOverview: closes its tab in the other room panel and opens it in this one; the widget keeps running
   | { type: "tab/activate"; panelId: PanelId; tabId: TabId } // the tab of an always-on-screen widget: takes it out of the PiP panel; the tab left behind may enter it
   | { type: "tab/move"; panelId: PanelId; tabId: TabId; toIndex: number }
-  | { type: "tab/close"; panelId: PanelId; tabId: TabId } // Alt+W in a panel with a widget tab; stops the widget, unless it is always on screen: then it keeps running in the PiP panel (assumption, see designFeedback.md)
+  | { type: "tab/close"; panelId: PanelId; tabId: TabId } // Alt+W while a tab is shown; stops the widget, unless it is always on screen: then it keeps running in the PiP panel (assumption, see designFeedback.md). The last one returns the room view to its RoomOverview
   // widgets
   | { type: "widget/reload"; widgetId: WidgetInstanceId } // "Retry" of a failed widget and the reload button of its dev tool bar: stops it and starts it again (new iframe and driver, the current URL of its state event); its dev tools data starts empty
   | { type: "widget/answerCapabilities"; widgetId: WidgetInstanceId; approved: string[] }
@@ -513,7 +524,7 @@ export type AppIntent =
   | { type: "pip/move"; position: PipViewModel["position"] }
   | { type: "pip/resize"; boxSize: PipViewModel["boxSize"] }
   | { type: "pip/setStacking"; stacking: PipViewModel["stacking"] }
-  // room overview and DevBackendView
+  // RoomOverview and DevBackendView
   | { type: "room/copyToDevBackend"; roomId: RoomId; lastEvents: number }
   | { type: "mock/selectRoom"; roomId: RoomId }
   | { type: "mock/addRoom" }

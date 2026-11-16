@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 
 import type { MainViewModel, RoomPanelViewModel, WidgetInstanceViewModel } from "../../appViewModel";
-import { devToolsLayout, mainVm, newTab, overviewTab, roomPanel, widgetTab, widgetVm, workspace } from "../fixtures";
+import { devToolsLayout, mainVm, roomPanel, widgetTab, widgetVm, workspace } from "../fixtures";
 import { DEV_SETTINGS, HeadOnly, SETTINGS, SoloPanel } from "./storyFrame";
 import { TabBar } from "./TabBar";
 
@@ -16,18 +16,18 @@ const vm = (panel: RoomPanelViewModel, widgets: WidgetInstanceViewModel[], devTo
     widgets: Object.fromEntries(widgets.map((w) => [w.id, w])),
   });
 
-// leaf tabs/widget-active: WidgetTab active, WidgetTab and NativeTab inactive
-const plain = roomPanel("design", [widgetTab("design", "call"), widgetTab("design", "board"), overviewTab("design")]);
+// leaf tabs/widget-active: WidgetTab active, the other WidgetTab and the room name inactive
+const plain = roomPanel("design", [widgetTab("design", "call"), widgetTab("design", "board")]);
 export const WidgetActive: Story = { render: () => <HeadOnly main={vm(plain, [widgetVm("design", "call"), widgetVm("design", "board")])} panel={plain} /> };
 
-// leaf tabs/native-active: NativeTab active; dev tools enabled, the whiteboard's dev tools are open
-const native = roomPanel("design", [widgetTab("design", "call"), widgetTab("design", "board"), overviewTab("design")], overviewTab("design").id);
-export const NativeActive: Story = {
-  render: () => <HeadOnly main={vm(native, [widgetVm("design", "call"), widgetVm("design", "board")], [widgetVm("design", "board").id])} panel={native} settings={DEV_SETTINGS} />,
+// leaf tabs/overview-active: the room name selected; dev tools enabled, the whiteboard's dev tools are open
+const overview = roomPanel("design", [widgetTab("design", "call"), widgetTab("design", "board")], null);
+export const OverviewActive: Story = {
+  render: () => <HeadOnly main={vm(overview, [widgetVm("design", "call"), widgetVm("design", "board")], [widgetVm("design", "board").id])} panel={overview} settings={DEV_SETTINGS} />,
 };
 
 // leaf tabs/pinned: two always-on-screen widgets (pin icon), one of them active
-const pinned = roomPanel("design", [widgetTab("design", "call"), widgetTab("design", "board"), widgetTab("design", "poll"), overviewTab("design")]);
+const pinned = roomPanel("design", [widgetTab("design", "call"), widgetTab("design", "board"), widgetTab("design", "poll")]);
 export const Pinned: Story = {
   render: () => (
     <HeadOnly
@@ -37,16 +37,13 @@ export const Pinned: Story = {
   ),
 };
 
-// leaf tabs/overflow: more tabs than fit; the bar scrolls and the "all tabs" button opens the menu
-const many = roomPanel(
-  "design",
-  [widgetTab("design", "call"), widgetTab("design", "board"), widgetTab("design", "poll"), widgetTab("design", "notes"), overviewTab("design"), widgetTab("design", "timer"), newTab("design")],
-  widgetTab("design", "poll").id,
-);
+// leaf tabs/overflow: more tabs than fit; the widget tabs scroll and the "all tabs" button opens the menu
+const MANY = ["call", "board", "poll", "notes", "timer", "retro", "stream"] as const;
+const many = roomPanel("design", MANY.map((w) => widgetTab("design", w)), widgetTab("design", "poll").id);
 export const Overflow: Story = {
   render: () => (
     <SoloPanel
-      main={vm(many, [widgetVm("design", "call", { alwaysOnScreen: true }), widgetVm("design", "board"), widgetVm("design", "poll"), widgetVm("design", "notes"), widgetVm("design", "timer")])}
+      main={vm(many, MANY.map((w) => widgetVm("design", w, { alwaysOnScreen: w === "call" })))}
       panel={many}
       settings={SETTINGS}
     />

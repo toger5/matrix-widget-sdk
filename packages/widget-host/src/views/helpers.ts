@@ -8,7 +8,7 @@ export const wrapperUrl = () =>
   new URLSearchParams(globalThis.location?.search ?? "").get("wrapper") ??
   new URL(`${import.meta.env.BASE_URL}widget_compatibility_wrapper/`, globalThis.location?.origin ?? "http://localhost").href;
 
-/** A widget of a room as the tiles show it. `problem`: the state event cannot be embedded (the tile is disabled). */
+/** A widget of a room as the RoomOverview lists it. `problem`: the state event cannot be embedded (the row is disabled). */
 export interface RoomWidget {
   key: WidgetKey;
   name: string;

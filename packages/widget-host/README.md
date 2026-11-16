@@ -67,9 +67,9 @@ hands it to the driver of each widget of that room like any other `MatrixBackend
     The wrapper resolves `$matrix_user_id` & co. itself through the `get_matrix_context` /
     `get_client_context` actions; this host has no template engine.
   - A `content.url` (or `wrapper=` URL) that is not an absolute `http:` / `https:` URL is not
-    embedded: the widget is a disabled tile with the reason. A legacy URL is checked untemplated,
+    embedded: the widget is listed disabled in the room overview, with the reason. A legacy URL is checked untemplated,
     so one that starts with a `$variable` is refused.
-  Send the event as state in the DevBackendView and the widget appears in the room's tiles (the
+  Send the event as state in the DevBackendView and the widget appears in the room overview (the
   URL parameters below start with the two test widgets). This is the logic a real client
   needs during the transition, in `src/widgetStateEvent.ts`, and the logged-in mode uses the same.
 - **Drives the protocol**: every message from the widget iframe goes into the driver, every

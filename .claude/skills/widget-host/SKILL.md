@@ -150,9 +150,13 @@ their tests) is the `matrix-session` skill (`.claude/skills/matrix-session/SKILL
   settings field by field: an unlisted field is lost on reload) → `src/views/sidepanel/SettingsView.tsx`
   and its story → the views that depend on it get it as a prop. `settings/set` and
   `HostSeed.settings` need no change.
-- **A persisted layout field** (`WorkspaceLayout` and what it contains, `PersistedUi`): stored
-  layouts (`localStorage` key `widget_host_ui_v1`) are not validated and predate the field, so make
-  it optional or default it where it is read.
+- **A persisted layout field** (`WorkspaceLayout` and what it contains): stored layouts
+  (`localStorage` key `widget_host_ui_v1`) predate the field. `loadPersisted` passes each through
+  `upgradeWorkspace` (`src/app/layout.ts`), which rebuilds it field by field: read the new field
+  there, with a default for older layouts, and add a case to `test/layout.test.ts`; a field it does
+  not read is lost on reload. A removed kind (the old `native` and `new` tabs) is dropped there.
+  The other fields of `PersistedUi` are not validated: make them optional or default them where
+  they are read.
 - **A DevBackend feature**: a method of `DevBackend` (a Rust change to `InMemoryBackend` only via
   `widget-api-change`) → its data in `MockedRoomData` (bottom of `appViewModel.ts`), `snapshot()`,
   `EMPTY_MOCKED_ROOM_DATA` (`src/views/env.tsx`) and `MOCKED_ROOM_DATA` (fixtures) → a `mock/*` or

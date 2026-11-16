@@ -63,7 +63,8 @@ Only if the structure changes:
 Keep the view model serialisable and free of runtime objects. High-frequency data goes into the
 data shapes at the bottom (`WidgetDevToolsData`, `MockedRoomData`), read through a `ViewEnv` hook;
 view-only state stays in the component. New fields of persisted types (`SettingsViewModel`,
-`WorkspaceLayout` and what it contains) are optional or defaulted (see the skill).
+`WorkspaceLayout` and what it contains) are optional or defaulted, and read in `loadPersisted` /
+`upgradeWorkspace` (see the skill).
 
 Run `npx tsc --noEmit`. The errors are the work list of step 4; do not fix them here.
 

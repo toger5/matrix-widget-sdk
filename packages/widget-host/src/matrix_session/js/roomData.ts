@@ -3,7 +3,7 @@ import { type MatrixClient, type MatrixEvent, type Room } from "matrix-js-sdk";
 import type { AccountInfo, RawEvent, RoomDetails, RoomExport, RoomMember } from "../../session";
 
 /**
- * What the AccountView, the RoomOverviewTab and "Copy to DevBackend" read from a matrix-js-sdk
+ * What the AccountView, the RoomOverview and "Copy to DevBackend" read from a matrix-js-sdk
  * client. Functions of the client, apart from the session, so they can be tested with a faked one.
  * Everything a request fails for (the session may be suspended or offline) falls back to what the
  * client has locally.

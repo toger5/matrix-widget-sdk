@@ -71,9 +71,9 @@ describe("resolveWidget", () => {
 });
 
 describe("roomWidgets", () => {
-  it("shows a refused widget as a tile with the problem and nothing to run", () => {
-    const [tile] = roomWidgets({ widgetEvents: [legacyWidget("javascript:top.__pwned=1//")] });
-    expect(tile).toMatchObject({ key: "im.vector.modular.widgets/w", name: "W", problem: "javascript: URLs are not allowed, only http: and https:" });
-    expect(tile.widget).toBeUndefined();
+  it("lists a refused widget with the problem (disabled in the room overview) and nothing to run", () => {
+    const [refused] = roomWidgets({ widgetEvents: [legacyWidget("javascript:top.__pwned=1//")] });
+    expect(refused).toMatchObject({ key: "im.vector.modular.widgets/w", name: "W", problem: "javascript: URLs are not allowed, only http: and https:" });
+    expect(refused.widget).toBeUndefined();
   });
 });

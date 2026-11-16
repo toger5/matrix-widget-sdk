@@ -28,7 +28,7 @@ function freeWidgetId(state: MockedStateEvent[]): string {
   return `widget-${n}`;
 }
 
-/** The forms check the URL as the host does before it embeds a widget (the Raw JSON form does not, so the disabled tile can be tried). */
+/** The forms check the URL as the host does before it embeds a widget (the Raw JSON form does not, so a widget that the room overview lists disabled can be tried). */
 const isHttpUrl = (url: string) => !widgetUrlProblem(url);
 
 /** The `intent` URL parameter of Element Call (`UserIntent`, `src/UrlConfiguration.ts`): it picks the defaults of everything else (lobby, header, ringing). */

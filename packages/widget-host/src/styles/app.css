@@ -352,8 +352,11 @@ mark { background: var(--highlight-soft); color: var(--highlight); border-radius
 .rp-head { height: 44px; flex: none; display: flex; align-items: center; gap: 4px; padding: 0 8px 0 6px; border-bottom: 1px solid var(--border); }
 .rp-body { flex: 1; min-height: 0; position: relative; display: flex; flex-direction: column; }
 .rp-div { width: 1px; height: 20px; flex: none; background: var(--border); margin: 0 4px; }
-.room-chip { height: 32px; flex: 0 0 auto; max-width: 46%; min-width: 0; display: flex; align-items: center; gap: 8px; padding: 0 8px 0 4px; border-radius: var(--r-3); }
+.rp-tabs { display: contents; }
+/* The room name is the first tab: plain header text, and like the active tab while it is selected. */
+.room-chip { height: 32px; flex: 0 0 auto; max-width: 46%; min-width: 0; display: flex; align-items: center; gap: 8px; padding: 0 8px 0 4px; border-radius: var(--r-3); border: 1px solid transparent; }
 .room-chip:hover { background: var(--surface-2); }
+.room-chip.active { background: var(--surface-3); border-color: var(--border-strong); }
 .room-name { font-weight: 600; font-size: 13.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .room-counts { display: inline-flex; gap: 8px; color: var(--text-muted); font-size: 11.5px; flex: none; }
 .room-counts span { display: inline-flex; gap: 3px; align-items: center; }
@@ -366,8 +369,6 @@ mark { background: var(--highlight-soft); color: var(--highlight); border-radius
 .tab-main { flex: 1; min-width: 0; height: 100%; display: flex; align-items: center; gap: 6px; }
 .tab-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; min-width: 0; }
 .tab.active { background: var(--surface-3); border-color: var(--border-strong); color: var(--text); padding-right: 2px; }
-.tab.native .tab-label, .tab.new .tab-label { font-weight: 400; }
-.tab.native.active .tab-label, .tab.native.active .tab-glyph { opacity: 0.8; }
 .tab-pin { display: inline-grid; flex: none; color: var(--text); }
 .tab-btn { width: 24px; height: 24px; flex: none; display: grid; place-items: center; border-radius: 4px; color: var(--text-muted); }
 .tab-btn:hover { background: var(--surface-3); color: var(--text); }
@@ -378,7 +379,7 @@ mark { background: var(--highlight-soft); color: var(--highlight); border-radius
 .picker { flex: 1; overflow: hidden; display: flex; justify-content: center; padding: 40px 24px; }
 .picker-in { width: 100%; max-width: 520px; display: flex; flex-direction: column; gap: 14px; }
 .picker-top { display: flex; align-items: center; justify-content: space-between; }
-.picker h2, .tiles-wrap h2 { font-size: 17px; font-weight: 600; }
+.picker h2 { font-size: 17px; font-weight: 600; }
 .switch-row { display: inline-flex; align-items: center; gap: 8px; color: var(--text-muted); }
 .picker .input.search { min-height: 36px; }
 .rows { display: grid; gap: 4px; }
@@ -392,20 +393,6 @@ mark { background: var(--highlight-soft); color: var(--highlight); border-radius
 .row-meta { color: var(--text-muted); font-size: 12px; display: inline-flex; align-items: center; gap: 4px; flex: none; }
 .row .end { color: var(--text-faint); }
 
-.tiles-wrap { flex: 1; display: grid; place-content: center; justify-items: center; gap: 6px; padding: 24px; text-align: center; }
-.tiles-wrap p { color: var(--text-muted); margin-bottom: 14px; }
-.tiles { display: flex; flex-wrap: wrap; justify-content: center; gap: 12px; max-width: 680px; }
-.tile { position: relative; width: 156px; height: 164px; border-radius: var(--r-4); border: 1px solid var(--border); background: var(--surface-2); }
-.tile-in { height: 100%; display: grid; place-content: center; justify-items: center; gap: 4px; }
-.tile-in .av { margin-bottom: 8px; }
-.tile b { font-weight: 600; }
-.tile small { color: var(--text-muted); font-size: 11.5px; }
-.tile.opened { background: none; border-style: dashed; border-color: var(--border-strong); }
-.tile.opened .tile-in { height: auto; padding-top: 14px; gap: 2px; color: var(--text-muted); }
-.tile.opened .tile-in .av { opacity: 0.4; filter: grayscale(1); margin-bottom: 4px; }
-.tile-acts { position: absolute; left: 10px; right: 10px; bottom: 10px; display: grid; gap: 4px; }
-button.tile { display: block; text-align: center; }
-
 .ov { flex: 1; overflow: hidden; display: flex; justify-content: center; padding: 28px 24px; }
 .ov-in { width: 100%; max-width: 720px; display: flex; flex-direction: column; gap: 18px; }
 .ov-hero { display: flex; gap: 18px; align-items: center; }
@@ -417,6 +404,10 @@ button.tile { display: block; text-align: center; }
 .card h3 { display: flex; align-items: center; gap: 7px; font-size: 12px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--text-muted); }
 .card h3 em { font-style: normal; font-weight: 400; }
 .ov-members { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 16px; }
+/* A widget that already has a tab: grayed out, with "jump to tab" (and "move widget here"). */
+.row.opened .av { opacity: 0.4; filter: grayscale(1); }
+.row.opened .row-main b { color: var(--text-muted); }
+.row-acts { display: flex; gap: 6px; flex: none; }
 .member { display: flex; align-items: center; gap: 10px; min-width: 0; }
 .card.devcard { border: 1px dashed var(--dev); background: var(--dev-soft); }
 .card.devcard h3 { color: var(--dev); }
@@ -897,8 +888,7 @@ button.tile { display: block; text-align: center; }
 .rp-sep:focus-visible { outline-offset: -1px; }
 
 /* Bodies scroll when the real content does not fit (the mockups only clip). */
-.rp-body > .ov, .rp-body > .picker, .rp-body > .tiles-wrap { overflow-y: auto; }
-.rp-body > .tiles-wrap { min-height: 0; }
+.rp-body > .ov, .rp-body > .picker { overflow-y: auto; }
 
 /* Tabs: ⋯ and × of an inactive tab lie over the end of its label and appear on hover and keyboard focus. */
 .tab:not(.active) .tab-btn:not(.on) { position: absolute; top: 2px; right: 3px; background: var(--surface-2); opacity: 0; pointer-events: none; box-shadow: -6px 0 5px var(--surface-2); }
@@ -929,15 +919,9 @@ button.tile { display: block; text-align: center; }
 .picker .input.search input::-webkit-search-cancel-button { display: none; }
 .picker .input.search input::placeholder { color: var(--text-faint); }
 .picker .input.search:focus-within { outline: 2px solid var(--focus); outline-offset: 2px; }
-.rtile:hover, .row:hover, button.tile:not(.problem):hover { border-color: var(--border-strong); }
+.rtile:hover, button.row:not([aria-disabled="true"]):hover { border-color: var(--border-strong); }
 /* without a filter no row is "the first match" */
 .rows:not(.filtered) > .row:first-child:not(:hover) { background: none; border-color: transparent; }
-
-/* Widget tiles: a widget whose state event cannot be embedded. */
-.tile.problem { background: none; border-style: dashed; border-color: var(--border-strong); cursor: not-allowed; }
-.tile.problem .tile-in { padding: 0 10px; color: var(--text-muted); }
-.tile.problem .tile-in .av { opacity: 0.4; filter: grayscale(1); }
-.tile.problem small { color: var(--danger); display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; line-clamp: 3; overflow: hidden; }
 
 /* Room overview: the number input of "last events", rows that cannot be opened. */
 .devcard input.input { font: inherit; color: inherit; font-family: var(--font-mono); font-size: 11.5px; }

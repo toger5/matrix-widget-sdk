@@ -10,6 +10,7 @@ import {
   type MainViewModel,
   type MockedRoomData,
   type RoomPanelViewModel,
+  type TabId,
   type TabViewModel,
   type VerificationViewModel,
   type WidgetDevToolsData,
@@ -32,6 +33,8 @@ export const WIDGET_EVENTS = {
   poll: widgetEvent("poll", "Standup poll", "polls.example.org"),
   notes: widgetEvent("notes", "Meeting notes", "pad.example.org"),
   timer: widgetEvent("timer", "Timer", "timer.example.org"),
+  retro: widgetEvent("retro", "Retro board", "retro.example.org"),
+  stream: widgetEvent("stream", "Livestream", "stream.example.org"),
 };
 /** `widgetKey()` of a fixture widget. */
 export const wk = (key: keyof typeof WIDGET_EVENTS) => `m.widget/${key}`;
@@ -105,11 +108,9 @@ export function widgetVm(room: RoomKey, widget: WidgetName, o: Partial<WidgetIns
 }
 
 export const widgetTab = (room: RoomKey, widget: WidgetName): TabViewModel => ({ kind: "widget", id: `tab-${room}-${widget}`, widgetId: widgetInstanceId(ROOMS[room].id, wk(widget)) });
-export const overviewTab = (room: RoomKey): TabViewModel => ({ kind: "native", id: `tab-${room}-overview`, view: "roomOverview" });
-export const newTab = (room: RoomKey): TabViewModel => ({ kind: "new", id: `tab-${room}-new` });
-
-export function roomPanel(room: RoomKey, tabs: TabViewModel[], activeTabId = tabs[0]?.id, id = `panel-${room}`): RoomPanelViewModel {
-  return { id, widthShare: 1, content: { kind: "room", roomId: ROOMS[room].id, tabs, activeTabId } };
+/** A room panel showing the tab `activeTabId` (default: the first tab); `null`: the room name is selected, the body is the RoomOverview. */
+export function roomPanel(room: RoomKey, tabs: TabViewModel[], activeTabId: TabId | null = tabs[0]?.id ?? null, id = `panel-${room}`): RoomPanelViewModel {
+  return { id, widthShare: 1, content: { kind: "room", roomId: ROOMS[room].id, tabs, activeTabId: activeTabId ?? undefined } };
 }
 export const pickerPanel = (mode: "recents" | "allRooms" = "recents", id = "panel-picker"): RoomPanelViewModel => ({ id, widthShare: 1, content: { kind: "picker", mode } });
 
@@ -138,7 +139,7 @@ export function mainVm(o: Partial<MainViewModel> = {}): MainViewModel {
     activeAccountId: "ada",
     leftBar: { collapsed: false, expandButtonVisible: false },
     sidePanel: { width: 324 },
-    workspaces: { ada: workspace([roomPanel("design", [widgetTab("design", "call"), widgetTab("design", "board"), overviewTab("design")])]) },
+    workspaces: { ada: workspace([roomPanel("design", [widgetTab("design", "call"), widgetTab("design", "board")])]) },
     data: {
       rooms: { status: "ready", value: [ROOMS.design, ROOMS.platform, ROOMS.family, ROOMS.rtc] },
       recents: [

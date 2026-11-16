@@ -24,7 +24,7 @@ export interface ViewEnv {
   useDevToolsData: (widgetId: WidgetInstanceId) => WidgetDevToolsData;
   /** Hook: the content of the DevBackend, with `state` / `timeline` / `scheduled` of the selected mocked room. */
   useMockedRoomData: () => MockedRoomData;
-  /** Hook: what the RoomOverviewTab shows beyond the `RoomSummary` (topic, members, encryption). */
+  /** Hook: what the RoomOverview shows beyond the `RoomSummary` (topic, members, encryption). */
   useRoomDetails: (roomId: RoomId) => Loadable<RoomDetails>;
   /** Resolve an `mxc://` avatar to a URL an `<img>` can show (`LiveSession.avatar`). */
   avatar: (mxcUrl: string) => Promise<string | undefined>;

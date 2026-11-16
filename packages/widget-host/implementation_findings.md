@@ -14,7 +14,6 @@ grep -rn "TODO-FINDING <name>" src     # one finding
 
 Not decisions, but statements in the documents that turned out wrong or outdated. The documents were not edited.
 
-- appDesign.md, "Widgets are iframes": "a shadow DOM does not prevent that". True for moving the iframe, but a shadow DOM **slot** does prevent the reload: the iframe stays where it is in the DOM and is displayed where its slot is. Measured in Chromium, Firefox and WebKit; this is how the app is built (implementationPlan.md, section 2). The "one persistent layer" of that paragraph is the fallback.
 - appDesign.md "LeftBar" (DevBackend button), designFeedback.md "Decided" (Leaving the DevBackend) and the leaves `leftbar/devbackend-hover`, `app/devbackend`: superseded by the last-minute note in appDesign.md "DevBackend" (the button does not leave). See `leftbar-devbackend-tooltip-outdated`.
 - `src/appViewModel.ts` was changed for those notes: `devBackend/toggle` no longer leaves, `devBackend/leave` and `canLeaveDevBackend` are new, `widget/close` asks for confirmation, `WidgetInstanceViewModel.generation` is new, and the views added `picker/reloadRooms` and `devTools/copyMessage`.
 
@@ -85,7 +84,7 @@ The DevBackend runtime (`src/matrix_session/memory/devBackend.ts`):
 | `tab-arrow-keys-manual-activation` | `src/views/rooms/TabBar.tsx` | appDesign.md: "arrow keys switch". Switching a tab can move an always-on-screen widget into the PiP panel | (a) arrows activate (b) arrows move focus, Enter/Space activates | (b) |
 | `inactive-tab-buttons-overlay` | `TabBar.tsx` | ⋯ and × of an inactive tab appear on hover | (a) overlay the end of the label (b) take space (the tabs shift) (c) only on the active tab | (a). With five or more tabs the tabs are so narrow that a press in the middle of an inactive tab hits ⋯ and opens the dev tools instead of activating the tab |
 | `overview-show-all-members` | `src/views/rooms/RoomOverview.tsx` | The mockup has a "Show all 12 members" link; there is no data and no intent for the full list | add an intent and a member list view / drop the link | A text line with the count |
-| `tile-widget-without-tab` | `src/views/rooms/WidgetTiles.tsx` | A widget that runs without a tab (always on screen, its panel was closed) in the tiles | treat as "open in another panel" / own state | Both buttons, labelled "running without a tab" |
+| `tile-widget-without-tab` | `src/views/rooms/RoomOverview.tsx` | A widget that runs without a tab (always on screen, its panel was closed) in the widget list of the RoomOverview | treat as "open in another panel" / own state | Both buttons, labelled "running without a tab" |
 | `panel-resize-intent-semantics` | `src/views/rooms/RoomsArea.tsx` | `panel/resize` carries one share | one share, the right neighbour gets the rest / an intent with both shares | One share (`resizePanel` in `src/app/layout.ts` gives the rest to the right neighbour). The double-click reset sends two intents, which is only exact for two panels |
 | `seed-dev-tools-off-in-devbackend` | `src/app/controller.ts` (`populate`) | A seed with `settings: { devTools: false }` is honoured although the settings toggle cannot turn dev tools off while the DevBackend is active. Then there is no fence, badge or DevBackend button | force dev tools on in `populate` / keep it as the tests' way to the "dev tools disabled" views | Kept; `overview/plain` and a tabs test rely on it |
 | `widget-api-without-uses-widget-api` | `src/app/runtime/widgetRuntime.ts` | A widget with `uses_widget_api: false` that still speaks the widget API gets answers, including the capability prompt | ignore its messages / answer | Answered |
@@ -112,7 +111,7 @@ Login, sync, suspend/resume, device verification and the storage migration of bo
 | `suspend-in-flight-requests` | `src/matrix_session/js/fetchGate.ts` | What happens to requests that are running when the DevBackend is activated | (a) abort all (b) abort only `/sync` (c) hold until resume | New requests are refused, `/sync` is aborted, sends in flight finish. `stopClient()` is not used because it shuts crypto down for good |
 | `rust-suspend-explicit-requests` | `src/matrix_session/rust/session.ts` | Suspending the rust session stops sync and the send queues, but a backend can still make a request for a widget | (a) the controller detaches the backends (it already stops all widgets) (b) a gate in `RustSdkBackend` | Neither. `Client::pause()` is avoided because it closes the stores |
 | `rust-export-state` | `src/matrix_session/rust/roomData.ts` | "Copy to DevBackend" needs all state; the bindings read state by type only | (a) a direct `/state` request with the access token (no token refresh) (b) a fixed type list (c) a new `Room::state_raw` in the SDK patches | (a), falling back to (b), which is incomplete |
-| `room-details-member-loading` | `js/roomData.ts`, `rust/roomData.ts` | Load all members for the RoomOverviewTab? | always / never / up to a size | Loaded up to 500 joined members, else what is local |
+| `room-details-member-loading` | `js/roomData.ts`, `rust/roomData.ts` | Load all members for the RoomOverview? | always / never / up to a size | Loaded up to 500 joined members, else what is local |
 | `export-decrypted-events` | `js/roomData.ts` | A copied room holds decrypted events or the events as sent | either | Decrypted |
 | `concurrent-sessions` | both `session.ts` | Several accounts run at once, one client each; unverified with real SDK stores | restore all / only the active one | All are restored and kept syncing (suspended while the DevBackend is active) |
 | `rust-resume-room-subscription` | `rust/session.ts` | Whether a room's full-state subscription survives stop/start of the sync service | verify on a homeserver | It is requested again on resume |
@@ -159,12 +158,12 @@ Login, sync, suspend/resume, device verification and the storage migration of bo
 - A JS `TurnServerSink` cannot be passed to `subscribeTurnServers` of the in-memory backend ("Cannot lower this object to a pointer").
 - The DevBackend's defaults changed from the old in-memory mode: user `@alice:dev.local`, device `DEVBACKEND`, base URL `https://matrix.dev.local`. The URL parameters of the README still give `!room:example.org` and `@alice:example.org`.
 - `tab-overflow-threshold`: tabs shrink to 88px before the bar scrolls and shows "All tabs"; `all-tabs-button-name`: that button's name contains the tab count.
+- In fullscreen the room name is the tab stop of the tab list (not the shown widget tab, which is hidden until the header has the focus).
 - `tab-reorder-not-implemented`: `tab/move` exists but no view lets you drag a tab.
 - `widget-avatar-initials`: a widget has no avatar source, so its icon is its initials.
 - `room-view-without-room`, `picker-loading-all-rooms`, `overview-encryption-unknown`: texts for states the mockups do not have.
 - `panel-focus-from-widget`: a press inside a widget iframe does not reach the host; the app root focuses the widget's panel when the iframe takes the focus (`src/app/AppRoot.tsx`).
-- The room header's accessible name is its content ("Widget lab 2 widgets 3 members"); its purpose (opens the room overview) is only in the `title`.
-- A recent tile for a widget that already runs jumps to its tab and leaves the new panel as an empty room view.
+- A recent tile for a widget that already runs jumps to its tab and leaves the new panel showing the room overview.
 - Alt+N inserts the new panel to the right of the focused panel, not at the far right (appDesign.md: "a new panel on the right").
 - The DevBackendView's timeline list and its count include state events (the lab seed shows "12 events" for 3 messages).
 - `populate` does not reset view-local drafts (send forms, filters, the delayed toggle).

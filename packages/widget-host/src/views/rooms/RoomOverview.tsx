@@ -1,8 +1,8 @@
 import { useState } from "react";
 
-import { activeAccount, type MainViewModel, type PanelId, type RoomId } from "../../appViewModel";
+import { activeAccount, widgetInstanceId, widgetTab, type MainViewModel, type PanelId, type RoomId } from "../../appViewModel";
 import { useDispatch, useViewEnv } from "../env";
-import { roomOf, roomWidgets } from "../helpers";
+import { roomOf, roomWidgets, type RoomWidget } from "../helpers";
 import { Avatar, Button, Icon, initials } from "../ui/atoms";
 import { hostOf } from "./tabInfo";
 
@@ -16,18 +16,25 @@ export interface RoomOverviewProps {
 
 const DEFAULT_LAST_EVENTS = 50;
 
-/** The RoomOverviewTab. leaves overview/plain, overview/devtools. Topic, members and encryption come from `useViewEnv().useRoomDetails(roomId)`. */
+/**
+ * What the room name tab shows, and where a room opens. leaves overview/plain, overview/devtools,
+ * roomview2/same. The widget list comes first: a widget opens as a new tab; one that is already
+ * open (a widget runs once per account) is grayed out and offers "jump to tab", and "move widget
+ * here" when its tab is in another panel. Then encryption, members and, with dev tools enabled,
+ * the dev card. Topic, members and encryption come from `useViewEnv().useRoomDetails(roomId)`.
+ */
 export function RoomOverview({ main, panelId, roomId, devTools }: RoomOverviewProps) {
   const dispatch = useDispatch();
   const details = useViewEnv().useRoomDetails(roomId);
   const [lastEvents, setLastEvents] = useState(String(DEFAULT_LAST_EVENTS));
 
   const room = roomOf(main, roomId);
-  const name = room?.name ?? roomId;
+  if (!room) return <RoomUnavailable main={main} roomId={roomId} />;
+  const name = room.name;
   const widgets = roomWidgets(room);
   const info = details.status === "ready" ? details.value : undefined;
   const members = info?.members ?? [];
-  const memberCount = info?.memberCount ?? room?.memberCount;
+  const memberCount = info?.memberCount ?? room.memberCount;
   const account = activeAccount(main);
   // A DevBackend room is already in the DevBackend.
   const copyCard = devTools && account?.kind !== "devBackend";
@@ -49,7 +56,7 @@ export function RoomOverview({ main, panelId, roomId, devTools }: RoomOverviewPr
     <div className="ov" data-testid="room-overview" data-room-id={roomId}>
       <div className="ov-in">
         <header className="ov-hero">
-          <Avatar name={name} id={roomId} size={72} square mxc={room?.avatarUrl} />
+          <Avatar name={name} id={roomId} size={72} square mxc={room.avatarUrl} />
           <div>
             <h1>{name}</h1>
             <span className="mono muted">{roomId}</span>
@@ -59,7 +66,20 @@ export function RoomOverview({ main, panelId, roomId, devTools }: RoomOverviewPr
           </div>
         </header>
         <div className="ov-grid">
-          <section className="card">
+          <section className="card span">
+            <h3>
+              <Icon name="grid" size={15} />
+              Widgets {room.widgetEvents !== undefined && <em>{widgets.length}</em>}
+            </h3>
+            <div className="ov-widgets">
+              {widgets.map((w) => (
+                <WidgetRow key={w.key} main={main} panelId={panelId} roomId={roomId} widget={w} />
+              ))}
+              {room.widgetEvents === undefined && loading("the widgets")}
+              {room.widgetEvents !== undefined && widgets.length === 0 && <p className="muted">This room has no widgets.</p>}
+            </div>
+          </section>
+          <section className="card span">
             <h3>
               <Icon name="shield" size={15} />
               Encryption
@@ -86,34 +106,6 @@ export function RoomOverview({ main, panelId, roomId, devTools }: RoomOverviewPr
             )}
             {/* TODO-FINDING overview-encryption-unknown - `RoomDetails.encrypted` is optional and the mockup only draws "encrypted". For now: "Not encrypted" for `false`, "Unknown" when the session does not say. */}
             {info && info.encrypted === undefined && <p className="muted">Unknown: the session does not report the encryption of this room.</p>}
-          </section>
-          <section className="card">
-            <h3>
-              <Icon name="grid" size={15} />
-              Widgets <em>{widgets.length}</em>
-            </h3>
-            <div className="ov-widgets">
-              {widgets.map((w) => (
-                <button
-                  key={w.key}
-                  type="button"
-                  className="row sm"
-                  title={w.problem ?? `Open ${w.name} in a new tab`}
-                  aria-disabled={w.problem ? true : undefined}
-                  data-widget-key={w.key}
-                  onClick={() => !w.problem && dispatch({ type: "tab/openWidget", panelId, widgetKey: w.key })}
-                >
-                  <Avatar name={w.name} id={w.key} size={26} square label={initials(w.name)} />
-                  <span className="row-main">
-                    <b>{w.name}</b>
-                    <small>{w.problem ?? hostOf(w.event.content.url)}</small>
-                  </span>
-                  {!w.problem && <Icon name="arrowUpRight" size={14} className="end" />}
-                </button>
-              ))}
-              {room && room.widgetEvents === undefined && loading("the widgets")}
-              {room?.widgetEvents !== undefined && widgets.length === 0 && <p className="muted">This room has no widgets.</p>}
-            </div>
           </section>
           <section className="card span">
             <h3>
@@ -173,6 +165,98 @@ export function RoomOverview({ main, panelId, roomId, devTools }: RoomOverviewPr
             </section>
           )}
         </div>
+      </div>
+    </div>
+  );
+}
+
+/** One widget of the list. The accessible names are the ones of the tests (and of the mockup). */
+function WidgetRow({ main, panelId, roomId, widget: w }: { main: MainViewModel; panelId: PanelId; roomId: RoomId; widget: RoomWidget }) {
+  const dispatch = useDispatch();
+  const widgetId = widgetInstanceId(roomId, w.key);
+  const avatar = <Avatar name={w.name} id={w.key} size={26} square label={initials(w.name)} />;
+  if (w.problem) {
+    // Not `disabled`: the row stays focusable, so the problem can be read with the keyboard.
+    return (
+      <button type="button" className="row sm" aria-disabled="true" aria-label={`${w.name} cannot be opened: ${w.problem}`} title={w.problem} data-widget-key={w.key}>
+        {avatar}
+        <span className="row-main">
+          <b>{w.name}</b>
+          <small>{w.problem}</small>
+        </span>
+      </button>
+    );
+  }
+  if (!main.widgets[widgetId]) {
+    return (
+      <button type="button" className="row sm" aria-label={`Open ${w.name}`} title={`Open ${w.name} in a new tab`} data-widget-key={w.key} onClick={() => dispatch({ type: "tab/openWidget", panelId, widgetKey: w.key })}>
+        {avatar}
+        <span className="row-main">
+          <b>{w.name}</b>
+          <small>{hostOf(w.event.content.url)}</small>
+        </span>
+        <Icon name="arrowUpRight" size={14} className="end" />
+      </button>
+    );
+  }
+  const tab = widgetTab(main, widgetId);
+  const elsewhere = tab?.panelId !== panelId;
+  // TODO-FINDING tile-widget-without-tab - a running widget can have no tab at all (always on screen, its room panel was closed). The mockups only draw "open in this panel" and "open in the other panel". For now it is treated like "another panel": "jump to tab" opens its panel again, "move widget here" gives it a tab here.
+  const where = !tab ? "running without a tab" : elsewhere ? "open in the other panel" : "open in this panel";
+  return (
+    <div className="row sm opened" data-widget-key={w.key} data-widget-id={widgetId}>
+      {avatar}
+      <span className="row-main">
+        <b>{w.name}</b>
+        <small>{where}</small>
+      </span>
+      <span className="row-acts">
+        <button type="button" className="btn sm primary" aria-label={`Jump to the tab of ${w.name}`} onClick={() => dispatch({ type: "widget/jumpToTab", widgetId })}>
+          <Icon name="goToTab" size={14} />
+          <span>Jump to tab</span>
+        </button>
+        {elsewhere && (
+          <button
+            type="button"
+            className="btn sm"
+            title="Closes its tab in the other room panel and opens it here. The widget keeps running."
+            aria-label={`Move ${w.name} here`}
+            onClick={() => dispatch({ type: "tab/moveWidgetHere", panelId, widgetId })}
+          >
+            <Icon name="arrowLeft" size={14} />
+            <span>Move widget here</span>
+          </button>
+        )}
+      </span>
+    </div>
+  );
+}
+
+/** The body for a room that is not in `data.rooms`: the room list is loading or failed, or the room was left. */
+function RoomUnavailable({ main, roomId }: { main: MainViewModel; roomId: RoomId }) {
+  const rooms = main.data.rooms;
+  // TODO-FINDING room-view-without-room - a room panel whose room is not in `data.rooms` (still loading, failed, or the room was left) is not drawn. For now: the loading / error / "not available" state here, and the room id as the name of the room name tab.
+  return (
+    <div className="ov" data-testid="room-overview" data-room-id={roomId}>
+      <div className="ov-in">
+        {rooms.status === "error" ? (
+          <div className="empty" role="alert">
+            <Icon name="alert" size={28} className="danger" />
+            <b>The room could not be loaded</b>
+            <p>{rooms.error}</p>
+          </div>
+        ) : rooms.status === "loading" ? (
+          <div className="empty" role="status">
+            <span className="spinner" aria-hidden="true" />
+            <b>Loading the room…</b>
+          </div>
+        ) : (
+          <div className="empty">
+            <Icon name="alert" size={28} />
+            <b>This room is not available</b>
+            <p>It is not one of the rooms of this account anymore.</p>
+          </div>
+        )}
       </div>
     </div>
   );
