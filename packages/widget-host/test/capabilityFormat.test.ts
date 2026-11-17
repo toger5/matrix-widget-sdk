@@ -10,13 +10,15 @@ import { describe, expect, it } from "vitest";
 import initWasm from "../../widget-host-bindings/src/generated/wasm-bindgen/index.js";
 import * as widgetActions from "../../widget-host-bindings/src/generated/widget_actions";
 import { DEFAULT_CAPABILITIES, DELAYED_CAPABILITIES, EXTRA_CAPABILITIES, RELATION_CAPABILITIES, TO_DEVICE_CAPABILITIES, WEBVIEW_CAPABILITIES } from "../../test-widgets/new/capabilities";
-import { LEGACY_WEBVIEW } from "../src/widgetStateEvent";
+import { LEGACY_WEBVIEW_CAPABILITIES } from "../../widget-compat-wrapper/src/capabilities";
 import { capabilityLabel, capabilityRisk, capabilitySection, capabilitySections, capabilitySummary, iframeTokens, splitCapability } from "../src/views/widget/format";
 
 const require = createRequire(import.meta.url);
 await initWasm({ module_or_path: readFileSync(require.resolve("../../widget-host-bindings/src/generated/wasm-bindgen/index_bg.wasm")) });
 widgetActions.default.initialize();
 const { capabilityIsKnown } = widgetActions;
+/** The webview capabilities of a legacy widget, as the compat wrapper requests them. */
+const LEGACY_WEBVIEW = [...LEGACY_WEBVIEW_CAPABILITIES];
 
 const X = "org.matrix.mscXXXX.";
 /** Everything the MSC4412 test widget requests: one capability per action it has a button for. */

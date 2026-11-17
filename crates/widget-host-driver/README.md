@@ -14,31 +14,43 @@ It runs in any Matrix client: natively in Rust, in Kotlin / Swift / Python, and 
 
 ## How to use it
 
-One driver per rendered widget:
+One driver per rendered widget, made from the widget's state event:
 
 ```rust
 use std::sync::Arc;
-use widget_host_driver::{MatrixBackend, WidgetHostDriver, WidgetHostPlatform};
+use widget_host_driver::{
+    parse_widget_state_event, EmbedOptions, MatrixBackend, WidgetHostDriver, WidgetHostPlatform, WidgetIframe,
+};
 use widget_host_driver::widget_actions::Capability;
 
 struct Platform { /* handle to the iframe + UI */ }
 impl WidgetHostPlatform for Platform {
-    fn send_to_widget(&self, json: String) { /* iframe.postMessage(json, widgetOrigin) */ }
+    fn load_iframe(&self, iframe: WidgetIframe) { /* a new iframe: src = iframe.url, sandbox, allow; show the loading state */ }
+    fn send_to_widget(&self, json: String) { /* iframe.postMessage(json, iframe.origin) */ }
     fn on_capabilities_requested(&self, requested: Vec<Capability>) { /* show (or update) the prompt */ }
     fn on_ready(&self) { /* hide the loading state */ }
     // navigate, set_always_on_screen, client_id / client_theme / client_language
 }
 
+let options = EmbedOptions { /* the client's compat wrapper and origin, see below */ };
+let widget = parse_widget_state_event(event_type, state_key, content, options.clone())?;
 let backend: Arc<dyn MatrixBackend> = Arc::new(MySdkBackend::new(room));
-let driver = WidgetHostDriver::new(backend, Arc::new(Platform { /* … */ }));
+let driver = WidgetHostDriver::new(widget, options, backend, Arc::new(Platform { /* … */ }))?;
+driver.set_auto_approved(remembered);             // what the client remembers of earlier approvals
+driver.start();                                   // → load_iframe
 
-// 1. every message from the widget iframe:
-driver.handle_message_from_widget(json).await?;   // Err(LegacyWidgetApi) → use the compat wrapper
+// 1. every message from the window of the iframe built last:
+driver.handle_message_from_widget(json).await?;
 // 2. after the user decided:
 driver.approve_capabilities(approved);
 // 3. whenever the user takes a permission away:
 driver.revoke_capabilities(revoked);
 ```
+
+`new` fails with `WidgetEventError::Refused` for a widget that must not be loaded (the check of
+`parse_widget_state_event`, made again). Nothing is loaded before `start()`: it calls
+`load_iframe` with the widget's `WidgetIframe { url, origin, sandbox, allow }`, and the driver calls
+it again whenever the widget's webview capabilities change `sandbox` or `allow` (below).
 
 `requested` is the whole open question: a request that arrives while the user decides joins it,
 and the callback is called again with all of it (minus what the widget holds or gets without
@@ -48,13 +60,17 @@ The driver subscribes to the backend itself once `host:…forward_event.*`, `hos
 `host:…forward_to_device` capabilities are approved. The
 client does not push events anywhere.
 
-* Legacy widgets (`im.vector.modular.widgets`): embed them through
-  `packages/widget-compat-wrapper` (`WidgetDefinition::embed` builds its URL, below) and call
-  `driver.set_auto_approved(..)` with `Capability::GetMatrixContext`,
-  `Capability::GetClientContext` and the webview capabilities of a legacy client's iframe (the
-  wrapper requests them when it starts, see below).
+* Legacy widgets (`im.vector.modular.widgets`): the driver loads them through
+  `packages/widget-compat-wrapper` (`EmbedOptions.wrapper_url`; it builds the wrapper's URL,
+  below), builds the iframe of a legacy client and grants `legacy_auto_approved()` without asking:
+  `get_matrix_context`, `get_client_context`, the theme, language and visibility updates and the
+  webview capabilities of a legacy client's iframe (the wrapper requests them when it starts). The
+  client passes none of this to `set_auto_approved`.
   The driver understands only the new capability and action names
   (`docs/spec-appendix/capability-naming-proposal.md`); the wrapper translates the legacy ones.
+* A widget without `uses_widget_api: true` (MSC4412) has no widget API: `on_ready` is called right
+  after `load_iframe`, and `handle_message_from_widget` refuses every message with
+  `DriverError::NoWidgetApi`.
 * Client pushes: `update_theme`, `update_language`, `update_visibility`. Each is sent only if
   the widget holds its `host:…` capability.
 * Limited grants: `set_single_use(capabilities)` (default: `widget:…get_openid`) makes a request
@@ -80,45 +96,58 @@ More is a capability of the source `webview` the widget requests like any other
   from what the widget holds (other capabilities are ignored): the base tokens first, then the
   granted ones sorted; each feature with the allowlist `'src'`. It checks every value again, so
   nothing but single web tokens reaches the attributes.
-* Applying a grant is the client's part: load the widget again with the new attributes (a new
-  iframe), and pass what it was built with to `set_auto_approved`, so that the widget's next request
-  is granted at once and causes no further reload. Revoking an applied one reloads too. The widget
-  host does this in `packages/widget-host/src/app/runtime/widgetRuntime.ts`, with a guard against
-  reload loops in its controller.
+* Applying a grant is the driver's part: when a grant, a revocation or `set_auto_approved` changes
+  `sandbox` or `allow`, it calls `load_iframe` again with the new attributes. The same driver goes
+  on: it forgets the old page (not ready, holds nothing, no open question, subscriptions
+  cancelled) and grants the page in the new iframe what the old one held without asking
+  (`DriverSnapshot::carried`; not a single-use capability, not what was revoked since). The
+  webview capabilities of `set_auto_approved` are part of the first iframe, so a remembered grant
+  needs no reload.
+* The client's part: build the new iframe in place of the old one, accept messages only from its
+  window and `WidgetIframe::origin`, drop a prompt that shows the old page's question, and stop a
+  widget that is reloaded too often (the widget host: `loadIframe` in
+  `packages/widget-host/src/app/controller.ts`).
+* `DriverSnapshot` has `iframe` (what the platform was last told to build), `carried`, and
+  `auto_approved`: everything granted without asking (the list of `set_auto_approved`, a legacy
+  widget's set, `carried`, the webview capabilities the iframe was built with).
 
 ## Which widgets a room has: the state event parser
 
 Before there is a driver, the client reads the widget state events of the room
 (`WIDGET_EVENT_TYPES`: MSC4411 `m.widget`, its unstable `org.matrix.msc4411.widget`, and the
-legacy `im.vector.modular.widgets`) and decides what to list and what to load. Both steps are here,
-so every client decides the same:
+legacy `im.vector.modular.widgets`) and decides what to list. The parser is here, so every client
+decides the same:
 
 ```rust
-use widget_host_driver::{EmbedOptions, WidgetDefinition};
+use widget_host_driver::{parse_widget_state_event, EmbedOptions, WidgetEventError};
 
-// 1. List: `Err(Removed)` for a removed widget (MSC4411: no string `url` or, for `m.widget`, `name`).
-let widget = WidgetDefinition::parse(&event_type, &state_key, &content)?;
-show_in_list(&widget.name, widget.avatar_url.as_deref(), &widget.url /* MSC4411: show it with the sender */);
-
-// 2. Open: the URL check, and for a legacy widget the compat wrapper's URL.
 let options = EmbedOptions {
     wrapper_url: Some("https://wrapper.example/".into()),
     client_origin: Some("https://client.example".into()), // no widget of the client's own origin
     own_widget_dirs: vec![],
     allow_http: false,
 };
-match widget.embed(&options) {
-    Ok(embed) => load_webview(&embed.url, embed.uses_widget_api), // wait for notify_ready if uses_widget_api
-    Err(refused) => show_disabled(&refused.to_string()), // "javascript: URLs are not allowed, only https:"
+match parse_widget_state_event(event_type, state_key, content, options.clone()) {
+    // A widget to list (MSC4411: show its URL with the sender) and to make a driver from.
+    Ok(widget) => show_in_list(&widget.name, widget.avatar_url.as_deref(), &widget.url),
+    // A widget that must not be loaded: "javascript: URLs are not allowed, only https:".
+    Err(WidgetEventError::Refused { widget, reason }) => show_disabled(&widget.name, &reason),
+    // `Removed` (MSC4411: no string `url` or, for `m.widget`, `name`), `NotAWidgetType`: not listed.
+    Err(_) => {}
 }
 ```
 
+* `parse_widget_state_event(event_type, state_key, content, options)` reads the event
+  (`WidgetDefinition::parse`) and makes the check a driver makes when it is created from the
+  definition: the URL check, and for a legacy widget the compat wrapper's URL. `Refused` carries
+  the whole definition. What the iframe loads is not returned: it reaches the client from the
+  driver (`WidgetIframe.url` of `load_iframe`).
 * `widget_url_problem(url, allow_http)` is the URL check: only absolute `https:` URLs (and `http:`
   with `allow_http`, which MSC4411 allows in developer tools), parsed as a browser parses an
   iframe's `src` (WHATWG, the `url` crate). A URL that an iframe resolves against the page that
   embeds it (`https:example.org`, `http:/path`) is refused: it has to name its own host (`//` after
   the scheme). The texts name the scheme, never the URL.
-* `embed_url_problem(url, options)` is what `embed` checks for both kinds, with `EmbedOptions`
+* `embed_url_problem(url, options)` is that check for both kinds, with `EmbedOptions`
   (`wrapper_url`, `client_origin`, `own_widget_dirs`, `allow_http`): `widget_url_problem`, **no page
   of the client's compat wrapper** ("a widget cannot load this client's compat wrapper"), and **no
   page of the client's own origin** (below). A client usually serves the wrapper from its own origin with
@@ -137,18 +166,18 @@ match widget.embed(&options) {
   test widgets): a page counts only if its path is in the directory both as written and as a server
   may read it (`/widgets/..%2F` and `/WIDGETS/` are not in `/widgets/`); a directory at the root of
   the origin is ignored. Without `client_origin` (a native client) nothing is checked.
-* An MSC4411 widget loads its `url` **as the check parsed and serialised it** (`WidgetEmbed.url`),
-  not the event's string: no other parser reads it differently, and a client that derives the
-  widget's `postMessage` target origin from `WidgetEmbed.url` gets the origin of the loaded page.
+* An MSC4411 widget loads its `url` **as the check parsed and serialised it** (`WidgetIframe.url`),
+  not the event's string: no other parser reads it differently, and `WidgetIframe.origin`, the
+  widget's `postMessage` target origin, is the origin of the loaded page.
   A legacy widget loads the compat wrapper with
   `legacy_widget_url` (untemplated), `legacy_widget_id`, `legacy_wait_for_iframe_load` and
   `legacy_widget_data` in its query (see the wrapper's README; they replace any the wrapper URL
   has), and always uses the widget API. The wrapper checks the legacy URL again, before and after
   templating.
-* Foreign code calls `parse_widget_state_event`, `embed_widget`, `widget_url_problem`,
-  `embed_url_problem`, `widget_event_types` and `webview_attributes` (TypeScript:
-  `parseWidgetStateEvent`, `embedWidget`, `embedUrlProblem`, `webviewAttributes`, …; `EmbedOptions`
-  and `WebviewAttributes` are plain objects).
+* Foreign code calls `parse_widget_state_event`, `widget_url_problem`, `embed_url_problem`,
+  `widget_event_types`, `webview_attributes` and `legacy_auto_approved` (TypeScript:
+  `parseWidgetStateEvent`, `embedUrlProblem`, `webviewAttributes`, `legacyAutoApproved`, …;
+  `EmbedOptions`, `WidgetDefinition`, `WidgetIframe` and `WebviewAttributes` are plain objects).
 
 ### More diagrams
 

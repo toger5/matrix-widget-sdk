@@ -9,7 +9,9 @@ use std::sync::{Arc, Mutex};
 use serde_json::json;
 use widget_actions::{Capability, MatrixEvent, StateKeySelector};
 use widget_base_sdk::{WidgetClient, WidgetDelegate};
-use widget_host_driver::{PlatformError, WidgetHostDriver, WidgetHostPlatform};
+use widget_host_driver::{
+    EmbedOptions, PlatformError, WidgetDefinition, WidgetHostDriver, WidgetHostPlatform, WidgetIframe,
+};
 use widget_matrix_backend::InMemoryBackend;
 
 /// Widget -> host queue plus what the widget app observed.
@@ -45,6 +47,7 @@ struct HostSide {
 }
 
 impl WidgetHostPlatform for HostSide {
+    fn load_iframe(&self, _iframe: WidgetIframe) {}
     fn send_to_widget(&self, json: String) {
         self.to_widget.lock().unwrap().push_back(json);
     }
@@ -85,7 +88,15 @@ impl Loop {
         let client = WidgetClient::new(widget_side.clone());
         let host_side = Arc::new(HostSide::default());
         let backend = InMemoryBackend::new("!room:example".into(), "@user:example".into());
-        let driver = WidgetHostDriver::new(backend.clone(), host_side.clone());
+        let widget = WidgetDefinition::parse(
+            "m.widget",
+            "loopback",
+            &serde_json::json!({ "name": "Loopback", "url": "https://widget.example/", "uses_widget_api": true }),
+        )
+        .expect("a widget");
+        let driver = WidgetHostDriver::new(widget, EmbedOptions::default(), backend.clone(), host_side.clone())
+            .expect("a widget that may be loaded");
+        driver.start();
         Self { client, widget_side, driver, host_side, backend }
     }
 

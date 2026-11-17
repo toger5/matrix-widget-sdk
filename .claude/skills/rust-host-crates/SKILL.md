@@ -48,8 +48,8 @@ Swift differ where noted.
   caller needs to show it.
 - **A leading U+FEFF of a string coming back from Rust is lost** (the generated `stringConverter`
   uses a default `TextDecoder`). Do not round-trip a security-relevant string through a record and
-  trust the copy: `src/lib/widgetEvents.ts` passes the event's own `url` (and state key) to
-  `embedWidget`.
+  trust the copy: `src/lib/widgetEvents.ts` (`definitionOf`) puts the event's own `url` (and state
+  key) into the `WidgetDefinition` it hands to the driver's constructor.
 - **Traits implemented in JS need every method** (UniFFI has no defaults).
 - **Init first:** `await uniffiInitAsync()` (the host's `src/main.tsx`) before any call. vitest
   loads the wasm by hand (`packages/widget-host/test/harness.ts`; import it in a test whose code
@@ -104,8 +104,8 @@ bindings scripts set their own target dir for that reason.
 1. In the crate: `#[cfg_attr(feature = "uniffi", uniffi::export)]` on a free function (`&str`
    arguments work), `derive(uniffi::Record)` / `uniffi::Enum` / `uniffi::Error` on the types, all
    behind `cfg_attr` so the plain Rust build has no UniFFI. Re-export it from the crate's `lib.rs`.
-   Examples: `capability_is_known` (`widget-actions`), `parse_widget_state_event`, `embed_widget`,
-   `widget_url_problem`, `embed_url_problem` (`widget-host-driver`).
+   Examples: `capability_is_known` (`widget-actions`), `parse_widget_state_event`,
+   `widget_url_problem`, `embed_url_problem`, `legacy_auto_approved` (`widget-host-driver`).
 2. `cargo build --features uniffi -p widget-host-driver`, then `npm run bindings`; check the
    generated name and shape in `src/generated/widget_host_driver.ts` (or `widget_actions.ts`).
 3. Use it from the model or the controller of the host (`src/lib/`, `src/app/`), never from a view.

@@ -95,7 +95,7 @@ export const Driver: Story = { args: { devTools: layout("top", ["driver"], 420) 
  * WidgetDevToolDriverPanel with webview capabilities. The call widget holds the camera, the
  * microphone and popups (approved, and auto-approved since its iframe has them); its webview
  * capabilities are marked "webview" in the lists. "Webview of this load" shows the `sandbox`
- * tokens and the `allow` features this start's iframe was built with, those of every widget's
+ * tokens and the `allow` features the current iframe was built with, those of every widget's
  * iframe muted. A webview capability is typed into the field: "Add" reads "Add and restart", as
  * adding it restarts the widget; the revoke buttons of the webview rows say so too.
  */

@@ -10,8 +10,8 @@ const LOADS_THE_WRAPPER: &str = "a widget cannot load this client's compat wrapp
 /// Why [`embed_url_problem`] refuses a page of the client's own origin.
 const ON_THE_CLIENTS_ORIGIN: &str = "a widget cannot be a page of this client's own origin";
 
-/// What a client tells [`embed_url_problem`] and [`WidgetDefinition::embed`](crate::WidgetDefinition::embed)
-/// about itself.
+/// What a client tells [`embed_url_problem`], [`parse_widget_state_event`](crate::parse_widget_state_event)
+/// and [`WidgetHostDriver::new`](crate::WidgetHostDriver::new) about itself.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct EmbedOptions {
@@ -64,7 +64,8 @@ pub fn widget_url_problem(url: &str, allow_http: bool) -> Option<String> {
 /// [`widget_url_problem`] (with [`EmbedOptions::allow_http`]); `url` is a page of the client's
 /// compat wrapper ([`EmbedOptions::wrapper_url`]); or it is a page of the client's own origin
 /// ([`EmbedOptions::client_origin`]) outside the client's own widget directories.
-/// [`WidgetDefinition::embed`](crate::WidgetDefinition::embed) refuses the same URLs.
+/// [`parse_widget_state_event`](crate::parse_widget_state_event) and
+/// [`WidgetHostDriver::new`](crate::WidgetHostDriver::new) refuse the same URLs.
 ///
 /// A client typically serves the compat wrapper from its own origin, and the wrapper loads whatever
 /// its `legacy_widget_url` parameter names into an iframe of its own. A widget whose URL is the

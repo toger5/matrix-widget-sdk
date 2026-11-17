@@ -35,7 +35,7 @@
  *       ├─ widgetWrite?                "Add widget" to the room: being sent, or why the room refused it
  *       ├─ widgets[widgetId]           runtime state of every running widget (one iframe each):
  *       │                              load state, always on screen, the capability prompt,
- *       │                              the iframe's sandbox / allow of this start
+ *       │                              what the driver said its iframe is (URL, sandbox, allow)
  *       └─ modal, toasts
  * ```
  *
@@ -57,7 +57,7 @@
  * what the current `LiveSession`, `SessionProvider` and `InMemoryBackend` cannot provide yet.
  */
 import type { RoomSummary, RoomTimeline, VerificationEmoji } from "./session";
-import type { ResolvedWidget, StateEvent } from "./widgetStateEvent";
+import type { StateEvent, WidgetDefinition, WidgetIframe } from "./widgetStateEvent";
 
 export type AccountId = string;
 export type RoomId = string;
@@ -452,21 +452,23 @@ export interface WidgetInstanceViewModel {
   id: WidgetInstanceId;
   roomId: RoomId;
   widgetKey: WidgetKey;
-  /** URL, name, legacy (compat wrapper) or not. */
-  widget: ResolvedWidget;
+  /** The widget as its state event describes it: name, URL (as the event has it), legacy or not. */
+  widget: WidgetDefinition;
   load: { state: "loading" } | { state: "ready" } | { state: "failed"; error: string };
   /**
-   * Counts the starts of this widget (`widget/reload` starts it again). `undefined` until its driver
-   * exists: only then is the iframe rendered, so no message of the widget is lost.
+   * Counts the iframes of this widget: the driver asked for a new one (`WidgetRuntimeEvents.loadIframe`:
+   * the first, or one with other `sandbox` / `allow`), or `widget/reload` started the widget again.
+   * `undefined` until the driver asked for the first: only then is the iframe rendered, so no
+   * message of the widget is lost.
    */
   generation?: number;
   /**
-   * The `sandbox` and `allow` attributes of this start's iframe, set with `generation`: the strict
-   * default plus the webview capabilities the widget holds or gets without asking (remembered,
-   * granted while it ran, a legacy client's set). A grant or a revocation applies with a new
-   * generation (the runtime's `webviewChanged`).
+   * What the driver told the host to build this generation's iframe from, set with `generation`:
+   * the URL it loads (for a legacy widget the compat wrapper) and its `sandbox` and `allow`, the
+   * strict default plus the webview capabilities the widget holds or gets without asking
+   * (remembered, granted while it ran, a legacy client's set).
    */
-  webview?: WebviewAttributes;
+  iframe?: WidgetIframe;
   /**
    * Set and cleared by the widget. Its tab gets the pin icon; the widget keeps running, and is
    * shown in the PictureInPicturePanel, whenever its tab is not shown. story `rooms-tabbar--pinned`
@@ -775,7 +777,7 @@ export interface WidgetDevToolsData {
   /**
    * story `widget-devtools--driver`. From `DriverSnapshot`; "denied" needs the driver to report it. `singleUse`:
    * what the driver grants for one use (`DriverSnapshot.singleUse`); an approved one is marked "once". `webview`:
-   * the webview capabilities this start's iframe was built from (`applied`; the base tokens are not listed) and
+   * the webview capabilities the current iframe was built from (`applied`; the base tokens are not listed) and
    * its attributes, "Webview of this load". story `widget-devtools--driver-webview`
    */
   capabilities: { approved: string[]; autoApproved: string[]; denied: string[]; singleUse: string[]; webview: { applied: string[] } & WebviewAttributes };

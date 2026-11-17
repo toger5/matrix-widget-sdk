@@ -75,8 +75,7 @@ A rename also means renaming the file, the variant and the body types, so the co
 - The namespace of each action lives in `namespace_of` here and has to equal the prefix of the
   action's serde `rename` (the test `capabilities_embed_the_action_name` checks it). The same
   table is repeated in `packages/widget-compat-wrapper/src/capabilities.ts` (`ACTION_NAMESPACES`),
-  `packages/test-widgets/new/capabilities.ts` (`NAMESPACES`), as literals in
-  `packages/widget-host/src/widgetStateEvent.ts` (`LEGACY_AUTO_APPROVED`) and in test strings. Moving an
+  `packages/test-widgets/new/capabilities.ts` (`NAMESPACES`) and in test strings. Moving an
   action to another namespace means changing all of them. The constants `MSC4412_NAMESPACE`,
   `PLACEHOLDER_NAMESPACE` and `STABLE_NAMESPACE` are in `src/wire.rs`.
 - **Webview capabilities** (source `webview`): `Capability::WebviewSandbox` / `WebviewAllow`, the
@@ -84,9 +83,10 @@ A rename also means renaming the file, the variant and the body types, so the co
   `webview_capabilities_name_no_action` checks that `sandbox` / `allow` are no action names. Their
   namespace is the one of their MSC draft (`namespace_of`: the placeholder). The strings are
   repeated in the compat wrapper (`webviewCapability`, `LEGACY_SANDBOX` / `LEGACY_ALLOW` /
-  `LEGACY_WEBVIEW_CAPABILITIES`, `normalizeCapability`), the host (`LEGACY_WEBVIEW` in
-  `src/widgetStateEvent.ts`, `test/webview.test.ts` compares it with the wrapper's; the namespace in
-  `canonicalWebview` of `src/lib/webview.ts`) and the test
+  `LEGACY_WEBVIEW_CAPABILITIES`, `normalizeCapability`; the driver's legacy set, `LEGACY_SANDBOX` /
+  `LEGACY_ALLOW` of `crates/widget-host-driver/src/webview.rs`, has to equal it: the host's
+  `test/webview.test.ts` compares `legacyAutoApproved()` with the wrapper's), the host (the
+  namespace in `canonicalWebview` of `src/lib/webview.ts`) and the test
   widget (`WEBVIEW_CAPABILITIES`, not in its default list). A new source needs its own arms in
   `with_data` / `parts` and the same treatment.
 
@@ -99,10 +99,12 @@ A rename also means renaming the file, the variant and the body types, so the co
 | Checks that depend on the body (event type, state key, msgtype, room) | `driver/access.rs` `check_send_event`, `check_room(s)`, `may_read`, `may_read_relation`, `may_forward`, `may_update_state` |
 | Handling the request, calling the backend | `driver/requests.rs` `answer` and its helpers |
 | What the driver subscribes to and forwards | `driver/subscriptions.rs` `subjects_for`, `to_device_types_for`, `forward_*` |
-| Public methods (pushes, approval, revocation, single-use capabilities) | `driver/mod.rs`; these are exported over UniFFI, see section 6 |
-| Platform callbacks | `platform.rs` (`WidgetHostPlatform`) |
-| Webview capabilities: which are granted without asking (base), never (`allow-top-navigation*`) or asked, and the iframe attributes | `webview.rs` (`WebviewPolicy`, `webview_attributes`, exported); used in `driver/mod.rs` (`State::question`, `approve_capabilities`) and `driver/requests.rs` (`request_capabilities`) |
-| The widget state event (MSC4411, `uses_widget_api` of MSC4412): which events are widgets, the URL check, the compat wrapper's URL (its query parameters are the wrapper's README) | `widget_event.rs` (`WidgetDefinition::parse` / `embed`), `widget_url.rs` (`widget_url_problem`; `embed_url_problem` with `EmbedOptions`: no page of the client's compat wrapper, no page of the client's own origin but its own widget directories; table `tests/widget_urls.json`, which the host's `test/widgetStateEvent.test.ts` also compares with Node's URL parser and the compat wrapper's `test/url.test.ts` / `test/wrapper.test.ts` with its own checks); used by the host through `packages/widget-host/src/lib/widgetEvents.ts` (`embedOptions`) |
+| Public methods (`new(widget, options, backend, platform)`, `start`, `widget`, pushes, approval, revocation, single-use capabilities, `snapshot` → `DriverSnapshot`) | `driver/mod.rs`; these are exported over UniFFI, see section 6 |
+| Platform callbacks (`load_iframe`, `send_to_widget`, `on_capabilities_requested`, `on_ready`, ...) | `platform.rs` (`WidgetHostPlatform`); every implementation needs a new one: the host's `widgetRuntime.ts`, `test/harness.ts`, the Rust tests' platforms (`driver/tests.rs`, `crates/widget-base-sdk/tests/loopback.rs`), the README examples |
+| Webview capabilities: which are granted without asking (base), never (`allow-top-navigation*`) or asked, the iframe attributes, and the iframe the platform builds (`WidgetIframe`) | `webview.rs` (`WebviewPolicy`, `webview_attributes`, exported); used in `driver/mod.rs` (`State::question`, `approve_capabilities`; `State::sync_iframe` loads the iframe again when the attributes change and carries what the widget held, `DriverSnapshot::carried`) and `driver/requests.rs` (`request_capabilities`) |
+| What a legacy widget (behind the compat wrapper) gets without asking, and its iframe | `webview.rs` (`legacy_auto_approved`, exported; `LEGACY_SANDBOX`, `LEGACY_ALLOW`), applied by the driver for a legacy definition |
+| A widget without the widget API (`uses_widget_api` not `true`): ready right after `load_iframe`, every message refused | `driver/mod.rs` (`load`, `handle_message_from_widget`), `error.rs` (`DriverError::NoWidgetApi`) |
+| The widget state event (MSC4411, `uses_widget_api` of MSC4412): which events are widgets, the URL check, the compat wrapper's URL (its query parameters are the wrapper's README) | `widget_event.rs` (`WidgetDefinition::parse`, the crate-private `embed`; exported: `parse_widget_state_event`, which runs both and takes `EmbedOptions`; `WidgetEventError::Refused` carries the definition; `WidgetHostDriver::new` runs `embed` again), `widget_url.rs` (`widget_url_problem`; `embed_url_problem` with `EmbedOptions`: no page of the client's compat wrapper, no page of the client's own origin but its own widget directories; table `tests/widget_urls.json`, which the host's `test/widgetStateEvent.test.ts` also compares with Node's URL parser and the compat wrapper's `test/url.test.ts` / `test/wrapper.test.ts` with its own checks); used by the host through `packages/widget-host/src/lib/widgetEvents.ts` (`parseWidget`, `embedOptions`) |
 | Tests | unit tests in `access.rs` and `subscriptions.rs`; end to end in `driver/tests.rs` (helpers `setup`, `feed`, `grant`, `grant_and_drain`, `send`, `event`) |
 
 Error messages name the capability (`Missing capability: <string>`, code `…missing_capability`);
@@ -176,7 +178,7 @@ Ask for every change:
 - Does a legacy capability cover this action? Then `LEGACY_RULES` must expand to the new
   capability, otherwise legacy widgets silently lose the action.
 - Did a legacy host allow it without a capability? Then it belongs in `IMPLICIT_CAPABILITIES`,
-  and in `LEGACY_AUTO_APPROVED` of the test host.
+  and in the driver's `legacy_auto_approved` (`crates/widget-host-driver/src/webview.rs`).
 - The legacy names come from matrix-widget-api:
   `node_modules/matrix-widget-api/lib/interfaces/WidgetApiAction.d.ts` and `Capabilities.d.ts`.
 
@@ -184,11 +186,11 @@ Ask for every change:
 
 | what | where |
 |---|---|
-| Driver calls, platform callbacks (`WidgetHostPlatform`), the message pump, capability answers and what is remembered (never a single-use capability) | `packages/widget-host/src/app/runtime/widgetRuntime.ts`; the store and its migrations: `src/lib/capabilityStore.ts` |
+| Driver calls (made from a `WidgetDefinition`, `setAutoApproved` with what is remembered, then `start`), platform callbacks (`WidgetHostPlatform`), the message pump, capability answers and what is remembered (never a single-use capability; `approved` and `carried` of the snapshot) | `packages/widget-host/src/app/runtime/widgetRuntime.ts`; the store and its migrations: `src/lib/capabilityStore.ts` |
 | Host pushes the dev tools send by hand (`update_theme`, `update_language`, `update_visibility`) | intent `devTools/mockHostAction` in `packages/widget-host/src/appViewModel.ts`, `WidgetRuntime.mockHostAction`, buttons in `packages/widget-host/src/views/widget/DriverPanel.tsx` |
 | Label, section and risk mark of a capability in the permission prompt | `LABELS`, `SECTIONS`, `RISKS` in `packages/widget-host/src/views/widget/format.ts` (keyed by action name without namespace; webview capabilities: `ALLOW` and `SANDBOX`, keyed by feature / token, section "Browser permissions"; the only source of this copy, changed as a design step of the `widget-host-ui` agent); `test/capabilityFormat.test.ts` checks every capability of the test widget. What the driver does not know (`capabilityIsKnown`) goes to "Unknown to this app" |
-| Auto-approved capabilities of legacy widgets, their webview set (`LEGACY_WEBVIEW`) | `packages/widget-host/src/widgetStateEvent.ts` |
-| The widget iframe's `sandbox` / `allow`: built per start from the webview capabilities (`webviewFor`), the restart when one is granted or revoked (`webviewChanged`), what is kept across restarts (`webviewKept`) and the loop guard | `src/lib/webview.ts`, `src/app/runtime/widgetRuntime.ts`, `src/app/controller.ts` (`applyWebview`), `WidgetInstanceViewModel.webview` rendered by `WidgetIframes` in `src/app/AppRoot.tsx`; tests `test/webview.test.ts`, `e2e/webview.spec.ts` |
+| Which state events are widgets and whether the host may load them (`hostWidgetEvents.resolve` → `{ widget, problem? }`) | `packages/widget-host/src/lib/widgetEvents.ts`, types in `src/widgetStateEvent.ts`; test `test/widgetStateEvent.test.ts` |
+| The widget's iframe (`src`, `sandbox`, `allow`): what the driver's `loadIframe` says, passed on as `WidgetRuntimeEvents.loadIframe`; a new generation and the loop guard per call | `src/app/runtime/widgetRuntime.ts`, `src/app/controller.ts` (`loadIframe`, `newRuntime`), `WidgetInstanceViewModel.iframe` rendered by `WidgetIframes` in `src/app/AppRoot.tsx`; `src/lib/webview.ts` only tells webview capabilities apart (`isWebviewCapability`, `canonicalWebview`); tests `test/webview.test.ts`, `e2e/webview.spec.ts` |
 | Controls of the in-memory store (the DevBackendView) | `packages/widget-host/src/matrix_session/memory/devBackend.ts` (editing API), `packages/widget-host/src/views/devbackend/` |
 | End to end through the JS bindings | `packages/widget-host/test/driver.test.ts` |
 | What every backend must do behind the driver | `packages/widget-host/test/backendContract.ts` |

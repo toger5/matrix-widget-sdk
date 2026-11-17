@@ -24,10 +24,18 @@ export type Message = { source: string; action: string; request_id: string; requ
 
 export const tick = (ms = 0) => new Promise((resolve) => setTimeout(resolve, ms));
 
+/** A client that says nothing about itself: no compat wrapper, no origin, https only. */
+export const NO_EMBED_OPTIONS: hostDriver.EmbedOptions = { wrapperUrl: undefined, clientOrigin: undefined, ownWidgetDirs: [], allowHttp: false };
+
+/** An MSC4411 widget with the widget API, at `https://widget.example/app`. */
+export const testWidget = (): hostDriver.WidgetDefinition =>
+  hostDriver.parseWidgetStateEvent("m.widget", "w", { name: "W", url: "https://widget.example/app", uses_widget_api: true }, NO_EMBED_OPTIONS);
+
 /** A driver on `backend` with a scripted widget in front of it. */
 export function behindDriver(backend: matrixBackend.MatrixBackend) {
   const sent: Message[] = [];
   const platform: hostDriver.WidgetHostPlatform = {
+    loadIframe: () => {},
     sendToWidget: (json) => void sent.push(JSON.parse(json)),
     onCapabilitiesRequested: (requested) => queueMicrotask(() => driver.approveCapabilities(requested)),
     onReady: () => {},
@@ -37,7 +45,8 @@ export function behindDriver(backend: matrixBackend.MatrixBackend) {
     clientTheme: () => "dark",
     clientLanguage: () => "en",
   };
-  const driver = new hostDriver.WidgetHostDriver(backend, platform);
+  const driver = new hostDriver.WidgetHostDriver(testWidget(), NO_EMBED_OPTIONS, backend, platform);
+  driver.start();
   let n = 0;
   /** Send a widget request and return the host's response to it. */
   const ask = async (action: string, request: unknown = {}) => {

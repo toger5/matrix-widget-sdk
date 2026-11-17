@@ -7,14 +7,39 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
-import { widgetEventTypes } from "@matrix-widget-tools/widget-host-bindings";
+import { InMemoryBackend, WidgetHostDriver, widgetEventTypes, type EmbedOptions, type WidgetIframe } from "@matrix-widget-tools/widget-host-bindings";
 
-import { embedOptions, hostWidgetEvents, ownWidgetDirs, resolveWidget, widgetEventParser, widgetUrlProblem, wrapperUrl } from "../src/lib/widgetEvents";
+import { embedOptions, hostWidgetEvents, ownWidgetDirs, reasonOf, widgetEventParser, wrapperUrl } from "../src/lib/widgetEvents";
 import { roomWidgets } from "../src/views/helpers";
 import { localWidgetKey, WIDGET_EVENT_TYPES, widgetKey, type StateEvent } from "../src/widgetStateEvent";
 import "./harness";
 
 const WRAPPER = "http://localhost:5173/widget_compatibility_wrapper/";
+
+/**
+ * What the host loads for a widget state event, as it gets there: the parser's definition
+ * (`parseWidget`), then the iframe a `WidgetHostDriver` made from it asks for when it starts.
+ * Throws the reason for an event that is no widget or must not be loaded.
+ */
+/** `EmbedOptions` of this host, or of this host with the compat wrapper at a URL. */
+const optionsOf = (options: EmbedOptions | string = embedOptions()) => (typeof options === "string" ? embedOptions(options) : options);
+const widgetUrlProblem = (url: string, options?: EmbedOptions | string) => widgetEventParser(optionsOf(options)).urlProblem(url);
+
+function resolveWidget(event: StateEvent, options?: EmbedOptions | string) {
+  const { widget, problem } = widgetEventParser(optionsOf(options)).resolve(event) ?? { problem: "the event describes no widget" };
+  if (!widget || problem) throw new Error(problem);
+  const iframes: WidgetIframe[] = [];
+  const platform = { loadIframe: (iframe: WidgetIframe) => void iframes.push(iframe), sendToWidget: () => {}, onCapabilitiesRequested: () => {}, onReady: () => {}, navigate: () => {}, setAlwaysOnScreen: () => false, clientId: () => undefined, clientTheme: () => undefined, clientLanguage: () => undefined };
+  let driver: WidgetHostDriver;
+  try {
+    driver = new WidgetHostDriver(widget, optionsOf(options), new InMemoryBackend("!room:example.org", "@alice:example.org").asBackend(), platform);
+  } catch (e) {
+    throw new Error(reasonOf(e));
+  }
+  driver.start();
+  driver.uniffiDestroy();
+  return { ...iframes[0], widget };
+}
 const newWidget = (url: string): StateEvent => ({ type: "m.widget", state_key: "w", content: { name: "W", url, uses_widget_api: true } });
 const legacyWidget = (url: string): StateEvent => ({ type: "im.vector.modular.widgets", state_key: "w", content: { type: "m.custom", name: "W", url } });
 
@@ -59,14 +84,14 @@ describe("widgetUrlProblem", () => {
 
 describe("the compat wrapper is no widget", () => {
   const { wrapper } = TABLE.compat_wrapper;
-  const parser = widgetEventParser(wrapper);
+  const parser = widgetEventParser(embedOptions(wrapper));
 
   it.each(Object.entries(TABLE.compat_wrapper.refused))("refuses %s, for both widget kinds", (_, url) => {
     expect(widgetUrlProblem(url, wrapper)).toBe(LOADS_THE_WRAPPER);
     expect(parser.urlProblem(url)).toBe(LOADS_THE_WRAPPER);
     expect(() => resolveWidget(newWidget(url), wrapper)).toThrow(LOADS_THE_WRAPPER);
     expect(() => resolveWidget(legacyWidget(url), wrapper)).toThrow(LOADS_THE_WRAPPER);
-    expect(parser.resolve(newWidget(url))).toEqual({ name: "W", problem: LOADS_THE_WRAPPER });
+    expect(parser.resolve(newWidget(url))).toMatchObject({ widget: { name: "W", url, widgetId: "w" }, problem: LOADS_THE_WRAPPER });
   });
 
   it.each(Object.entries(TABLE.compat_wrapper.allowed))("allows %s", (_, url) => {
@@ -91,7 +116,7 @@ describe("no widget on this host's origin but its own test widgets", () => {
     expect(parser.urlProblem(url)).toBe(ON_THE_CLIENTS_ORIGIN);
     expect(() => resolveWidget(newWidget(url), options)).toThrow(ON_THE_CLIENTS_ORIGIN);
     expect(() => resolveWidget(legacyWidget(url), options)).toThrow(ON_THE_CLIENTS_ORIGIN);
-    expect(parser.resolve(newWidget(url))).toEqual({ name: "W", problem: ON_THE_CLIENTS_ORIGIN });
+    expect(parser.resolve(newWidget(url))).toMatchObject({ widget: { name: "W", url, widgetId: "w" }, problem: ON_THE_CLIENTS_ORIGIN });
   });
 
   it.each(Object.entries({ ...TABLE.client_origin.own_widgets, ...TABLE.client_origin.other_origins }))("allows %s", (_, url) => {
@@ -115,15 +140,18 @@ describe("no widget on this host's origin but its own test widgets", () => {
   });
 });
 
-describe("resolveWidget", () => {
+describe("what the driver loads for a widget state event", () => {
   it.each(ALLOWED)("loads a new widget's URL as the driver checked it, which is how Node serialises it: %s", (_, url) => {
     expect(resolveWidget(newWidget(url), WRAPPER).url).toBe(new URL(url).href);
   });
 
   it("embeds a new widget directly and a legacy widget through the compat wrapper, untemplated", () => {
-    expect(resolveWidget(newWidget("https://example.org/?x=$y"), WRAPPER)).toEqual({ url: "https://example.org/?x=$y", name: "W", legacy: false, usesWidgetApi: true });
+    const strict = { sandbox: "allow-scripts allow-same-origin", allow: "" };
+    expect(resolveWidget(newWidget("https://example.org/?x=$y"), WRAPPER)).toMatchObject({ url: "https://example.org/?x=$y", origin: "https://example.org", ...strict, widget: { name: "W", legacy: undefined, usesWidgetApi: true } });
     const legacy = resolveWidget({ ...legacyWidget("https://example.org/?t=$title"), content: { url: "https://example.org/?t=$title", data: { title: "Notes & more" } } }, WRAPPER);
-    expect(legacy).toMatchObject({ name: "w", legacy: true, usesWidgetApi: true });
+    expect(legacy.widget).toMatchObject({ name: "w", url: "https://example.org/?t=$title", usesWidgetApi: false, legacy: { waitForIframeLoad: true } });
+    expect(legacy.origin).toBe("http://localhost:5173");
+    expect(legacy.sandbox).toContain("allow-forms");
     const query = new URL(legacy.url).searchParams;
     expect(legacy.url.startsWith(`${WRAPPER}?`)).toBe(true);
     expect([...query.keys()]).toEqual(["legacy_widget_url", "legacy_widget_id", "legacy_wait_for_iframe_load", "legacy_widget_data"]);
@@ -138,7 +166,7 @@ describe("resolveWidget", () => {
 
   it("refuses a compat wrapper URL that is not http(s) (`?wrapper=`), and an m.widget without a name (MSC4411: removed)", () => {
     expect(() => resolveWidget(legacyWidget("https://example.org/"), "javascript:top.__pwned=1//")).toThrow("compat wrapper: javascript: URLs are not allowed");
-    expect(() => resolveWidget({ type: "m.widget", state_key: "w", content: { url: "https://example.org/" } }, WRAPPER)).toThrow("the content has no name");
+    expect(() => resolveWidget({ type: "m.widget", state_key: "w", content: { url: "https://example.org/" } }, WRAPPER)).toThrow("the event describes no widget");
   });
 
   it("hands the event's own URL and state key to the driver (the bindings drop a leading U+FEFF of a string they return)", () => {
@@ -174,7 +202,7 @@ describe("localWidgetKey", () => {
 });
 
 describe("roomWidgets", () => {
-  const parser = widgetEventParser(WRAPPER);
+  const parser = widgetEventParser(embedOptions(WRAPPER));
 
   it("lists a refused widget with the problem (disabled in the room overview) and nothing to run", () => {
     const [refused] = roomWidgets(parser, { widgetEvents: [legacyWidget("javascript:top.__pwned=1//")] });

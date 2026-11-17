@@ -61,7 +61,7 @@ grep -rlE '(from |import\()"(matrix-js-sdk|matrix-sdk-uniffi-js)' src | grep -vE
 - Intents that lose state carry `confirmed?: boolean`: the controller opens the confirm modal,
   which sends the intent again with `confirmed: true`.
 - The runtime reports back through `WidgetRuntimeEvents` (`ready`, `failed`,
-  `capabilitiesRequested`, `alwaysOnScreen`, `activity`); the controller turns
+  `capabilitiesRequested`, `alwaysOnScreen`, `activity`, `loadIframe`); the controller turns
   them into view model changes. These are controller events, not intents.
 - High-frequency data is not in the view model: `WidgetRuntime.devTools` (a `Store` per widget),
   `DevBackend.subscribe` / `snapshot()`, `LiveSession.roomDetails` / `timeline` / `roomState`. Views read it with the hooks of
@@ -94,29 +94,41 @@ grep -rlE '(from |import\()"(matrix-js-sdk|matrix-sdk-uniffi-js)' src | grep -vE
   `.storybook/mockup.css`).
 - Key presses and clicks inside an iframe never reach the host. `AppRoot` focuses the widget's
   panel when the window loses focus to an iframe.
-- The iframe `sandbox` and `allow` attributes are set in one place, `WidgetIframes`, from
-  `WidgetInstanceViewModel.webview`: strict (`allow-scripts allow-same-origin`, empty `allow`)
-  plus the webview capabilities the start applies (`webview:…`; remembered, a legacy client's set
-  for a legacy widget, `webviewKept`), built by the driver's `webview_attributes`
-  (`src/lib/webview.ts`). Never hard-code them. A grant or revocation of one restarts the widget
-  (`WidgetRuntimeEvents.webviewChanged` → controller `applyWebview`, a new generation, a reload
-  guard). Changing the default or the legacy set is a security decision: ask first.
+- The iframe's `src`, `sandbox` and `allow` are set in one place, `WidgetIframes`, from
+  `WidgetInstanceViewModel.iframe`, which is what the driver said (`WidgetHostPlatform.loadIframe`,
+  a `WidgetIframe`): the URL it checked (for a legacy widget the compat wrapper), and strict
+  attributes (`allow-scripts allow-same-origin`, empty `allow`) plus the webview capabilities the
+  widget holds or gets without asking (`webview:…`; remembered, a legacy client's set for a legacy
+  widget). Never hard-code them, never build them in the host. A grant or revocation of one makes
+  the driver call `loadIframe` again (`WidgetRuntimeEvents.loadIframe` → controller `loadIframe`:
+  a new generation behind the loading state, no prompt, a reload guard). Runtime and driver stay;
+  the driver grants the reloaded page what the widget held (`DriverSnapshot.carried`). The default
+  and the legacy set are the driver's (`crates/widget-host-driver/src/webview.rs`); changing them
+  is a security decision: ask first. `src/lib/webview.ts` only tells webview capabilities apart
+  (`isWebviewCapability`, `canonicalWebview`).
 - `WidgetRuntime` owns the driver of one widget. The driver calls the platform callbacks
   synchronously from inside its own methods, so anything that calls back into the driver or
   changes the view model is deferred (`later`, a microtask). Messages are accepted only from the
-  widget's own `contentWindow` and posted to the widget's origin; keep both checks. A reload
-  (`widget/reload`: Retry, the reload button of the dev tools) disposes the runtime (and frees its
-  driver) and starts a new generation.
+  widget's own `contentWindow` and posted to the widget's origin (`WidgetIframe.origin`); keep
+  both checks. The driver is made from the widget's `WidgetDefinition` (the constructor throws for
+  one the host must not load) and started after `setAutoApproved` with what is remembered. A
+  widget without `uses_widget_api: true` is ready right after `loadIframe`; the driver answers
+  none of its messages. A reload (`widget/reload`: Retry, the reload button of the dev tools)
+  disposes the runtime (and frees its driver) and makes a new one (`newRuntime` in the
+  controller): what was granted only while the widget ran is gone, also after the reload guard.
 - A widget runs once per account (`WidgetInstanceId` = `<room id>|<widget key>`). Switching the
   account stops every widget; its workspace starts them again.
-- Which state events are widgets and how they are embedded (directly, or through the compat
-  wrapper for `im.vector.modular.widgets`) is the driver's parser (`parse_widget_state_event`,
-  `embed_widget`, `widget_url_problem`, `embed_url_problem` in `crates/widget-host-driver`; the
-  last refuses the host's own compat wrapper and every other page of the host's origin, except
-  the test widgets it ships itself), used through `src/lib/widgetEvents.ts` (`describesWidget`,
-  `resolveWidget`, `hostWidgetEvents`, `wrapperUrl`, `embedOptions`, `ownWidgetDirs`).
-  `src/widgetStateEvent.ts` keeps the host's types and keys (`widgetKey`, `localWidgetKey`), the
-  event types, and which capabilities legacy widgets get without asking (`LEGACY_AUTO_APPROVED`).
+- Which state events are widgets and whether the host may load them is the driver's parser
+  (`parse_widget_state_event`, `widget_url_problem`, `embed_url_problem` in
+  `crates/widget-host-driver`; the last refuses the host's own compat wrapper and every other page
+  of the host's origin, except the test widgets it ships itself), used through
+  `src/lib/widgetEvents.ts` (`hostWidgetEvents.resolve` → `{ widget, problem? }`, `describesWidget`,
+  `wrapperUrl`, `embedOptions`, `ownWidgetDirs`). How a widget is embedded
+  (directly, or through the compat wrapper for `im.vector.modular.widgets`) and what a legacy
+  widget gets without asking (`legacy_auto_approved`) is decided by its driver, not by the host.
+  `src/widgetStateEvent.ts` keeps the host's types (`StateEvent`, `WidgetEventParser`; it
+  re-exports the bindings' `WidgetDefinition` and `WidgetIframe` as types), keys (`widgetKey`,
+  `localWidgetKey`) and the event types.
 
 ## The session seam
 

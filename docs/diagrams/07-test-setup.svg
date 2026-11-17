@@ -32,7 +32,7 @@
   <rect x="50" y="146" width="660" height="150" rx="10" fill="#ffffff" stroke="#9ca3af"/>
   <text x="66" y="170" class="bb">Page UI (= the WidgetHostPlatform)</text>
   <text x="66" y="194" class="b">• widget state event input + <tspan font-weight="700">Add widget to the room</tspan>: m.widget → iframe, legacy → compat wrapper</text>
-  <text x="66" y="214" class="b">• capability prompt (OpenID per token) or auto-approve; legacy: <tspan font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="12">setAutoApproved(context, theme, …)</tspan></text>
+  <text x="66" y="214" class="b">• capability prompt (OpenID per token) or auto-approve; legacy: the driver's <tspan font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="12">legacyAutoApproved()</tspan></text>
   <text x="66" y="234" class="b">• <tspan font-weight="700">Messages</tspan> log of every envelope in both directions · <tspan font-weight="700">Driver snapshot</tspan></text>
   <text x="66" y="254" class="b">• get_client_context: widget-host / browser theme and language · <tspan font-weight="700">Revoke all capabilities</tspan> · notify_ready timeout</text>
   <text x="66" y="280" class="s">URL params for e2e: ?event=&lt;json&gt;&amp;autoload=1&amp;autoApprove=1&amp;wrapper=&lt;url&gt;</text>
@@ -42,7 +42,7 @@
   <text x="66" y="340" class="h2">WidgetHostDriver</text>
   <text x="66" y="362" class="s">the real driver, compiled to wasm</text>
   <text x="66" y="384" class="m">handleMessageFromWidget(json)</text>
-  <text x="66" y="402" class="m">sendToWidget → iframe.postMessage</text>
+  <text x="66" y="402" class="m">loadIframe · sendToWidget → iframe</text>
   <text x="66" y="418" class="s">nothing test-specific in here</text>
 
   <!-- memory store menu -->

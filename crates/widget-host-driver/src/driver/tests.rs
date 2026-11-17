@@ -16,11 +16,15 @@ use widget_actions::{
 };
 use widget_matrix_backend::{BackendError, InMemoryBackend, MatrixBackend, MediaFile};
 
-use crate::{DriverError, PlatformError, WidgetHostDriver, WidgetHostPlatform};
+use crate::{
+    legacy_auto_approved, DriverError, EmbedOptions, PlatformError, WidgetDefinition, WidgetEventError,
+    WidgetHostDriver, WidgetHostPlatform, WidgetIframe,
+};
 
 #[derive(Default)]
 struct RecordingPlatform {
     sent: Mutex<Vec<WireMessage>>,
+    loaded: Mutex<Vec<WidgetIframe>>,
     requested: Mutex<Vec<Vec<Capability>>>,
     ready: AtomicBool,
     navigated: Mutex<Vec<String>>,
@@ -34,6 +38,9 @@ impl RecordingPlatform {
 }
 
 impl WidgetHostPlatform for RecordingPlatform {
+    fn load_iframe(&self, iframe: WidgetIframe) {
+        self.loaded.lock().unwrap().push(iframe);
+    }
     fn send_to_widget(&self, json: String) {
         self.sent.lock().unwrap().push(WireMessage::from_json(&json).unwrap());
     }
@@ -68,8 +75,27 @@ impl WidgetHostPlatform for RecordingPlatform {
 fn setup() -> (Arc<WidgetHostDriver>, Arc<InMemoryBackend>, Arc<RecordingPlatform>) {
     let backend = InMemoryBackend::new("!room:x".into(), "@me:x".into());
     let platform = Arc::new(RecordingPlatform::default());
-    let driver = WidgetHostDriver::new(backend.clone(), platform.clone());
+    let driver =
+        WidgetHostDriver::new(widget("m.widget", true), EmbedOptions::default(), backend.clone(), platform.clone())
+            .unwrap();
+    driver.start();
     (driver, backend, platform)
+}
+
+/// A widget at `https://widget.example/app`: an MSC4411 one, or a legacy one.
+fn widget(event_type: &str, uses_widget_api: bool) -> WidgetDefinition {
+    let content = json!({ "name": "W", "url": "https://widget.example/app", "uses_widget_api": uses_widget_api });
+    WidgetDefinition::parse(event_type, "w", &content).unwrap()
+}
+
+/// A driver that was not started, for `widget`, of a client with a compat wrapper.
+fn setup_for(widget: WidgetDefinition) -> (Arc<WidgetHostDriver>, Arc<RecordingPlatform>) {
+    let backend = InMemoryBackend::new("!room:x".into(), "@me:x".into());
+    let platform = Arc::new(RecordingPlatform::default());
+    let options =
+        EmbedOptions { wrapper_url: Some("https://client.example/wrapper/".into()), ..EmbedOptions::default() };
+    let driver = WidgetHostDriver::new(widget, options, backend, platform.clone()).unwrap();
+    (driver, platform)
 }
 
 fn block<F: std::future::Future>(f: F) -> F::Output {
@@ -1526,9 +1552,11 @@ fn top_navigation_is_never_asked_about_nor_granted() {
     assert_eq!(updates(&platform.drain()), [vec![camera.clone()]]);
 
     // A request of nothing else completes at once, with nothing new.
+    // (The camera loaded the iframe again: the page in it holds nothing yet.)
     request_caps(&driver, never, "w2");
     assert_eq!(platform.requested.lock().unwrap().len(), 1);
-    assert_eq!(updates(&platform.drain()), [vec![camera]]);
+    assert_eq!(updates(&platform.drain()), [Vec::<Capability>::new()]);
+    assert_eq!(driver.snapshot().carried, [camera]);
 }
 
 #[test]
@@ -1566,4 +1594,222 @@ fn webview_capabilities_allow_no_action() {
     .unwrap();
     let reply = platform.drain().remove(0);
     assert_eq!(reply.error().unwrap().kind(), ErrorKind::MissingCapability);
+}
+
+// ---------------------------------------------------------------------------------------------
+// The widget's iframe: what the platform is told to load, and when it is loaded again.
+
+const STRICT: &str = "allow-scripts allow-same-origin";
+
+fn request(driver: &WidgetHostDriver, capabilities: &[Capability]) {
+    let request = RequestCapabilitiesRequest { capabilities: capabilities.to_vec() };
+    block(feed(driver, WidgetRequest::RequestCapabilities { request }, "req")).unwrap();
+}
+
+/// The `allowed` of the one `update_capabilities` among the messages sent since the last drain.
+fn allowed(platform: &RecordingPlatform) -> Vec<Capability> {
+    let updates: Vec<_> = platform
+        .drain()
+        .iter()
+        .filter_map(|msg| match HostRequest::from_wire(msg) {
+            Ok(HostRequest::UpdateCapabilities { request }) => Some(request.allowed),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(updates.len(), 1, "one update_capabilities");
+    updates.into_iter().next().unwrap()
+}
+
+fn loaded(platform: &RecordingPlatform) -> Vec<WidgetIframe> {
+    platform.loaded.lock().unwrap().clone()
+}
+
+#[test]
+fn start_loads_the_strict_iframe() {
+    let (driver, _, platform) = setup();
+    let strict = WidgetIframe {
+        url: "https://widget.example/app".into(),
+        origin: "https://widget.example".into(),
+        sandbox: STRICT.into(),
+        allow: String::new(),
+    };
+    assert_eq!(loaded(&platform), std::slice::from_ref(&strict));
+    assert_eq!(driver.snapshot().iframe, strict);
+    // A widget with the widget API is ready when it says so.
+    assert!(!platform.ready.load(Ordering::SeqCst));
+    // Once.
+    driver.start();
+    assert_eq!(loaded(&platform).len(), 1);
+}
+
+#[test]
+fn nothing_is_loaded_before_start() {
+    let (driver, platform) = setup_for(widget("m.widget", true));
+    assert!(loaded(&platform).is_empty());
+    // What the client remembers is part of the first iframe, requested or not.
+    driver.set_auto_approved(vec![Capability::webview_allow("camera"), Capability::Navigate]);
+    assert!(loaded(&platform).is_empty());
+    assert_eq!(driver.snapshot().iframe.allow, "camera 'src'");
+    driver.start();
+    assert_eq!(loaded(&platform).len(), 1);
+    assert_eq!((loaded(&platform)[0].sandbox.as_str(), loaded(&platform)[0].allow.as_str()), (STRICT, "camera 'src'"));
+    // The widget's request for it is granted at once: no question, no second iframe.
+    request(&driver, &[Capability::webview_allow("camera")]);
+    assert!(platform.requested.lock().unwrap().is_empty());
+    assert_eq!(allowed(&platform), [Capability::webview_allow("camera")]);
+    assert_eq!(loaded(&platform).len(), 1);
+}
+
+#[test]
+fn a_widget_that_must_not_be_loaded_gets_no_driver() {
+    let backend = InMemoryBackend::new("!room:x".into(), "@me:x".into());
+    let platform = Arc::new(RecordingPlatform::default());
+    let content = json!({ "name": "W", "url": "javascript:alert(1)" });
+    let refused = WidgetDefinition::parse("m.widget", "w", &content).unwrap();
+    let error = WidgetHostDriver::new(refused.clone(), EmbedOptions::default(), backend.clone(), platform.clone())
+        .err()
+        .unwrap();
+    assert_eq!(
+        error,
+        WidgetEventError::Refused { widget: refused, reason: "javascript: URLs are not allowed, only https:".into() }
+    );
+    // A legacy widget of a client without a compat wrapper.
+    let legacy = widget("im.vector.modular.widgets", false);
+    let error = WidgetHostDriver::new(legacy, EmbedOptions::default(), backend, platform).err().unwrap();
+    assert_eq!(error.to_string(), "a legacy widget needs the compat wrapper");
+}
+
+#[test]
+fn a_widget_without_the_widget_api_is_ready_at_once_and_gets_no_answer() {
+    let (driver, platform) = setup_for(widget("m.widget", false));
+    assert!(!platform.ready.load(Ordering::SeqCst));
+    driver.start();
+    assert_eq!(loaded(&platform).len(), 1);
+    assert!(platform.ready.load(Ordering::SeqCst));
+    assert!(!driver.snapshot().ready, "it never said notify_ready");
+
+    assert_eq!(block(feed(&driver, WidgetRequest::NotifyReady, "c1")), Err(DriverError::NoWidgetApi));
+    request_refused(&driver);
+    assert!(platform.drain().is_empty());
+    assert!(platform.requested.lock().unwrap().is_empty());
+    assert!(driver.snapshot().pending_requested.is_empty());
+}
+
+fn request_refused(driver: &WidgetHostDriver) {
+    let request = RequestCapabilitiesRequest { capabilities: vec![Capability::Navigate] };
+    let result = block(feed(driver, WidgetRequest::RequestCapabilities { request }, "req"));
+    assert_eq!(result, Err(DriverError::NoWidgetApi));
+}
+
+#[test]
+fn a_legacy_widget_runs_in_the_compat_wrapper_with_a_legacy_clients_iframe() {
+    let (driver, platform) = setup_for(widget("im.vector.modular.widgets", false));
+    driver.start();
+    let iframe = loaded(&platform).pop().unwrap();
+    assert!(iframe.url.starts_with("https://client.example/wrapper/?legacy_widget_url="), "{}", iframe.url);
+    assert_eq!(iframe.origin, "https://client.example");
+    assert_eq!(
+        iframe.sandbox,
+        "allow-scripts allow-same-origin allow-downloads allow-forms allow-popups allow-popups-to-escape-sandbox \
+         allow-presentation"
+    );
+    assert!(iframe.allow.starts_with("autoplay 'src'; camera 'src'; "), "{}", iframe.allow);
+    // The compat wrapper speaks the widget API: ready when it says so.
+    assert!(!platform.ready.load(Ordering::SeqCst));
+
+    // What the wrapper requests when it starts is granted at once: no question, no second iframe.
+    request(&driver, &legacy_auto_approved());
+    assert!(platform.requested.lock().unwrap().is_empty());
+    assert_eq!(allowed(&platform), legacy_auto_approved());
+    assert_eq!(loaded(&platform).len(), 1);
+    // An OpenID token is asked about, as for every widget.
+    request(&driver, &[Capability::GetOpenId]);
+    assert_eq!(platform.requested.lock().unwrap().as_slice(), [vec![Capability::GetOpenId]]);
+}
+
+#[test]
+fn a_granted_webview_capability_loads_the_iframe_again() {
+    let (driver, backend, platform) = setup();
+    let camera = Capability::webview_allow("camera");
+    let forward = Capability::forward_event("m.room.message");
+    block(feed(&driver, WidgetRequest::NotifyReady, "ready")).unwrap();
+    platform.ready.store(false, Ordering::SeqCst);
+    platform.drain();
+    request(&driver, &[camera.clone(), forward.clone(), Capability::GetOpenId]);
+    platform.drain();
+    driver.approve_capabilities(vec![camera.clone(), forward.clone(), Capability::GetOpenId]);
+
+    // The old page is told what it holds, then the iframe is loaded again with the new attributes.
+    assert_eq!(allowed(&platform), [camera.clone(), forward.clone(), Capability::GetOpenId]);
+    let iframes = loaded(&platform);
+    assert_eq!(iframes.len(), 2);
+    assert_eq!((iframes[1].sandbox.as_str(), iframes[1].allow.as_str()), (STRICT, "camera 'src'"));
+    assert_eq!(iframes[1].url, iframes[0].url);
+
+    // The driver has forgotten the old page; what it held is carried, but not a single-use capability.
+    let snapshot = driver.snapshot();
+    assert!(!snapshot.ready && snapshot.approved.is_empty() && snapshot.pending_requested.is_empty());
+    assert_eq!(snapshot.carried, [camera.clone(), forward.clone()]);
+    assert_eq!(snapshot.iframe, iframes[1]);
+    // Nothing is forwarded to a page that has not spoken yet.
+    backend.inject(event("m.room.message", None, json!({ "body": "hi" })));
+    assert!(platform.drain().is_empty());
+
+    // The new page starts over: it is ready when it says so, and gets what the old one held without a question.
+    block(feed(&driver, WidgetRequest::NotifyReady, "ready")).unwrap();
+    assert!(platform.ready.load(Ordering::SeqCst) && driver.snapshot().ready);
+    platform.drain();
+    platform.requested.lock().unwrap().clear();
+    request(&driver, &[camera.clone(), forward.clone()]);
+    assert!(platform.requested.lock().unwrap().is_empty());
+    assert_eq!(allowed(&platform), [camera.clone(), forward.clone()]);
+    assert_eq!(loaded(&platform).len(), 2, "no reload for what the iframe has already");
+    // The OpenID token is asked about again.
+    request(&driver, &[Capability::GetOpenId]);
+    assert_eq!(platform.requested.lock().unwrap().as_slice(), [vec![Capability::GetOpenId]]);
+    driver.approve_capabilities(vec![]);
+    platform.drain();
+
+    // Revoking it loads the iframe again, without it; the rest is carried on.
+    driver.revoke_capabilities(vec![camera.clone()]);
+    assert_eq!(allowed(&platform), std::slice::from_ref(&forward));
+    let iframes = loaded(&platform);
+    assert_eq!(iframes.len(), 3);
+    assert_eq!((iframes[2].sandbox.as_str(), iframes[2].allow.as_str()), (STRICT, ""));
+    assert_eq!(driver.snapshot().carried, std::slice::from_ref(&forward));
+    // The next page is asked about the camera again.
+    request(&driver, &[camera.clone(), forward]);
+    assert_eq!(platform.requested.lock().unwrap().as_slice(), [vec![Capability::GetOpenId], vec![camera]]);
+}
+
+#[test]
+fn what_does_not_change_the_attributes_loads_nothing() {
+    let (driver, _, platform) = setup();
+    // The base tokens are in every iframe; a denied capability changes nothing; the two spellings are one capability.
+    request(
+        &driver,
+        &[
+            Capability::webview_sandbox("allow-scripts"),
+            Capability::webview_allow("camera"),
+            Capability::webview_sandbox("allow-top-navigation"),
+            Capability::Navigate,
+        ],
+    );
+    driver.approve_capabilities(vec![Capability::Navigate, Capability::webview_sandbox("allow-top-navigation")]);
+    assert_eq!(allowed(&platform), [Capability::webview_sandbox("allow-scripts"), Capability::Navigate]);
+    assert_eq!(loaded(&platform).len(), 1);
+    driver.revoke_capabilities(vec![Capability::Navigate]);
+    assert_eq!(loaded(&platform).len(), 1);
+    assert!(driver.snapshot().carried.is_empty());
+
+    // Granted without asking from now on, in the stable spelling: part of the iframe at once.
+    driver.set_auto_approved(vec![Capability::parse("webview:m.allow:camera")]);
+    assert_eq!(loaded(&platform).len(), 2);
+    assert_eq!(loaded(&platform)[1].allow, "camera 'src'");
+    driver.set_auto_approved(vec![Capability::parse("webview:org.matrix.mscXXXX.allow:camera")]);
+    assert_eq!(loaded(&platform).len(), 2);
+    // And no longer.
+    driver.set_auto_approved(vec![]);
+    assert_eq!(loaded(&platform).len(), 3);
+    assert_eq!(loaded(&platform)[2].allow, "");
 }

@@ -17,8 +17,8 @@ const LAB_STATE: RoomStateData = { state: { status: "ready", value: MOCKED_ROOM_
 
 /**
  * A stand-in for the driver's parser (stories load no wasm): every widget type with a string `url`
- * (and, MSC4411, a string `name` for `m.widget`) is a widget, absolute http(s) URLs are loaded, a
- * legacy widget through a fake compat wrapper. The URL check is coarser than the driver's.
+ * (and, MSC4411, a string `name` for `m.widget`) is a widget, and one with an absolute http(s) URL may
+ * be loaded. The URL check is coarser than the driver's.
  */
 const STORY_WIDGET_EVENTS: WidgetEventParser = {
   resolve(event) {
@@ -26,10 +26,17 @@ const STORY_WIDGET_EVENTS: WidgetEventParser = {
     const legacy = event.type === "im.vector.modular.widgets";
     if (typeof url !== "string" || !WIDGET_EVENT_TYPES.includes(event.type) || (!legacy && typeof name !== "string")) return undefined;
     const shown = typeof name === "string" && name ? name : event.state_key;
+    const widget = {
+      eventType: event.type,
+      widgetId: event.state_key,
+      name: shown,
+      url,
+      avatarUrl: undefined,
+      usesWidgetApi: !legacy && event.content.uses_widget_api === true,
+      legacy: legacy ? { widgetType: undefined, waitForIframeLoad: event.content.waitForIframeLoad !== false, data: undefined } : undefined,
+    };
     const problem = STORY_WIDGET_EVENTS.urlProblem(url);
-    if (problem) return { name: shown, problem };
-    const embedded = legacy ? `https://wrapper.example/?legacy_widget_url=${encodeURIComponent(url)}` : url;
-    return { name: shown, widget: { url: embedded, name: shown, legacy, usesWidgetApi: legacy || event.content.uses_widget_api === true } };
+    return problem ? { widget, problem } : { widget };
   },
   urlProblem: (url) => (URL.canParse(url) && /^https?:$/.test(new URL(url).protocol) ? undefined : "the URL is not an absolute http: or https: URL"),
 };

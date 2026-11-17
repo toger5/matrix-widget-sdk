@@ -14,7 +14,11 @@ use widget_actions::{
 };
 use widget_matrix_backend::MatrixBackend;
 
-use crate::{DriverError, WebviewPolicy, WidgetHostPlatform};
+use crate::webview::{legacy_auto_approved, webview_attributes};
+use crate::widget_event::WidgetEmbed;
+use crate::{
+    DriverError, EmbedOptions, WebviewPolicy, WidgetDefinition, WidgetEventError, WidgetHostPlatform, WidgetIframe,
+};
 
 mod access;
 mod requests;
@@ -39,10 +43,21 @@ pub struct DriverSnapshot {
     /// ([`WidgetHostDriver::set_single_use`]) took out of those lists after the question was asked
     /// (it is granted only if the answer approves it).
     pub pending_requested: Vec<Capability>,
-    /// Capabilities granted without asking the platform, see [`WidgetHostDriver::set_auto_approved`].
+    /// Capabilities granted without asking the platform: those of
+    /// [`WidgetHostDriver::set_auto_approved`], then what the driver adds itself (the set of a
+    /// legacy widget, [`legacy_auto_approved`](crate::legacy_auto_approved); `carried`; the webview
+    /// capabilities the iframe was built with).
     pub auto_approved: Vec<Capability>,
     /// Capabilities granted for one use only, see [`WidgetHostDriver::set_single_use`].
     pub single_use: Vec<Capability>,
+    /// What the widget held when its iframe was last loaded again for its webview capabilities
+    /// ([`WidgetHostPlatform::load_iframe`]), without the single-use ones and what was revoked
+    /// since: the page in the new iframe gets these without asking when it requests them. A client
+    /// that remembers approvals remembers `approved` and these.
+    pub carried: Vec<Capability>,
+    /// The widget's iframe as the platform was last told to build it
+    /// ([`WidgetHostPlatform::load_iframe`]); before [`WidgetHostDriver::start`], as `start` will.
+    pub iframe: WidgetIframe,
 }
 
 #[derive(Debug, Default)]
@@ -53,10 +68,21 @@ struct State {
     approved: Vec<Capability>,
     /// The capabilities of the open `request_capabilities`, if there is one.
     pending_requested: Option<Vec<Capability>>,
+    /// What the client grants without asking ([`WidgetHostDriver::set_auto_approved`]).
     auto_approved: Vec<Capability>,
+    /// What a legacy widget is granted without asking; empty for an MSC4411 widget. Never changes.
+    legacy: Vec<Capability>,
+    /// See [`DriverSnapshot::carried`].
+    carried: Vec<Capability>,
     single_use: Vec<Capability>,
     /// Requests the driver sent to the widget that the widget has not acknowledged yet.
     awaiting_ack: HashMap<String, HostRequest>,
+    /// [`WidgetHostDriver::start`] was called: the platform has an iframe.
+    started: bool,
+    /// See [`DriverSnapshot::iframe`].
+    iframe: WidgetIframe,
+    /// The webview capabilities `iframe` was built from.
+    applied_webview: Vec<Capability>,
 }
 
 impl State {
@@ -82,15 +108,69 @@ impl State {
         self.pending_requested
             .iter()
             .flatten()
-            .filter(|c| !self.approved.contains(c) && !self.auto_approved.contains(c) && WebviewPolicy::asks(c))
+            .filter(|c| !self.approved.contains(c) && !self.unasked(c) && WebviewPolicy::asks(c))
             .cloned()
             .collect()
     }
+
+    /// What is granted without asking the platform: the client said so, a legacy widget gets it
+    /// anyway, the page before held it ([`DriverSnapshot::carried`]), or the iframe was built with it.
+    fn unasked_lists(&self) -> impl Iterator<Item = &Capability> {
+        self.auto_approved.iter().chain(&self.legacy).chain(&self.carried).chain(&self.applied_webview)
+    }
+
+    fn unasked(&self, capability: &Capability) -> bool {
+        self.unasked_lists().any(|unasked| unasked == capability)
+    }
+
+    /// Bring `iframe` in line with the webview capabilities the widget holds or gets without
+    /// asking (so a remembered grant is part of the first iframe). Returns the iframe to load when
+    /// its attributes changed after the start: the page in it starts over, so everything about the
+    /// old page is forgotten here, and what it held is carried over.
+    fn sync_iframe(&mut self) -> Option<WidgetIframe> {
+        let granted = self.legacy.iter().chain(&self.auto_approved).chain(&self.carried).chain(&self.approved);
+        let wanted = unique(granted.filter(|capability| capability.is_webview()));
+        let attributes = webview_attributes(wanted.clone());
+        let same = attributes.sandbox == self.iframe.sandbox && attributes.allow == self.iframe.allow;
+        self.applied_webview = wanted;
+        if same {
+            return None;
+        }
+        self.iframe.sandbox = attributes.sandbox;
+        self.iframe.allow = attributes.allow;
+        if !self.started {
+            return None;
+        }
+        for capability in std::mem::take(&mut self.approved) {
+            if !self.single_use.contains(&capability) && !self.carried.contains(&capability) {
+                self.carried.push(capability);
+            }
+        }
+        self.widget_spoke = false;
+        self.ready = false;
+        self.pending_requested = None;
+        self.awaiting_ack.clear();
+        Some(self.iframe.clone())
+    }
+}
+
+/// `capabilities`, each once, in their order.
+fn unique<'a>(capabilities: impl Iterator<Item = &'a Capability>) -> Vec<Capability> {
+    let mut all: Vec<Capability> = Vec::new();
+    for capability in capabilities {
+        if !all.contains(capability) {
+            all.push(capability.clone());
+        }
+    }
+    all
 }
 
 /// Host side state machine for one widget instance. See the crate documentation.
 #[cfg_attr(feature = "uniffi", derive(uniffi::Object))]
 pub struct WidgetHostDriver {
+    /// Whether the widget API is set up: the widget's `uses_widget_api`, and always for a legacy
+    /// widget (the compat wrapper speaks it).
+    uses_widget_api: bool,
     backend: Arc<dyn MatrixBackend>,
     platform: Arc<dyn WidgetHostPlatform>,
     state: Mutex<State>,
@@ -106,22 +186,64 @@ pub struct WidgetHostDriver {
 
 #[cfg_attr(feature = "uniffi", uniffi::export)]
 impl WidgetHostDriver {
-    /// Create a driver for one widget. `backend` must be bound to the room the widget lives in.
+    /// Create a driver for the widget [`parse_widget_state_event`](crate::parse_widget_state_event)
+    /// read from its state event. `backend` must be bound to the room the widget lives in.
+    /// Nothing is loaded before [`start`](Self::start).
+    ///
+    /// Fails with [`WidgetEventError::Refused`] for a widget that must not be loaded: the check of
+    /// `parse_widget_state_event`, made again (a definition is plain data).
     #[cfg_attr(feature = "uniffi", uniffi::constructor)]
-    pub fn new(backend: Arc<dyn MatrixBackend>, platform: Arc<dyn WidgetHostPlatform>) -> Arc<Self> {
+    pub fn new(
+        widget: WidgetDefinition,
+        options: EmbedOptions,
+        backend: Arc<dyn MatrixBackend>,
+        platform: Arc<dyn WidgetHostPlatform>,
+    ) -> Result<Arc<Self>, WidgetEventError> {
         // On the web, warnings and errors reach the console without any setup.
         #[cfg(all(feature = "uniffi", target_arch = "wasm32"))]
         widget_logging::ensure_default();
-        log::debug!("widget host driver created for room {}", backend.room_id());
-        Arc::new_cyclic(|this| Self {
+        let WidgetEmbed { url, uses_widget_api } = widget.embed(&options)?;
+        // `embed` returns a serialised http(s) URL.
+        let origin = url::Url::parse(&url).map(|url| url.origin().ascii_serialization()).unwrap_or_default();
+        let mut state = State {
+            single_use: vec![Capability::GetOpenId],
+            legacy: if widget.legacy.is_some() { legacy_auto_approved() } else { Vec::new() },
+            iframe: WidgetIframe { url, origin, ..WidgetIframe::default() },
+            ..State::default()
+        };
+        // Not started: sets the attributes of the first iframe, strict or a legacy client's.
+        state.sync_iframe();
+        log::debug!(
+            "widget host driver created for {} ({}) in room {}",
+            widget.widget_id,
+            widget.event_type,
+            backend.room_id()
+        );
+        Ok(Arc::new_cyclic(|this| Self {
+            uses_widget_api,
             backend,
             platform,
-            state: Mutex::new(State { single_use: vec![Capability::GetOpenId], ..State::default() }),
+            state: Mutex::new(state),
             room_subscription: SubscriptionSlot::default(),
             to_device_subscription: SubscriptionSlot::default(),
             turn_subscription: SubscriptionSlot::default(),
             this: this.clone(),
-        })
+        }))
+    }
+
+    /// Load the widget ([`WidgetHostPlatform::load_iframe`]). Call it once, after
+    /// [`set_auto_approved`](Self::set_auto_approved) with what the client remembers: its webview
+    /// capabilities are part of the first iframe.
+    pub fn start(&self) {
+        let iframe = {
+            let mut state = self.lock();
+            if state.started {
+                return;
+            }
+            state.started = true;
+            state.iframe.clone()
+        };
+        self.load(iframe);
     }
 
     /// Feed a message from the widget window (`event.data`, as JSON) into the driver.
@@ -131,7 +253,14 @@ impl WidgetHostDriver {
     /// whether to ignore it, log it, or pass it to a legacy implementation.
     /// [`DriverError::LegacyWidgetApi`] says that the message has the legacy shape (`api` instead
     /// of `source`): the first action a widget sends tells the two formats apart.
+    ///
+    /// A widget without the widget API (its state event does not say `uses_widget_api: true`) gets
+    /// no answer at all: every message is refused with [`DriverError::NoWidgetApi`].
     pub async fn handle_message_from_widget(&self, json: String) -> Result<(), DriverError> {
+        if !self.uses_widget_api {
+            log::debug!("ignored a message of a widget without the widget api");
+            return Err(DriverError::NoWidgetApi);
+        }
         let result = self.dispatch(&json).await;
         match &result {
             Ok(()) => {}
@@ -152,14 +281,16 @@ impl WidgetHostDriver {
     /// question is open, the platform is not called and `update_capabilities` goes out
     /// immediately; while a question is open, they wait for its answer.
     ///
-    /// Typical use: `widget:…get_matrix_context` and `widget:…get_client_context` for a legacy
-    /// widget behind the compat wrapper, because a legacy client passed the same facts as URL
-    /// parameters; and the webview capabilities the widget's iframe was built with, so that the
-    /// widget's request for them is granted at once.
+    /// Typical use: what the client remembers of earlier approvals. What a legacy widget gets
+    /// anyway ([`legacy_auto_approved`](crate::legacy_auto_approved)) the driver adds itself.
+    ///
     /// Replaces the previous list and affects only future requests. A webview capability that is
-    /// never granted ([`WebviewPolicy::Never`]) stays refused.
+    /// never granted ([`WebviewPolicy::Never`]) stays refused; the others are part of the widget's
+    /// iframe, requested or not, which loads the iframe again if it changes its attributes after
+    /// [`start`](Self::start).
     pub fn set_auto_approved(&self, capabilities: Vec<Capability>) {
         self.lock().auto_approved = capabilities;
+        self.sync_iframe();
     }
 
     /// Complete the capability negotiation started by
@@ -174,6 +305,8 @@ impl WidgetHostDriver {
     /// * The widget gets `update_capabilities` with everything it holds now.
     /// * If new capabilities were granted, the driver subscribes to the backend again. The backend
     ///   then delivers the current room state, which reaches the widget as `update_state`.
+    /// * If a granted webview capability changes the iframe's `sandbox` or `allow`, the iframe is
+    ///   loaded again after that ([`WidgetHostPlatform::load_iframe`]).
     ///
     /// Does nothing if no request is pending.
     pub fn approve_capabilities(&self, approved: Vec<Capability>) {
@@ -184,7 +317,7 @@ impl WidgetHostDriver {
             };
             let before = state.approved.len();
             for capability in &requested {
-                let approved = approved.contains(capability) || state.auto_approved.contains(capability);
+                let approved = approved.contains(capability) || state.unasked(capability);
                 let granted = WebviewPolicy::grants(capability, approved);
                 if granted && !state.approved.contains(capability) {
                     state.approved.push(capability.clone());
@@ -203,7 +336,7 @@ impl WidgetHostDriver {
             (update, state.approved.len() != before)
         };
         self.send_request(update);
-        if changed {
+        if !self.sync_iframe() && changed {
             self.resubscribe();
         }
     }
@@ -213,26 +346,36 @@ impl WidgetHostDriver {
     /// * The widget gets `update_capabilities` with the reduced list.
     /// * From then on its requests for the revoked actions are answered with
     ///   `missing_capability`, and the host stops sending the revoked subscriptions.
-    /// * The capabilities stay revoked until the widget requests them again.
+    /// * The capabilities stay revoked until the widget requests them again, and are no longer
+    ///   [carried](DriverSnapshot::carried).
+    /// * If that changes the iframe's `sandbox` or `allow`, the iframe is loaded again.
     ///
-    /// Does nothing if the widget holds none of `capabilities`.
+    /// Does nothing if the widget holds none of `capabilities` and none is carried.
     pub fn revoke_capabilities(&self, capabilities: Vec<Capability>) {
         let update = {
             let mut state = self.lock();
             let before = state.approved.len();
             state.approved.retain(|capability| !capabilities.contains(capability));
-            if state.approved.len() == before {
-                return;
-            }
-            log::info!(
-                "capabilities revoked: {} taken away, the widget holds {}",
-                before - state.approved.len(),
-                state.approved.len()
-            );
-            HostRequest::UpdateCapabilities { request: UpdateCapabilitiesRequest { allowed: state.approved.clone() } }
+            state.carried.retain(|capability| !capabilities.contains(capability));
+            (state.approved.len() != before).then(|| {
+                log::info!(
+                    "capabilities revoked: {} taken away, the widget holds {}",
+                    before - state.approved.len(),
+                    state.approved.len()
+                );
+                HostRequest::UpdateCapabilities {
+                    request: UpdateCapabilitiesRequest { allowed: state.approved.clone() },
+                }
+            })
         };
-        self.send_request(update);
-        self.resubscribe();
+        let revoked = update.is_some();
+        // The page is told before a reload forgets it.
+        if let Some(update) = update {
+            self.send_request(update);
+        }
+        if !self.sync_iframe() && revoked {
+            self.resubscribe();
+        }
     }
 
     /// Set the capabilities that are granted for one use only. Default: `widget:…get_openid`.
@@ -293,8 +436,10 @@ impl WidgetHostDriver {
             ready: s.ready,
             approved: s.approved.clone(),
             pending_requested: s.pending_requested.clone().unwrap_or_default(),
-            auto_approved: s.auto_approved.clone(),
+            auto_approved: unique(s.unasked_lists()),
             single_use: s.single_use.clone(),
+            carried: s.carried.clone(),
+            iframe: s.iframe.clone(),
         }
     }
 }
@@ -307,6 +452,26 @@ impl WidgetHostDriver {
     /// A copy of the approved capabilities, so that no lock is held while they are used.
     fn approved(&self) -> Vec<Capability> {
         self.lock().approved.clone()
+    }
+
+    /// Hand `iframe` to the platform; a widget without the widget API is ready with that.
+    fn load(&self, iframe: WidgetIframe) {
+        log::info!("loading the widget's iframe: sandbox \"{}\", allow \"{}\"", iframe.sandbox, iframe.allow);
+        self.platform.load_iframe(iframe);
+        if !self.uses_widget_api {
+            self.platform.on_ready();
+        }
+    }
+
+    /// [`State::sync_iframe`]; if the attributes changed, the page starts over in a new iframe:
+    /// nothing is forwarded to the old one any more. Returns whether it did.
+    fn sync_iframe(&self) -> bool {
+        let Some(iframe) = self.lock().sync_iframe() else { return false };
+        self.room_subscription.cancel();
+        self.to_device_subscription.cancel();
+        self.turn_subscription.cancel();
+        self.load(iframe);
+        true
     }
 
     fn send(&self, msg: &WireMessage) {

@@ -1,6 +1,6 @@
 use widget_actions::Capability;
 
-use crate::PlatformError;
+use crate::{PlatformError, WidgetIframe};
 
 /// What the embedding client provides to the driver.
 ///
@@ -8,6 +8,19 @@ use crate::PlatformError;
 /// concurrently for one driver, but it may call them from any thread the platform runs it on.
 #[cfg_attr(feature = "uniffi", uniffi::export(with_foreign))]
 pub trait WidgetHostPlatform: Send + Sync {
+    /// Build the widget's iframe (webview) from `iframe` behind a loading state, in place of the
+    /// one before, and start the timeout of [`on_ready`](Self::on_ready).
+    ///
+    /// Called by [`WidgetHostDriver::start`], and again whenever the widget's webview
+    /// capabilities change `sandbox` or `allow`: a browser applies them only to a new iframe, so
+    /// the widget starts over in it. The driver has forgotten the old page by then (drop an open
+    /// capability prompt) and grants the new one what the old one held without asking. Accept
+    /// messages only from the window of the iframe built last, and only from
+    /// [`WidgetIframe::origin`]. A client should stop a widget that is reloaded too often.
+    ///
+    /// [`WidgetHostDriver::start`]: crate::WidgetHostDriver::start
+    fn load_iframe(&self, iframe: WidgetIframe);
+
     /// Deliver a JSON message to the widget window, e.g.
     /// `iframe.contentWindow.postMessage(JSON.parse(json), widgetOrigin)`.
     ///
@@ -40,7 +53,12 @@ pub trait WidgetHostPlatform: Send + Sync {
     /// [`WidgetHostDriver::approve_capabilities`]: crate::WidgetHostDriver::approve_capabilities
     fn on_capabilities_requested(&self, requested: Vec<Capability>);
 
-    /// The widget sent `notify_ready`: hide the loading state and show the iframe.
+    /// Hide the loading state and show the iframe built by the last
+    /// [`load_iframe`](Self::load_iframe). Called once after each `load_iframe`:
+    ///
+    /// * when the widget sends `notify_ready`, or
+    /// * right after `load_iframe`, from inside the same driver call, for a widget whose state
+    ///   event does not say `uses_widget_api: true`: it never sends `notify_ready`.
     ///
     /// Until then the client shows a loading state in place of the widget. If this is not called
     /// in time (MSC4412 recommends 15 seconds,

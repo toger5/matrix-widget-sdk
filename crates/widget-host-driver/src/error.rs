@@ -15,6 +15,10 @@ pub enum DriverError {
     /// through the compat wrapper.
     #[error("widget uses the legacy widget api (`api` instead of `source`)")]
     LegacyWidgetApi,
+    /// The widget's state event does not say `uses_widget_api: true` (MSC4412), so the widget API
+    /// is not set up for it: the driver answers none of its messages.
+    #[error("the widget does not use the widget api (`uses_widget_api` is not set in its state event)")]
+    NoWidgetApi,
     /// The widget sent a response for a request the driver never made (or already completed).
     #[error("unexpected response for request id `{request_id}`")]
     UnexpectedResponse { request_id: String },

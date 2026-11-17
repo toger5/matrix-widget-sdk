@@ -24,13 +24,23 @@ const CORE = "org.matrix.msc4412.";
 
 type Message = { source: string; action: string; request_id: string; request?: unknown; response?: unknown };
 
-function setup() {
+const OPTIONS: hostDriver.EmbedOptions = { wrapperUrl: "https://client.example/wrapper/", clientOrigin: undefined, ownWidgetDirs: [], allowHttp: false };
+const widgetOf = (type: string, content: Record<string, unknown>) => hostDriver.parseWidgetStateEvent(type, "w", { name: "W", url: "https://widget.example/app", ...content }, OPTIONS);
+
+function setup(widget = widgetOf("m.widget", { uses_widget_api: true })) {
   const sent: Message[] = [];
-  const platform: hostDriver.WidgetHostPlatform & { navigated: string[] } = {
+  const platform: hostDriver.WidgetHostPlatform & { navigated: string[]; iframes: hostDriver.WidgetIframe[]; ready: number } = {
     navigated: [],
+    iframes: [],
+    ready: 0,
+    loadIframe(iframe) {
+      this.iframes.push(iframe);
+    },
     sendToWidget: (json) => void sent.push(JSON.parse(json)),
     onCapabilitiesRequested: (requested) => queueMicrotask(() => driver.approveCapabilities(requested)),
-    onReady: () => {},
+    onReady() {
+      this.ready += 1;
+    },
     navigate(uri) {
       this.navigated.push(uri);
     },
@@ -40,7 +50,8 @@ function setup() {
     clientLanguage: () => "en",
   };
   const backend = new matrixBackend.InMemoryBackend("!room:example.org", "@alice:example.org");
-  const driver = new hostDriver.WidgetHostDriver(backend.asBackend(), platform);
+  const driver = new hostDriver.WidgetHostDriver(widget, OPTIONS, backend.asBackend(), platform);
+  driver.start();
   let n = 0;
   /** Send a widget request and return the host's response to it. */
   const ask = async (action: string, request: unknown = {}) => {
@@ -195,8 +206,10 @@ describe("WidgetHostDriver through the JS bindings", () => {
     expect(drain().map((m) => m.action)).toEqual([`${X}update_theme`, `${X}update_language`, `${X}update_visibility`]);
   });
 
-  it("grants the base webview tokens without asking, never the top navigation, and builds the iframe attributes", async () => {
-    const { driver, ask, drain } = setup();
+  it("grants the base webview tokens without asking, never the top navigation, and loads the iframe again with what was granted", async () => {
+    const { driver, ask, drain, platform } = setup();
+    const strict = { url: "https://widget.example/app", origin: "https://widget.example", sandbox: "allow-scripts allow-same-origin", allow: "" };
+    expect(platform.iframes).toEqual([strict]);
     const asked: string[][] = [];
     const camera = `webview:${X}allow:camera`;
     const scripts = `webview:${X}sandbox:allow-scripts`;
@@ -209,8 +222,49 @@ describe("WidgetHostDriver through the JS bindings", () => {
     await new Promise((r) => setTimeout(r, 0));
     expect(asked).toEqual([[camera]]);
     expect(drain().find((m) => m.action === `${CORE}update_capabilities`)?.request).toEqual({ allowed: [scripts, camera] });
-    expect(hostDriver.webviewAttributes(driver.snapshot().approved)).toEqual({ sandbox: "allow-scripts allow-same-origin", allow: "camera 'src'" });
+    // The camera is new to the iframe: the platform builds it again, and the page in it gets what the old one held.
+    expect(platform.iframes).toEqual([strict, { ...strict, allow: "camera 'src'" }]);
+    expect(driver.snapshot()).toMatchObject({ ready: false, approved: [], carried: [scripts, camera], iframe: platform.iframes[1] });
+    asked.length = 0;
+    await ask(`${CORE}request_capabilities`, { capabilities: [scripts, camera] });
+    expect(asked).toEqual([]);
+    expect(drain().find((m) => m.action === `${CORE}update_capabilities`)?.request).toEqual({ allowed: [scripts, camera] });
+    expect(platform.iframes).toHaveLength(2);
     expect(hostDriver.webviewAttributes([])).toEqual({ sandbox: "allow-scripts allow-same-origin", allow: "" });
+  });
+
+  it("is made from a widget definition: a legacy widget in the compat wrapper, no widget API without uses_widget_api, no driver for a refused URL", async () => {
+    // A legacy widget: the compat wrapper, the iframe of a legacy client, its capabilities without a question.
+    const legacy = setup(widgetOf("im.vector.modular.widgets", { type: "m.custom" }));
+    expect(legacy.platform.iframes).toHaveLength(1);
+    expect(legacy.platform.iframes[0].url.startsWith("https://client.example/wrapper/?legacy_widget_url=https%3A%2F%2Fwidget.example%2Fapp&legacy_widget_id=w&")).toBe(true);
+    expect(legacy.platform.iframes[0].origin).toBe("https://client.example");
+    expect(legacy.platform.iframes[0].sandbox).toContain("allow-popups-to-escape-sandbox");
+    expect(legacy.platform.iframes[0].allow).toContain("camera 'src'");
+    expect(legacy.driver.snapshot().autoApproved).toEqual(hostDriver.legacyAutoApproved());
+    expect(legacy.platform.ready).toBe(0);
+
+    // Without the widget API: ready at once, and no message is answered.
+    const plain = setup(widgetOf("m.widget", {}));
+    expect(plain.platform.iframes).toHaveLength(1);
+    expect(plain.platform.ready).toBe(1);
+    const refused = plain.driver.handleMessageFromWidget(JSON.stringify({ source: "widget", action: `${CORE}notify_ready`, request_id: "1", request: {} }));
+    await expect(refused).rejects.toSatisfy((e) => hostDriver.DriverError.NoWidgetApi.instanceOf(e));
+    expect(plain.sent).toEqual([]);
+
+    // A widget that must not be loaded: the parser says so, with the whole widget; so does the constructor.
+    const parse = () => widgetOf("m.widget", { url: "javascript:alert(1)", name: "Evil" });
+    let error: unknown;
+    try {
+      parse();
+    } catch (e) {
+      error = e;
+    }
+    if (!hostDriver.WidgetEventError.Refused.instanceOf(error)) throw new Error("not refused");
+    expect(error.inner.reason).toBe("javascript: URLs are not allowed, only https:");
+    expect(error.inner.widget).toMatchObject({ eventType: "m.widget", widgetId: "w", name: "Evil", url: "javascript:alert(1)" });
+    const backend = new matrixBackend.InMemoryBackend("!room:example.org", "@alice:example.org");
+    expect(() => new hostDriver.WidgetHostDriver(error.inner.widget, OPTIONS, backend.asBackend(), plain.platform)).toThrow();
   });
 
   it("refuses a widget on the client's own origin, except in the client's own widget directories", () => {

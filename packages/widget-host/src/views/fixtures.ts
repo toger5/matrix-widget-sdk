@@ -107,7 +107,7 @@ export function widgetVm(room: RoomKey, widget: WidgetName, o: Partial<WidgetIns
     id: widgetInstanceId(ROOMS[room].id, wk(widget)),
     roomId: ROOMS[room].id,
     widgetKey: wk(widget),
-    widget: { url: String(event.content.url), name: String(event.content.name), legacy: false, usesWidgetApi: true },
+    widget: { eventType: event.type, widgetId: event.state_key, name: String(event.content.name), url: String(event.content.url), avatarUrl: undefined, usesWidgetApi: true, legacy: undefined },
     load: { state: "ready" },
     alwaysOnScreen: false,
     prompts: {},

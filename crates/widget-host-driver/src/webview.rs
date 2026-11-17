@@ -6,7 +6,9 @@
 //! A webview capability (`webview:…sandbox:<token>`, `webview:…allow:<feature>`) is requested and
 //! granted like any other, but no action needs it: the client applies the granted ones to the
 //! widget's iframe, which takes a reload. The driver grants and refuses them by [`WebviewPolicy`];
-//! the platform builds the attributes with [`webview_attributes`].
+//! the driver builds the attributes ([`webview_attributes`]) and hands them to the platform with
+//! the widget's URL ([`WidgetIframe`], [`WidgetHostPlatform::load_iframe`](crate::WidgetHostPlatform::load_iframe)),
+//! again whenever a grant or a revocation changes them.
 
 use widget_actions::{is_webview_value, Capability};
 
@@ -98,9 +100,100 @@ pub fn webview_attributes(capabilities: Vec<Capability>) -> WebviewAttributes {
     }
 }
 
+/// Everything a client needs to construct the iframe (webview) of a widget: what
+/// [`WidgetHostPlatform::load_iframe`](crate::WidgetHostPlatform::load_iframe) gets.
+#[derive(Debug, Clone, PartialEq, Eq, Default, serde::Serialize)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+pub struct WidgetIframe {
+    /// The `src`: the widget's own URL as the URL check parsed and serialised it (so the iframe
+    /// loads exactly what was checked), or for a legacy widget the compat wrapper with the widget
+    /// in its query. Always an absolute `http:` or `https:` URL.
+    pub url: String,
+    /// The origin of `url` (`https://widget.example`): the target origin of every `postMessage`
+    /// to the widget, and the only origin to accept its messages from.
+    pub origin: String,
+    /// The `sandbox` attribute, see [`WebviewAttributes::sandbox`].
+    pub sandbox: String,
+    /// The `allow` attribute, see [`WebviewAttributes::allow`].
+    pub allow: String,
+}
+
+/// The `sandbox` tokens of a legacy client's widget iframe (Element Web's `AppTile`). The compat
+/// wrapper requests them when it starts (`LEGACY_SANDBOX` of `packages/widget-compat-wrapper`).
+const LEGACY_SANDBOX: [&str; 7] = [
+    "allow-forms",
+    "allow-popups",
+    "allow-popups-to-escape-sandbox",
+    "allow-same-origin",
+    "allow-scripts",
+    "allow-presentation",
+    "allow-downloads",
+];
+
+/// The `allow` features of a legacy client's widget iframe, plus `fullscreen` (`LEGACY_ALLOW` of
+/// the compat wrapper).
+const LEGACY_ALLOW: [&str; 8] = [
+    "microphone",
+    "camera",
+    "encrypted-media",
+    "autoplay",
+    "display-capture",
+    "clipboard-write",
+    "clipboard-read",
+    "fullscreen",
+];
+
+/// The webview capabilities of a legacy widget: the iframe of a legacy client. The driver builds
+/// the iframe of a legacy widget with them from the start, so the compat wrapper's request for
+/// them is granted at once, without a question and without a reload.
+pub(crate) fn legacy_webview() -> Vec<Capability> {
+    let sandbox = LEGACY_SANDBOX.iter().map(|token| Capability::webview_sandbox(*token));
+    sandbox.chain(LEGACY_ALLOW.iter().map(|feature| Capability::webview_allow(*feature))).collect()
+}
+
+/// The capabilities a legacy widget (`im.vector.modular.widgets`, behind the compat wrapper) is
+/// granted without asking, because a legacy client did not ask about them either: the facts it put
+/// into the widget URL (`get_matrix_context`, `get_client_context`), the theme, language and
+/// visibility updates, and the webview capabilities of its iframe.
+///
+/// Not `get_openid`: a legacy client asked the user per token, and the single-use capability is
+/// how a client asks now. A [`WidgetHostDriver`](crate::WidgetHostDriver) of a legacy widget
+/// applies this list itself; it is exported for clients that show it.
+#[cfg_attr(feature = "uniffi", uniffi::export)]
+pub fn legacy_auto_approved() -> Vec<Capability> {
+    let mut capabilities = vec![
+        Capability::GetMatrixContext,
+        Capability::GetClientContext,
+        Capability::UpdateTheme,
+        Capability::UpdateLanguage,
+        Capability::UpdateVisibility,
+    ];
+    capabilities.extend(legacy_webview());
+    capabilities
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_legacy_set() {
+        let legacy = legacy_auto_approved();
+        assert_eq!(legacy.len(), 5 + 7 + 8);
+        assert!(legacy.iter().all(|capability| !matches!(capability, Capability::Other { .. })));
+        assert!(!legacy.contains(&Capability::GetOpenId));
+        assert_eq!(
+            webview_attributes(legacy),
+            WebviewAttributes {
+                sandbox: "allow-scripts allow-same-origin allow-downloads allow-forms allow-popups \
+                          allow-popups-to-escape-sandbox allow-presentation"
+                    .into(),
+                allow: "autoplay 'src'; camera 'src'; clipboard-read 'src'; clipboard-write 'src'; \
+                        display-capture 'src'; encrypted-media 'src'; fullscreen 'src'; microphone 'src'"
+                    .into(),
+            }
+        );
+    }
 
     fn caps(raw: &[&str]) -> Vec<Capability> {
         raw.iter().map(|r| Capability::parse(r)).collect()

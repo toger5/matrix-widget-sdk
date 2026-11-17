@@ -6,13 +6,20 @@
 //! which translates. This is host-side vocabulary: widgets never see the event, which is why it
 //! lives here and not in `widget-actions`.
 //!
-//! Two steps, so that a client can list widgets without loading them:
+//! Two steps:
 //!
 //! 1. [`WidgetDefinition::parse`]: a state event becomes the widget it describes, or the reason it
 //!    describes none (another event type, a removed widget).
-//! 2. [`WidgetDefinition::embed`]: the widget becomes the URL of its iframe (webview), or the reason
-//!    it must not be loaded ([`embed_url_problem`](crate::embed_url_problem)). A legacy widget is loaded through the compat
-//!    wrapper, with its URL template and data as query parameters of the wrapper's URL.
+//! 2. `WidgetDefinition::embed` (crate-private): the widget becomes the URL of its iframe
+//!    (webview), or the reason it must not be loaded ([`embed_url_problem`](crate::embed_url_problem)).
+//!    A legacy widget is loaded through the compat wrapper, with its URL template and data as
+//!    query parameters of the wrapper's URL.
+//!
+//! A client lists widgets with [`parse_widget_state_event`], which runs both and keeps the
+//! definition: one it returns is a widget the client can open, and a
+//! [`WidgetEventError::Refused`] carries the definition of one it must not. The URL itself only
+//! reaches the client from a [`WidgetHostDriver`](crate::WidgetHostDriver), which runs the second
+//! step again ([`WidgetHostPlatform::load_iframe`](crate::WidgetHostPlatform::load_iframe)).
 
 use serde_json::Value;
 use widget_actions::JsonValue;
@@ -32,8 +39,8 @@ pub const WIDGET_EVENT_TYPES: [&str; 3] = [WIDGET_EVENT_TYPE, WIDGET_EVENT_TYPE_
 const WRAPPER_PARAMETERS: [&str; 4] =
     ["legacy_widget_url", "legacy_widget_id", "legacy_wait_for_iframe_load", "legacy_widget_data"];
 
-/// A widget as its state event describes it: what a client lists. Load it only through
-/// [`embed`](Self::embed), which checks the URL.
+/// A widget as its state event describes it: what a client lists, and what a
+/// [`WidgetHostDriver`](crate::WidgetHostDriver) is created from (it checks the URL).
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct WidgetDefinition {
@@ -49,8 +56,8 @@ pub struct WidgetDefinition {
     /// `content.avatar_url`: an `mxc://` URI (MSC2765).
     pub avatar_url: Option<String>,
     /// `content.uses_widget_api` (MSC4412) is `true`: set up the widget API and wait for
-    /// `notify_ready` before showing the widget. Always `false` for a legacy widget; its
-    /// [`WidgetEmbed`] says `true`, since the compat wrapper speaks the API.
+    /// `notify_ready` before showing the widget. Always `false` for a legacy widget, though the
+    /// driver sets up the widget API for it: the compat wrapper speaks it.
     pub uses_widget_api: bool,
     /// The fields of `im.vector.modular.widgets` the compat wrapper needs; `None` for an MSC4411
     /// widget.
@@ -73,8 +80,7 @@ pub struct LegacyWidget {
 
 /// What a client puts into the iframe (webview) of a widget.
 #[derive(Debug, Clone, PartialEq, Eq)]
-#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
-pub struct WidgetEmbed {
+pub(crate) struct WidgetEmbed {
     /// The URL to load: the widget's own as the URL check parsed and serialised it (so the iframe
     /// loads exactly what was checked), or for a legacy widget the compat wrapper with the widget
     /// in its query. Always an absolute `http:` or `https:` URL.
@@ -94,9 +100,11 @@ pub enum WidgetEventError {
     /// or the content does not match the event's schema. Not to be listed.
     #[error("removed widget: {reason}")]
     Removed { reason: String },
-    /// The widget must not be loaded; `reason` names the problem (the URL check).
+    /// The widget must not be loaded; `reason` names the problem (the URL check, the compat
+    /// wrapper of a legacy widget). `widget` is the widget, whole, as its event describes it: a
+    /// client lists it, disabled, with the reason.
     #[error("{reason}")]
-    Refused { reason: String },
+    Refused { widget: WidgetDefinition, reason: String },
 }
 
 impl WidgetDefinition {
@@ -150,8 +158,8 @@ impl WidgetDefinition {
     /// load another widget than this one). The host never fills in the template: the wrapper asks
     /// for the values through `get_matrix_context` / `get_client_context`. `options.allow_http`:
     /// also `http:` URLs (MSC4411: in developer tools).
-    pub fn embed(&self, options: &EmbedOptions) -> Result<WidgetEmbed, WidgetEventError> {
-        let refused = |reason: String| WidgetEventError::Refused { reason };
+    pub(crate) fn embed(&self, options: &EmbedOptions) -> Result<WidgetEmbed, WidgetEventError> {
+        let refused = |reason: String| WidgetEventError::Refused { widget: self.clone(), reason };
         let checked = checked_embed_url(&self.url, options).map_err(refused)?;
         let Some(legacy) = &self.legacy else {
             return Ok(WidgetEmbed { url: checked.into(), uses_widget_api: self.uses_widget_api });
@@ -184,20 +192,26 @@ impl WidgetDefinition {
     }
 }
 
-/// [`WidgetDefinition::parse`] for foreign code: `content` is the event content as JSON.
+/// The widget a state event describes, if this client can open it: [`WidgetDefinition::parse`]
+/// (`content` is the event content as JSON), then the check a
+/// [`WidgetHostDriver`](crate::WidgetHostDriver) makes when it is created from the definition (the
+/// URL check [`embed_url_problem`](crate::embed_url_problem), and for a legacy widget the compat
+/// wrapper of `options`).
+///
+/// * `Ok`: a widget to list; create a driver from it to open it.
+/// * [`WidgetEventError::Refused`]: a widget that must not be loaded. List its `widget`, disabled,
+///   with the `reason`.
+/// * [`WidgetEventError::Removed`], [`WidgetEventError::NotAWidgetType`]: no widget, not listed.
 #[cfg_attr(feature = "uniffi", uniffi::export)]
 pub fn parse_widget_state_event(
     event_type: String,
     state_key: String,
     content: JsonValue,
+    options: EmbedOptions,
 ) -> Result<WidgetDefinition, WidgetEventError> {
-    WidgetDefinition::parse(&event_type, &state_key, &content)
-}
-
-/// [`WidgetDefinition::embed`] for foreign code.
-#[cfg_attr(feature = "uniffi", uniffi::export)]
-pub fn embed_widget(widget: WidgetDefinition, options: EmbedOptions) -> Result<WidgetEmbed, WidgetEventError> {
-    widget.embed(&options)
+    let widget = WidgetDefinition::parse(&event_type, &state_key, &content)?;
+    widget.embed(&options)?;
+    Ok(widget)
 }
 
 /// [`WIDGET_EVENT_TYPES`] for foreign code: the state event types to read for a room's widgets.
@@ -233,6 +247,17 @@ mod tests {
 
     fn legacy_widget(url: &str) -> WidgetDefinition {
         parse("im.vector.modular.widgets", json!({ "type": "m.custom", "name": "W", "url": url })).unwrap()
+    }
+
+    /// Why `embed` refuses a widget.
+    fn refusal(widget: &WidgetDefinition, options: &EmbedOptions) -> String {
+        match widget.embed(options) {
+            Err(WidgetEventError::Refused { widget: refused, reason }) => {
+                assert_eq!(&refused, widget, "the refusal carries the widget");
+                reason
+            }
+            other => panic!("not refused: {other:?}"),
+        }
     }
 
     /// The query of a URL, decoded.
@@ -356,15 +381,14 @@ mod tests {
         let wrapper = &wrapper["compat_wrapper"];
         let refused: BTreeMap<String, String> = serde_json::from_value(wrapper["refused"].clone()).unwrap();
         let wrapper = wrapper["wrapper"].as_str().unwrap();
-        let expected =
-            Err(WidgetEventError::Refused { reason: "a widget cannot load this client's compat wrapper".to_owned() });
+        let expected = "a widget cannot load this client's compat wrapper";
         for (label, url) in refused {
-            assert_eq!(new_widget(&url).embed(&options(Some(wrapper), true)), expected, "{label}");
-            assert_eq!(legacy_widget(&url).embed(&options(Some(wrapper), true)), expected, "{label}");
+            assert_eq!(refusal(&new_widget(&url), &options(Some(wrapper), true)), expected, "{label}");
+            assert_eq!(refusal(&legacy_widget(&url), &options(Some(wrapper), true)), expected, "{label}");
         }
         // The attack: an MSC4411 widget that is this host's compat wrapper with a `javascript:` widget.
         let attack = "http://localhost:5173/widget_compatibility_wrapper/?legacy_widget_url=javascript:top.__pwned=1//";
-        assert_eq!(new_widget(attack).embed(&options(Some(WRAPPER), true)), expected);
+        assert_eq!(refusal(&new_widget(attack), &options(Some(WRAPPER), true)), expected);
         // Other pages of the wrapper's origin are widgets as before.
         assert!(new_widget("http://localhost:5173/widgets/new/").embed(&options(Some(WRAPPER), true)).is_ok());
     }
@@ -380,13 +404,11 @@ mod tests {
             own_widget_dirs: serde_json::from_value(table["own_widget_dirs"].clone()).unwrap(),
             allow_http: true,
         };
-        let expected = Err(WidgetEventError::Refused {
-            reason: "a widget cannot be a page of this client's own origin".to_owned(),
-        });
+        let expected = "a widget cannot be a page of this client's own origin";
         let part = |name: &str| -> BTreeMap<String, String> { serde_json::from_value(table[name].clone()).unwrap() };
         for (label, url) in part("refused") {
-            assert_eq!(new_widget(&url).embed(&options), expected, "{label}");
-            assert_eq!(legacy_widget(&url).embed(&options), expected, "{label}");
+            assert_eq!(refusal(&new_widget(&url), &options), expected, "{label}");
+            assert_eq!(refusal(&legacy_widget(&url), &options), expected, "{label}");
         }
         for (label, url) in part("own_widgets").into_iter().chain(part("other_origins")) {
             assert_eq!(new_widget(&url).embed(&options).unwrap().url, Url::parse(&url).unwrap().as_str(), "{label}");
@@ -454,31 +476,63 @@ mod tests {
     #[test]
     fn refused_urls_are_never_loaded() {
         for (label, url) in table("refused") {
-            let new = new_widget(&url).embed(&options(Some(WRAPPER), true)).unwrap_err();
-            let legacy = legacy_widget(&url).embed(&options(Some(WRAPPER), true)).unwrap_err();
-            let expected = WidgetEventError::Refused { reason: widget_url_problem(&url, true).unwrap() };
+            let new = refusal(&new_widget(&url), &options(Some(WRAPPER), true));
+            let legacy = refusal(&legacy_widget(&url), &options(Some(WRAPPER), true));
+            let expected = widget_url_problem(&url, true).unwrap();
             assert_eq!((&new, &legacy), (&expected, &expected), "{label}");
         }
-        let refused = |reason: &str| -> Result<WidgetEmbed, WidgetEventError> {
-            Err(WidgetEventError::Refused { reason: reason.to_owned() })
-        };
         // `?wrapper=` can replace the compat wrapper by a link, so its URL is checked too.
         assert_eq!(
-            legacy_widget("https://example.org/").embed(&options(Some("javascript:top.__pwned=1//"), true)),
-            refused("compat wrapper: javascript: URLs are not allowed, only http: and https:")
+            refusal(&legacy_widget("https://example.org/"), &options(Some("javascript:top.__pwned=1//"), true)),
+            "compat wrapper: javascript: URLs are not allowed, only http: and https:"
         );
         assert_eq!(
-            legacy_widget("https://example.org/").embed(&options(None, true)),
-            refused("a legacy widget needs the compat wrapper")
+            refusal(&legacy_widget("https://example.org/"), &options(None, true)),
+            "a legacy widget needs the compat wrapper"
         );
         // Without `allow_http`, the wrapper too must be https.
         assert_eq!(
-            legacy_widget("https://example.org/").embed(&options(Some(WRAPPER), false)),
-            refused("compat wrapper: http: URLs are not allowed, only https:")
+            refusal(&legacy_widget("https://example.org/"), &options(Some(WRAPPER), false)),
+            "compat wrapper: http: URLs are not allowed, only https:"
         );
+        assert_eq!(refusal(&new_widget("http://x/"), &options(None, false)), "http: URLs are not allowed, only https:");
+    }
+
+    #[test]
+    fn parsing_a_state_event_checks_it() {
+        let parse = |event_type: &str, content: Value, options: EmbedOptions| {
+            parse_widget_state_event(event_type.to_owned(), "w".to_owned(), JsonValue(content), options)
+        };
+        // A widget this client can open: the definition, as `WidgetDefinition::parse` reads it.
+        let content = json!({ "name": "W", "url": "https://w.example/", "uses_widget_api": true });
+        assert_eq!(parse("m.widget", content.clone(), options(None, false)), Ok(new_widget("https://w.example/")));
+        let legacy = json!({ "type": "m.custom", "name": "W", "url": "https://w.example/" });
         assert_eq!(
-            new_widget("http://x/").embed(&options(None, false)),
-            refused("http: URLs are not allowed, only https:")
+            parse("im.vector.modular.widgets", legacy.clone(), options(Some(WRAPPER), true)),
+            Ok(legacy_widget("https://w.example/"))
         );
+        // One it must not load: the whole definition, with the reason.
+        let refused = json!({ "name": "W", "url": "javascript:alert(1)", "uses_widget_api": true });
+        assert_eq!(
+            parse("m.widget", refused, options(None, false)),
+            Err(WidgetEventError::Refused {
+                widget: new_widget("javascript:alert(1)"),
+                reason: "javascript: URLs are not allowed, only https:".to_owned(),
+            })
+        );
+        // A legacy widget of a client without a compat wrapper.
+        assert_eq!(
+            parse("im.vector.modular.widgets", legacy, options(None, true)),
+            Err(WidgetEventError::Refused {
+                widget: legacy_widget("https://w.example/"),
+                reason: "a legacy widget needs the compat wrapper".to_owned(),
+            })
+        );
+        // No widget: not listed, whatever the options.
+        assert!(matches!(parse("m.widget", json!({}), options(None, false)), Err(WidgetEventError::Removed { .. })));
+        assert!(matches!(
+            parse("m.room.topic", content, options(None, false)),
+            Err(WidgetEventError::NotAWidgetType { .. })
+        ));
     }
 }

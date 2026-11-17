@@ -30,7 +30,7 @@ The app is built as MVVM from the design in [`appDesign.md`](appDesign.md) and i
 - `src/matrix_session/rust/` is the same on matrix-rust-sdk (`../matrix-sdk-uniffi-js`, with native sliding sync). A build has one SDK or the other, see "Choosing the Matrix SDK" below. This implementation has not run against a homeserver yet. The SDK API it adds is in [`../matrix-sdk-uniffi-js/README.md`](../matrix-sdk-uniffi-js/README.md) ("API added to the SDK"), its open questions in [`implementation_findings.md`](implementation_findings.md) ("Matrix sessions").
 - `src/matrix_session/memory/devBackend.ts` is the DevBackend: the same `LiveSession` on the crate's `InMemoryBackend`, with several mocked rooms, an editing API for the Dev tools (the DevBackendView) and a JSON seed format (`seed.ts`).
 - `src/lib/` holds what is neither a view nor a session: the store of approved capabilities, the avatar cache, log formatting and the driver's log.
-- `src/lib/widgetEvents.ts` reads widget state events with the driver's parser (`parseWidgetStateEvent`, `embedWidget` of the bindings): which events are widgets and what their iframe loads (below). Views get it as `ViewEnv.widgetEvents`; `src/widgetStateEvent.ts` keeps the host's types, keys and event types.
+- `src/lib/widgetEvents.ts` reads widget state events with the driver's parser (`parseWidgetStateEvent` of the bindings): which events are widgets and whether the host may load them (below). What an iframe loads is said by the widget's driver when it runs (`WidgetHostPlatform.loadIframe`). Views get it as `ViewEnv.widgetEvents`; `src/widgetStateEvent.ts` keeps the host's types, keys and event types.
 
 ## Logged in
 
@@ -67,7 +67,9 @@ hands it to the driver of each widget of that room like any other `MatrixBackend
 - **Loads a widget from a widget state event** of a mocked room. The event decides how it is embedded:
   - `m.widget` / `org.matrix.msc4411.widget` → `content.url` is loaded directly; the iframe is
     hidden until `notify_ready` when `uses_widget_api` is `true`. If the widget does not send it
-    within 15 seconds, the loading state turns into an error. An event whose content has no string
+    within 15 seconds, the loading state turns into an error. Without `uses_widget_api: true` the
+    widget is shown at once and has no widget API: the driver answers none of its messages
+    (`DriverError.NoWidgetApi`). An event whose content has no string
     `name` or `url` is a removed widget (MSC4411) and is not listed.
   - `im.vector.modular.widgets` (legacy) → `content.url` is handed **untemplated** to the compat
     wrapper: `<wrapper url>?legacy_widget_url=...&legacy_widget_id=...&legacy_wait_for_iframe_load=...[&legacy_widget_data=...]`.
@@ -94,11 +96,11 @@ hands it to the driver of each widget of that room like any other `MatrixBackend
   one answer decides all of them. **Approve** is blocked for 3 s after the card appeared or a
   request added to it; **Deny all** never is. What the driver does not know is listed under "Unknown to this app".
   Webview capabilities (camera, microphone, popups, ...) are "Browser permissions": approving them restarts the widget.
-  For legacy widgets the host calls the driver's `setAutoApproved` with what a legacy client
+  For legacy widgets the driver grants by itself (`legacy_auto_approved`) what a legacy client
   gave a widget without asking: the `get_matrix_context` and `get_client_context` capabilities the
   compat wrapper needs to template the URL (a legacy client handed the same facts over as URL
   parameters), plus the `update_theme` / `update_language` / `update_visibility`
-  subscriptions the wrapper always requests. The driver grants those without consulting the host;
+  subscriptions the wrapper always requests, and a legacy client's iframe. The host is not asked about those;
   the legacy widget's own capabilities are still prompted for, so a wrapped widget prompts once,
   like a new widget. The prompt lists the **new** capability names: the wrapper has already
   translated the legacy ones. The **Driver** panel lists the auto-approved set.
@@ -229,38 +231,39 @@ host's origin, unlike a wrapper deployed for a real client.
 `allow` (no camera, microphone, clipboard, popups, downloads, ...). More is a webview capability the
 widget requests (`webview:…sandbox:<token>`, `webview:…allow:<feature>`,
 [`spec/patch/new/webview-capabilities.md`](../../spec/patch/new/webview-capabilities.md)). The
-attributes are made by the driver (`webview_attributes`) from what the widget holds and set once
-per start (`WidgetInstanceViewModel.webview`, rendered by `WidgetIframes` in `src/app/AppRoot.tsx`):
+iframe is the driver's: it tells the host what to build (`WidgetHostPlatform.loadIframe`: URL,
+`sandbox`, `allow`, made from what the widget holds), and the host renders it
+(`WidgetInstanceViewModel.iframe`, `WidgetIframes` in `src/app/AppRoot.tsx`):
 
 - The base tokens are granted without asking, `allow-top-navigation` never (not even "Approve" or
   auto-approve). Everything else goes through the capability prompt, under "Browser permissions".
-- A grant applies with a restart of the widget: the runtime (`src/app/runtime/widgetRuntime.ts`)
-  reports `webviewChanged` once the widget holds a webview capability its iframe lacks (after the
-  driver's `update_capabilities` went out); the controller keeps it for the widget's next starts
-  (`webviewKept`, forgotten when the widget stops, and only for the URL it was granted to: a start
-  after the widget's state event named another URL does not get it) and starts it again with a new
-  generation, whose iframe has it. The widget's request for it is then granted at once, without a
-  prompt or another restart. A denial changes nothing; revoking an applied one (driver panel) restarts the widget
+- A grant applies with a restart of the widget in a new iframe: once the widget holds a webview
+  capability its iframe lacks (after the driver's `update_capabilities` went out), the driver calls
+  `loadIframe` again. The runtime (`src/app/runtime/widgetRuntime.ts`) passes it on
+  (`WidgetRuntimeEvents.loadIframe`) and the controller renders a new generation behind the loading
+  state (`loadIframe` in `src/app/controller.ts`). Runtime and driver stay the same; the driver
+  grants the reloaded page what the widget held, without a prompt or another restart (not a
+  one-use capability). A denial changes nothing; revoking an applied one (driver panel) restarts the widget
   without it; "Add" of a webview capability in the driver panel ("Add and restart") restarts it with it.
   The driver panel shows the attributes of the iframe under "Webview of this load". A widget that
-  restarts more than twice within 10 s for this fails instead (a guard; it should not happen).
+  restarts more than twice within 10 s for this is stopped instead (a guard; it should not happen).
+- What was granted this way lasts as long as the driver: "Retry", Reload and a changed state event
+  start a new driver, strict again unless the capabilities are remembered.
 - Remembered webview capabilities (`rememberCapabilities`) are in the iframe from the first start.
   They are remembered per widget (account, room, event type and state key) like all its capabilities,
   not per URL: a room widget whose state event names another URL keeps them (a local widget forgets
   them).
-- A legacy widget's iframe (the compat wrapper) has Element Web's set from the start
-  (`LEGACY_WEBVIEW` in `src/widgetStateEvent.ts`): the wrapper requests it and gets it without a
-  prompt or a restart; the wrapper gives the legacy widget's own iframe the same set.
-- Without remembered capabilities (the DevBackend's default), a restart for a webview capability asks
-  again for the other capabilities of the widget, as every start does.
+- A legacy widget's iframe (the compat wrapper) has Element Web's set from the start (the driver's
+  `legacy_auto_approved`): the wrapper requests it and gets it without a prompt or a restart; the
+  wrapper gives the legacy widget's own iframe the same set.
 
 `allow-scripts allow-same-origin` is only harmless for pages of another origin than the host's: a
 page of the host's own origin in such an iframe is not sandboxed from the host. It can reach
 `window.top`, the logins in `localStorage` and IndexedDB. Four layers keep a widget state event
 (anyone who may send state to a room can send one) from putting script there:
 
-1. **The URL check** (the driver's `embed`): only absolute `http:` / `https:` URLs that name their
-   own host, so no `javascript:`, `data:`, `blob:` or page-relative URL.
+1. **The URL check** (the driver's `embed_url_problem`, in `parse_widget_state_event` and in the
+   driver's constructor): only absolute `http:` / `https:` URLs that name their own host, so no `javascript:`, `data:`, `blob:` or page-relative URL.
 2. **The compat wrapper is no widget**: its page runs on the host's origin and loads the
    `legacy_widget_url` of its own query, so an `m.widget` (or legacy widget) whose URL is a page of
    the wrapper's directory, `<host>/widget_compatibility_wrapper/…` in any spelling a server may

@@ -1,12 +1,16 @@
 //! The host side of the widget API (MSC4412).
 //!
-//! A [`WidgetHostDriver`] is created per rendered widget. The embedding client ("platform") has
-//! exactly two obligations:
+//! A [`WidgetHostDriver`] is created per rendered widget, from the widget's [`WidgetDefinition`]
+//! (below). The embedding client ("platform") has three obligations:
 //!
-//! 1. Pass every `postMessage` received **from** the widget window into
+//! 1. Implement [`WidgetHostPlatform::load_iframe`]: build the widget's iframe (webview) from the
+//!    URL, `sandbox` and `allow` the driver hands over ([`WidgetIframe`]), in place of the one
+//!    before. The driver calls it from [`WidgetHostDriver::start`], and again whenever the widget's
+//!    webview capabilities change the attributes.
+//! 2. Pass every `postMessage` received **from** the window of that iframe into
 //!    [`WidgetHostDriver::handle_message_from_widget`].
-//! 2. Implement [`WidgetHostPlatform::send_to_widget`] to `postMessage` JSON **to** the widget
-//!    window (never with a `*` target origin, see MSC4412).
+//! 3. Implement [`WidgetHostPlatform::send_to_widget`] to `postMessage` JSON **to** the widget
+//!    window, with [`WidgetIframe::origin`] as the target origin (never `*`, see MSC4412).
 //!
 //! The driver takes care of the handshake (`notify_ready`, capability negotiation), checks
 //! capabilities, performs Matrix operations through a [`MatrixBackend`] and answers the widget.
@@ -31,18 +35,26 @@
 //! `revoke_capabilities`.
 //!
 //! [`WidgetDefinition`] reads the widget state events of a room (MSC4411 `m.widget`, and the
-//! legacy `im.vector.modular.widgets`): [`WidgetDefinition::parse`] tells which events are widgets,
-//! [`WidgetDefinition::embed`] what a client loads for one, after the URL check
-//! ([`widget_url_problem`], and [`embed_url_problem`]: never the client's own compat wrapper, never
-//! a page of the client's own origin, see [`EmbedOptions`]); a legacy widget is loaded through the
-//! compat wrapper.
+//! legacy `im.vector.modular.widgets`): [`parse_widget_state_event`] tells which events are
+//! widgets and whether the client may load one, after the URL check ([`widget_url_problem`], and
+//! [`embed_url_problem`]: never the client's own compat wrapper, never a page of the client's own
+//! origin, see [`EmbedOptions`]). [`WidgetHostDriver::new`] makes the same check and decides what
+//! the iframe loads; a legacy widget is loaded through the compat wrapper and gets
+//! [`legacy_auto_approved`] without asking.
+//!
+//! A widget whose state event does not say `uses_widget_api: true` (MSC4412) has no widget API:
+//! the driver calls [`WidgetHostPlatform::on_ready`] right after `load_iframe` and refuses its
+//! messages with [`DriverError::NoWidgetApi`].
 //!
 //! The iframe (webview) of a widget starts strict: `sandbox="allow-scripts allow-same-origin"`,
 //! nothing in `allow`. Everything else is a webview capability (`webview:…sandbox:<token>`,
 //! `webview:…allow:<feature>`) the widget requests like any other; [`WebviewPolicy`] grants the
 //! base tokens without asking and never the `allow-top-navigation` ones, and
 //! [`webview_attributes`] builds the iframe's attributes from what the widget holds. Applying a
-//! grant takes a reload of the iframe, which is the platform's part.
+//! grant or a revocation takes a new iframe: the driver calls `load_iframe` again, forgets the old
+//! page (not ready, holds nothing, no open question, no subscriptions) and grants the new page
+//! what the old one held without asking ([`DriverSnapshot::carried`]; not a single-use
+//! capability).
 //!
 //! With the `uniffi` feature this crate's `cdylib` carries the UniFFI scaffolding of this crate,
 //! `widget-matrix-backend` and `widget-actions`; it is what the Kotlin/Swift/Python bindings and
@@ -71,11 +83,13 @@ mod widget_url;
 pub use driver::{DriverSnapshot, WidgetHostDriver};
 pub use error::{DriverError, PlatformError};
 pub use platform::WidgetHostPlatform;
-pub use webview::{webview_attributes, WebviewAttributes, WebviewPolicy, BASE_SANDBOX};
+pub use webview::{
+    legacy_auto_approved, webview_attributes, WebviewAttributes, WebviewPolicy, WidgetIframe, BASE_SANDBOX,
+};
 pub use widget_actions;
 pub use widget_event::{
-    embed_widget, parse_widget_state_event, widget_event_types, LegacyWidget, WidgetDefinition, WidgetEmbed,
-    WidgetEventError, WIDGET_EVENT_TYPE, WIDGET_EVENT_TYPES, WIDGET_EVENT_TYPE_LEGACY, WIDGET_EVENT_TYPE_UNSTABLE,
+    parse_widget_state_event, widget_event_types, LegacyWidget, WidgetDefinition, WidgetEventError, WIDGET_EVENT_TYPE,
+    WIDGET_EVENT_TYPES, WIDGET_EVENT_TYPE_LEGACY, WIDGET_EVENT_TYPE_UNSTABLE,
 };
 pub use widget_matrix_backend::{self, MatrixBackend};
 pub use widget_url::{embed_url_problem, widget_url_problem, EmbedOptions};

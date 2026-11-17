@@ -82,16 +82,16 @@
   <text x="958" y="144" class="m">WidgetHostDriver</text>
   <text x="958" y="160" class="s">one per widget, MSC4412 only</text>
   <line x1="958" y1="175" x2="1152" y2="175" stroke="#93c5fd"/>
-  <text x="958" y="198" class="bb">For a wrapped widget:</text>
-  <text x="958" y="219" class="m">set_auto_approved([</text>
+  <text x="958" y="198" class="bb">A wrapped widget gets</text>
+  <text x="958" y="219" class="m">legacy_auto_approved():</text>
   <text x="958" y="235" class="m">widget:…get_matrix_context,</text>
   <text x="958" y="251" class="m">widget:…get_client_context,</text>
-  <text x="958" y="267" class="m">webview:… legacy iframe])</text>
+  <text x="958" y="267" class="m">webview:… legacy iframe</text>
   <text x="958" y="289" class="s">a legacy client handed these</text>
   <text x="958" y="305" class="s">facts over in the URL and gave</text>
   <text x="958" y="321" class="s">every widget that iframe, so</text>
-  <text x="958" y="337" class="s">the user is prompted once,</text>
-  <text x="958" y="353" class="s">for the widget's own caps</text>
+  <text x="958" y="337" class="s">the driver grants them unasked;</text>
+  <text x="958" y="353" class="s">the prompt has the widget's caps</text>
   <line x1="958" y1="370" x2="1152" y2="370" stroke="#93c5fd"/>
   <text x="958" y="393" class="bb">The client has no</text>
   <text x="958" y="413" class="b">• template engine</text>

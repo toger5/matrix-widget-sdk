@@ -37,9 +37,10 @@ transition code: a check on the widget state event.
 
 That URL construction is the only client code specific to the transition. Once legacy widgets are
 gone, delete it and the wrapper. The host keeps no template engine at all. `widget-host-driver`
-has it (`WidgetDefinition::embed`, `embedWidget` in the TypeScript bindings), with the URL check
-of the widget and of the wrapper, and refuses a widget of either kind whose URL is a page of the
-wrapper; it sets `legacy_widget_url`, `legacy_widget_id`,
+has it: a `WidgetHostDriver` made from a legacy widget's definition, with the client's wrapper URL
+in `EmbedOptions`, hands the wrapper's URL to the client (`WidgetHostPlatform::load_iframe`). It
+makes the URL check of the widget and of the wrapper, and refuses a widget of either kind whose URL
+is a page of the wrapper; it sets `legacy_widget_url`, `legacy_widget_id`,
 `legacy_wait_for_iframe_load` and `legacy_widget_data`.
 
 ## Query parameters
@@ -96,7 +97,8 @@ in all):
 | `allow-forms`, `allow-popups`, `allow-popups-to-escape-sandbox`, `allow-same-origin`, `allow-scripts`, `allow-presentation`, `allow-downloads` | `microphone`, `camera`, `encrypted-media`, `autoplay`, `display-capture`, `clipboard-write`, `clipboard-read`, `fullscreen` |
 
 A host that keeps legacy widgets working grants them without a prompt and builds the wrapper's
-iframe with them from the start (this repository's test host does), so the request needs no reload.
+iframe with them from the start, so the request needs no reload (`widget-host-driver` does both for
+a legacy widget: `legacy_auto_approved`, the same set).
 The wrapper's own iframe for the legacy widget (`innerIframe` in `src/wrapper.ts`) always has these
 attributes (`INNER_SANDBOX`, `INNER_ALLOW`), whatever the host granted: a legacy widget cannot request
 webview capabilities (a `webview:` string in its list expands to nothing). One exception: a legacy
@@ -223,7 +225,7 @@ with: `org.matrix.msc2876.` (`read_events`), `org.matrix.msc3869.` (`read_relati
 - **Always requested**, whatever the widget asks for: `host:…update_theme`,
   `host:…update_language`, `host:…update_visibility`. The legacy api has no capability for these;
   a legacy host simply allows them. A host that wants the legacy behaviour grants them without a
-  prompt (`setAutoApproved`).
+  prompt (`widget-host-driver` does for a legacy widget: `legacy_auto_approved`).
 - **Webview capabilities** (`webview:…`) of a legacy client's iframe are requested when the wrapper
   starts (see [The iframes](#the-iframes)); the legacy widget cannot request any.
 - **`widget:…get_openid` is requested per token**, when the widget asks for one (see
@@ -332,8 +334,8 @@ Always:
 
 - Legacy widgets overwrite their approved list with `notify_capabilities.approved`, so it must be
   the full set. MSC4412's `update_capabilities.allowed` is exactly that.
-- The wrapper needs the host to wait for `notify_ready` (`uses_widget_api: true`); the test host
-  always does for a wrapped widget.
+- The wrapper needs the host to wait for `notify_ready` (`uses_widget_api: true`); the driver
+  always does for a legacy widget, whatever its state event says.
 - Legacy widgets built with `new WidgetApi(widgetId, clientOrigin)` only accept a parent at
   `clientOrigin`; widgets derive it from `parentUrl`, which the wrapper sets to itself. A widget
   that passes `null` cannot talk to any parent, wrapper or not.

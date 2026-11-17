@@ -133,13 +133,14 @@ function viewEnv(controller: AppController, narrow: boolean): ViewEnv {
 /**
  * The iframes of the running widgets: one flat list in the light DOM of the host element, keyed
  * by widget (and start), in the order the widgets were started. An iframe is never moved; the
- * `<slot name="widget-…">` a view renders decides where it is shown. Its `sandbox` and `allow` are
- * those of the start (`WidgetInstanceViewModel.webview`, made by the driver from the widget's webview
- * capabilities; strict unless granted): a change comes with a new start, so a new iframe.
+ * `<slot name="widget-…">` a view renders decides where it is shown. Its `src`, `sandbox` and `allow`
+ * are what the driver said (`WidgetInstanceViewModel.iframe`, `WidgetHostPlatform.loadIframe`; the
+ * attributes are made from the widget's webview capabilities, strict unless granted): when they
+ * change the driver says so again, which is a new generation, so a new iframe.
  */
 function WidgetIframes({ controller, widgets }: { controller: AppController; widgets: WidgetInstanceViewModel[] }) {
-  return widgets.flatMap(({ id, generation, webview, widget, load }) =>
-    generation === undefined || webview === undefined
+  return widgets.flatMap(({ id, generation, iframe, widget, load }) =>
+    generation === undefined || iframe === undefined
       ? []
       : [
           <iframe
@@ -147,12 +148,12 @@ function WidgetIframes({ controller, widgets }: { controller: AppController; wid
             ref={(iframe) => controller.attachIframe(id, generation, iframe)}
             slot={widgetSlotName(id)}
             data-widget-id={id}
-            src={widget.url}
+            src={iframe.url}
             title={widget.name}
-            // Hidden until the widget reports that it is ready (`notify_ready`); the WidgetView shows the loading state meanwhile.
+            // Hidden until the driver reports the widget ready (`notify_ready`; at once without the widget API); the WidgetView shows the loading state meanwhile.
             hidden={load.state !== "ready"}
-            sandbox={webview.sandbox}
-            allow={webview.allow}
+            sandbox={iframe.sandbox}
+            allow={iframe.allow}
           />,
         ],
   );

@@ -1,14 +1,15 @@
 /** Derivations the views share. Pure functions of the view model; nothing here holds state. */
 import type { MainViewModel, RoomId, WidgetKey } from "../appViewModel";
 import type { RoomSummary } from "../session";
-import { localWidgetKey, widgetKey, type ResolvedWidget, type StateEvent, type WidgetEventParser } from "../widgetStateEvent";
+import { localWidgetKey, widgetKey, type StateEvent, type WidgetDefinition, type WidgetEventParser } from "../widgetStateEvent";
 
 /** A widget of a room as the RoomOverview lists it. `problem`: the state event cannot be embedded (the row is disabled). */
 export interface RoomWidget {
   key: WidgetKey;
   name: string;
   event: StateEvent;
-  widget?: ResolvedWidget;
+  /** The widget's definition, when the host may load it: what a `WidgetRuntime` is started from. */
+  widget?: WidgetDefinition;
   problem?: string;
   /** A local widget ("Add widget", only in this host): `key` is its `localWidgetKey`. */
   local?: true;
@@ -25,8 +26,8 @@ export function roomWidgets(parser: WidgetEventParser, room: Pick<RoomSummary, "
     const resolution = parser.resolve(event);
     if (!resolution) return [];
     const key = isLocal ? localWidgetKey(event) : widgetKey(event);
-    const { name, widget, problem } = resolution;
-    return [{ key, name, event, ...(widget ? { widget } : { problem }), ...(isLocal ? { local: true as const } : {}) }];
+    const { widget, problem } = resolution;
+    return [{ key, name: widget.name, event, ...(problem ? { problem } : { widget }), ...(isLocal ? { local: true as const } : {}) }];
   };
   return [...(room?.widgetEvents ?? []).flatMap((e) => listed(e, false)), ...local.flatMap((e) => listed(e, true))];
 }

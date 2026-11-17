@@ -1,57 +1,54 @@
 /**
  * Webview capabilities in the host (`src/lib/webview.ts`, `WidgetRuntime`): the iframe attributes the
- * driver makes of them, the legacy set, and when a running widget reports `webviewChanged` (its
- * iframe must be built again) and when not. The policy itself (base, never) is tested in Rust
- * (`crates/widget-host-driver/src/webview.rs`, `driver/tests.rs`); the reload in the browser in
- * `e2e/webview.spec.ts`.
+ * driver makes of them, the legacy set, and when the driver of a running widget has its iframe built
+ * again (`WidgetRuntimeEvents.loadIframe`). Only what the host adds is tested here (the message
+ * pump, what it remembers, its spelling of capabilities); the policy (base, never, denial) and the
+ * reload are tested in Rust (`crates/widget-host-driver/src/webview.rs`, `driver/tests.rs`); the
+ * reload in the browser in `e2e/webview.spec.ts`.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { InMemoryBackend } from "@matrix-widget-tools/widget-host-bindings";
+import { InMemoryBackend, legacyAutoApproved, webviewAttributes } from "@matrix-widget-tools/widget-host-bindings";
 
 import { LEGACY_WEBVIEW_CAPABILITIES } from "../../widget-compat-wrapper/src/capabilities";
 import { INNER_ALLOW, INNER_SANDBOX } from "../../widget-compat-wrapper/src/wrapper";
 import { WEBVIEW_CAPABILITIES } from "../../test-widgets/new/capabilities";
 import { WidgetRuntime, type WidgetRuntimeEvents } from "../src/app/runtime/widgetRuntime";
-import { isWebviewCapability, webviewCapabilities, webviewFor } from "../src/lib/webview";
-import { LEGACY_AUTO_APPROVED, LEGACY_WEBVIEW, type ResolvedWidget } from "../src/widgetStateEvent";
+import { canonicalWebview, isWebviewCapability } from "../src/lib/webview";
+import type { WidgetDefinition, WidgetIframe } from "../src/widgetStateEvent";
 import { CORE, tick, X } from "./harness";
 
 const CAMERA = `webview:${X}allow:camera`;
 const MICROPHONE = `webview:${X}allow:microphone`;
 const POPUPS = `webview:${X}sandbox:allow-popups`;
-const TOP_NAVIGATION = `webview:${X}sandbox:allow-top-navigation`;
 const NAVIGATE = "widget:org.matrix.msc2931.navigate";
 const STRICT = { sandbox: "allow-scripts allow-same-origin", allow: "" };
+/** The webview capabilities a legacy widget gets without asking (the driver's `legacy_auto_approved`). */
+const LEGACY_WEBVIEW = legacyAutoApproved().filter(isWebviewCapability);
 
 describe("webview capabilities and the iframe attributes", () => {
-  it("start strict: scripts and the widget's own origin, no feature", () => {
-    expect(webviewFor([])).toEqual(STRICT);
-    expect(webviewFor([`widget:${X}get_matrix_context`, "garbage"])).toEqual(STRICT);
-  });
-
-  it("add a granted token or feature, for the widget's own origin only; never the top navigation", () => {
-    expect(webviewFor([MICROPHONE, POPUPS, CAMERA, TOP_NAVIGATION])).toEqual({
-      sandbox: "allow-scripts allow-same-origin allow-popups",
-      allow: "camera 'src'; microphone 'src'",
-    });
-    // The stable spelling is the same capability.
-    expect(webviewFor(["webview:m.allow:camera"]).allow).toBe("camera 'src'");
-  });
-
   it("are known to the driver; a value that is no single web token is no webview capability", () => {
     expect(isWebviewCapability(CAMERA)).toBe(true);
     expect(isWebviewCapability("webview:m.sandbox:allow-forms")).toBe(true);
     for (const raw of ["webview:m.allow:camera *", "webview:m.allow:camera; usb", "webview:m.allow:Camera", `widget:${X}allow:camera`, "webview:garbage"]) {
       expect(isWebviewCapability(raw), raw).toBe(false);
     }
-    expect(webviewCapabilities([CAMERA, NAVIGATE, CAMERA, "webview:m.allow:camera *"])).toEqual([CAMERA]);
+    // This host's own lists spell one the driver's way.
+    expect(canonicalWebview("webview:m.allow:camera")).toBe(CAMERA);
+    expect([CAMERA, NAVIGATE, "widget:m.navigate"].map(canonicalWebview)).toEqual([CAMERA, NAVIGATE, "widget:m.navigate"]);
   });
 
   it("of a legacy widget: what the compat wrapper requests and its inner iframe has, granted without asking", () => {
     expect(new Set(LEGACY_WEBVIEW)).toEqual(new Set(LEGACY_WEBVIEW_CAPABILITIES));
-    expect(LEGACY_WEBVIEW.every((c) => LEGACY_AUTO_APPROVED.includes(c))).toBe(true);
-    const legacy = webviewFor(LEGACY_WEBVIEW);
+    // Besides: the facts of the widget URL and the host's pushes, never an OpenID token.
+    expect(legacyAutoApproved().filter((c) => !isWebviewCapability(c))).toEqual([
+      `widget:${X}get_matrix_context`,
+      `widget:${X}get_client_context`,
+      `host:${X}update_theme`,
+      `host:${X}update_language`,
+      `host:${X}update_visibility`,
+    ]);
+    const legacy = webviewAttributes(LEGACY_WEBVIEW);
     expect(new Set(legacy.sandbox.split(" "))).toEqual(new Set(INNER_SANDBOX.split(" ")));
     expect(new Set(legacy.allow.split("; ").map((f) => f.replace(" 'src'", "")))).toEqual(new Set(INNER_ALLOW.split("; ")));
   });
@@ -61,9 +58,9 @@ describe("webview capabilities and the iframe attributes", () => {
   });
 });
 
-// ---- WidgetRuntime: when the iframe has to be built again ---------------------------------------
+// ---- WidgetRuntime: when the driver has the iframe built again ----------------------------------
 
-type Listener = (ev: { source: unknown; data: unknown }) => void;
+type Listener = (ev: { source: unknown; origin: string; data: unknown }) => void;
 
 /** `window` and `document` as far as `WidgetRuntime` uses them, and the widget's window. */
 function fakeBrowser() {
@@ -75,45 +72,59 @@ function fakeBrowser() {
     addEventListener: (_: string, listener: Listener) => listeners.add(listener),
     removeEventListener: (_: string, listener: Listener) => listeners.delete(listener),
     setTimeout: () => 0,
+    clearTimeout: () => {},
   });
   let n = 0;
   /** The widget sends a request, as a message event from its window. */
-  const fromWidget = async (action: string, request: unknown = {}) => {
-    listeners.forEach((listener) => listener({ source: contentWindow, data: { source: "widget", action, request_id: `w${++n}`, request } }));
+  const fromWidget = async (action: string, request: unknown = {}, origin = page.origin) => {
+    listeners.forEach((listener) => listener({ source: contentWindow, origin, data: { source: "widget", action, request_id: `w${++n}`, request } }));
     await tick();
   };
-  return { contentWindow, posted, fromWidget };
+  /** The origin of the page in the widget's window: that of the iframe built last. */
+  const page = { origin: "" };
+  return { contentWindow, posted, fromWidget, page };
 }
 
-function start(widget: Partial<ResolvedWidget> = {}, keptWebview?: string[]) {
+const NEW: WidgetDefinition = { eventType: "m.widget", widgetId: "w", name: "W", url: "https://widget.example/", avatarUrl: undefined, usesWidgetApi: true, legacy: undefined };
+const LEGACY: WidgetDefinition = { ...NEW, eventType: "im.vector.modular.widgets", usesWidgetApi: false, legacy: { widgetType: "m.custom", waitForIframeLoad: true, data: undefined } };
+
+function start(widget: WidgetDefinition = NEW) {
   const browser = fakeBrowser();
+  /** Every iframe the driver asked for, oldest first. The page of each is "mounted" at once. */
+  const iframes: WidgetIframe[] = [];
   const events = {
     ready: vi.fn(),
     failed: vi.fn(),
     capabilitiesRequested: vi.fn<WidgetRuntimeEvents["capabilitiesRequested"]>(),
     alwaysOnScreen: vi.fn(),
     activity: vi.fn(),
-    webviewChanged: vi.fn<WidgetRuntimeEvents["webviewChanged"]>(),
+    loadIframe: (iframe: WidgetIframe) => {
+      iframes.push(iframe);
+      browser.page.origin = iframe.origin;
+      runtime.attach({ contentWindow: browser.contentWindow } as unknown as HTMLIFrameElement);
+    },
   };
-  const runtime = new WidgetRuntime({
+  const runtime: WidgetRuntime = new WidgetRuntime({
     id: "!room:example.org|m.widget/w",
-    widget: { url: "https://widget.example/", name: "W", legacy: false, usesWidgetApi: true, ...widget },
+    widget,
     backend: new InMemoryBackend("!room:example.org", "@alice:example.org").asBackend(),
     autoApproveCapabilities: () => false,
     theme: () => "light",
-    keptWebview,
     events,
   });
-  runtime.attach({ contentWindow: browser.contentWindow } as unknown as HTMLIFrameElement);
   const updates = () => browser.posted.filter((m) => m.action === `${CORE}update_capabilities`).map((m) => (m.request as { allowed: string[] }).allowed);
-  return { runtime, events, updates, ...browser };
+  /** The questions the user was asked (not the "answered" calls). */
+  const questions = () => events.capabilitiesRequested.mock.calls.map(([question]) => question).filter((question) => question !== undefined);
+  const attributes = () => iframes.map(({ sandbox, allow }) => ({ sandbox, allow }));
+  return { runtime, events, iframes, attributes, updates, questions, ...browser };
 }
 
 describe("WidgetRuntime and webview capabilities", () => {
   const runtimes: WidgetRuntime[] = [];
-  const started = (...args: Parameters<typeof start>) => {
+  const started = async (...args: Parameters<typeof start>) => {
     const s = start(...args);
     runtimes.push(s.runtime);
+    await tick();
     return s;
   };
   beforeEach(() => void (runtimes.length = 0));
@@ -122,104 +133,89 @@ describe("WidgetRuntime and webview capabilities", () => {
     vi.unstubAllGlobals();
   });
 
-  it("builds a widget's first iframe strict", async () => {
-    const { runtime } = started();
-    expect(runtime.webview).toEqual({ applied: [], ...STRICT });
-    await tick();
+  it("builds a widget's first iframe strict, as the driver says", async () => {
+    const { runtime, iframes, events } = await started();
+    expect(iframes).toEqual([{ url: "https://widget.example/", origin: "https://widget.example", ...STRICT }]);
+    expect(runtime.appliedWebview).toEqual([]);
     expect(runtime.devTools.get().capabilities.webview).toEqual({ applied: [], ...STRICT });
+    // A widget with the widget API is ready when it says so.
+    expect(events.ready).not.toHaveBeenCalled();
   });
 
-  it("reports webviewChanged once a grant is out, and the next start applies it without asking again", async () => {
-    const { runtime, events, updates, fromWidget } = started();
-    await fromWidget(`${CORE}request_capabilities`, { capabilities: [CAMERA, NAVIGATE] });
-    expect(events.capabilitiesRequested).toHaveBeenLastCalledWith({ requested: [CAMERA, NAVIGATE], unknown: [], singleUse: [] });
-    runtime.answerCapabilities([CAMERA, NAVIGATE]);
-    // The widget is told first; the restart is reported after that.
-    expect(updates()).toEqual([[CAMERA, NAVIGATE]]);
-    expect(events.webviewChanged).not.toHaveBeenCalled();
-    await tick();
-    expect(events.webviewChanged).toHaveBeenCalledExactlyOnceWith([CAMERA]);
-
-    // The next start: built with the camera, and its request for it is granted at once.
-    const next = started({}, [CAMERA]);
-    expect(next.runtime.webview).toEqual({ applied: [CAMERA], sandbox: STRICT.sandbox, allow: "camera 'src'" });
-    await next.fromWidget(`${CORE}request_capabilities`, { capabilities: [CAMERA] });
-    expect(next.events.capabilitiesRequested).not.toHaveBeenCalled();
-    expect(next.updates()).toEqual([[CAMERA]]);
-    await tick();
-    expect(next.events.webviewChanged).not.toHaveBeenCalled();
-  });
-
-  it("does not restart for a denial, a base token, a never token or anything but webview capabilities", async () => {
-    const { runtime, events, updates, fromWidget } = started();
-    await fromWidget(`${CORE}request_capabilities`, { capabilities: [`webview:${X}sandbox:allow-scripts`, TOP_NAVIGATION] });
-    // Granted (the base token) and refused (the top navigation) without asking.
+  it("shows a widget without the widget API at once, and passes none of its messages on", async () => {
+    const { events, iframes, posted, fromWidget } = await started({ ...NEW, usesWidgetApi: false });
+    expect(iframes).toHaveLength(1);
+    expect(events.ready).toHaveBeenCalledOnce();
+    await fromWidget(`${CORE}request_capabilities`, { capabilities: [NAVIGATE] });
+    expect(posted).toEqual([]);
     expect(events.capabilitiesRequested).not.toHaveBeenCalled();
-    expect(updates()).toEqual([[`webview:${X}sandbox:allow-scripts`]]);
+  });
+
+  it("accepts messages only from the origin of the iframe the driver asked for", async () => {
+    const { posted, fromWidget } = await started();
+    await fromWidget(`${CORE}request_capabilities`, { capabilities: [`webview:${X}sandbox:allow-scripts`] }, "https://elsewhere.example");
+    expect(posted).toEqual([]);
+    await fromWidget(`${CORE}request_capabilities`, { capabilities: [`webview:${X}sandbox:allow-scripts`] });
+    expect(posted.length).toBeGreaterThan(0);
+  });
+
+  it("has the iframe built again once a grant is out; the page in it gets what the widget held without a question", async () => {
+    const { runtime, attributes, updates, questions, fromWidget } = await started();
     await fromWidget(`${CORE}request_capabilities`, { capabilities: [CAMERA, NAVIGATE] });
-    runtime.answerCapabilities([NAVIGATE], [CAMERA, NAVIGATE]);
+    expect(questions()).toEqual([{ requested: [CAMERA, NAVIGATE], unknown: [], singleUse: [] }]);
+    runtime.answerCapabilities([CAMERA, NAVIGATE]);
+    // The widget is told first; the new iframe comes after that.
+    expect(updates()).toEqual([[CAMERA, NAVIGATE]]);
+    expect(attributes()).toEqual([STRICT]);
     await tick();
-    expect(events.webviewChanged).not.toHaveBeenCalled();
-    expect(runtime.webview).toEqual({ applied: [], ...STRICT });
+    expect(attributes()).toEqual([STRICT, { sandbox: STRICT.sandbox, allow: "camera 'src'" }]);
+    expect(runtime.appliedWebview).toEqual([CAMERA]);
+
+    // The page in the new iframe asks again: granted at once, also what is no webview capability; no further iframe.
+    await fromWidget(`${CORE}request_capabilities`, { capabilities: [CAMERA, NAVIGATE] });
+    expect(questions()).toHaveLength(1);
+    expect(updates()).toEqual([[CAMERA, NAVIGATE], [CAMERA, NAVIGATE]]);
+    await tick();
+    expect(attributes()).toHaveLength(2);
   });
 
-  it("restarts without a revoked webview capability, also one the widget has not requested in this start", async () => {
-    const { runtime, events } = started({}, [CAMERA, MICROPHONE]);
-    expect(runtime.webview.allow).toBe("camera 'src'; microphone 'src'");
-    runtime.revoke([CAMERA]);
-    await tick();
-    expect(events.webviewChanged).toHaveBeenCalledExactlyOnceWith([MICROPHONE]);
-    // At most once per runtime: the controller starts a new one.
-    runtime.revoke([MICROPHONE]);
-    await tick();
-    expect(events.webviewChanged).toHaveBeenCalledOnce();
-  });
-
-  it("restarts for a webview capability added in the driver panel, and keeps it without a store", async () => {
-    const { runtime, events } = started();
+  it("builds the iframe again for a webview capability added in the driver panel (kept without a store), and again without a revoked one", async () => {
+    const { runtime, attributes } = await started();
     runtime.grant(POPUPS);
     await tick();
-    expect(events.webviewChanged).toHaveBeenCalledExactlyOnceWith([POPUPS]);
-    expect(started({}, [POPUPS]).runtime.webview.sandbox).toBe("allow-scripts allow-same-origin allow-popups");
+    runtime.grant(CAMERA);
+    await tick();
+    const popups = "allow-scripts allow-same-origin allow-popups";
+    expect(attributes()).toEqual([STRICT, { sandbox: popups, allow: "" }, { sandbox: popups, allow: "camera 'src'" }]);
+    // One the widget has not requested in this iframe.
+    runtime.revoke([CAMERA]);
+    await tick();
+    runtime.revoke("all");
+    await tick();
+    expect(attributes().slice(3)).toEqual([{ sandbox: popups, allow: "" }, STRICT]);
   });
 
   it("treats both spellings of a webview capability alike: added in the stable one, revoked as the driver lists it", async () => {
-    const first = started();
-    first.runtime.grant("webview:m.allow:camera");
+    const { runtime, attributes } = await started();
+    runtime.grant("webview:m.allow:camera");
     await tick();
-    expect(first.events.webviewChanged).toHaveBeenCalledExactlyOnceWith([CAMERA]);
-    // Kept in the stable spelling, revoked in the driver's: the next start is without it.
-    const { runtime, events } = started({}, ["webview:m.allow:camera"]);
-    expect(runtime.webview).toEqual({ applied: [CAMERA], sandbox: STRICT.sandbox, allow: "camera 'src'" });
+    expect(runtime.appliedWebview).toEqual([CAMERA]);
     runtime.revoke([CAMERA]);
     await tick();
-    expect(events.webviewChanged).toHaveBeenCalledExactlyOnceWith([]);
+    expect(attributes()).toEqual([STRICT, { sandbox: STRICT.sandbox, allow: "camera 'src'" }, STRICT]);
   });
 
-  it("asks about a legacy client's set when an MSC4411 widget requests it: only a legacy widget gets it without asking", async () => {
-    const { runtime, events, updates, fromWidget } = started();
-    await fromWidget(`${CORE}request_capabilities`, { capabilities: [...LEGACY_WEBVIEW_CAPABILITIES] });
-    const base = [`webview:${X}sandbox:allow-same-origin`, `webview:${X}sandbox:allow-scripts`];
-    const asked = LEGACY_WEBVIEW_CAPABILITIES.filter((c) => !base.includes(c));
-    expect(asked).toHaveLength(13);
-    expect(events.capabilitiesRequested).toHaveBeenCalledOnce();
-    expect(new Set(events.capabilitiesRequested.mock.calls[0][0]?.requested)).toEqual(new Set(asked));
-    expect(runtime.webview).toEqual({ applied: [], ...STRICT });
-    // Denied: the widget holds the base only, and its iframe stays strict.
-    runtime.answerCapabilities([], asked);
-    expect(new Set(updates().at(-1))).toEqual(new Set(base));
-    await tick();
-    expect(events.webviewChanged).not.toHaveBeenCalled();
-  });
-
-  it("builds a legacy widget's iframe like a legacy client's; the compat wrapper's request needs no prompt and no restart", async () => {
-    const { runtime, events, updates, fromWidget } = started({ legacy: true });
-    expect(runtime.webview.sandbox.split(" ")).toEqual(expect.arrayContaining(INNER_SANDBOX.split(" ")));
-    expect(runtime.webview.allow).toContain("fullscreen 'src'");
+  it("builds a legacy widget's iframe like a legacy client's, in the compat wrapper; the wrapper's request needs no prompt and no new iframe", async () => {
+    const { iframes, updates, questions, fromWidget } = await started(LEGACY);
+    expect(iframes).toHaveLength(1);
+    expect(iframes[0].url.startsWith("http://localhost/widget_compatibility_wrapper/?legacy_widget_url=https%3A%2F%2Fwidget.example%2F&")).toBe(true);
+    expect(iframes[0].origin).toBe("http://localhost");
+    expect(iframes[0].sandbox.split(" ")).toEqual(expect.arrayContaining(INNER_SANDBOX.split(" ")));
+    expect(iframes[0].allow).toContain("fullscreen 'src'");
     await fromWidget(`${CORE}request_capabilities`, { capabilities: [`widget:${X}get_matrix_context`, ...LEGACY_WEBVIEW_CAPABILITIES] });
-    expect(events.capabilitiesRequested).not.toHaveBeenCalled();
+    expect(questions()).toEqual([]);
     expect(new Set(updates()[0])).toEqual(new Set([`widget:${X}get_matrix_context`, ...LEGACY_WEBVIEW_CAPABILITIES]));
     await tick();
-    expect(events.webviewChanged).not.toHaveBeenCalled();
+    expect(iframes).toHaveLength(1);
   });
 });

@@ -45,7 +45,7 @@ function Token({ token, capability }: IframeToken) {
   );
 }
 
-/** "Webview of this load": the `sandbox` and `allow` the iframe of this start was built with. A change needs a new start. */
+/** "Webview of this load": the `sandbox` and `allow` the current iframe was built with. A change comes with a new iframe (the widget restarts in it). */
 function WebviewOfThisLoad({ webview }: { webview: WidgetDevToolsData["capabilities"]["webview"] }) {
   const tokens = iframeTokens(webview);
   const row = (name: "sandbox" | "allow") => (
@@ -76,7 +76,7 @@ function WebviewOfThisLoad({ webview }: { webview: WidgetDevToolsData["capabilit
 }
 
 /**
- * WidgetDevToolDriverPanel: the capabilities the driver holds, the iframe's webview of this start,
+ * WidgetDevToolDriverPanel: the capabilities the driver holds, the webview of the current iframe,
  * and buttons that mock a host action. Granting ("Add") or revoking a webview capability restarts
  * the widget. stories `widget-devtools--driver`, `widget-devtools--driver-webview`
  */

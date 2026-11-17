@@ -55,27 +55,42 @@ package entry: it loads the wasm by URL (bundler friendly) and re-exports the th
 
 ```ts
 import {
-  uniffiInitAsync, InMemoryBackend, WidgetHostDriver, matrixEventFromJson,
-  type MatrixBackend, type WidgetHostPlatform, type RoomSink, type RoomSubjects, type Subscription,
+  uniffiInitAsync, InMemoryBackend, WidgetHostDriver, matrixEventFromJson, parseWidgetStateEvent,
+  type EmbedOptions, type MatrixBackend, type WidgetHostPlatform, type RoomSink, type RoomSubjects, type Subscription,
 } from "@matrix-widget-tools/widget-host-bindings";
 
 await uniffiInitAsync();                                   // once, before anything else
 
+let iframe: HTMLIFrameElement | undefined;
+let widgetOrigin = "";
 const platform: WidgetHostPlatform = {
-  sendToWidget: (json) => iframe.contentWindow!.postMessage(JSON.parse(json), widgetOrigin),
+  // The first iframe (`driver.start()`), and a new one whenever webview capabilities change `sandbox` / `allow`.
+  loadIframe: ({ url, origin, sandbox, allow }) => {
+    iframe?.remove();
+    iframe = Object.assign(document.createElement("iframe"), { src: url, allow, hidden: true });
+    iframe.setAttribute("sandbox", sandbox);
+    widgetOrigin = origin;
+    container.append(iframe);
+  },
+  sendToWidget: (json) => iframe!.contentWindow!.postMessage(JSON.parse(json), widgetOrigin),
   onCapabilitiesRequested: (requested) => queueMicrotask(() => driver.approveCapabilities(requested)),
-  onReady: () => (iframe.hidden = false),
+  onReady: () => (iframe!.hidden = false),               // `notify_ready`; at once for a widget without `uses_widget_api`
   navigate: (uri) => { location.href = uri; },
   setAlwaysOnScreen: (value) => value,
   clientId: () => "io.example.client", clientTheme: () => "light", clientLanguage: () => "en",
 };
 const backend = new InMemoryBackend("!room:example.org", "@alice:example.org");
-const driver = new WidgetHostDriver(backend.asBackend(), platform);
+const options: EmbedOptions = { wrapperUrl: "https://client.example/wrapper/", clientOrigin: location.origin, ownWidgetDirs: [], allowHttp: false };
+// Throws a `WidgetEventError`: `Refused` (list `e.inner.widget`, disabled, with `e.inner.reason`), `Removed`, `NotAWidgetType`.
+const widget = parseWidgetStateEvent(event.type, event.state_key, event.content, options);
+const driver = new WidgetHostDriver(widget, options, backend.asBackend(), platform);   // throws `Refused` as well
 // `get_openid` is granted for one token at a time by default; `driver.setSingleUse([])` keeps every grant.
+driver.setAutoApproved(remembered);                        // what the client remembers; before `start()`
 
 window.addEventListener("message", (ev) => {
-  if (ev.source === iframe.contentWindow) driver.handleMessageFromWidget(JSON.stringify(ev.data));
+  if (ev.source === iframe?.contentWindow && ev.origin === widgetOrigin) driver.handleMessageFromWidget(JSON.stringify(ev.data));
 });
+driver.start();                                            // → loadIframe
 // InMemoryBackend specific public api to mock a sync response
 backend.inject(matrixEventFromJson(JSON.stringify(eventFromSync)));   // reaches the widget if permitted
 ```
@@ -116,24 +131,31 @@ tells a capability of the widget API from a string the driver does not know (whi
 but which allows nothing), e.g. to set the latter apart in a permission prompt.
 
 Which state events are widgets, and what to load for one, is the driver's too (see its README):
-`parseWidgetStateEvent(eventType, stateKey, content)` returns a `WidgetDefinition` (`name`, `url`,
-`usesWidgetApi`, `legacy?`, …) and `embedWidget(widget, options)` a `WidgetEmbed`
-(`url`, `usesWidgetApi`; for an `m.widget` its URL as the check serialised it, so derive the
-widget's target origin from it); `widgetUrlProblem(url, allowHttp)` is the URL check alone,
-`embedUrlProblem(url, options)` the one `embedWidget` makes (also: no page of the compat wrapper at
+`parseWidgetStateEvent(eventType, stateKey, content, options)` returns a `WidgetDefinition` (`name`,
+`url`, `usesWidgetApi`, `legacy?`, …) for a widget the client may load; it makes the check the
+driver's constructor makes with the same `options`. `widgetUrlProblem(url, allowHttp)` is the URL
+check alone, `embedUrlProblem(url, options)` the whole check (also: no page of the compat wrapper at
 `options.wrapperUrl`, no page of `options.clientOrigin` outside `options.ownWidgetDirs`; `options` is
 the plain object `EmbedOptions { wrapperUrl?, clientOrigin?, ownWidgetDirs, allowHttp }`), and
-`widgetEventTypes()` the event types to read. Both functions throw a `WidgetEventError`
-(`NotAWidgetType`, `Removed`, `Refused`). Errors of the bindings carry their fields in `inner`
+`widgetEventTypes()` the event types to read. The parser and the constructor throw a
+`WidgetEventError` (`NotAWidgetType`, `Removed`, `Refused`; `Refused` carries the whole definition
+in `widget`, to list it disabled). Errors of the bindings carry their fields in `inner`
 (`e.inner.reason`), not the text of the Rust error. Strings coming back from the bindings lose a
-leading U+FEFF (they are decoded with a default `TextDecoder`), so the host passes the event's own
-`url` and state key to `embedWidget` rather than those of the returned definition.
+leading U+FEFF (they are decoded with a default `TextDecoder`), so the host puts the event's own
+`url` and state key into the definition it hands to the constructor.
 
-`webviewAttributes(capabilities)` returns the `{ sandbox, allow }` of a widget's iframe for the
-webview capabilities among `capabilities` (`webview:…sandbox:<token>`, `webview:…allow:<feature>`;
-anything else is ignored): `{ sandbox: "allow-scripts allow-same-origin", allow: "" }` for none. The
-driver grants the base tokens without calling `onCapabilitiesRequested` and never grants
-`allow-top-navigation`.
+What the iframe loads reaches the client through `loadIframe(iframe)`: `WidgetIframe { url, origin,
+sandbox, allow }`, the URL as the check serialised it (for a legacy widget the compat wrapper), its
+origin as the `postMessage` target, and the attributes made from the widget's webview capabilities
+(`webview:…sandbox:<token>`, `webview:…allow:<feature>`): `sandbox: "allow-scripts allow-same-origin"`
+and an empty `allow` for none. The driver calls it from `start()` and again when a granted, revoked
+or auto-approved webview capability changes the attributes; the same driver goes on, forgets the
+old page and grants the new one what the old held without asking (`snapshot().carried`). The driver
+grants the base tokens without calling `onCapabilitiesRequested` and never grants
+`allow-top-navigation`. `webviewAttributes(capabilities)` is the function behind the attributes,
+`legacyAutoApproved()` the list a legacy widget gets without asking (the driver applies it itself).
+A widget without `usesWidgetApi` gets `onReady` right after `loadIframe`; its messages are refused
+with `DriverError.NoWidgetApi`.
 
 `onCapabilitiesRequested` gets the whole open question: a request that arrives before
 `approveCapabilities` joins it, and the callback is called again with all of it (without what the

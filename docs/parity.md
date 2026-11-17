@@ -59,10 +59,12 @@ matrix-widget-api's `WidgetParser.parseRoomWidget` treats `m.widget` and
 `WidgetDefinition::parse` (`crates/widget-host-driver/src/widget_event.rs`) follows MSC4411 for
 `m.widget` / `org.matrix.msc4411.widget` (a string `name` and `url`, else a removed widget) and
 needs only a string `url` for the legacy event (`type` is optional, the name falls back to the
-state key). `WidgetDefinition::embed` checks the URL (absolute `http(s)`, parsed per WHATWG, not
-relative to the page that embeds it; no page of the client's compat wrapper; no page of the
-client's own origin, `EmbedOptions`) and loads a legacy widget through the compat wrapper with
-its URL untemplated. One parser for every client: the browser host calls it through the bindings.
+state key). `parse_widget_state_event` also checks the URL (absolute `http(s)`, parsed per WHATWG,
+not relative to the page that embeds it; no page of the client's compat wrapper; no page of the
+client's own origin, `EmbedOptions`); a `WidgetHostDriver` made from the definition checks it
+again and tells the client what to load (`WidgetHostPlatform::load_iframe`), a legacy widget
+through the compat wrapper with its URL untemplated. One parser for every client: the browser host
+calls it through the bindings.
 
 ### The widget iframe
 
@@ -80,8 +82,8 @@ to recommend this set (without `allowFullscreen`).
 
 | | Element Web | here |
 |---|---|---|
-| widget of MSC4411 | the set above | `sandbox="allow-scripts allow-same-origin"`, empty `allow`; more only as webview capabilities it requests and the user grants (`webview:…sandbox:<token>`, `webview:…allow:<feature>`), applied with a reload |
-| legacy widget (`im.vector.modular.widgets`) | the set above | the wrapper's iframe: the same set plus `fullscreen` in `allow`, as webview capabilities the wrapper requests and the host grants without asking; the wrapper's inner iframe: the same, constant |
+| widget of MSC4411 | the set above | `sandbox="allow-scripts allow-same-origin"`, empty `allow`; more only as webview capabilities it requests and the user grants (`webview:…sandbox:<token>`, `webview:…allow:<feature>`), applied with a reload: the driver calls `load_iframe` again and grants the reloaded page what the widget held |
+| legacy widget (`im.vector.modular.widgets`) | the set above | the wrapper's iframe: the same set plus `fullscreen` in `allow`, as webview capabilities the wrapper requests and the driver grants without asking (`legacy_auto_approved`); the wrapper's inner iframe: the same, constant |
 | a widget of the client's own origin | loaded with the set above | refused ("a widget cannot be a page of this client's own origin"); the dev site's own test widgets are the exception |
 | `allow` features | `camera` (default allowlist `'src'`) | `camera 'src'`, spelled out |
 | top navigation | not in the set | never granted, even if approved |

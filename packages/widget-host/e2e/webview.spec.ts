@@ -97,7 +97,7 @@ test("an approved webview capability restarts the widget with it; asking again n
   await expect(host.iframe(NEW)).toHaveAttribute("sandbox", STRICT_SANDBOX);
   expect((await webview(host, NEW))?.applied).toEqual([CAMERA, MICROPHONE]);
 
-  // The new start may use the camera.
+  // The page in the new iframe may use the camera.
   await press(host, NEW, "notify_ready");
   await host.ready(NEW);
   await press(host, NEW, "webview: feature policy");
@@ -194,7 +194,7 @@ test("allow-top-navigation is never in the prompt and never granted", async ({ h
   expect((await webview(host, NEW))?.applied).toEqual([CAMERA]);
 });
 
-test("a widget restarted a third time within 10 s for its webview capabilities is stopped; Retry starts it with them", async ({ host }) => {
+test("a widget restarted a third time within 10 s for its webview capabilities is stopped; Retry starts it anew", async ({ host }) => {
   await readyQuietWidget(host);
   await grantCameraAndMicrophone(host);
   await host.dispatch({ type: "devTools/revokeCapabilities", widgetId: NEW, capabilities: [CAMERA], confirmed: true });
@@ -207,8 +207,10 @@ test("a widget restarted a third time within 10 s for its webview capabilities i
   const failed = host.page.getByTestId("widget-failed");
   await expect(failed).toContainText("restarted 2 times within 10 seconds to change the permissions of its iframe");
   await expect(host.iframe(NEW)).toHaveCount(0);
+  // Retry is a new start (a new driver): strict again, unless the approvals are remembered.
   await failed.getByRole("button", { name: "Retry" }).click();
-  await expect(host.iframe(NEW)).toHaveAttribute("allow", "camera 'src'; microphone 'src'");
+  await expect(host.iframe(NEW)).toHaveAttribute("allow", "");
+  expect((await webview(host, NEW))?.applied).toEqual([]);
 });
 
 test("what was granted to the widget's iframe is not carried to another URL: a reload after its state event changed starts strict", async ({ host }) => {
@@ -253,7 +255,7 @@ test("the driver panel shows the webview of this load; adding a webview capabili
   await expect(load.getByRole("list", { name: "allow" }).getByRole("listitem")).toHaveText(["camera"]);
   await expect(load.getByRole("listitem").filter({ hasText: /^camera$/ })).toHaveAttribute("title", CAMERA);
 
-  // The new start asks for it and gets it at once: a "webview" row, whose revoke button says that the widget restarts.
+  // The page in the new iframe asks for it and gets it at once: a "webview" row, whose revoke button says that the widget restarts.
   await press(host, NEW, "notify_ready");
   await host.ready(NEW);
   await requestNext(host, NEW, [CAMERA]);

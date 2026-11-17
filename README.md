@@ -36,7 +36,7 @@ More diagrams (legacy widgets, wire format, the actions crate, capabilities, tes
 |---|---|---|
 | [`widget-actions`](crates/widget-actions) | everywhere, optional UniFFI | Plain data types: the wire envelope, typed `Action` tree (`WidgetRequest`, `HostRequest`, ...), capability strings, `MatrixEvent`. No I/O, no state. |
 | [`widget-base-sdk`](crates/widget-base-sdk) | widget side, wasm + JS | `WidgetClient`: tracks the session (capabilities, `notify_ready`), turns actions into async functions, answers host requests. On `wasm32` also exports the `WidgetApi` JS class wired to `window.parent.postMessage`. |
-| [`widget-host-driver`](crates/widget-host-driver) | host side, optional UniFFI | `WidgetHostDriver`: one instance per rendered widget. Feed it widget messages, it performs the handshake, checks capabilities, calls the backend, subscribes to the room for the approved `receive.*` capabilities and answers. One callback (`send_to_widget`) carries JSON to the iframe. Also reads the widget state events (MSC4411 `m.widget` and the legacy `im.vector.modular.widgets`): which are widgets, the URL check, the compat wrapper URL of a legacy widget. Its `cdylib` carries the UniFFI scaffolding of all three host crates. |
+| [`widget-host-driver`](crates/widget-host-driver) | host side, optional UniFFI | `WidgetHostDriver`: one instance per rendered widget. Feed it widget messages, it performs the handshake, checks capabilities, calls the backend, subscribes to the room for the approved `receive.*` capabilities and answers. Two callbacks reach the iframe: `load_iframe` says what to build (URL, `sandbox`, `allow`), `send_to_widget` carries JSON to it. Also reads the widget state events (MSC4411 `m.widget` and the legacy `im.vector.modular.widgets`): which are widgets, the URL check, the compat wrapper URL and the auto-approved set of a legacy widget. Its `cdylib` carries the UniFFI scaffolding of all three host crates. |
 | [`widget-matrix-backend`](crates/widget-matrix-backend) | host side, optional UniFFI | `MatrixBackend`: the trait a host implements once per Matrix SDK, shaped after matrix-rust-rtc's (send room / state / sticky / delayed / to-device, read events / state / relations / account data, OpenID, TURN, RTC transports, user directory, media config, LiveKit; subscribe to the room, to-device messages and TURN credentials). Ships `InMemoryBackend` for tests and the browser test host. See [`docs/parity.md`](docs/parity.md). |
 | [`widget-logging`](crates/widget-logging) | bindings only | The logger the bindings install: `RUST_LOG`-style filter, platform log output, optional host sink. See [Logging](#logging). |
 | [`uniffi-bindgen`](crates/uniffi-bindgen) | tooling | Binary that generates Kotlin / Swift / Python bindings for the crates above. |
@@ -147,8 +147,9 @@ one capability per action, written `source:action[.modifier][:data]`.
 * The source `webview` is about no action but the widget's iframe: `webview:…sandbox:<token>` and
   `webview:…allow:<feature>`, one web token each (`webview:org.matrix.mscXXXX.allow:camera`). Every
   iframe starts strict (`sandbox="allow-scripts allow-same-origin"`, empty `allow`); the driver
-  grants those two tokens without asking and `allow-top-navigation` never, and `webview_attributes`
-  builds the attributes from what the widget holds. A grant applies with a reload of the iframe
+  grants those two tokens without asking and `allow-top-navigation` never, builds the attributes
+  from what the widget holds (`webview_attributes`) and hands them to the client
+  (`WidgetHostPlatform::load_iframe`). A grant applies with a reload of the iframe
   ([`spec/patch/new/webview-capabilities.md`](spec/patch/new/webview-capabilities.md)).
 * The matrix-widget-api capability names (`org.matrix.msc2762.send.event:<type>`, ...) and action
   names (`content_loaded`, `theme_change`, host `send_event`, any name without a namespace) are
@@ -207,11 +208,12 @@ client.notify_ready().await?;
 
 ```rust
 use std::sync::Arc;
-use widget_host_driver::{WidgetHostDriver, WidgetHostPlatform};
+use widget_host_driver::{parse_widget_state_event, EmbedOptions, WidgetHostDriver, WidgetHostPlatform, WidgetIframe};
 
 struct Platform { /* handle to the iframe */ }
 impl WidgetHostPlatform for Platform {
-    fn send_to_widget(&self, json: String) { /* iframe.postMessage(JSON.parse(json), widgetOrigin) */ }
+    fn load_iframe(&self, iframe: WidgetIframe) { /* a new iframe from iframe.url, .sandbox, .allow, behind a loading state */ }
+    fn send_to_widget(&self, json: String) { /* iframe.postMessage(JSON.parse(json), the WidgetIframe's origin) */ }
     fn on_capabilities_requested(&self, requested: Vec<Capability>) { /* prompt (the whole open question), then driver.approve_capabilities(..) */ }
     fn on_ready(&self) { /* hide the loading state */ }
     fn navigate(&self, uri: String) -> Result<(), PlatformError> { /* open the matrix.to link */ Ok(()) }
@@ -223,14 +225,19 @@ impl WidgetHostPlatform for Platform {
 }
 
 let backend: Arc<dyn MatrixBackend> = Arc::new(MyRustSdkBackend::new(room));
-let driver = WidgetHostDriver::new(backend, Arc::new(Platform { .. }));
-// granted without a prompt, e.g. for a legacy widget behind the compat wrapper:
-driver.set_auto_approved(vec![Capability::GetMatrixContext, Capability::GetClientContext]);
+// The widget's state event; `Err(Refused)` for a widget that must not be loaded (the URL check).
+let options = EmbedOptions { wrapper_url: Some("https://client.example/wrapper/".into()), ..Default::default() };
+let widget = parse_widget_state_event(event_type, state_key, content, options.clone())?;
+let driver = WidgetHostDriver::new(widget, options, backend, Arc::new(Platform { .. }))?;
+// granted without a prompt: what the client remembers of earlier approvals. (A legacy widget runs
+// behind the compat wrapper and gets a legacy client's set from the driver, `legacy_auto_approved()`.)
+driver.set_auto_approved(remembered);
 // granted for one use each (the default; `vec![]` keeps every grant). A time limit is your timer
 // plus `driver.revoke_capabilities(..)`.
 driver.set_single_use(vec![Capability::GetOpenId]);
+driver.start();   // → load_iframe; again whenever webview capabilities change `sandbox` / `allow`
 
-// from the iframe's message handler:
+// from the message handler, for messages of the iframe built last:
 driver.handle_message_from_widget(json).await?;
 // Events from sync are not pushed: once capabilities are approved the driver calls
 // `backend.subscribe_room(room_id, subjects, sink)` and the backend feeds the sink.
@@ -248,9 +255,19 @@ npm run bindings      # packages/widget-host-bindings, see its README
 ```
 
 ```ts
-import { uniffiInitAsync, InMemoryBackend, WidgetHostDriver } from "@matrix-widget-tools/widget-host-bindings";
+import { uniffiInitAsync, InMemoryBackend, WidgetHostDriver, parseWidgetStateEvent } from "@matrix-widget-tools/widget-host-bindings";
 await uniffiInitAsync();
-const driver = new WidgetHostDriver(new InMemoryBackend(roomId, userId).asBackend(), {
+const options = { wrapperUrl: "https://client.example/wrapper/", clientOrigin: location.origin, ownWidgetDirs: [], allowHttp: false };
+const widget = parseWidgetStateEvent(event.type, event.state_key, event.content, options);   // throws WidgetEventError
+let iframe, widgetOrigin;
+const driver = new WidgetHostDriver(widget, options, new InMemoryBackend(roomId, userId).asBackend(), {
+  loadIframe: ({ url, origin, sandbox, allow }) => {     // the first iframe, and a new one when sandbox / allow change
+    iframe?.remove();
+    iframe = Object.assign(document.createElement("iframe"), { src: url, allow, hidden: true });
+    iframe.setAttribute("sandbox", sandbox);
+    widgetOrigin = origin;
+    container.append(iframe);
+  },
   sendToWidget: (json) => iframe.contentWindow.postMessage(JSON.parse(json), widgetOrigin),
   onCapabilitiesRequested: (caps) => queueMicrotask(() => driver.approveCapabilities(caps)),
   onReady: () => (iframe.hidden = false),
@@ -259,14 +276,17 @@ const driver = new WidgetHostDriver(new InMemoryBackend(roomId, userId).asBacken
   clientId: () => "io.example.client", clientTheme: () => "light", clientLanguage: () => "en",
 });
 window.addEventListener("message", (ev) => {
-  if (ev.source === iframe.contentWindow) driver.handleMessageFromWidget(JSON.stringify(ev.data));
+  if (ev.source === iframe?.contentWindow && ev.origin === widgetOrigin) driver.handleMessageFromWidget(JSON.stringify(ev.data));
 });
+driver.start();
 ```
 
-The iframe's attributes come from the driver too: `webviewAttributes(capabilities)` gives
-`{ sandbox, allow }` for the webview capabilities a widget holds (the strict default for none), and
-`embedUrlProblem` / `embedWidget` check a widget URL first, also against the client's own origin
-(`EmbedOptions.clientOrigin`). A grant of a webview capability applies with a new iframe.
+The driver decides what the iframe loads and with which `sandbox` and `allow`: the widget's URL as
+the URL check serialised it (for a legacy widget the compat wrapper), strict attributes unless the
+widget holds webview capabilities. `parseWidgetStateEvent` and the constructor check the URL, also
+against the client's own origin (`EmbedOptions.clientOrigin`); `embedUrlProblem` is that check
+alone. A grant of a webview capability applies with a new iframe: the driver calls `loadIframe`
+again and grants the reloaded page what it held without asking.
 
 A real client replaces `InMemoryBackend` with its own `MatrixBackend` object (a matrix-js-sdk
 backed one is the next step); `packages/widget-host` is the smallest complete host.

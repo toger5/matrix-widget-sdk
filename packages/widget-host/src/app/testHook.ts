@@ -45,7 +45,7 @@ export function installTestHook(controller: AppController): void {
     webview: (id) => {
       const widget = controller.vm.screen.kind === "main" ? controller.vm.screen.main.widgets[id] : undefined;
       if (!widget) return undefined;
-      return { generation: widget.generation, ...widget.webview, applied: [...(controller.runtime(id)?.webview.applied ?? [])] };
+      return { generation: widget.generation, sandbox: widget.iframe?.sandbox, allow: widget.iframe?.allow, applied: controller.runtime(id)?.appliedWebview ?? [] };
     },
     devTools: (id) => controller.runtime(id)?.devTools.get(),
     store: (roomId) => {

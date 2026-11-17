@@ -44,12 +44,12 @@ import {
 } from "../appViewModel";
 import { EXAMPLE_LEGACY, EXAMPLE_NEW } from "../exampleWidgets";
 import { capabilityStoreKey, clearCapabilities, forgetCapabilities } from "../lib/capabilityStore";
-import { describesWidget, hostWidgetEvents, parseWidget, resolveWidget, widgetUrlProblem } from "../lib/widgetEvents";
+import { describesWidget, hostWidgetEvents, reasonOf } from "../lib/widgetEvents";
 import { DevBackend } from "../matrix_session/memory/devBackend";
 import { validateWidgetEvent, type DevBackendSeed } from "../matrix_session/memory/seed";
 import { sessions, StoredLoginInvalidError, type LiveSession, type PendingLogin, type RoomBackend, type RoomSummary, type SessionProvider } from "../session";
 import { roomWidgets } from "../views/helpers";
-import { WIDGET_EVENT_TYPES, localWidgetKey, widgetKey, type StateEvent } from "../widgetStateEvent";
+import { WIDGET_EVENT_TYPES, localWidgetKey, widgetKey, type StateEvent, type WidgetDefinition, type WidgetIframe } from "../widgetStateEvent";
 import {
   activateTab,
   addPanel,
@@ -112,9 +112,10 @@ const SCHEDULED_SLACK_MS = 1000;
 /** The longest a `setTimeout` waits; a longer delay would fire at once. */
 const MAX_TIMER_MS = 2 ** 31 - 1;
 /**
- * The loop guard of the webview reloads: a widget that is started again for its webview capabilities
- * more than `MAX_WEBVIEW_RELOADS` times within `WEBVIEW_RELOAD_WINDOW_MS` fails instead. A grant that
- * the next start applies needs no further reload, so only a fault gets there.
+ * The loop guard of the webview reloads: a widget whose iframe the driver loads again for its webview
+ * capabilities (`WidgetRuntimeEvents.loadIframe`, after the first) more than `MAX_WEBVIEW_RELOADS`
+ * times within `WEBVIEW_RELOAD_WINDOW_MS` fails instead. The reloaded iframe has what was granted,
+ * so it needs no further reload: only a fault gets there.
  */
 const MAX_WEBVIEW_RELOADS = 2;
 const WEBVIEW_RELOAD_WINDOW_MS = 10_000;
@@ -162,14 +163,7 @@ export class AppController {
   private readonly verifications = new Map<AccountId, AccountVerification>();
   private devBackend: DevBackend | undefined;
   private readonly runtimes = new Map<WidgetInstanceId, WidgetRuntime>();
-  /**
-   * Per running widget: the webview capabilities its next start applies besides the remembered and the
-   * legacy ones (`WidgetRuntimeEvents.webviewChanged`), and the URL of the iframe they were granted to.
-   * Kept across reloads, forgotten when it stops; a start of another URL (the state event changed) does
-   * not get them.
-   */
-  private readonly webviewKept = new Map<WidgetInstanceId, { url: string; capabilities: string[] }>();
-  /** Per running widget: when it was started again for its webview capabilities (the loop guard). */
+  /** Per running widget: when its iframe was loaded again for its webview capabilities (the loop guard). */
   private readonly webviewReloads = new Map<WidgetInstanceId, number[]>();
   /** Room backends of the active account, shared by the widgets of a room and released with the last one. */
   private readonly backends = new Map<RoomId, { backend: Promise<RoomBackend>; refs: number }>();
@@ -558,12 +552,6 @@ export class AppController {
     const id = widgetInstanceId(roomId, key);
     const accountId = m.activeAccountId;
     const old = m.widgets[id];
-    // What was granted to the iframe of another URL (the widget's state event changed since) is not this page's.
-    const keptFor = (url: string) => {
-      const kept = this.webviewKept.get(id);
-      return kept?.url === url ? kept.capabilities : undefined;
-    };
-    if (!keptFor(widget.url)) this.webviewKept.delete(id);
     this.setMain((mm) => ({
       ...mm,
       widgets: { ...mm.widgets, [id]: { id, roomId, widgetKey: key, widget, load: { state: "loading" }, alwaysOnScreen: old?.alwaysOnScreen ?? false, prompts: {}, generation: undefined } },
@@ -572,28 +560,32 @@ export class AppController {
     this.acquireBackend(session, roomId).then(
       (backend) => {
         if (!stillWanted()) return this.releaseBackend(roomId);
+        // The driver of the runtime refuses a widget the host must not load (the list does not offer one).
         const behavior = () => this.behavior();
-        const runtime = new WidgetRuntime({
-          id,
-          widget,
-          backend,
-          capabilityKey: behavior().rememberCapabilities ? capabilityStoreKey(session.userId, roomId, key) : undefined,
-          autoApproveCapabilities: () => behavior().autoApproveCapabilities,
-          theme: () => this.resolvedTheme(),
-          notifyReadyTimeoutMs: this.notifyReadyTimeoutMs,
-          keptWebview: keptFor(widget.url),
-          events: {
-            ready: () => this.setWidget(id, (w) => ({ ...w, load: { state: "ready" } })),
-            failed: (error) => this.setWidget(id, (w) => (w.load.state === "ready" ? w : { ...w, load: { state: "failed", error } })),
-            capabilitiesRequested: (question) => this.setWidget(id, (w) => ({ ...w, prompts: { ...w.prompts, capabilities: question && joinCapabilityPrompt(w.prompts.capabilities, question, Date.now()) } })),
-            alwaysOnScreen: (value) => this.setAlwaysOnScreen(id, value),
-            activity: () => this.devBackend?.refresh(id),
-            webviewChanged: (kept) => this.applyWebview(id, kept),
-          },
-        });
+        let runtime: WidgetRuntime;
+        try {
+          runtime = new WidgetRuntime({
+            id,
+            widget,
+            backend,
+            capabilityKey: behavior().rememberCapabilities ? capabilityStoreKey(session.userId, roomId, key) : undefined,
+            autoApproveCapabilities: () => behavior().autoApproveCapabilities,
+            theme: () => this.resolvedTheme(),
+            notifyReadyTimeoutMs: this.notifyReadyTimeoutMs,
+            events: {
+              ready: () => this.setWidget(id, (w) => ({ ...w, load: { state: "ready" } })),
+              failed: (error) => this.setWidget(id, (w) => (w.load.state === "ready" ? w : { ...w, load: { state: "failed", error } })),
+              capabilitiesRequested: (question) => this.setWidget(id, (w) => ({ ...w, prompts: { ...w.prompts, capabilities: question && joinCapabilityPrompt(w.prompts.capabilities, question, Date.now()) } })),
+              alwaysOnScreen: (value) => this.setAlwaysOnScreen(id, value),
+              activity: () => this.devBackend?.refresh(id),
+              loadIframe: (iframe) => this.loadIframe(id, iframe),
+            },
+          });
+        } catch (e) {
+          this.releaseBackend(roomId);
+          return this.setWidget(id, (w) => ({ ...w, load: { state: "failed", error: `The widget cannot be loaded: ${reasonOf(e)}.` } }));
+        }
         this.runtimes.set(id, runtime);
-        const { sandbox, allow } = runtime.webview;
-        this.setWidget(id, (w) => ({ ...w, generation: ++this.generation, webview: { sandbox, allow } }));
       },
       (e: unknown) => {
         this.releaseBackend(roomId);
@@ -607,7 +599,6 @@ export class AppController {
   private stopWidget(id: WidgetInstanceId, closeTab: boolean): void {
     const widget = this.main?.widgets[id];
     const runtime = this.runtimes.get(id);
-    this.webviewKept.delete(id);
     this.webviewReloads.delete(id);
     if (runtime) {
       runtime.dispose();
@@ -756,31 +747,33 @@ export class AppController {
   }
 
   /**
-   * A running widget holds webview capabilities its iframe lacks, or one was revoked
-   * (`WidgetRuntimeEvents.webviewChanged`): keep `kept` for its next starts and start it again, which
-   * builds the iframe with them. A widget that gets here too often in a short time fails instead.
+   * The driver of a widget says what its iframe is (`WidgetRuntimeEvents.loadIframe`): a new generation
+   * with it, behind the loading state, and no open question. The first time when the widget starts;
+   * again when its webview capabilities changed the `sandbox` or `allow` (the widget starts over in
+   * the new iframe, on the same runtime and driver, which grants it what it held). A widget that
+   * gets there too often in a short time is stopped instead.
    */
-  private applyWebview(id: WidgetInstanceId, kept: string[]): void {
-    // TODO-FINDING webview-restart-asks-again - only the webview capabilities are kept across this restart. Without remembered capabilities the new start asks again for the widget's other capabilities, approved together with the webview one a moment ago. Option: carry everything the widget held across a webview restart (not across a manual reload).
+  private loadIframe(id: WidgetInstanceId, iframe: WidgetIframe): void {
     const widget = this.main?.widgets[id];
     if (!widget) return;
-    this.webviewKept.set(id, { url: widget.widget.url, capabilities: kept });
-    const now = Date.now();
-    const recent = (this.webviewReloads.get(id) ?? []).filter((at) => now - at < WEBVIEW_RELOAD_WINDOW_MS);
-    if (recent.length >= MAX_WEBVIEW_RELOADS) {
-      // Stopped, not left running hidden: "Retry" (`widget/reload`) starts it again, with what is kept.
-      this.webviewReloads.delete(id);
-      const runtime = this.runtimes.get(id);
-      if (runtime) {
-        runtime.dispose();
-        this.runtimes.delete(id);
-        this.releaseBackend(widget.roomId);
+    if (widget.generation !== undefined) {
+      const now = Date.now();
+      const recent = (this.webviewReloads.get(id) ?? []).filter((at) => now - at < WEBVIEW_RELOAD_WINDOW_MS);
+      if (recent.length >= MAX_WEBVIEW_RELOADS) {
+        // Stopped, not left running hidden: "Retry" (`widget/reload`) starts it again.
+        this.webviewReloads.delete(id);
+        const runtime = this.runtimes.get(id);
+        if (runtime) {
+          runtime.dispose();
+          this.runtimes.delete(id);
+          this.releaseBackend(widget.roomId);
+        }
+        const error = `The widget was restarted ${recent.length} times within ${WEBVIEW_RELOAD_WINDOW_MS / 1000} seconds to change the permissions of its iframe, and is stopped.`;
+        return this.setWidget(id, (w) => ({ ...w, generation: undefined, iframe: undefined, prompts: {}, load: { state: "failed", error } }));
       }
-      const error = `The widget was restarted ${recent.length} times within ${WEBVIEW_RELOAD_WINDOW_MS / 1000} seconds to change the permissions of its iframe, and is stopped.`;
-      return this.setWidget(id, (w) => ({ ...w, generation: undefined, webview: undefined, load: { state: "failed", error } }));
+      this.webviewReloads.set(id, [...recent, now]);
     }
-    this.webviewReloads.set(id, [...recent, now]);
-    this.reloadWidget(id);
+    this.setWidget(id, (w) => ({ ...w, generation: ++this.generation, iframe, prompts: {}, load: { state: "loading" } }));
   }
 
   /** Start a running widget again (a new generation), e.g. after its definition changed. */
@@ -857,27 +850,23 @@ export class AppController {
     const old = this.localOf(roomId).find((e) => localWidgetKey(e) === key);
     this.setLocalWidgets(roomId, (events) => (old ? events.map((e) => (localWidgetKey(e) === key ? event : e)) : [...events, event]));
     if (!old) return;
-    // What the host embeds: the URL, and for a legacy widget the wrapper URL, which also carries its `data` (the values of
-    // the URL's variables, which can name another origin) and `waitForIframeLoad`.
+    // What the host embeds: the URL, and for a legacy widget what the wrapper URL carries besides: its `data` (the values of
+    // the URL's variables, which can name another origin) and `waitForIframeLoad`. The definition without what is only shown.
     const embeds = (e: StateEvent) => {
-      try {
-        return resolveWidget(e).url;
-      } catch {
-        return undefined;
-      }
+      const widget = hostWidgetEvents.resolve(e)?.widget;
+      return widget && JSON.stringify({ ...widget, name: undefined, avatarUrl: undefined });
     };
     const urlChanged = old.content.url !== event.content.url || embeds(old) !== embeds(event);
     const id = widgetInstanceId(roomId, key);
     if (urlChanged) {
       this.forgetWidgetCapabilities(roomId, key);
-      this.webviewKept.delete(id);
     }
     const running = this.main?.widgets[id];
     if (!running) return;
-    const resolved = resolveWidget(event);
-    if (urlChanged || resolved.url !== running.widget.url || resolved.usesWidgetApi !== running.widget.usesWidgetApi) return this.reloadWidget(id);
+    const resolved = hostWidgetEvents.resolve(event);
+    if (urlChanged || !resolved || resolved.problem) return this.reloadWidget(id);
     // Only the name changed: the running widget keeps going.
-    this.setWidget(id, (w) => ({ ...w, widget: resolved }));
+    this.setWidget(id, (w) => ({ ...w, widget: resolved.widget }));
   }
 
   /**
@@ -1601,10 +1590,9 @@ function widgetEventProblem(event: StateEvent): string | undefined {
   if (!WIDGET_EVENT_TYPES.includes(event.type)) return `${event.type} is not a widget state event type`;
   if (!event.state_key) return "the widget ID (state key) is missing";
   if (typeof event.content.url !== "string") return "the content has no url";
-  const problem = widgetUrlProblem(event.content.url);
-  if (problem) return problem;
-  const parsed = parseWidget(event);
-  return "problem" in parsed ? parsed.problem : undefined;
+  // The URL first; then a widget type with a string `url` that describes no widget is an `m.widget` without a name.
+  const resolved = hostWidgetEvents.resolve(event);
+  return hostWidgetEvents.urlProblem(event.content.url) ?? (resolved ? resolved.problem : "the content has no name");
 }
 
 /** `HostSeed.localWidgets`, checked like the widgets of the DevBackend's seed. */
