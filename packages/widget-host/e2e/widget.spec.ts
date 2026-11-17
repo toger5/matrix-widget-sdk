@@ -13,7 +13,7 @@ const SEND_DELAYED = "widget:org.matrix.mscXXXX.send_event.delayed";
 const GET_OPENID = "widget:org.matrix.mscXXXX.get_openid";
 /** What story `widget-widgetview--capability-prompt` requests: four sections. */
 const SHORT = [
-  "widget:org.matrix.msc2876.read_events.timeline:m.room.message",
+  "widget:org.matrix.mscXXXX.read_timeline:m.room.message",
   "host:org.matrix.mscXXXX.forward_event.timeline:m.room.message",
   SEND_MESSAGE,
   SEND_DELAYED,
@@ -105,7 +105,8 @@ test("capability prompt: deny all, then approve a subset; the widget's actions s
   await expect(capabilityBoxes(prompt)).toHaveCount(all);
   await expect(capabilityBoxes(prompt, true)).toHaveCount(all);
   await expect(prompt).toHaveAccessibleDescription(
-    "New test widget wants to send messages as you, change the room for everyone, exchange hidden messages with devices, prove who you are to other servers, read this room, work with files, join calls and adapt to this app.",
+    // "read this room" is risky too: `paginate_timeline` makes requests to the homeserver.
+    "New test widget wants to read this room, send messages as you, change the room for everyone, exchange hidden messages with devices, prove who you are to other servers, work with files, join calls and adapt to this app.",
   );
   // "Approve" is blocked for a moment after the prompt appeared; "Deny all" never is.
   await expect(prompt.getByRole("button", { name: `Approve ${all} selected` })).toHaveAttribute("aria-disabled", "true");
@@ -606,4 +607,64 @@ test("a widget sends m.room.message: it lands in the room, and the other widget 
   await host.frame(LEGACY).frameLocator("iframe").getByRole("button", { name: "send m.room.message" }).click();
   await expect.poll(() => messageBodies(host)).toContain("hello from the legacy widget");
   await expect(widgetLog(host, NEW)).toContainText(/forward_event .*hello from the legacy widget/);
+});
+
+test("legacy widget: read_events through the wrapper reads the timeline cache, and paginates while short (resolved in the DevBackendView); state reads still answer", async ({ host }) => {
+  type LegacyEvent = { event_id: string; type: string; content: { body?: string; topic?: string } };
+  await host.populate("lab", { behavior: { autoApproveCapabilities: true }, open: [{ room: LAB, widgets: [LEGACY_WIDGET] }] });
+  await host.ready(LEGACY);
+  const legacy = host.frame(LEGACY).frameLocator("iframe");
+  const log = legacy.locator("#log");
+  const READ = "read m.room.message (limit 10)";
+  /** Press a button of the legacy widget and return what it logged for it (a JSON result, or its error). */
+  const press = async (label: string) => {
+    const entries = log.locator("pre", { hasText: label });
+    const count = await entries.count();
+    await legacy.getByRole("button", { name: label, exact: true }).click();
+    await expect(entries).toHaveCount(count + 1, { timeout: 9_000 });
+    const text = (await entries.first().textContent())!;
+    expect(text, text).toContain(`${label} →`);
+    return JSON.parse(text.slice(text.indexOf("→") + 1)) as LegacyEvent[];
+  };
+  const view = host.page.getByTestId("devbackend-view");
+  const timelineSection = view.getByRole("button", { name: /^Timeline \d/ });
+  if ((await timelineSection.getAttribute("aria-expanded")) === "false") await timelineSection.click();
+  const request = view.getByRole("form", { name: "Pagination request" });
+
+  // The room has three messages: the wrapper reads them, asks the host for 7 more and waits.
+  const entries = log.locator("pre", { hasText: READ });
+  await legacy.getByRole("button", { name: READ, exact: true }).click();
+  await expect(request).toContainText("Pagination requested: 7 events");
+  // The legacy widget is still waiting for its answer.
+  await expect(entries).toHaveCount(0);
+  await request.getByRole("button", { name: "Resolve pagination" }).click();
+  await expect(entries).toHaveCount(1);
+  const text = (await entries.first().textContent())!;
+  const read = JSON.parse(text.slice(text.indexOf("→") + 1)) as LegacyEvent[];
+  // Newest first, as Element Web answers: the room's three messages, then the seven fetched ones.
+  const timeline = (await host.store(LAB)).timeline as { eventId: string; eventType: string }[];
+  const messages = timeline.filter((e) => e.eventType === "m.room.message").map((e) => e.eventId);
+  expect(read.map((e) => e.event_id)).toEqual(messages.slice(-10).reverse());
+  expect(read.slice(0, 3).map((e) => e.content.body)).toEqual([
+    "The landscape picture is in the media repository.",
+    "Yes, both of them. Try the legacy one too.",
+    "Is the new widget up?",
+  ]);
+  const actions = await host.actions(LEGACY, "fromWidget");
+  expect(actions).toEqual(expect.arrayContaining(["org.matrix.mscXXXX.read_timeline", "org.matrix.mscXXXX.paginate_timeline"]));
+  // The host has no read_events: the wrapper translated it.
+  expect(actions).not.toContain("org.matrix.msc2876.read_events");
+  // The wrapper took the notifications; the legacy widget never saw one.
+  expect(await host.actions(LEGACY, "toWidget")).toContain("org.matrix.mscXXXX.notify_timeline_update");
+  await expect(log).not.toContainText("notify_timeline_update");
+
+  // Now the cache has ten: the answer comes from it, without a pagination.
+  const paginations = (await host.actions(LEGACY, "fromWidget")).filter((a) => a.endsWith("paginate_timeline")).length;
+  expect((await press(READ)).map((e) => e.event_id)).toEqual(messages.slice(-10).reverse());
+  expect((await host.actions(LEGACY, "fromWidget")).filter((a) => a.endsWith("paginate_timeline"))).toHaveLength(paginations);
+  await expect(request).toHaveCount(0);
+
+  // A state read is answered from what the host pushed with update_state.
+  const [topic] = await press("read state m.room.topic");
+  expect(topic).toMatchObject({ type: "m.room.topic", content: { topic: "Both test widgets, a few people and something to read" } });
 });

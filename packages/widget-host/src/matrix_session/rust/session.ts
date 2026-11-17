@@ -286,7 +286,7 @@ class RustSdkSession implements LiveSession {
   /** The RoomTimelines: the start of the room, a running pagination, the listeners (`./roomData`). */
   private readonly timelines = new RoomTimelines((roomId, changed) => {
     const room = this.client.getRoom(roomId);
-    const stop = room ? onTimelineChanged(room, () => changed()) : () => {};
+    const stop = room ? onTimelineChanged(room, changed) : () => {};
     return () => {
       stop();
       this.timelineOpened.delete(roomId);
@@ -531,7 +531,7 @@ class RustSdkSession implements LiveSession {
 
   /** A `MatrixBackend` bound to `roomId`; `dispose()` it when the room view closes. */
   async backendFor(roomId: string): Promise<RustSdkBackend> {
-    return RustSdkBackend.create(this.client, await this.open(roomId));
+    return RustSdkBackend.create(this.client, await this.open(roomId), this.timelines);
   }
 
   /** Device verification: `./verification`. */

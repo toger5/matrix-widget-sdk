@@ -140,7 +140,11 @@ hands it to the driver of each widget of that room like any other `MatrixBackend
     it to the widget (`forward_event`, and for state events also `update_state`) if the matching
     `host:…forward_event.*` / `host:…update_state` capability was approved. Events the widget
     sends are echoed back the same way. **Scheduled** lists the delayed events (MSC4157) with
-    send now / restart / cancel; nothing fires by itself.
+    send now / restart / cancel; nothing fires by itself. The room's events are also the timeline
+    cache widgets read with `read_timeline`. A widget's `paginate_timeline` waits there:
+    **Pagination requested: N events** with how many random messages to generate (N, else 20) and
+    **Start reached**; **Resolve pagination** puts them before the oldest event and the widgets get
+    `notify_timeline_update`.
   - **Client Backend Tool** (below the room box, shared by all mocked rooms; one tool box is open
     at a time): **Widget host behavior** (auto-approve capabilities, OpenID tokens included,
     remember capabilities, and **fail sends**: every `send_event` and `upload_file` from a widget

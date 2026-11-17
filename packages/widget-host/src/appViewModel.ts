@@ -752,6 +752,7 @@ export type AppIntent =
   | { type: "mock/setBehavior"; behavior: Partial<WidgetHostBehavior> } // for all mocked rooms
   | { type: "mock/setFailSends"; on: boolean } // every send of a widget in every mocked room fails (or succeeds again)
   | { type: "mock/clearRoom"; roomId: RoomId } // drops all events of the mocked room
+  | { type: "mock/resolvePagination"; roomId: RoomId; count: number; startReached: boolean } // "Resolve pagination": `count` random messages older than the oldest event end the pagination a widget asked for; the widgets are told (`notify_timeline_update`)
   | { type: "mock/toggleTool"; tool: DevBackendTool } // opens the tool box (closing the open one) or minimises it
   | { type: "mock/resizeTool"; heightShare: number } // the share of the open tool box
   | { type: "media/upload"; files: File[] }
@@ -826,12 +827,21 @@ export interface MockedRoomData {
   userId?: string;
   /** Of the selected room: its delayed events (state and timeline), whoever scheduled them, that are not sent yet. */
   scheduled: ScheduledEvent[];
+  /** Of the selected room: the pagination of its timeline cache (widgets' `read_timeline` / `paginate_timeline`). */
+  pagination?: MockedPagination;
   /** Account-scoped, not per room. */
   toDevice: ToDeviceMessage[];
   /** Account-scoped: every send of a widget is answered with an error. */
   failSends: boolean;
   /** Not per room. `name` and `uploadedBy` need the store to record them. */
   media: { mxcUri: string; mimetype?: string; bytes: number; name?: string; uploadedBy?: WidgetInstanceId; /** An object URL for a preview or a download. */ url?: string }[];
+}
+
+/** The pagination status of a mocked room's timeline cache, and the back-pagination a widget is waiting for. */
+export interface MockedPagination {
+  status: "idle" | "paginating" | "start_reached";
+  /** A widget asked for older events (`paginate_timeline`) and nobody resolved it yet; `limit` is its hint. story `sidepanel-devbackendview--timeline-pagination-requested` */
+  requested?: { limit?: number };
 }
 
 /** A state event as the Dev tools show and send it (of a mocked or a real room). */

@@ -64,7 +64,9 @@ export const ERROR_MISSING_CAPABILITY = `${MSC4412}.missing_capability`;
  *
  * The host accepts none of the legacy names, so this table is the only place they are understood.
  * Every other action passes through: the host sends and accepts the unstable MSC spellings
- * (`org.matrix.msc2876.read_events`) the legacy api uses.
+ * (`org.matrix.msc3869.read_relations`) the legacy api uses. The legacy
+ * `org.matrix.msc2876.read_events`, which the host does not have, is answered by the bridge
+ * (readEvents.ts).
  */
 const LEGACY_TO_NEW: Record<Source, Record<string, string>> = {
   widget: {

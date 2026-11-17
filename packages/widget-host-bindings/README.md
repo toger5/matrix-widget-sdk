@@ -99,7 +99,7 @@ backend.inject(matrixEventFromJson(JSON.stringify(eventFromSync)));   // reaches
 
 `MatrixBackend` is a plain interface shaped after matrix-rust-rtc's: identity getters, async
 operations (`sendRoomEvent` / `sendStateEvent` / `sendStickyEvent` / `sendDelayedEvent` & co.,
-`readRoomEvents` / `readRoomState` / `relations` / `readRoomAccountData`, `openidToken`,
+`timelineRead` / `timelinePaginateBackwards` / `relations` / `readRoomAccountData`, `openidToken`,
 `rtcTransports`, `searchUserDirectory`, `mediaConfig`, `uploadMedia` / `downloadMedia` (raw bytes
 as `ArrayBuffer`), `sendToDeviceMessage`, the LiveKit pair;
 each returns a `Promise` and throws `new BackendError.Failed({ errcode, status, reason })` to
@@ -109,6 +109,7 @@ fail, which the widget sees as `error.matrix_api_error`), and the subscription h
 subscribeRoom(roomId: string, subjects: RoomSubjects, sink: RoomSink): Subscription
 subscribeToDevice(eventTypes: string[], sink: ToDeviceSink): Subscription
 subscribeTurnServers(sink: TurnServerSink): Subscription
+subscribeTimeline(roomId: string, sink: TimelineSink): Subscription
 ```
 
 Every method is required (UniFFI traits have no defaults); an operation the client cannot offer
@@ -122,10 +123,23 @@ events with `sink.onTimelineEvents([event])`, and return `{ cancel() { /* remove
 `subscribeRoom` is synchronous; the sink may be called from inside it. The driver calls it
 whenever the widget's approved `host:…` capabilities grow and cancels the previous subscription.
 
+The timeline cache (`read_timeline`, `paginate_timeline`, `notify_timeline_update`;
+`spec/patch/new/timeline-reading.md`): `timelineRead(roomId, from, limit, filter)` walks the
+client's cached timeline from the event older than `from` (the newest when `undefined`), returns
+up to `limit` events matching any `TimelineFilter` (`{ eventType, msgtype? }`) **newest first**
+with the `PaginationStatus`, and throws `new BackendError.EventNotCached({ eventId })` for a `from`
+it does not cache. `timelinePaginateBackwards(roomId, limit)` starts (or joins) a back-pagination
+and resolves **at once** with the status; `subscribeTimeline` reports
+`sink.onTimelineUpdate({ pagination, paginationError, reset, decrypted })` when the status changes
+(after the fetched events are cached), when the cache is reset, and when cached events were
+decrypted late. `InMemoryBackend` keeps a pagination pending until `resolvePagination(events,
+startReached)` / `failPagination(message)`; `pendingPagination()` and `paginationStatus()` show it.
+
 Notes on the generated types: records are camelCase (`eventType`, `stateKey`), `u64` fields such
 as `originServerTs` are `bigint`, event `content` is a plain JS value, capabilities are strings
-(`host:org.matrix.mscXXXX.forward_event.timeline:m.room.message`), and `StateKeySelector` is a tagged class
-(`new StateKeySelector.Any()` / `new StateKeySelector.Key({ key })`). `matrixEventFromJson` /
+(`host:org.matrix.mscXXXX.forward_event.timeline:m.room.message`), enums with data and errors are
+tagged classes (`new BackendError.Failed({ … })`, `BackendError.EventNotCached.instanceOf(e)`), and
+`PaginationStatus` is a numeric enum (`PaginationStatus.Idle`). `matrixEventFromJson` /
 `matrixEventToJson` convert between the record and client-server API JSON. `capabilityIsKnown`
 tells a capability of the widget API from a string the driver does not know (which it may grant,
 but which allows nothing), e.g. to set the latter apart in a permission prompt.

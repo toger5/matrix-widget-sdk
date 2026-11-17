@@ -211,13 +211,13 @@ describe("steady state forwarding", () => {
   boot(s);
 
   it("forwards widget requests with renamed actions and echoes the host response", () => {
-    s.bridge.onWidgetMessage(fromWidget("org.matrix.msc2876.read_events", "r1", { type: "m.room.message", limit: 2 }));
+    s.bridge.onWidgetMessage(fromWidget("org.matrix.msc3973.user_directory_search", "r1", { search_term: "ali" }));
     expect(s.take(s.toHost)).toEqual([
-      { source: "widget", request_id: "r1", action: "org.matrix.msc2876.read_events", request: { type: "m.room.message", limit: 2 } },
+      { source: "widget", request_id: "r1", action: "org.matrix.msc3973.search_user_directory", request: { search_term: "ali" } },
     ]);
-    s.bridge.onHostMessage({ source: "widget", request_id: "r1", action: "org.matrix.msc2876.read_events", response: { events: [] } });
+    s.bridge.onHostMessage({ source: "widget", request_id: "r1", action: "org.matrix.msc3973.search_user_directory", response: { limited: false, results: [] } });
     expect(s.take(s.toWidget)).toEqual([
-      { api: "fromWidget", widgetId: "w", requestId: "r1", action: "org.matrix.msc2876.read_events", data: { type: "m.room.message", limit: 2 }, response: { events: [] } },
+      { api: "fromWidget", widgetId: "w", requestId: "r1", action: "org.matrix.msc3973.user_directory_search", data: { search_term: "ali" }, response: { limited: false, results: [] } },
     ]);
   });
 
@@ -302,10 +302,11 @@ describe("capability translation", () => {
   const NEW = [
     ...IMPLICIT_CAPABILITIES,
     W("send_event.timeline:m.room.message"),
-    W("read_events.timeline:m.room.message"),
+    W("read_timeline:m.room.message"),
     W("read_relations:m.room.message"),
     H("forward_event.timeline:m.room.message"),
-    W("read_events.state:m.room.member#@alice:example.org"),
+    W("paginate_timeline"),
+    H("notify_timeline_update"),
     H("update_state:m.room.member#@alice:example.org"),
     H("forward_event.state:m.room.member#@alice:example.org"),
     W("upload_file"),
@@ -383,7 +384,16 @@ describe("capability translation", () => {
     const [toHost] = s.take(s.toHost);
     expect(toHost).toEqual({
       source: "widget", request_id: "re", action: REQUEST,
-      request: { capabilities: [...IMPLICIT_CAPABILITIES, W("read_events.timeline:m.room.message"), W("read_relations:m.room.message"), H("forward_event.timeline:m.room.message")] },
+      request: {
+        capabilities: [
+          ...IMPLICIT_CAPABILITIES,
+          W("read_timeline:m.room.message"),
+          W("read_relations:m.room.message"),
+          H("forward_event.timeline:m.room.message"),
+          W("paginate_timeline"),
+          H("notify_timeline_update"),
+        ],
+      },
     });
     // The host's ack reaches the widget as the reply to its own request.
     s.bridge.onHostMessage(hostResponse(toHost, {}));
@@ -561,5 +571,158 @@ describe("file payloads", () => {
     expect(file).toBeInstanceOf(Blob);
     expect(file.type).toBe("text/plain");
     expect(await file.text()).toBe("hello");
+  });
+});
+
+describe("legacy read_events", () => {
+  const READ = "org.matrix.msc2876.read_events";
+  const event = (id: string) => ({ type: "m.room.message", event_id: id, sender: "@bob:example.org", content: { body: id } });
+  const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
+  /** The one request the bridge sent to the host since the last look; it must be `action`. */
+  const nextToHost = (s: S, action: string): NewMessage => {
+    const sent = s.take(s.toHost);
+    expect(sent.map((m) => m.action)).toEqual([action]);
+    return sent[0];
+  };
+  /** A booted bridge; `readDeadlineMs` replaces the 7 s a timeline read may take. */
+  const booted = (readDeadlineMs?: number): S => {
+    const s = setup(true);
+    const bridge =
+      readDeadlineMs === undefined
+        ? s.bridge
+        : new CompatBridge({
+            widgetId: "w",
+            waitForIframeLoad: true,
+            legacyWidgetUrl: "https://widget.example/",
+            wrapperUrl: "https://compat.example/",
+            sendToHost: (m) => s.toHost.push(m),
+            sendToWidget: (m) => s.toWidget.push(m),
+            loadWidget: (url) => s.loaded.push(url),
+            refuseWidget: (reason) => s.refused.push(reason),
+            readDeadlineMs,
+          });
+    const booted = { ...s, bridge };
+    boot(booted);
+    s.take(s.toHost);
+    s.take(s.toWidget);
+    return booted;
+  };
+
+  it("reads the timeline cache, filtered by the legacy type and msgtype, newest first", async () => {
+    const s = booted();
+    const data = { type: "m.room.message", msgtype: "m.text", limit: 2 };
+    s.bridge.onWidgetMessage(fromWidget(READ, "r", data));
+    const read = nextToHost(s, `${X}read_timeline`);
+    expect(read.request).toEqual({ limit: 2, filter: [{ type: "m.room.message", msgtype: "m.text" }] });
+    s.bridge.onHostMessage(hostResponse(read, { events: [event("$2"), event("$1")], pagination: "idle" }));
+    await flush();
+    expect(s.take(s.toWidget)).toEqual([{ ...fromWidget(READ, "r", data), response: { events: [event("$2"), event("$1")] } }]);
+    expect(s.toHost).toEqual([]);
+  });
+
+  it("paginates while the answer is short, waits for notify_timeline_update (not passed on) and reads on below the oldest event", async () => {
+    const s = booted();
+    s.bridge.onWidgetMessage(fromWidget(READ, "r", { type: "m.room.message", limit: 3 }));
+    const first = nextToHost(s, `${X}read_timeline`);
+    s.bridge.onHostMessage(hostResponse(first, { events: [event("$3")], pagination: "idle" }));
+    await flush();
+    const paginate = nextToHost(s, `${X}paginate_timeline`);
+    expect(paginate.request).toEqual({ limit: 2 });
+    // The host announces the start (ignored) before it answers; each notification is acknowledged.
+    s.bridge.onHostMessage(fromHost(`${X}notify_timeline_update`, "n1", { pagination: { status: "paginating" } }));
+    expect(s.take(s.toHost)).toEqual([{ source: "host", request_id: "n1", action: `${X}notify_timeline_update`, response: {} }]);
+    s.bridge.onHostMessage(hostResponse(paginate, { pagination: "paginating" }));
+    await flush();
+    expect(s.toHost).toEqual([]);
+    s.bridge.onHostMessage(fromHost(`${X}notify_timeline_update`, "n2", { pagination: { status: "idle" } }));
+    expect(s.take(s.toHost).map((m) => m.response)).toEqual([{}]);
+    await flush();
+    const second = nextToHost(s, `${X}read_timeline`);
+    expect(second.request).toEqual({ from: "$3", limit: 2, filter: [{ type: "m.room.message" }] });
+    s.bridge.onHostMessage(hostResponse(second, { events: [event("$2"), event("$1")], pagination: "idle" }));
+    await flush();
+    // One reply; the legacy widget never sees the notifications.
+    expect(s.take(s.toWidget).map((m) => m.response)).toEqual([{ events: [event("$3"), event("$2"), event("$1")] }]);
+  });
+
+  it("stops at the start of the room, at a failed pagination and when it may not paginate", async () => {
+    // The start of the room.
+    let s = booted();
+    s.bridge.onWidgetMessage(fromWidget(READ, "r", { type: "m.room.message", limit: 5 }));
+    s.bridge.onHostMessage(hostResponse(nextToHost(s, `${X}read_timeline`), { events: [event("$1")], pagination: "start_reached" }));
+    await flush();
+    expect(s.take(s.toWidget).map((m) => m.response)).toEqual([{ events: [event("$1")] }]);
+
+    // A failed pagination, which was running already.
+    s = booted();
+    s.bridge.onWidgetMessage(fromWidget(READ, "r", { type: "m.room.message", limit: 5 }));
+    s.bridge.onHostMessage(hostResponse(nextToHost(s, `${X}read_timeline`), { events: [event("$1")], pagination: "paginating" }));
+    await flush();
+    s.bridge.onHostMessage(fromHost(`${X}notify_timeline_update`, "n", { pagination: { status: "idle", error: { code: "org.matrix.msc4412.unknown", message: "offline" } } }));
+    s.take(s.toHost);
+    await flush();
+    expect(s.take(s.toWidget).map((m) => m.response)).toEqual([{ events: [event("$1")] }]);
+    expect(s.toHost).toEqual([]);
+
+    // `paginate_timeline` refused.
+    s = booted();
+    s.bridge.onWidgetMessage(fromWidget(READ, "r", { type: "m.room.message", limit: 5 }));
+    s.bridge.onHostMessage(hostResponse(nextToHost(s, `${X}read_timeline`), { events: [event("$1")], pagination: "idle" }));
+    await flush();
+    s.bridge.onHostMessage(hostResponse(nextToHost(s, `${X}paginate_timeline`), { error: { code: "org.matrix.msc4412.missing_capability", message: "no" } }));
+    await flush();
+    expect(s.take(s.toWidget).map((m) => m.response)).toEqual([{ events: [event("$1")] }]);
+  });
+
+  it("answers with what it has at the deadline, well before the legacy timeout", async () => {
+    const s = booted(30);
+    s.bridge.onWidgetMessage(fromWidget(READ, "r", { type: "m.room.message", limit: 5 }));
+    s.bridge.onHostMessage(hostResponse(nextToHost(s, `${X}read_timeline`), { events: [event("$1")], pagination: "paginating" }));
+    await flush();
+    expect(s.toWidget).toEqual([]);
+    await new Promise((resolve) => setTimeout(resolve, 60));
+    expect(s.take(s.toWidget).map((m) => m.response)).toEqual([{ events: [event("$1")] }]);
+  });
+
+  it("without a limit reads the cache only; passes a refusal on; serves only the widget's room", async () => {
+    const s = booted();
+    s.bridge.onWidgetMessage(fromWidget(READ, "a", { type: "m.room.message" }));
+    const read = nextToHost(s, `${X}read_timeline`);
+    expect(read.request).toEqual({ limit: 1000, filter: [{ type: "m.room.message" }] });
+    s.bridge.onHostMessage(hostResponse(read, { events: [event("$1")], pagination: "idle" }));
+    await flush();
+    expect(s.take(s.toWidget).map((m) => m.response)).toEqual([{ events: [event("$1")] }]);
+    expect(s.toHost).toEqual([]);
+
+    const refusal = { error: { code: "org.matrix.msc4412.missing_capability", message: "Missing capability: widget:org.matrix.mscXXXX.read_timeline:m.room.message" } };
+    s.bridge.onWidgetMessage(fromWidget(READ, "b", { type: "m.room.message", limit: 1 }));
+    s.bridge.onHostMessage(hostResponse(nextToHost(s, `${X}read_timeline`), refusal));
+    await flush();
+    expect(s.take(s.toWidget).map((m) => m.response)).toEqual([refusal]);
+
+    s.bridge.onWidgetMessage(fromWidget(READ, "c", { type: "m.room.message", room_ids: ["!other:example.org"] }));
+    s.bridge.onWidgetMessage(fromWidget(READ, "d", { type: "m.room.message", limit: 0 }));
+    await flush();
+    expect(s.take(s.toWidget).map((m) => m.response)).toEqual([{ events: [] }, { error: { message: "Invalid request - limit out of range" } }]);
+    expect(s.toHost).toEqual([]);
+  });
+
+  it("answers state reads from the host's update_state", async () => {
+    const s = booted();
+    const topic = { type: "m.room.topic", state_key: "", event_id: "$t", sender: "@a:example.org", content: { topic: "hi" } };
+    // Not held: refused, as a legacy host would.
+    s.bridge.onWidgetMessage(fromWidget(READ, "s0", { type: "m.room.topic", state_key: "" }));
+    await flush();
+    expect(s.take(s.toWidget).map((m) => m.response)).toEqual([{ error: { message: "Cannot read state events of this type" } }]);
+
+    s.bridge.onHostMessage(fromHost(UPDATE, "u", { allowed: [...START_CAPABILITIES, H("update_state:m.room.topic")] }));
+    s.bridge.onHostMessage(fromHost(`${X}update_state`, "st", { state: [topic] }));
+    s.take(s.toWidget);
+    s.bridge.onWidgetMessage(fromWidget(READ, "s1", { type: "m.room.topic", state_key: "" }));
+    s.bridge.onWidgetMessage(fromWidget(READ, "s2", { type: "m.room.topic", state_key: "other" }));
+    s.bridge.onWidgetMessage(fromWidget(READ, "s3", { type: "m.room.topic", state_key: true }));
+    await flush();
+    expect(s.take(s.toWidget).map((m) => m.response)).toEqual([{ events: [topic] }, { events: [] }, { events: [topic] }]);
+    expect(s.toHost).toEqual([]);
   });
 });

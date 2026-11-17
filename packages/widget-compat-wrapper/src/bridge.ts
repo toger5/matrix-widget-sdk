@@ -26,7 +26,11 @@
  *    `update_capabilities { allowed }` becomes the legacy `notify_capabilities
  *    { requested, approved }`.
  * 4. **Files.** Legacy widgets send files as `Blob`; MSC4412 hosts expect base64 (files.ts).
- * 5. **OpenID.** A legacy widget may always ask for a token (`get_openid`); the host hands one out
+ * 5. **Reading events.** The host has no `read_events`: a timeline read becomes `read_timeline`
+ *    reads (and `paginate_timeline` while the answer is short), a state read is answered from the
+ *    host's `update_state` pushes (readEvents.ts). The host's `notify_timeline_update` is
+ *    acknowledged here and not passed on: legacy widgets do not know it.
+ * 6. **OpenID.** A legacy widget may always ask for a token (`get_openid`); the host hands one out
  *    only while the widget holds `widget:…get_openid`, which it grants for one token at a time.
  *    The bridge answers `get_openid` itself: while the capability is held it fetches the token at
  *    once (`state: "allowed"`). Otherwise it answers `state: "request"`, requests the capability
@@ -39,7 +43,7 @@
  */
 import { CurrentApiVersions } from "matrix-widget-api";
 
-import { capabilitiesToRequest, collapseApproved, LEGACY_WEBVIEW_CAPABILITIES, normalizeCapability, widgetCapability } from "./capabilities";
+import { capabilitiesToRequest, collapseApproved, hostCapability, LEGACY_WEBVIEW_CAPABILITIES, normalizeCapability, widgetCapability } from "./capabilities";
 import {
   ERROR_INVALID_REQUEST,
   ERROR_MISSING_CAPABILITY,
@@ -63,6 +67,7 @@ import {
 } from "./envelope";
 import { DOWNLOAD_FILE_ACTION, downloadResponseToLegacy, UPLOAD_FILE_ACTION, uploadRequestToNew } from "./files";
 import type { ClientContext, MatrixContext } from "./template";
+import { LEGACY_READ_EVENTS_ACTION, LegacyEventReader, NOTIFY_TIMELINE_UPDATE_ACTION } from "./readEvents";
 import { templatedLegacyUrl } from "./url";
 import { log } from "./log";
 
@@ -78,6 +83,8 @@ const LEGACY_GET_OPENID = "get_openid";
 /** The host's name of it, and its capability. */
 export const GET_OPENID_ACTION = toNewAction(LEGACY_GET_OPENID, "widget");
 export const GET_OPENID_CAPABILITY = widgetCapability("get_openid");
+/** The host's `update_state`: the bridge keeps the state for legacy state reads. */
+const UPDATE_STATE_ACTION = `${PLACEHOLDER}.update_state`;
 /** The legacy host -> widget action with the outcome of a `get_openid` answered `state: "request"`. */
 const LEGACY_OPENID_CREDENTIALS = "openid_credentials";
 
@@ -112,6 +119,8 @@ export interface BridgeOptions {
   supportedVersions?: string[];
   /** Generates the request ids of the bridge's own requests. Default: `crypto.randomUUID`. */
   nextId?: () => string;
+  /** How long a legacy timeline read may wait for paginations. Default: `LEGACY_READ_DEADLINE_MS`. */
+  readDeadlineMs?: number;
 }
 
 /** Called with the response body of one of the bridge's own requests. */
@@ -145,8 +154,22 @@ export class CompatBridge {
    * (`fetching`).
    */
   private openIdStep: "none" | "sent" | "acked" | "fetching" = "none";
+  /** The widget's room, from `get_matrix_context`. */
+  private roomId?: string;
+  /** Answers the legacy `read_events` (readEvents.ts). */
+  private readonly reader: LegacyEventReader;
 
-  constructor(private readonly o: BridgeOptions) {}
+  constructor(private readonly o: BridgeOptions) {
+    this.reader = new LegacyEventReader({
+      call: (action, request) => new Promise((resolve) => this.requestHost(action, request, resolve)),
+      holdsUpdateState: (type) => {
+        const capability = hostCapability(`update_state:${type}`);
+        return [...this.held].some((held) => held === capability || held.startsWith(`${capability}#`));
+      },
+      roomId: () => this.roomId,
+      deadlineMs: o.readDeadlineMs,
+    });
+  }
 
   /**
    * Start the bootstrap by requesting the context capabilities and the webview capabilities of a
@@ -201,6 +224,7 @@ export class CompatBridge {
         return this.o.refuseWidget(templated.problem);
       }
       this.phase = "running";
+      if (typeof matrix.room_id === "string") this.roomId = matrix.room_id;
       this.o.loadWidget(templated.url);
     };
     // An error reply (capability denied, action unknown to the host) leaves the variables empty.
@@ -222,6 +246,9 @@ export class CompatBridge {
         return this.onWidgetContentLoaded(m);
       case LEGACY_GET_OPENID:
         return this.onWidgetGetOpenId(m);
+      case LEGACY_READ_EVENTS_ACTION:
+        void this.reader.read(m.data).then((body) => this.o.sendToWidget(legacyResponse(m, body)));
+        return;
       case UPLOAD_FILE_ACTION:
         // The file has to be read first, so the request goes out asynchronously.
         uploadRequestToNew(m.data).then(
@@ -277,6 +304,11 @@ export class CompatBridge {
   // ---- host -> widget ------------------------------------------------------------------------
 
   private onHostRequest(m: NewMessage): void {
+    if (m.action === NOTIFY_TIMELINE_UPDATE_ACTION) {
+      // Only for the bridge's own timeline reads; a legacy widget has no such action.
+      this.o.sendToHost(newResponse(m, {}));
+      return this.reader.onTimelineUpdate(m.request);
+    }
     if (this.phase === "refused") {
       log.warn(`refused ${m.action} from the host: the legacy widget's URL was refused`);
       return this.o.sendToHost(newResponse(m, newErrorBody(ERROR_INVALID_REQUEST, "The wrapped widget's URL was refused")));
@@ -292,6 +324,7 @@ export class CompatBridge {
       this.rememberAllowed(m.request);
       return this.bootstrap();
     }
+    if (m.action === UPDATE_STATE_ACTION) this.reader.onUpdateState(m.request);
     this.fromHost.set(m.request_id, m);
     const request = m.action === UPDATE_CAPABILITIES_ACTION ? this.translateUpdate(m.request) : m.request;
     this.o.sendToWidget(newRequestToLegacy({ ...m, request }, this.o.widgetId));

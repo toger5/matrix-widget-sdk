@@ -14,11 +14,12 @@ It contains:
   instead of `source`) do not parse.
 * `WidgetError` / `ErrorKind`: the error body `{ error: { code, message } }` and MSC4412's codes
   (`unknown_action`, `missing_capability`, `invalid_request`, `unknown`), plus
-  `matrix_api_error` for failed Matrix requests.
+  `matrix_api_error` for failed Matrix requests and `event_not_cached` for a `read_timeline` whose
+  `from` the client does not cache (both in the placeholder namespace).
 * `Action` and its four leaf enums `WidgetRequest`, `WidgetResponse`, `HostRequest`,
   `HostResponse`: one variant per action, one file per action under `src/actions/`.
 * `Capability` / `CapabilitySet`: capability strings and the `allows_*` checks. A capability
-  embeds the wire name of its action (`widget:org.matrix.msc2876.read_events.state:<type>`); the
+  embeds the wire name of its action (`widget:org.matrix.msc3869.read_relations:<type>`); the
   stable `m.` spelling is parsed as well. `capability_is_known` (exported to the bindings) tells
   them from strings outside the scheme (`Capability::Other`). The source `webview` is about no
   action: `WebviewSandbox` / `WebviewAllow` are one token of the widget iframe's `sandbox` or

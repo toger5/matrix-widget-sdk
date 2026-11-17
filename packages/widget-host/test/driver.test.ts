@@ -71,7 +71,9 @@ describe("WidgetHostDriver through the JS bindings", () => {
     const { backend, driver, ask, drain } = setup();
     const caps = [
       "widget:org.matrix.mscXXXX.send_event.timeline:m.room.message",
-      "widget:org.matrix.msc2876.read_events.timeline:m.room.message",
+      "widget:org.matrix.mscXXXX.read_timeline:m.room.message",
+      "widget:org.matrix.mscXXXX.paginate_timeline",
+      "host:org.matrix.mscXXXX.notify_timeline_update",
       "host:org.matrix.mscXXXX.forward_event.timeline:m.room.message",
       "host:org.matrix.mscXXXX.update_state:m.room.topic",
       "widget:org.matrix.mscXXXX.send_event.delayed",
@@ -96,11 +98,27 @@ describe("WidgetHostDriver through the JS bindings", () => {
     expect(drain().some((m) => m.source === "host" && m.action === `${X}forward_event`)).toBe(true);
     expect(backend.timeline()).toHaveLength(1);
 
-    const read = await ask("org.matrix.msc2876.read_events", { type: "m.room.message", limit: 10 });
+    const read = await ask(`${X}read_timeline`, { limit: 10 });
     expect((read.events as unknown[]).length).toBe(1);
+    expect(read.pagination).toBe("idle");
     // The stable spelling works too; a name without a namespace is not an action.
-    expect(((await ask("read_events", { type: "m.room.message" })).error as { code: string }).code).toBe(`${CORE}unknown_action`);
-    expect(((await ask("m.read_events", { type: "m.room.message" })).events as unknown[]).length).toBe(1);
+    expect(((await ask("read_timeline", { limit: 10 })).error as { code: string }).code).toBe(`${CORE}unknown_action`);
+    expect(((await ask("m.read_timeline", { limit: 10 })).events as unknown[]).length).toBe(1);
+    // `read_events` (MSC2876) is gone in every spelling: only the compat wrapper knows it.
+    for (const old of ["org.matrix.msc2876.read_events", "m.read_events", "read_events"]) {
+      expect(((await ask(old, { type: "m.room.message" })).error as { code: string }).code, old).toBe(`${CORE}unknown_action`);
+    }
+    // `from` not in the cache.
+    expect(((await ask(`${X}read_timeline`, { from: "$gone", limit: 1 })).error as { code: string }).code).toBe(`${X}event_not_cached`);
+
+    // A pagination waits for the test host; its end is announced.
+    drain();
+    expect(await ask(`${X}paginate_timeline`, { limit: 3 })).toEqual({ pagination: "paginating" });
+    expect(backend.pendingPagination()).toEqual({ limit: 3 });
+    backend.resolvePagination([], true);
+    await new Promise((r) => setTimeout(r, 0));
+    const notes = drain().filter((m) => m.action === `${X}notify_timeline_update` && m.request !== undefined).map((m) => m.request);
+    expect(notes).toEqual([{ pagination: { status: "paginating" } }, { pagination: { status: "start_reached" } }]);
 
     const delayed = await ask(`${X}send_event`, { type: "m.room.message", content: { body: "later" }, delay: 5000 });
     expect(typeof delayed.delay_id).toBe("string");

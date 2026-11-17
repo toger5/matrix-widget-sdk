@@ -1518,6 +1518,8 @@ export class AppController {
         });
       case "mock/clearRoom":
         return dev?.clearRoom(intent.roomId);
+      case "mock/resolvePagination":
+        return dev?.resolvePagination(intent.roomId, intent.count, intent.startReached);
       case "mock/sendToDevice":
         return void dev?.sendToDevice(intent.message);
       case "mock/setBehavior":

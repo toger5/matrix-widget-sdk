@@ -15,6 +15,7 @@ import {
   ErrorKind,
   type ClientLike,
   type RawRoomEventsListener,
+  type RawTimelineChangesListener,
   type RoomLike,
   type RoomStateEvent,
   type RoomStateEventsListener,
@@ -53,6 +54,8 @@ const stateEvent = (type: string, eventId: string, content: unknown, stateKey = 
 interface Listeners {
   state: Map<string, RoomStateEventsListener>;
   events?: RawRoomEventsListener;
+  /** Every subscriber of the event cache's changes (the backend subscribes twice: RoomTimelines and the late decryptions). */
+  changes: Set<RawTimelineChangesListener>;
   toDevice?: ToDeviceMessageListener;
 }
 
@@ -63,12 +66,14 @@ interface Listeners {
  */
 function fakeSdk(sdk: { room?: Record<string, unknown>; client?: Record<string, unknown> } = {}) {
   const sdkCalls: unknown[][] = [];
-  const listeners: Listeners = { state: new Map() };
+  const listeners: Listeners = { state: new Map(), changes: new Set() };
   const handle = { cancel: () => {} };
   const cached: string[] = [];
   const state = new Map<string, RoomStateEvent[]>();
   let sendFailure: Error | undefined;
   let n = 0;
+  /** The running `paginateEventsRawBackwards`, ended by `resolvePagination`. */
+  let finishPagination: ((events: string[], startReached: boolean) => void) | undefined;
   const record =
     (name: string, result: unknown) =>
     async (...args: unknown[]) => (sdkCalls.push([name, ...args]), result);
@@ -87,7 +92,16 @@ function fakeSdk(sdk: { room?: Record<string, unknown>; client?: Record<string, 
     sendStateEventRaw: record("sendStateEventRaw", "$state"),
     sendDelayedEvent: record("sendDelayedEvent", "delay-1"),
     eventsRaw: async () => cached,
-    paginateEventsRawBackwards: async () => true,
+    // Like the SDK: the older events are in the event cache when the promise resolves (whether the start is reached).
+    paginateEventsRawBackwards: (count: number) => {
+      sdkCalls.push(["paginateEventsRawBackwards", count]);
+      return new Promise<boolean>((resolve) => {
+        finishPagination = (events, startReached) => {
+          cached.unshift(...events);
+          resolve(startReached);
+        };
+      });
+    },
     stateEvents: async (type: rumaEvents.StateEventType) => state.get(type.tag) ?? [],
     subscribeToStateEvents: (type: rumaEvents.StateEventType, listener: RoomStateEventsListener) => {
       listeners.state.set(type.tag, listener);
@@ -96,6 +110,7 @@ function fakeSdk(sdk: { room?: Record<string, unknown>; client?: Record<string, 
       return handle;
     },
     subscribeToEventsRaw: (listener: RawRoomEventsListener) => ((listeners.events = listener), handle),
+    subscribeToTimelineChangesRaw: (listener: RawTimelineChangesListener) => (listeners.changes.add(listener), { cancel: () => listeners.changes.delete(listener) }),
     ...sdk.room,
   } as unknown as RoomLike;
   const client = {
@@ -126,6 +141,12 @@ function fakeSdk(sdk: { room?: Record<string, unknown>; client?: Record<string, 
       listeners.state.get(tag)?.onUpdate(events);
     },
     failSends: (error: Error) => (sendFailure = error),
+    /** End the running pagination with `events` (oldest first). */
+    resolvePagination(events: { type: string; content: Record<string, unknown> }[], startReached: boolean) {
+      if (!finishPagination) throw new Error("no pagination runs");
+      finishPagination(events.map((ev) => rawEvent(ev.type, { event_id: `$old${++n}`, content: ev.content })), startReached);
+      finishPagination = undefined;
+    },
   };
 }
 
@@ -155,6 +176,10 @@ describeBackendContract("RustSdkBackend", async () => {
     userId: USER,
     receiveState: fake.receiveState,
     failSends: (message) => fake.failSends(new Error(message)),
+    resolvePagination: async (events, startReached) => {
+      fake.resolvePagination(events, startReached);
+      await tick();
+    },
     dispose: () => backend.dispose(),
   };
 });
@@ -267,47 +292,49 @@ describe("RustSdkBackend behind the driver", () => {
     expect(forwarded?.request).toMatchObject({ type: "org.example.key", sender: "@bob:example.org", content: { key: 2 }, encrypted: false });
   });
 
-  it("reads the newest events of a type from the SDK's event cache, loading older ones when it holds too few", async () => {
+  it("reads the SDK's event cache newest first, never paginating by itself; an undecryptable event is skipped but is a cursor", async () => {
     const calls = watchFetch();
-    let cached = [rawEvent("m.room.message", { event_id: "$2" }), rawEvent("m.reaction", { event_id: "$r" }), rawEvent("m.room.message", { event_id: "$3" })];
-    const paginated: number[] = [];
-    const room = {
-      eventsRaw: async () => cached,
-      paginateEventsRawBackwards: async (count: number) => {
-        paginated.push(count);
-        cached = [rawEvent("m.room.message", { event_id: "$1" }), ...cached];
-        return true;
-      },
-    };
-    const { backend, ask, grant } = await setup({ room });
+    const cached = [
+      rawEvent("m.room.message", { event_id: "$1" }),
+      rawEvent("m.reaction", { event_id: "$r" }),
+      rawEvent("m.room.encrypted", { event_id: "$utd" }),
+      rawEvent("m.room.message", { event_id: "$2" }),
+    ];
+    const { backend, ask, grant, sdkCalls } = await setup({ room: { eventsRaw: async () => cached } });
     dispose = () => backend.dispose();
-    await grant(["widget:org.matrix.msc2876.read_events.timeline:m.room.message"]);
+    await grant([`widget:${X}read_timeline:m.room.message`]);
 
-    const newest = await ask("org.matrix.msc2876.read_events", { type: "m.room.message", limit: 2 });
+    const newest = await ask(`${X}read_timeline`, { limit: 10 });
     expect((newest.events as { event_id: string; room_id: string }[]).map((e) => [e.event_id, e.room_id])).toEqual([
       ["$2", ROOM],
-      ["$3", ROOM],
+      ["$1", ROOM],
     ]);
-    expect(paginated).toHaveLength(0);
-
-    const more = await ask("org.matrix.msc2876.read_events", { type: "m.room.message", limit: 10 });
-    expect((more.events as { event_id: string }[]).map((e) => e.event_id)).toEqual(["$1", "$2", "$3"]);
-    expect(paginated).toHaveLength(1);
+    expect(newest.pagination).toBe("idle");
+    expect(((await ask(`${X}read_timeline`, { from: "$utd", limit: 10 })).events as { event_id: string }[]).map((e) => e.event_id)).toEqual(["$1"]);
+    expect(sdkCalls.filter(([name]) => name === "paginateEventsRawBackwards")).toEqual([]);
     expect(calls).toHaveLength(0);
   });
 
-  it("reads state of any type from the SDK's store", async () => {
-    const calls = watchFetch();
-    const read: string[] = [];
-    const stateEvents = async (type: rumaEvents.StateEventType) => (read.push(type.tag), [stateEvent("org.example.custom", "$custom", { value: 1 })]);
-    const { backend, ask, grant } = await setup({ room: { stateEvents } });
+  it("reports late decryptions and resets of the event cache (subscribeToTimelineChangesRaw)", async () => {
+    const { backend, ask, grant, pushed, listeners } = await setup();
     dispose = () => backend.dispose();
-    await grant(["widget:org.matrix.msc2876.read_events.state:org.example.custom"]);
-
-    const state = await ask("org.matrix.msc2876.read_events", { type: "org.example.custom", state_key: true });
-    expect(JSON.stringify(state.events)).toContain("$custom");
-    expect(read).toHaveLength(1);
-    expect(calls).toHaveLength(0);
+    await grant([`widget:${X}read_timeline:m.room.message`, `host:${X}notify_timeline_update`]);
+    pushed("");
+    const decrypted = [
+      rawEvent("m.room.message", { event_id: "$late", content: { body: "secret" } }),
+      rawEvent("org.example.secret", { event_id: "$other" }),
+      // A redaction applied in place is no decryption.
+      rawEvent("m.room.message", { event_id: "$redacted", unsigned: { redacted_because: { type: "m.room.redaction" } } }),
+    ];
+    listeners.changes.forEach((listener) => listener.onDecrypted(decrypted));
+    await tick();
+    expect(pushed(`${X}notify_timeline_update`)).toEqual([{ decrypted: ["$late"] }]);
+    listeners.changes.forEach((listener) => listener.onReset());
+    await tick();
+    expect(pushed(`${X}notify_timeline_update`)).toEqual([{ reset: true }]);
+    expect((await ask(`${X}read_timeline`, { limit: 1 })).pagination).toBe("idle");
+    backend.dispose();
+    expect(listeners.changes.size).toBe(0);
   });
 
   it("delivers state and live events of any type from the SDK's sync", async () => {

@@ -7,7 +7,9 @@ use std::rc::Rc;
 use std::sync::{Arc, Mutex};
 
 use serde_json::json;
-use widget_actions::{Capability, MatrixEvent, StateKeySelector};
+use widget_actions::{
+    Capability, MatrixEvent, NotifyTimelineUpdateRequest, PaginationStatus, ReadTimelineRequest, TimelinePagination,
+};
 use widget_base_sdk::{WidgetClient, WidgetDelegate};
 use widget_host_driver::{
     EmbedOptions, PlatformError, WidgetDefinition, WidgetHostDriver, WidgetHostPlatform, WidgetIframe,
@@ -20,6 +22,7 @@ struct WidgetSide {
     to_host: RefCell<VecDeque<String>>,
     events: RefCell<Vec<MatrixEvent>>,
     state_updates: RefCell<Vec<Vec<MatrixEvent>>>,
+    timeline_updates: RefCell<Vec<NotifyTimelineUpdateRequest>>,
     approved: RefCell<Vec<Capability>>,
 }
 
@@ -35,6 +38,9 @@ impl WidgetDelegate for WidgetSide {
     }
     fn on_capabilities_changed(&self, approved: Vec<Capability>) {
         *self.approved.borrow_mut() = approved;
+    }
+    fn on_timeline_update(&self, update: NotifyTimelineUpdateRequest) {
+        self.timeline_updates.borrow_mut().push(update);
     }
 }
 
@@ -127,11 +133,14 @@ fn full_widget_lifecycle() {
         let caps = vec![
             Capability::send_event("m.room.message"),
             // New messages and topic changes are forwarded, the topic is kept up to date, and
-            // the widget may read the topic itself: one capability per action.
+            // the widget may read topic changes from the timeline cache, paginate it and be told
+            // about its changes: one capability per action.
             Capability::forward_event("m.room.message"),
             Capability::forward_state_event("m.room.topic", None::<&str>),
             Capability::update_state("m.room.topic", None::<&str>),
-            Capability::read_state_events("m.room.topic", None::<&str>),
+            Capability::read_timeline("m.room.topic"),
+            Capability::PaginateTimeline,
+            Capability::NotifyTimelineUpdate,
             Capability::send_state_event("m.room.topic", Some("")),
         ];
         let cap_fut = l.client.request_capabilities(caps.clone());
@@ -195,10 +204,35 @@ fn full_widget_lifecycle() {
         // The widget acked, so the driver has nothing outstanding.
         assert!(l.host_side.to_widget.lock().unwrap().is_empty());
 
-        // 7. Widget reads state through the host.
-        let read = l.client.read_state("m.room.topic", StateKeySelector::Any);
+        // 7. Widget reads the timeline cache: only the topic change is readable. It asks for
+        //    more, the client fetches older events (the test resolves the pagination), the widget
+        //    is told and reads on below the topic.
+        let read = l.client.read_timeline(ReadTimelineRequest::newest(5));
         l.pump().await;
-        assert_eq!(read.await.unwrap(), vec![topic.clone()]);
+        let page = read.await.unwrap();
+        assert_eq!(page.events, vec![topic.clone()]);
+        assert_eq!(page.pagination, PaginationStatus::Idle);
+        let paginate = l.client.paginate_timeline(Some(5));
+        l.pump().await;
+        assert_eq!(paginate.await.unwrap(), PaginationStatus::Paginating);
+        let older_topic = MatrixEvent { event_id: "$older".into(), ..topic.clone() };
+        l.backend.resolve_pagination(vec![older_topic.clone()], true);
+        l.pump().await;
+        let status = |status| NotifyTimelineUpdateRequest {
+            pagination: Some(TimelinePagination { status, error: None }),
+            ..Default::default()
+        };
+        assert_eq!(
+            l.widget_side.timeline_updates.borrow().as_slice(),
+            [status(PaginationStatus::Paginating), status(PaginationStatus::StartReached)]
+        );
+        let read = l
+            .client
+            .read_timeline(ReadTimelineRequest { from: Some("$topic".into()), ..ReadTimelineRequest::newest(5) });
+        l.pump().await;
+        let page = read.await.unwrap();
+        assert_eq!(page.events, vec![older_topic]);
+        assert_eq!(page.pagination, PaginationStatus::StartReached);
 
         // 8. State changes: non-permitted types are dropped, a changed topic replaces the set.
         let name = MatrixEvent { event_type: "m.room.name".into(), ..topic.clone() };

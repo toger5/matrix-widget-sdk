@@ -10,7 +10,7 @@ const X = "org.matrix.mscXXXX.";
 
 // What the prompts request.
 const SHORT = [
-  `widget:org.matrix.msc2876.read_events.timeline:m.room.message`,
+  `widget:org.matrix.mscXXXX.read_timeline:m.room.message`,
   `host:${X}forward_event.timeline:m.room.message`,
   `widget:${X}send_event.timeline:m.room.message`,
   `widget:${X}send_event.delayed`,
@@ -25,10 +25,10 @@ const MORE = [`widget:${X}send_event.state:m.room.topic`, OPENID];
 const UNKNOWN = "widget:org.example.custom.share_screen";
 const LONG = [
   `widget:${X}send_event.timeline:m.room.message`,
-  `widget:org.matrix.msc2876.read_events.timeline:m.room.message`,
+  `widget:org.matrix.mscXXXX.read_timeline:m.room.message`,
   `host:${X}forward_event.timeline:m.room.message`,
   `widget:${X}send_event.state:m.room.topic`,
-  `widget:org.matrix.msc2876.read_events.state:m.room.topic`,
+  `widget:org.matrix.mscXXXX.paginate_timeline`,
   `host:${X}update_state:m.room.topic`,
   `host:${X}forward_event.state:m.room.topic`,
   `widget:${X}send_event.delayed`,
@@ -36,7 +36,7 @@ const LONG = [
   `widget:${X}send_event.sticky`,
   `widget:${X}send_event.timeline:m.rtc.member`,
   `widget:${X}send_event.timeline:m.reaction`,
-  `widget:org.matrix.msc2876.read_events.timeline:m.reaction`,
+  `widget:org.matrix.mscXXXX.read_timeline:m.reaction`,
   `widget:org.matrix.msc3869.read_relations:m.reaction`,
   `host:${X}forward_event.timeline:m.reaction`,
   `widget:${X}send_to_device:org.example.ping`,
@@ -62,7 +62,7 @@ const LONG = [
 
 /** A call widget (the call example of the webview capabilities' MSC draft): read the call members, join calls, and browser permissions. */
 const CALL_WEBVIEW = [
-  `widget:org.matrix.msc2876.read_events.timeline:m.rtc.member`,
+  `widget:org.matrix.mscXXXX.read_timeline:m.rtc.member`,
   `host:${X}forward_event.timeline:m.rtc.member`,
   `widget:org.matrix.msc4515.get_rtc_transports`,
   `widget:org.matrix.msc4533.get_rtc_livekit_token`,

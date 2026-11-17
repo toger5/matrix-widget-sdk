@@ -3,7 +3,7 @@ import { userEvent, within } from "storybook/test";
 
 import type { RoomToolsViewModel } from "../../appViewModel";
 import { EMPTY_MOCKED_ROOM_DATA } from "../env";
-import { ROOMS, roomToolsVm } from "../fixtures";
+import { MOCKED_ROOM_DATA, ROOMS, roomToolsVm } from "../fixtures";
 import { SideStage, StoryEnv, fillIn, findElement } from "../storyEnv";
 import { DevBackendView } from "./DevBackendView";
 
@@ -87,6 +87,22 @@ export const TimelineDelayed: Story = {
     await userEvent.click(toggle);
     toggle.blur();
   },
+};
+
+/**
+ * Timeline with a widget's pagination request: a widget called `paginate_timeline` (limit 20) and
+ * waits. "Pagination requested: 20 events" above the event list, how many random messages to
+ * generate (the requested number, else 20), "Start reached", and "Resolve pagination", which puts
+ * the messages before the oldest event and tells the widgets (`notify_timeline_update`).
+ */
+export const TimelinePaginationRequested: Story = {
+  args: { roomTools: roomTools({ openSections: ["timeline"] }) },
+  parameters: { size: [348, 1120] },
+  render: (args) => (
+    <StoryEnv env={{ useMockedRoomData: () => ({ ...MOCKED_ROOM_DATA, pagination: { status: "paginating", requested: { limit: 20 } } }) }}>
+      <DevBackendView {...args} />
+    </StoryEnv>
+  ),
 };
 
 /** Tools collapsed: the room box with its sections closed, the "Client Backend Tool" and "Media Backend Tool" buttons below it. */

@@ -103,7 +103,9 @@ Actions implemented here:
 | `…send_event` | widget | send a timeline/state event; `room_id` (own room only), `delay` (MSC4157, answers with `delay_id`), `sticky_duration_ms` (MSC4407) | `widget:…send_event.timeline:<type>[#<msgtype>]` / `widget:…send_event.state:<type>[#<key>]`, plus `widget:…send_event.delayed` / `widget:…send_event.sticky` |
 | `org.matrix.msc4157.update_delayed_event` | widget | `{ delay_id, action: cancel \| restart \| send }` | `widget:…update_delayed_event` |
 | `…forward_event` | host | a new event from sync (the driver's backend subscription) | `host:…forward_event.timeline:<type>[#<msgtype>]` / `host:…forward_event.state:<type>[#<key>]` |
-| `org.matrix.msc2876.read_events` | widget | read timeline (`limit`, `msgtype`, `since`) or state (`state_key`: string or `true`); `room_ids` (own room only) | `widget:…read_events.timeline:<type>[#<msgtype>]` / `widget:…read_events.state:<type>[#<key>]` |
+| `…read_timeline` | widget | `{ from?, limit, filter? }` → `{ events, pagination }`: the client's timeline cache, newest first, from the event older than `from`; never the homeserver. `from` not cached: error `…event_not_cached` ([draft](spec/patch/new/timeline-reading.md)) | results filtered by `widget:…read_timeline:<type>[#<msgtype>]` |
+| `…paginate_timeline` | widget | `{ limit? }` → `{ pagination }` at once: the client fetches older events; the outcome follows as `notify_timeline_update` | `widget:…paginate_timeline` |
+| `…notify_timeline_update` | host | `{ pagination?: { status, error? }, reset?, decrypted? }`: the timeline cache changed in a way `forward_event` does not cover | `host:…notify_timeline_update` |
 | `org.matrix.msc3869.read_relations` | widget | `{ event_id, rel_type?, event_type?, limit?, from?, to?, direction? }` → `{ chunk, next_batch?, prev_batch? }` | results filtered by `widget:…read_relations:<type>[#<msgtype>]` |
 | `…update_state` | host | `{ state: [...] }` the current permitted state, on approval and after changes | `host:…update_state:<type>[#<key>]` |
 | `…send_to_device` | widget | `{ type, encrypted, messages: { user_id: { device_id: content } } }` | `widget:…send_to_device:<type>` |
@@ -137,10 +139,10 @@ one capability per action, written `source:action[.modifier][:data]`.
 * `action` is the value of the action's `action` property, namespace included. `…` in the
   capability column stands for that namespace:
   `widget:org.matrix.mscXXXX.send_event.timeline:m.room.message`,
-  `widget:org.matrix.msc2876.read_events.state:m.room.topic`, `widget:org.matrix.msc2931.navigate`.
+  `widget:org.matrix.msc3869.read_relations:m.reaction`, `widget:org.matrix.msc2931.navigate`.
   The stable spelling `widget:m.navigate` is accepted as well. The same name under another
   namespace is another action, so `widget:org.matrix.mscXXXX.navigate` grants nothing.
-* `send_event`, `read_events` and `forward_event` always carry `timeline` or `state`.
+* `send_event` and `forward_event` always carry `timeline` or `state`.
 * No capability names a room: a widget acts in the room it is embedded in.
 * A widget can only ask for more capabilities. Only the host removes them, by sending
   `update_capabilities` with a shorter list.
@@ -174,13 +176,16 @@ api.onCapabilitiesChanged((allowed) => console.log(allowed));   // the full list
 
 await api.requestCapabilities([
   "widget:org.matrix.mscXXXX.send_event.timeline:m.room.message",
-  "widget:org.matrix.msc2876.read_events.timeline:m.room.message",   // readEvents()
+  "widget:org.matrix.mscXXXX.read_timeline:m.room.message",   // readTimeline()
+  "widget:org.matrix.mscXXXX.paginate_timeline",              // paginateTimeline()
+  "host:org.matrix.mscXXXX.notify_timeline_update",           // onTimelineUpdate()
   "host:org.matrix.mscXXXX.forward_event.timeline:m.room.message",   // onEvent()
   "widget:org.matrix.mscXXXX.get_matrix_context",
 ]);
 await api.notifyReady();                            // host removes its spinner
 const { event_id } = await api.sendEvent("m.room.message", { msgtype: "m.text", body: "hi" });
-const history = await api.readEvents("m.room.message", 20);
+const { events, pagination } = await api.readTimeline({ limit: 20 });   // newest first
+if (events.length < 20 && pagination === "idle") await api.paginateTimeline(20);  // then wait for onTimelineUpdate
 const { user_id, room_id } = await api.getMatrixContext();   // the get_matrix_context action
 ```
 
@@ -464,6 +469,8 @@ python3 -m http.server 8088 -d /tmp/site        # http://localhost:8088/matrix-w
   driver and `m.sticker` parses as `Capability::Other`.
 * **Legacy capability and action names**: every matrix-widget-api capability string parses as
   `Capability::Other` and grants nothing; the compat wrapper translates them.
+* **Rate limiting of `paginate_timeline`**: the timeline reading draft says a client SHOULD
+  rate-limit it per widget; the driver does not.
 * **Timeouts on the host side**: the widget SDK fails a request the host does not answer within
   10 seconds. The driver does not time out its own requests to the widget (they are only acked,
   nothing waits for them), and the compat wrapper does not time out its bootstrap requests.

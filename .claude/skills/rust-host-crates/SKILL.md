@@ -42,7 +42,8 @@ Swift differ where noted.
 - **`Capability` is its string** (a `custom_type!` in `widget-actions`). **`JsonValue` is a plain
   JS value** in TypeScript (`crates/widget-actions/uniffi.toml` maps it through `JSON.parse` /
   `JSON.stringify`), a JSON string in Kotlin / Swift.
-- **Enums with data are tagged classes** (`new StateKeySelector.Key({ key })`, `x.tag`).
+- **Enums with data are tagged classes** (`new BackendError.EventNotCached({ eventId })`, `x.tag`);
+  enums without data are numeric TS enums (`PaginationStatus.Idle`).
 - **Errors are classes with `tag` and `inner`**, not the text of the Rust error:
   `WidgetEventError.Refused.instanceOf(e) && e.inner.reason`. Give every error variant the fields a
   caller needs to show it.
@@ -78,8 +79,8 @@ Measured on an Apple M1 Pro (10 cores), 2026-11-16:
 - `npm run bindings` runs ubrn with `CARGO_TARGET_DIR=packages/widget-host-bindings/rust_modules/target`
   (about 2 GB): it builds `widget-host-driver` natively with `uniffi` (for the metadata),
   generates `src/generated/*.ts`, writes the wasm shim crate `rust_modules/wasm/` (its own
-  `Cargo.lock`), builds it for wasm32 (`opt-level 3`, LTO) and runs `wasm-bindgen`. The 3
-  dead-code warnings of `widget-host-wasm` are expected.
+  `Cargo.lock`), builds it for wasm32 (`opt-level 3`, LTO) and runs `wasm-bindgen`. The 4
+  dead-code warnings of `widget-host-wasm` (one per sink trait implemented in Rust) are expected.
 - Never edit `src/generated/`, `rust_modules/`, `crates/widget-base-sdk/pkg/` or `dist/`; rebuild.
 - Size of `index_bg.wasm` after this group: 2.15 MB (521 KB gzip); the `url` crate with ICU4X
   IDNA added 257 KB (92 KB gzip). Not optimised further: no `wasm-opt`, and the shim's

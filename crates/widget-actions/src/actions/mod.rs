@@ -8,7 +8,7 @@
 //!
 //! Only types that exist solely as the body of one action live here. Vocabulary that the host
 //! driver, the widget client or the backend use on their own ([`MatrixEvent`](crate::MatrixEvent),
-//! [`Capability`](crate::Capability), [`StateKeySelector`](crate::StateKeySelector)) lives at the
+//! [`Capability`](crate::Capability), [`TimelineFilter`](crate::TimelineFilter)) lives at the
 //! crate root next to the wire types.
 //!
 //! `source` + `action` identify a message type. Every action is `<namespace>.<name>`, and no name

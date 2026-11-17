@@ -9,7 +9,7 @@ are marked **decision**; everything marked **raised** is a conflict left for a h
 ## 1. Wire names and prefixes
 
 MSC4412 demands that every action is `<namespace>.<name>`: `m` for actions in the spec, the
-unstable prefix of the defining MSC until then (`org.matrix.msc2876.read_events`). To keep every
+unstable prefix of the defining MSC until then (`org.matrix.msc3869.read_relations`). To keep every
 action renameable later, this crate emits the **unstable name** on the wire and accepts the
 **stable name `m.<name>` as an alias** when parsing. A name without a namespace is not an action.
 The serde `rename` / `alias` attributes in `crates/widget-actions/src/actions/*/mod.rs` are the
@@ -27,11 +27,12 @@ capabilities follow MSC4412 and
 * **Namespaces:** an action keeps the unstable prefix of the MSC that defines it. Actions that
   have no MSC of their own yet use the placeholder `org.matrix.mscXXXX`: `send_event`,
   `send_to_device`, `get_openid`, `watch_turn_servers`, `unwatch_turn_servers`,
-  `set_always_on_screen`, `get_matrix_context`, `get_client_context` and every host action
+  `set_always_on_screen`, `get_matrix_context`, `get_client_context`, the timeline reading
+  draft's `read_timeline` / `paginate_timeline` / `notify_timeline_update` and every host action
   (`forward_event`, `update_state`, `forward_to_device`, `update_turn_servers`, `update_theme`,
   `update_language`, `update_visibility`).
 * **Capabilities** are `source:action[.modifier][:data]`, one per action, where `action` is the
-  wire name of the action, namespace included (`widget:org.matrix.msc2876.read_events.state:<type>`,
+  wire name of the action, namespace included (`widget:org.matrix.msc3869.read_relations:<type>`,
   `widget:org.matrix.mscXXXX.send_event.timeline:<type>`). The stable spelling
   (`widget:m.navigate`) is parsed as well. The same name under another namespace is a different
   action and grants nothing. No capability names a room.
@@ -115,7 +116,9 @@ here" column, or `m`). Every wire name also has the stable alias `m.<name>`.
 | `send_event` + `delay` (MSC4157) | – | + `widget:…send_event.delayed` | 🔨 response carries `delay_id` | `backend.send_delayed_event` |
 | `send_event` + `sticky_duration_ms` (MSC4407 / MSC4354) | – | + `widget:…send_event.sticky` | 🔨 | `backend.send_sticky_event` |
 | `org.matrix.msc4157.update_delayed_event` | `org.matrix.msc4157.update_delayed_event` | `widget:…update_delayed_event` | 🔨 | `backend.restart_delayed_event` / `cancel_delayed_event` / `send_delayed_event_now` |
-| `org.matrix.msc2876.read_events` | `org.matrix.msc2876.read_events` | `widget:…read_events.timeline:<type>[#msgtype]` / `widget:…read_events.state:<type>[#key]` | ✅ (+ 🔨 `msgtype`, `since`, `room_ids`) | `backend.read_room_events` / `read_room_state` |
+| `org.matrix.msc2876.read_events` | – | – | ➖ replaced by the three timeline actions below (draft `spec/patch/new/timeline-reading.md`); the compat wrapper serves legacy widgets: timeline reads become `read_timeline` (+ `paginate_timeline` while short), state reads are answered from `update_state` | – |
+| *(new)* | `org.matrix.mscXXXX.read_timeline` | results filtered by `widget:…read_timeline:<type>[#msgtype]` | 🔨 cursor `from`, `limit`, `filter`; newest first; never the homeserver | `backend.timeline_read` |
+| *(new)* | `org.matrix.mscXXXX.paginate_timeline` | `widget:…paginate_timeline` | 🔨 answers at once; not rate limited (the draft says SHOULD) | `backend.timeline_paginate_backwards` |
 | `org.matrix.msc3869.read_relations` | `org.matrix.msc3869.read_relations` | results filtered by `widget:…read_relations:<type>[#msgtype]` | 🔨 | `backend.relations` |
 | `send_to_device` (MSC3819) | `org.matrix.mscXXXX.send_to_device` | `widget:…send_to_device:<type>` | 🔨 | `backend.send_to_device_message` |
 | `get_openid` (MSC1960) | `org.matrix.mscXXXX.get_openid` | `widget:…get_openid`, single use by default | 🔨 the token at once, no `state`; see §5 | `backend.openid_token`, `driver.set_single_use` |
@@ -143,6 +146,7 @@ here" column, or `m`). Every wire name also has the stable alias `m.<name>`.
 | `notify_capabilities` | `org.matrix.msc4412.update_capabilities` | none (core action) | ✅ (🔨 `{ allowed }`: always the full list) | `driver.approve_capabilities` / `driver.revoke_capabilities` |
 | `send_event` | `org.matrix.mscXXXX.forward_event` | `host:…forward_event.timeline:<type>[#msgtype]` / `host:…forward_event.state:<type>[#key]` | ✅ | `RoomSink::on_timeline_events` |
 | `update_state` (MSC2762 update_state) | `org.matrix.mscXXXX.update_state` | `host:…update_state:<type>[#key]` | ✅ | `RoomSink::on_state_events` |
+| *(new)* | `org.matrix.mscXXXX.notify_timeline_update` | `host:…notify_timeline_update` | 🔨 pagination status, `reset`, `decrypted` (IDs the widget may read) | `TimelineSink::on_timeline_update` |
 | `send_to_device` | `org.matrix.mscXXXX.forward_to_device` | `host:…forward_to_device:<type>` | 🔨 | `ToDeviceSink::on_to_device_message` |
 | `openid_credentials` | – | – | ➖ removed: `get_openid` answers at once; the compat wrapper sends it to legacy widgets itself (§5) | – |
 | `update_turn_servers` | `org.matrix.mscXXXX.update_turn_servers` | `host:…update_turn_servers` | 🔨 | `TurnServerSink::on_turn_server` |
@@ -164,8 +168,8 @@ nothing; that includes every matrix-widget-api capability string.
 | `widget:…send_event.delayed` | `SendDelayedEvent` | `org.matrix.msc4157.send.delayed_event` |
 | `widget:…send_event.sticky` | `SendStickyEvent` | `org.matrix.msc4407.send.sticky_event` |
 | `widget:…update_delayed_event` | `UpdateDelayedEvent` | `org.matrix.msc4157.update_delayed_event` |
-| `widget:…read_events.timeline:<type>[#msgtype]` | `ReadEvents` | `org.matrix.msc2762.receive.event:<type>` |
-| `widget:…read_events.state:<type>[#key]` | `ReadStateEvents` | `org.matrix.msc2762.receive.state_event:<type>` |
+| `widget:…read_timeline:<type>[#msgtype]` | `ReadTimeline` | `org.matrix.msc2762.receive.event:<type>` |
+| `widget:…paginate_timeline` | `PaginateTimeline` | `org.matrix.msc2762.receive.event:<type>` (any type) |
 | `widget:…read_relations:<type>[#msgtype]` | `ReadRelations` | `org.matrix.msc2762.receive.event:<type>` |
 | `widget:…read_room_account_data:<type>` | `ReadRoomAccountData` | `com.beeper.capabilities.receive.room_account_data:<type>` |
 | `widget:…send_to_device:<type>` | `SendToDevice` | `org.matrix.msc3819.send.to_device:<type>` |
@@ -185,13 +189,13 @@ nothing; that includes every matrix-widget-api capability string.
 | `host:…forward_to_device:<type>` | `ForwardToDevice` | `org.matrix.msc3819.receive.to_device:<type>` |
 | `host:…update_turn_servers` | `UpdateTurnServers` | `town.robin.msc3846.turn_servers` |
 | `host:…update_theme` / `update_language` / `update_visibility` | `UpdateTheme` / `UpdateLanguage` / `UpdateVisibility` | none (always requested by the wrapper) |
+| `host:…notify_timeline_update` | `NotifyTimelineUpdate` | `org.matrix.msc2762.receive.event:<type>` (any type) |
 | `webview:…sandbox:<token>` (`…` = `org.matrix.mscXXXX` or `m`) | `WebviewSandbox` (about no action: a token of the widget iframe's `sandbox`) | none: the wrapper requests Element Web's tokens for itself; a legacy widget cannot request one |
 | `webview:…allow:<feature>` | `WebviewAllow` (a feature of the iframe's `allow`) | none: the wrapper requests Element Web's features plus `fullscreen` for itself |
 | `org.matrix.msc2762.timeline:<room_id>` | `Other` | no equivalent: never requested by the wrapper, never granted |
 | `io.element.requires_client`, `m.sticker`, `m.capability.screenshot` | `Other` | passed through unchanged; nothing acts on them |
 
-The namespace of a capability is the one of its action: `org.matrix.msc2876` (`read_events`),
-`org.matrix.msc3869` (`read_relations`), `org.matrix.msc4157` (`update_delayed_event`),
+The namespace of a capability is the one of its action: `org.matrix.msc3869` (`read_relations`), `org.matrix.msc4157` (`update_delayed_event`),
 `org.matrix.msc4515` (`get_rtc_transports`), `org.matrix.msc3973` (`search_user_directory`),
 `org.matrix.msc4039` (`get_media_config`, `upload_file`, `download_file`), `org.matrix.msc4533`
 (`get_rtc_livekit_token`, `delegate_rtc_livekit_delayed_leave`), `org.matrix.msc2931` (`navigate`),
@@ -226,11 +230,11 @@ the method here has the same name and parameter order, so one adapter per Matrix
 | `relations(room_id, event_id, rel_type, event_type) -> Vec<EventIn>` | `relations(room_id, event_id, rel_type?, event_type?, from?, to?, limit?, direction?) -> RelationsChunk` | **raised**, see §4 |
 | `openid_token() -> OpenIdToken` | same | |
 | `rtc_transports() -> Value` | `rtc_transports() -> JsonValue` | |
-| – | `read_room_events(room_id, type, msgtype?, limit, since?)`, `read_room_state(room_id, type, selector)` | widgets read on demand; rtc only subscribes |
+| – | `timeline_read(room_id, from?, limit, filter) -> TimelineChunk`, `timeline_paginate_backwards(room_id, limit?) -> PaginationStatus`, `subscribe_timeline(room_id, sink) -> Subscription` | widgets read the client's timeline cache on demand (MSCXXXX draft `spec/patch/new/timeline-reading.md`); rtc only subscribes. A `from` not cached is `BackendError::EventNotCached` |
 | – | `rtc_livekit_get_token(server_name, url, room_id, slot_id, member_id) -> jwt`, `rtc_livekit_delegate_delayed_leave(url, room_id, slot_id, member_id, delay_id)` | MSC4533 (added to matrix-widget-api in October 2026); rtc may grow the same when it hosts a LiveKit integration |
 | – | `read_room_account_data(room_id, type)` | beeper extension |
 | – | `search_user_directory(term, limit?)`, `media_config()`, `upload_media(MediaFile) -> mxc`, `download_media(mxc) -> MediaFile` | MSC3973 / MSC4039; media takes raw bytes, the driver does the base64 |
-| `BackendError { errcode?, status?, message }` | `BackendError::Failed { errcode?, status?, reason }` | one uniffi error variant like rtc's ffi layer (`reason`, because Kotlin exceptions own `message`); replaces the old four-variant enum; `errcode` and `status` are forwarded to the widget as `matrix_api_error` |
+| `BackendError { errcode?, status?, message }` | `BackendError::Failed { errcode?, status?, reason }`, `BackendError::EventNotCached { event_id }` | `Failed` as rtc's ffi layer (`reason`, because Kotlin exceptions own `message`); `errcode` and `status` are forwarded to the widget as `matrix_api_error`. `EventNotCached` is `timeline_read`'s answer for a `from` it does not cache; the widget gets `…event_not_cached` |
 | `EventIn { ..., encryption }` | `MatrixEvent` (client-server JSON incl. `room_id`, `unsigned`) | widgets get the event as the C-S API has it; decryption facts are not part of the widget API |
 | content as `content_json: String` | `JsonValue` (string over FFI, plain value in TS) | same thing, nicer in TypeScript |
 | async `subscribe_room` in core, sync over uniffi | sync everywhere | this crate is the uniffi surface, there is no separate core |
@@ -238,7 +242,7 @@ the method here has the same name and parameter order, so one adapter per Matrix
 ## 4. Conflicts raised
 
 1. **Rooms.** rtc is multi-room (`room_id` on every call). The legacy widget API is multi-room too
-   (`room_id` / `room_ids` on `send_event` / `read_events`, `org.matrix.msc2762.timeline:<room>`
+   (`room_id` / `room_ids` on `send_event` / the legacy `read_events`, `org.matrix.msc2762.timeline:<room>`
    capabilities, `getKnownRooms`). This backend is bound to **one room** (decided 2026-10-25).
    **Decision:** keep one room per backend, but pass `room_id` on every backend call like rtc does
    so the adapters stay interchangeable. The driver accepts `room_id` / `room_ids` from the widget
@@ -321,6 +325,10 @@ granted for one token at a time ([`spec/patch/msc4412/capability-lifetimes.md`](
   `RoomSink::on_sticky_events` and a `sticky` field on `MatrixEvent`. Sending is built; receiving
   follows when the MSC4354 shape settles.
 * **`redact_event`**: widgets redact via `send_event` of `m.room.redaction`.
+* **Rate limiting of `paginate_timeline`**: the timeline reading draft says clients SHOULD
+  rate-limit it per widget (and answer `m.unknown`); the driver does not.
+* **`since` of the legacy `read_events`**: the compat wrapper ignores it, as every host of this
+  repository did before.
 * **`parent_delay_id`** on `send_event`: deprecated in matrix-widget-api and ignored by its
   driver; not modelled (unknown body fields are accepted and dropped).
 * **msgtype `#` escaping**: matrix-widget-api un-escapes `\#` inside

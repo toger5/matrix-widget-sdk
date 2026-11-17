@@ -8,7 +8,7 @@
  */
 import type { CSSProperties } from "react";
 
-import { roomStateVersion, type MockedRoomData, type MockedStateEvent, type RoomId, type RoomToolsSection, type RoomToolsViewModel, type ScheduledEvent } from "../../appViewModel";
+import { roomStateVersion, type MockedPagination, type MockedRoomData, type MockedStateEvent, type RoomId, type RoomToolsSection, type RoomToolsViewModel, type ScheduledEvent } from "../../appViewModel";
 import type { RawEvent } from "../../session";
 import { useDispatch, useViewEnv } from "../env";
 import { Avatar, Button, Icon, IconButton } from "../ui/atoms";
@@ -32,6 +32,8 @@ export interface RoomBoxProps {
   userId?: string;
   /** The delayed events of the shown room that "Scheduled" lists. */
   scheduled: ScheduledEvent[];
+  /** DevBackend: the pagination of the shown room's timeline cache (a widget's request to resolve). */
+  pagination?: MockedPagination;
 }
 
 const plural = (n: number, what: string) => `${n} ${what}${n === 1 ? "" : "s"}`;
@@ -39,7 +41,7 @@ const plural = (n: number, what: string) => `${n} ${what}${n === 1 ? "" : "s"}`;
 /** A state event of the room as the forms of the State section take it. */
 const asStateEvent = (event: RawEvent): MockedStateEvent => ({ type: event.type, stateKey: String(event.state_key), content: event.content });
 
-export function RoomBox({ mode, rooms, roomId, roomTools, userId, scheduled }: RoomBoxProps) {
+export function RoomBox({ mode, rooms, roomId, roomTools, userId, scheduled, pagination }: RoomBoxProps) {
   const dispatch = useDispatch();
   const room = rooms.find((r) => r.id === roomId);
   return (
@@ -51,7 +53,7 @@ export function RoomBox({ mode, rooms, roomId, roomTools, userId, scheduled }: R
       </header>
       <div className="side-body">
         {room ? (
-          <RoomSections key={room.id} mode={mode} roomId={room.id} roomTools={roomTools} userId={userId} scheduled={scheduled} />
+          <RoomSections key={room.id} mode={mode} roomId={room.id} roomTools={roomTools} userId={userId} scheduled={scheduled} pagination={pagination} />
         ) : mode === "account" ? (
           <div className="empty">
             <Icon name="grid" size={28} />
@@ -88,7 +90,21 @@ export function RoomBox({ mode, rooms, roomId, roomTools, userId, scheduled }: R
  * `sidepanel-devbackendview--timeline*`, `sidepanel-roomtoolsview--state`, `--timeline`,
  * `--loading-failed`.
  */
-function RoomSections({ mode, roomId, roomTools, userId, scheduled }: { mode: RoomBoxMode; roomId: RoomId; roomTools: RoomToolsViewModel; userId?: string; scheduled: ScheduledEvent[] }) {
+function RoomSections({
+  mode,
+  roomId,
+  roomTools,
+  userId,
+  scheduled,
+  pagination,
+}: {
+  mode: RoomBoxMode;
+  roomId: RoomId;
+  roomTools: RoomToolsViewModel;
+  userId?: string;
+  scheduled: ScheduledEvent[];
+  pagination?: MockedPagination;
+}) {
   const dispatch = useDispatch();
   const env = useViewEnv();
   const { timeline, retry: retryTimeline } = env.useRoomTimeline(roomId);
@@ -130,6 +146,7 @@ function RoomSections({ mode, roomId, roomTools, userId, scheduled }: { mode: Ro
             atStart={timeline.value.atStart}
             loadingOlder={timeline.value.loadingOlder}
             scheduled={scheduled}
+            pagination={pagination}
             userId={userId}
             members={members}
           />

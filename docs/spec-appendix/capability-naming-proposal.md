@@ -50,7 +50,7 @@ source        = "widget"                           ; the widget sends this actio
 action        = namespace "." name                 ; the value of the action's `action` property
 namespace     = "m"                                ; the action is part of the spec
               / unstable prefix of the MSC that defines the action, e.g. "org.matrix.msc2876"
-name          = the action's name, a verb, e.g. "send_event", "read_events", "forward_event"
+name          = the action's name, a verb, e.g. "send_event", "read_timeline", "forward_event"
 modifier      = a variant (clearly defined enum) of the action, a descriptive word:
                 "timeline", "state", "delayed", "sticky"
 modifier_data = additional constraints that are arbitrary data outside the modifier enum.
@@ -67,9 +67,9 @@ modifier_data = additional constraints that are arbitrary data outside the modif
   `webview` is the only one so far. They have the same shape, the source is not namespaced, and a
   host grants nothing of a source it does not know.
 - The action part is **exactly the string in the `action` property** of the action, namespace
-  included. While an action is sent as `org.matrix.msc2876.read_events`, its capability is
-  `widget:org.matrix.msc2876.read_events.timeline:<type>`; once it is `m.read_events`, the
-  capability is `widget:m.read_events.timeline:<type>`. There is no separate namespace for
+  included. While an action is sent as `org.matrix.msc3869.read_relations`, its capability is
+  `widget:org.matrix.msc3869.read_relations:<type>`; once it is `m.read_relations`, the
+  capability is `widget:m.read_relations:<type>`. There is no separate namespace for
   capabilities.
 - The same name under two namespaces is two independent actions with two capabilities. This is
   how an action evolves: a new iteration gets a new namespace, a widget requests the capabilities
@@ -77,8 +77,8 @@ modifier_data = additional constraints that are arbitrary data outside the modif
 - Actions that have no MSC of their own yet use the literal placeholder `org.matrix.mscXXXX` in
   this repository (`send_event`, `get_openid`, every host action, ...). The three core actions of
   MSC4412 use `org.matrix.msc4412`.
-- **An action that defines modifiers has no capability without one.** `send_event`, `read_events`
-  and `forward_event` always say `timeline` or `state`; `widget:m.send_event:m.room.message` is not
+- **An action that defines modifiers has no capability without one.** `send_event` and
+  `forward_event` always say `timeline` or `state`; `widget:m.send_event:m.room.message` is not
   a capability. Otherwise a widget holding the bare form would silently gain power whenever a new
   modifier is added to the action.
 - **An action that defines no modifiers omits the modifier.** `widget:m.navigate`,
@@ -100,7 +100,7 @@ modifier_data = additional constraints that are arbitrary data outside the modif
 ```text
 widget:m.send_event.timeline:m.room.message       the widget may send timeline events of type m.room.message
 widget:m.send_event.delayed                       the widget may send events, delayed
-widget:m.read_events.state:m.room.topic           the widget may read state events of type m.room.topic
+widget:m.read_timeline:m.room.topic              the widget may read m.room.topic events from the timeline cache
 host:m.forward_event.timeline:m.room.message      the host forwards timeline events of type m.room.message
 host:m.update_state:m.room.member#@a:x            the host updates the state of m.room.member for @a:x
 host:m.update_theme                               the host updates the theme
@@ -212,8 +212,9 @@ answer: the user's consent is `widget:m.get_openid` itself, and the response is 
 | `send_event` with `delay` | + `widget:m.send_event.delayed` | `msc4157.send.delayed_event` |
 | `send_event` with `sticky_duration_ms` | + `widget:m.send_event.sticky` | `msc4407.send.sticky_event` |
 | `update_delayed_event` | `widget:m.update_delayed_event` | `msc4157.update_delayed_event` |
-| `read_events` (timeline) | `widget:m.read_events.timeline:<type>[#<msgtype>]` | `msc2762.receive.event:<type>[#<msgtype>]` (shared) |
-| `read_events` (state) | `widget:m.read_events.state:<type>[#<state_key>]` | `msc2762.receive.state_event:<type>[#<state_key>]` (shared) |
+| `read_timeline` (replaces the timeline part of `msc2876.read_events`) | `widget:m.read_timeline:<type>[#<msgtype>]` | `msc2762.receive.event:<type>[#<msgtype>]` (shared) |
+| `paginate_timeline` | `widget:m.paginate_timeline` | none (`read_events` paginated as the client saw fit) |
+| (the state part of `msc2876.read_events`) | none: the current state comes with `host:m.update_state:<type>[#<state_key>]` | `msc2762.receive.state_event:<type>[#<state_key>]` (shared) |
 | `read_relations` | `widget:m.read_relations:<type>[#<msgtype>]` | none; results filtered by `receive.event` (shared) |
 | `read_room_account_data` | `widget:m.read_room_account_data:<type>` | `com.beeper.capabilities.receive.room_account_data:<type>` |
 | `send_to_device` | `widget:m.send_to_device:<type>` | `msc3819.send.to_device:<type>` |
@@ -234,7 +235,10 @@ answer: the user's consent is `widget:m.get_openid` itself, and the response is 
 "(shared)" marks today's capabilities that govern more than one action; rule 1 splits them.
 
 The type given to `read_relations` is the type of the related events that are returned. They are
-timeline events, so `#` narrows `m.room.message` to one `msgtype`.
+timeline events, so `#` narrows `m.room.message` to one `msgtype`. The same holds for
+`read_timeline`, whose results are timeline events too (state events of the timeline included);
+`read_timeline`, `paginate_timeline` and `notify_timeline_update` are proposed in
+[`spec/patch/new/timeline-reading.md`](../../spec/patch/new/timeline-reading.md).
 
 ## Host → widget actions
 
@@ -249,6 +253,7 @@ timeline events, so `#` narrows `m.room.message` to one `msgtype`.
 | `update_theme` | `host:m.update_theme` | none |
 | `update_language` | `host:m.update_language` | none |
 | `update_visibility` | `host:m.update_visibility` | none |
+| `notify_timeline_update` | `host:m.notify_timeline_update` | none |
 
 ## Examples
 
@@ -270,10 +275,13 @@ webview:m.allow:microphone
 webview:m.allow:display-capture
 ```
 
-A widget that only reads and follows text messages:
+A widget that reads the cached text messages, pages back through the history, and follows new
+ones:
 
 ```text
-widget:m.read_events.timeline:m.room.message#m.text
+widget:m.read_timeline:m.room.message#m.text
+widget:m.paginate_timeline
+host:m.notify_timeline_update
 host:m.forward_event.timeline:m.room.message#m.text
 ```
 
@@ -288,12 +296,17 @@ its whole expansion:
 |---|---|
 | `send.event:<t>` | `widget:m.send_event.timeline:<t>` |
 | `send.state_event:<t>#<k>` | `widget:m.send_event.state:<t>#<k>` |
-| `receive.event:<t>` | `widget:m.read_events.timeline:<t>`, `widget:m.read_relations:<t>`, `host:m.forward_event.timeline:<t>` |
-| `receive.state_event:<t>#<k>` | `widget:m.read_events.state:<t>#<k>`, `host:m.update_state:<t>#<k>`, `host:m.forward_event.state:<t>#<k>` |
+| `receive.event:<t>` | `widget:m.read_timeline:<t>`, `widget:m.read_relations:<t>`, `host:m.forward_event.timeline:<t>`, `widget:m.paginate_timeline`, `host:m.notify_timeline_update` |
+| `receive.state_event:<t>#<k>` | `host:m.update_state:<t>#<k>`, `host:m.forward_event.state:<t>#<k>` |
 | `timeline:<r>` | nothing; it is never requested and never reported as approved |
 | `upload_file` | `widget:m.upload_file`, `widget:m.get_media_config` |
 | `turn_servers` | `host:m.update_turn_servers` |
 | any other | the one capability in the tables above |
+
+The legacy `read_events` has no new name: the wrapper answers it. A timeline read becomes
+`read_timeline` reads, with `paginate_timeline` while the answer is short (hence the last two
+capabilities of `receive.event`); a state read is answered from the `update_state` the wrapper
+received.
 
 Theme, language and visibility updates had no capability so far. The wrapper always requests
 `host:m.update_theme`, `host:m.update_language` and `host:m.update_visibility` on behalf of a

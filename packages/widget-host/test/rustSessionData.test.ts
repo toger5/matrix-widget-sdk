@@ -20,6 +20,7 @@ import {
   type ClientLike,
   type RoomLike,
   type RawRoomEventsListener,
+  type RawTimelineChangesListener,
   type RoomMember,
   type RoomStateEvent,
   type SessionVerificationControllerDelegate,
@@ -62,6 +63,7 @@ const stored = (type: string, stateKey: string, content: unknown, eventId?: stri
 function fakeSdk(options: { joinedCount?: number; encryption?: EncryptionState; events?: Record<string, unknown>[]; older?: Record<string, unknown>[]; reachesStart?: boolean } = {}) {
   const calls: string[] = [];
   const eventListeners = new Set<RawRoomEventsListener>();
+  const changeListeners = new Set<RawTimelineChangesListener>();
   const members = [member("@carol:example.org", 0n), member(USER, "infinite", "Alice"), member("@bob:example.org", 50n, "Bob"), member("@gone:example.org", 100n, "Gone", false)];
   const iterator = () => {
     let done = false;
@@ -87,6 +89,10 @@ function fakeSdk(options: { joinedCount?: number; encryption?: EncryptionState; 
       cached.unshift(...(options.older ?? []).map((ev) => JSON.stringify(ev)));
       return options.reachesStart ?? true;
     },
+    subscribeToTimelineChangesRaw: (listener: RawTimelineChangesListener) => {
+      changeListeners.add(listener);
+      return { cancel: () => (calls.push("cancel changes"), changeListeners.delete(listener)), isFinished: () => false };
+    },
     subscribeToEventsRaw: (listener: RawRoomEventsListener) => {
       eventListeners.add(listener);
       return { cancel: () => (calls.push("cancel events"), eventListeners.delete(listener)), isFinished: () => false };
@@ -109,7 +115,10 @@ function fakeSdk(options: { joinedCount?: number; encryption?: EncryptionState; 
     cached.push(...events.map((ev) => JSON.stringify(ev)));
     eventListeners.forEach((listener) => listener.onEvents(events.map((ev) => JSON.stringify(ev))));
   };
-  return { client, room, calls, sync };
+  /** The event cache dropped its events, or replaced some it decrypted late. */
+  const resetCache = () => changeListeners.forEach((listener) => listener.onReset());
+  const decryptLate = (...events: Record<string, unknown>[]) => changeListeners.forEach((listener) => listener.onDecrypted(events.map((ev) => JSON.stringify(ev))));
+  return { client, room, calls, sync, resetCache, decryptLate };
 }
 
 afterEach(() => vi.unstubAllGlobals());
@@ -232,6 +241,32 @@ describe("matrix-rust-sdk RoomTimeline", () => {
     sync(message("$6"));
     expect(listener).toHaveBeenCalledTimes(1);
     expect(calls.at(-1)).toBe("cancel events");
+  });
+
+  it("the listener hears of a reset of the event cache (with `reset`) and of events it decrypted late", () => {
+    const { room, calls, resetCache, decryptLate } = fakeSdk({ events: [message("$1")] });
+    const listener = vi.fn();
+    const stop = onTimelineChanged(room, listener);
+    decryptLate(message("$1"));
+    resetCache();
+    expect(listener.mock.calls).toEqual([[], [true]]);
+    stop();
+    resetCache();
+    expect(listener).toHaveBeenCalledTimes(2);
+    expect(calls.slice(-2)).toEqual(["cancel changes", "cancel events"]);
+  });
+
+  it("RoomTimelines: a listener learns about a failed pagination (with the error) and a reset", async () => {
+    let changed: (reset?: boolean) => void = () => undefined;
+    const timelines = new RoomTimelines((_roomId, onChange) => ((changed = onChange), () => undefined));
+    const changes: unknown[] = [];
+    timelines.listen(ROOM, (change) => changes.push(change));
+    const failure = new Error("offline");
+    await expect(timelines.loadOlder(ROOM, async () => Promise.reject(failure))).rejects.toBe(failure);
+    changed(true);
+    changed();
+    expect(changes).toEqual([{}, { failed: failure }, { reset: true }, {}]);
+    expect(timelines.pagination(ROOM)).toEqual({ loading: false, atStart: false });
   });
 
   it("RoomTimelines: the start is reached by a pagination or the create event; loadingOlder while one runs, a second load joins it; the room is followed while it has listeners", async () => {

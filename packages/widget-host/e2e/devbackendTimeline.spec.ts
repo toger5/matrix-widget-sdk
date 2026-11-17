@@ -167,3 +167,74 @@ test("a delayed event of another sender is refused", async ({ host }) => {
   await expect(host.page.getByTestId("toast")).toContainText("a delayed event is always sent by @alice:dev.local");
   expect((await host.store(LAB)).delayed).toHaveLength(0);
 });
+
+/** The result the test widget logged for its button `label` last: "<label> → <JSON>" (a string is logged as it is). */
+async function logged<T>(host: Host, id: string, label: string): Promise<T> {
+  const entry = host.frame(id).locator("#log pre", { hasText: `${label} →` }).first();
+  const text = (await entry.textContent())!;
+  const result = text.slice(text.indexOf("→") + 1).trim();
+  try {
+    return JSON.parse(result) as T;
+  } catch {
+    return result as T;
+  }
+}
+
+test("a widget's pagination waits for “Resolve pagination”: the generated messages reach the widget, then the start of the room", async ({ host }) => {
+  type Read = { events: { event_id: string; type: string; content: { msgtype?: string } }[]; pagination: string };
+  const view = host.page.getByTestId("devbackend-view");
+  const widget = host.frame(NEW);
+  const log = widget.locator("#log");
+  const request = view.getByRole("form", { name: "Pagination request" });
+  const press = async (label: string) => {
+    const count = await log.locator("pre", { hasText: `${label} →` }).count();
+    await widget.getByRole("button", { name: label, exact: true }).click();
+    await expect(log.locator("pre", { hasText: `${label} →` })).toHaveCount(count + 1);
+  };
+
+  // The widget reads what is cached: the three messages of the room, nothing older to read yet.
+  await press("read_timeline (limit 10)");
+  const newest = await logged<Read>(host, NEW, "read_timeline (limit 10)");
+  expect(newest.events).toHaveLength(3);
+  expect(newest.pagination).toBe("idle");
+  await expect(request).toHaveCount(0);
+
+  // It asks for more: the DevBackend shows the request and waits.
+  await press("paginate_timeline (limit 5)");
+  expect(await logged(host, NEW, "paginate_timeline (limit 5)")).toBe("paginating");
+  await expect(request).toContainText("Pagination requested: 5 events");
+  await expect(request.getByLabel("Messages to generate")).toHaveValue("5");
+  await expect(log).toContainText('notify_timeline_update {"pagination":{"status":"paginating"}}');
+  await host.story("sidepanel-devbackendview--timeline-pagination-requested");
+
+  const stored = (await host.store(LAB)).timeline.length;
+  await request.getByRole("button", { name: "Resolve pagination" }).click();
+  await expect(request).toHaveCount(0);
+  await expect(log.locator("pre").first()).toContainText('notify_timeline_update {"pagination":{"status":"idle"}}');
+  const timeline = (await host.store(LAB)).timeline as { eventId: string; eventType: string }[];
+  expect(timeline).toHaveLength(stored + 5);
+  const generated = timeline.slice(0, 5);
+  expect(generated.every((e) => e.eventType === "m.room.message")).toBe(true);
+
+  // Read again below the oldest event it had: the five new, older messages, newest first.
+  await press("read_timeline older (limit 10)");
+  const older = await logged<Read>(host, NEW, "read_timeline older (limit 10)");
+  expect(older.events.map((e) => e.event_id)).toEqual(generated.map((e) => e.eventId).reverse());
+  expect(older.events.every((e) => e.content.msgtype === "m.text")).toBe(true);
+  expect(older.pagination).toBe("idle");
+
+  // Once more, two messages and the start of the room.
+  await press("paginate_timeline (limit 5)");
+  await request.getByLabel("Messages to generate").fill("2");
+  await request.getByRole("switch", { name: "Start reached" }).click();
+  await request.getByRole("button", { name: "Resolve pagination" }).click();
+  await expect(log.locator("pre").first()).toContainText('notify_timeline_update {"pagination":{"status":"start_reached"}}');
+  await press("read_timeline older (limit 10)");
+  const start = await logged<Read>(host, NEW, "read_timeline older (limit 10)");
+  expect(start.events).toHaveLength(2);
+  expect(start.pagination).toBe("start_reached");
+  await press("paginate_timeline (limit 5)");
+  expect(await logged(host, NEW, "paginate_timeline (limit 5)")).toBe("start_reached");
+  await expect(request).toHaveCount(0);
+  expect(await host.actions(NEW, "fromWidget")).toEqual(expect.arrayContaining(["org.matrix.mscXXXX.read_timeline", "org.matrix.mscXXXX.paginate_timeline"]));
+});

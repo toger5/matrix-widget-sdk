@@ -49,7 +49,7 @@
   <rect x="380" y="316" width="330" height="110" rx="10" fill="#ffedd5" stroke="#ea580c" stroke-width="1.5"/>
   <text x="396" y="340" class="h2">Memory store menu</text>
   <text x="396" y="362" class="b">• <tspan font-weight="700">Inject event</tspan>: as if it came from sync</text>
-  <text x="396" y="380" class="b">• <tspan font-weight="700">Inject to-device</tspan> message</text>
+  <text x="396" y="380" class="b">• <tspan font-weight="700">Inject to-device</tspan> · <tspan font-weight="700">Resolve pagination</tspan></text>
   <text x="396" y="398" class="b">• <tspan font-weight="700">Clear store</tspan> · <tspan font-weight="700">fail sends</tspan> (error replies)</text>
   <text x="396" y="416" class="b">• live view of timeline, state, delayed, to-device</text>
 
@@ -68,13 +68,14 @@
 
   <rect x="282" y="488" width="412" height="164" rx="8" fill="#ffffff" stroke="#16a34a"/>
   <text x="296" y="510" class="bb">behaves like a client would</text>
-  <text x="296" y="532" class="b">• sends append to the store and return fake ids</text>
-  <text x="296" y="552" class="b">• every stored event notifies live subscriptions, so a</text>
-  <text x="310" y="570" class="b">widget sees its own sends echoed, like real sync</text>
-  <text x="296" y="590" class="b">• reads (read_events, state, relations) query the store</text>
-  <text x="296" y="610" class="b">• subscribe_room hands over the current state at once</text>
-  <text x="296" y="630" class="b">• openid: placeholder token; TURN, transports set by tests</text>
-  <text x="296" y="646" class="s">nothing leaves the page</text>
+  <text x="680" y="510" class="s" text-anchor="end">nothing leaves the page</text>
+  <text x="296" y="530" class="b">• sends append to the store and return fake ids</text>
+  <text x="296" y="548" class="b">• every stored event notifies live subscriptions, so a</text>
+  <text x="310" y="564" class="b">widget sees its own sends echoed, like real sync</text>
+  <text x="296" y="582" class="b">• read_timeline / read_relations query the store</text>
+  <text x="296" y="600" class="b">• a pagination stays pending until Resolve pagination</text>
+  <text x="296" y="618" class="b">• subscribe_room hands over the current state at once</text>
+  <text x="296" y="636" class="b">• openid: placeholder token; TURN, transports set by tests</text>
 
   <!-- arrows inside host -->
   <line x1="200" y1="298" x2="200" y2="314" stroke="#374151" stroke-width="1.4" marker-end="url(#arr)" marker-start="url(#arr)"/>
@@ -91,8 +92,8 @@
   <text x="810" y="136" class="s">widget-base-sdk (wasm)</text>
   <text x="810" y="162" class="b">buttons: request_capabilities, notify_ready,</text>
   <text x="810" y="180" class="b">send m.room.message, send state m.room.topic,</text>
-  <text x="810" y="198" class="b">read message / topic, get_matrix_context,</text>
-  <text x="810" y="216" class="b">get_client_context</text>
+  <text x="810" y="198" class="b">read_timeline (+ older), paginate_timeline,</text>
+  <text x="810" y="216" class="b">get_matrix_context, get_client_context</text>
   <text x="810" y="240" class="b">logs every push: forward_event, update_state,</text>
   <text x="810" y="258" class="b">update_capabilities, to-device, TURN, theme…</text>
   <text x="810" y="282" class="b">state panel: the SDK's view (ready, allowed caps)</text>
@@ -149,12 +150,12 @@
   <rect x="800" y="738" width="370" height="150" rx="10" fill="#ffffff" stroke="#2563eb"/>
   <circle cx="822" cy="760" r="12" fill="#2563eb"/><text x="822" y="764" class="num" text-anchor="middle">3</text>
   <text x="842" y="765" class="bb">Widget reads</text>
-  <text x="816" y="790" class="m">read_events m.room.message</text>
-  <text x="816" y="808" class="m">→ backend.read_room_events</text>
-  <text x="816" y="826" class="m">→ last `limit` from the store</text>
-  <text x="816" y="844" class="m">→ filtered by widget:…read_events.*</text>
-  <text x="816" y="862" class="m">→ reply { events }</text>
-  <text x="816" y="878" class="s">   approval itself pushes update_state</text>
+  <text x="816" y="790" class="m">read_timeline { limit: 10 }</text>
+  <text x="816" y="808" class="m">→ backend.timeline_read</text>
+  <text x="816" y="826" class="m">→ newest first from the store</text>
+  <text x="816" y="844" class="m">→ filtered by widget:…read_timeline:&lt;t&gt;</text>
+  <text x="816" y="862" class="m">→ reply { events, pagination }</text>
+  <text x="816" y="878" class="s">   older: from = oldest id, or paginate_timeline</text>
 
   <text x="30" y="918" class="b"><tspan font-weight="700">Automated:</tspan> packages/widget-host/test/driver.test.ts drives the bindings end to end; crates/widget-base-sdk/tests/loopback.rs wires WidgetClient ↔ driver ↔</text>
   <text x="30" y="936" class="b">InMemoryBackend in Rust with in-memory queues instead of postMessage. Assertions read the store (timeline(), state(), toDeviceSent()…).</text>

@@ -35,8 +35,8 @@ use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::future_to_promise;
 use widget_actions::{
     Base64File, Capability, DelegateRtcLivekitDelayedLeaveRequest, GetRtcLivekitTokenRequest, MatrixEvent,
-    ReadEventsRequest, ReadRelationsRequest, StateKeySelector, ToDeviceEvent, TurnServer, UpdateDelayedEventAction,
-    ACTION_TIMEOUT_MS,
+    NotifyTimelineUpdateRequest, ReadRelationsRequest, ReadTimelineRequest, ToDeviceEvent, TurnServer,
+    UpdateDelayedEventAction, ACTION_TIMEOUT_MS,
 };
 
 use crate::{WidgetClient, WidgetClientError, WidgetDelegate};
@@ -50,6 +50,7 @@ struct Callbacks {
     on_theme_change: Option<Function>,
     on_language_change: Option<Function>,
     on_visibility_change: Option<Function>,
+    on_timeline_update: Option<Function>,
     on_capabilities_changed: Option<Function>,
 }
 
@@ -164,6 +165,10 @@ impl WidgetDelegate for JsDelegate {
 
     fn on_visibility_change(&self, visible: bool) {
         call("onVisibilityChange", &self.callbacks.borrow().on_visibility_change, JsValue::from_bool(visible));
+    }
+
+    fn on_timeline_update(&self, update: NotifyTimelineUpdateRequest) {
+        call("onTimelineUpdate", &self.callbacks.borrow().on_timeline_update, to_js(&update));
     }
 
     fn on_capabilities_changed(&self, allowed: Vec<Capability>) {
@@ -308,6 +313,13 @@ impl WidgetApi {
         self.delegate.callbacks.borrow_mut().on_visibility_change = callback;
     }
 
+    /// Register a callback for `notify_timeline_update` (receives
+    /// `{ pagination?: { status, error? }, reset?, decrypted? }`). Read again with `readTimeline`.
+    #[wasm_bindgen(js_name = onTimelineUpdate)]
+    pub fn on_timeline_update(&self, callback: Option<Function>) {
+        self.delegate.callbacks.borrow_mut().on_timeline_update = callback;
+    }
+
     /// Register a callback `(allowed: string[]) => void` invoked when the host sends
     /// `update_capabilities`. `allowed` is the full list the widget holds now; it can grow
     /// (granted) and shrink (taken away by the host).
@@ -393,12 +405,19 @@ impl WidgetApi {
         with_arg(messages, |messages| promise(self.client.send_to_device(event_type, encrypted, messages)))
     }
 
-    /// Resolves with an array of timeline events; `msgtype` narrows `m.room.message` reads.
-    #[wasm_bindgen(js_name = readEvents)]
-    pub fn read_events(&self, event_type: String, limit: Option<u32>, msgtype: Option<String>) -> Promise {
-        let mut request = ReadEventsRequest::timeline(event_type, limit.map(u64::from));
-        request.msgtype = msgtype;
-        promise(self.client.read_events_request(request))
+    /// Read the client's timeline cache. `request` is
+    /// `{ from?: eventId, limit: number, filter?: [{ type, msgtype? }] }`; resolves with
+    /// `{ events (newest first), pagination: "idle" | "paginating" | "start_reached" }`.
+    #[wasm_bindgen(js_name = readTimeline)]
+    pub fn read_timeline(&self, request: JsValue) -> Promise {
+        with_arg(request, |request: ReadTimelineRequest| promise(self.client.read_timeline(request)))
+    }
+
+    /// Ask the client to fetch older events (`limit` is a hint). Resolves at once with the status
+    /// (`"paginating"` or `"start_reached"`); the outcome arrives through `onTimelineUpdate`.
+    #[wasm_bindgen(js_name = paginateTimeline)]
+    pub fn paginate_timeline(&self, limit: Option<u32>) -> Promise {
+        promise(self.client.paginate_timeline(limit))
     }
 
     /// Resolves with `{ chunk, next_batch?, prev_batch? }` (MSC3869).
@@ -526,17 +545,6 @@ impl WidgetApi {
     #[wasm_bindgen(js_name = getMatrixContext)]
     pub fn get_matrix_context(&self) -> Promise {
         promise(self.client.get_matrix_context())
-    }
-
-    /// Resolves with an array of state events. `stateKey` is a string for one state key, or
-    /// omitted / `true` for all state keys of the type.
-    #[wasm_bindgen(js_name = readState)]
-    pub fn read_state(&self, event_type: String, state_key: JsValue) -> Promise {
-        let selector = match state_key.as_string() {
-            Some(key) => StateKeySelector::key(key),
-            None => StateKeySelector::Any,
-        };
-        promise(self.client.read_state(event_type, selector))
     }
 }
 

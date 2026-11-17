@@ -8,14 +8,14 @@
 //! be tested without a driver, backend or platform.
 
 use widget_actions::{
-    Capability, CapabilitySet, HostRequest, JsonValue, MatrixEvent, RoomSelector, SendEventRequest, WidgetError,
-    WidgetRequest,
+    Capability, CapabilitySet, HostRequest, JsonValue, MatrixEvent, RoomSelector, SendEventRequest, TimelineFilter,
+    WidgetError, WidgetRequest,
 };
 
 /// The single capability that allows or denies `request` as a whole.
 ///
 /// `None` means either that no capability is needed, or that the check depends on the request
-/// body and happens in the request's handler (`send_event`, `read_events`, ...).
+/// body and happens in the request's handler (`send_event`, `read_timeline`, ...).
 ///
 /// The list is exhaustive on purpose: a new action does not compile until it has a rule here.
 pub(super) fn required_capability(request: &WidgetRequest) -> Option<Capability> {
@@ -37,12 +37,13 @@ pub(super) fn required_capability(request: &WidgetRequest) -> Option<Capability>
         R::SetAlwaysOnScreen { .. } => Capability::SetAlwaysOnScreen,
         R::GetMatrixContext => Capability::GetMatrixContext,
         R::GetClientContext => Capability::GetClientContext,
+        R::PaginateTimeline { .. } => Capability::PaginateTimeline,
         // The handshake works before any capability exists.
         R::NotifyReady | R::RequestCapabilities { .. } | R::Unknown => return None,
         // Checked against the body by the handler.
         R::SendEvent { .. }
         | R::SendToDevice { .. }
-        | R::ReadEvents { .. }
+        | R::ReadTimeline { .. }
         | R::ReadRelations { .. }
         | R::ReadRoomAccountData { .. } => return None,
     })
@@ -61,6 +62,7 @@ pub(super) fn push_capability(request: &HostRequest) -> Option<Capability> {
         H::UpdateTheme { .. } => Capability::UpdateTheme,
         H::UpdateLanguage { .. } => Capability::UpdateLanguage,
         H::UpdateVisibility { .. } => Capability::UpdateVisibility,
+        H::NotifyTimelineUpdate { .. } => Capability::NotifyTimelineUpdate,
         // The handshake.
         H::UpdateCapabilities { .. } | H::Unknown => return None,
         // Checked against the event by the forwarding code.
@@ -85,7 +87,7 @@ pub(super) fn check_room(own_room: &str, room_id: &str) -> Result<(), WidgetErro
     Ok(())
 }
 
-/// Check the `room_ids` of `read_events` / `read_room_account_data`.
+/// Check the `room_ids` of `read_room_account_data`.
 ///
 /// No selector and `*` both mean the widget's own room, the only room it can read. Explicitly
 /// named rooms must each pass [`check_room`].
@@ -124,9 +126,72 @@ pub(super) fn check_send_event(
     Ok(())
 }
 
-/// May `event` be part of a `read_events` result?
-pub(super) fn may_read(approved: &[Capability], event: &MatrixEvent) -> bool {
-    approved.allows_read(&event.event_type, event.state_key.as_deref(), msgtype(&event.content))
+/// The filter the backend reads the timeline cache with for a `read_timeline`: the widget's
+/// `filter` (every type when absent) reduced to what its `read_timeline:<type>[#<msgtype>]`
+/// capabilities allow.
+///
+/// A filter entry the widget may not read is dropped, not an error. It is
+/// `missing_capability` only when nothing is left: the widget holds no `read_timeline`
+/// capability at all, or none for any entry of its filter. An empty `filter` is invalid.
+pub(super) fn timeline_filter(
+    approved: &[Capability],
+    requested: Option<&[TimelineFilter]>,
+) -> Result<Vec<TimelineFilter>, WidgetError> {
+    let granted: Vec<TimelineFilter> = approved
+        .iter()
+        .filter_map(|c| match c {
+            Capability::ReadTimeline { event_type, msgtype } => {
+                Some(TimelineFilter { event_type: event_type.clone(), msgtype: msgtype.clone() })
+            }
+            _ => None,
+        })
+        .collect();
+    let mut filter: Vec<TimelineFilter> = Vec::new();
+    let mut add = |entry: TimelineFilter| {
+        if !filter.contains(&entry) {
+            filter.push(entry);
+        }
+    };
+    match requested {
+        None => granted.iter().cloned().for_each(&mut add),
+        Some([]) => {
+            return Err(WidgetError::invalid_request("`filter` must not be empty; leave it out to read every type"))
+        }
+        Some(requested) => {
+            for wanted in requested {
+                granted.iter().filter_map(|g| intersect(wanted, g)).for_each(&mut add);
+            }
+        }
+    }
+    if filter.is_empty() {
+        let needed = match requested.and_then(|r| r.first()) {
+            Some(TimelineFilter { event_type, msgtype }) => {
+                Capability::ReadTimeline { event_type: event_type.clone(), msgtype: msgtype.clone() }.to_string()
+            }
+            None => Capability::read_timeline("<event type>").to_string(),
+        };
+        return Err(WidgetError::missing_capability(needed));
+    }
+    Ok(filter)
+}
+
+/// The events both filters match: the same type, and the stricter `msgtype`. `None` when they
+/// match no event in common (other type, other `msgtype`).
+fn intersect(a: &TimelineFilter, b: &TimelineFilter) -> Option<TimelineFilter> {
+    if a.event_type != b.event_type {
+        return None;
+    }
+    let msgtype = match (&a.msgtype, &b.msgtype) {
+        (Some(x), Some(y)) if x != y => return None,
+        (Some(m), _) | (None, Some(m)) => Some(m.clone()),
+        (None, None) => None,
+    };
+    Some(TimelineFilter { event_type: a.event_type.clone(), msgtype })
+}
+
+/// May `event` be part of a `read_timeline` result, or named in `notify_timeline_update.decrypted`?
+pub(super) fn may_read_timeline(approved: &[Capability], event: &MatrixEvent) -> bool {
+    approved.allows_read_timeline(&event.event_type, msgtype(&event.content))
 }
 
 /// May `event` be part of a `read_relations` result?
@@ -242,8 +307,8 @@ mod tests {
         let topic = event("m.room.topic", Some(""), json!({}));
         let none = None::<&str>;
 
-        let read = vec![Capability::read_events("m.room.message"), Capability::read_state_events("m.room.topic", none)];
-        assert!(may_read(&read, &message) && may_read(&read, &topic));
+        let read = vec![Capability::read_timeline("m.room.message"), Capability::read_timeline("m.room.topic")];
+        assert!(may_read_timeline(&read, &message) && may_read_timeline(&read, &topic));
         assert!(!may_forward(&read, &message) && !may_forward(&read, &topic));
         assert!(!may_read_relation(&read, &message));
         assert!(!may_update_state(&read, &topic));
@@ -251,16 +316,66 @@ mod tests {
         let forward =
             vec![Capability::forward_event("m.room.message"), Capability::forward_state_event("m.room.topic", none)];
         assert!(may_forward(&forward, &message) && may_forward(&forward, &topic));
-        assert!(!may_read(&forward, &message) && !may_update_state(&forward, &topic));
+        assert!(!may_read_timeline(&forward, &message) && !may_update_state(&forward, &topic));
 
         let update = vec![Capability::update_state("m.room.topic", Some(""))];
         assert!(may_update_state(&update, &topic));
-        assert!(!may_forward(&update, &topic) && !may_read(&update, &topic));
+        assert!(!may_forward(&update, &topic) && !may_read_timeline(&update, &topic));
         // A timeline event is never part of a state update.
         assert!(!may_update_state(&[Capability::update_state("m.room.message", none)], &message));
 
         let relations = vec![Capability::read_relations("m.room.message")];
         assert!(may_read_relation(&relations, &message));
-        assert!(!may_read(&relations, &message));
+        assert!(!may_read_timeline(&relations, &message));
+    }
+
+    #[test]
+    fn timeline_filter_is_what_the_widget_may_read() {
+        let f = |t: &str, m: Option<&str>| TimelineFilter::new(t, m);
+        let approved = vec![
+            Capability::read_timeline("m.reaction"),
+            Capability::read_timeline_messages("m.text"),
+            Capability::read_timeline_messages("m.emote"),
+            Capability::forward_event("m.room.topic"),
+        ];
+        let text = f("m.room.message", Some("m.text"));
+        let emote = f("m.room.message", Some("m.emote"));
+        // No filter: everything granted.
+        assert_eq!(timeline_filter(&approved, None).unwrap(), [f("m.reaction", None), text.clone(), emote.clone()]);
+        // A wider filter entry is narrowed to the granted msgtypes; an unreadable entry is dropped.
+        let wanted = [f("m.room.message", None), f("m.room.topic", None), text.clone()];
+        assert_eq!(timeline_filter(&approved, Some(&wanted)).unwrap(), [text.clone(), emote]);
+        // A narrower entry stays narrow, another msgtype matches nothing.
+        let wanted = [f("m.room.message", Some("m.text")), f("m.room.message", Some("m.image"))];
+        assert_eq!(timeline_filter(&approved, Some(&wanted)).unwrap(), [text]);
+        // Nothing left: missing capability, named after the first entry.
+        let err = timeline_filter(&approved, Some(&[f("m.room.topic", None)])).unwrap_err();
+        assert_eq!(err.kind(), widget_actions::ErrorKind::MissingCapability);
+        assert!(err.message.contains("widget:org.matrix.mscXXXX.read_timeline:m.room.topic"), "{}", err.message);
+        let err = timeline_filter(&approved, Some(&[f("m.room.message", Some("m.image"))])).unwrap_err();
+        assert!(err.message.ends_with("read_timeline:m.room.message#m.image"), "{}", err.message);
+        let err = timeline_filter(&[Capability::Navigate], None).unwrap_err();
+        assert_eq!(err.kind(), widget_actions::ErrorKind::MissingCapability);
+        assert_eq!(
+            timeline_filter(&approved, Some(&[])).unwrap_err().kind(),
+            widget_actions::ErrorKind::InvalidRequest
+        );
+        // A capability for all msgtypes keeps the entry's own msgtype.
+        let all_messages = vec![Capability::read_timeline("m.room.message")];
+        assert_eq!(
+            timeline_filter(&all_messages, Some(&[f("m.room.message", Some("m.notice"))])).unwrap(),
+            [f("m.room.message", Some("m.notice"))]
+        );
+    }
+
+    #[test]
+    fn timeline_actions_need_their_capabilities() {
+        use widget_actions::{NotifyTimelineUpdateRequest, PaginateTimelineRequest, ReadTimelineRequest};
+        let paginate = WidgetRequest::PaginateTimeline { request: PaginateTimelineRequest::default() };
+        assert_eq!(required_capability(&paginate), Some(Capability::PaginateTimeline));
+        // Checked against the body.
+        assert_eq!(required_capability(&WidgetRequest::ReadTimeline { request: ReadTimelineRequest::newest(1) }), None);
+        let notify = HostRequest::NotifyTimelineUpdate { request: NotifyTimelineUpdateRequest::default() };
+        assert_eq!(push_capability(&notify), Some(Capability::NotifyTimelineUpdate));
     }
 }

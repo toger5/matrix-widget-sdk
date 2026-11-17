@@ -2,15 +2,19 @@
 //! backend delivers to the widget.
 //!
 //! The subscriptions follow the approved `host:…` capabilities: `forward_event.*` and
-//! `update_state` give a room subscription, `forward_to_device` a to-device subscription. TURN
-//! servers are subscribed only while the widget watches them.
+//! `update_state` give a room subscription, `forward_to_device` a to-device subscription,
+//! `notify_timeline_update` a timeline subscription. TURN servers are subscribed only while the
+//! widget watches them.
 
 use std::sync::{Arc, Mutex, Weak};
 
 use widget_actions::{
-    Capability, CapabilitySet, HostRequest, MatrixEvent, ToDeviceEvent, TurnServer, UpdateStateRequest, WireMessage,
+    Capability, CapabilitySet, HostRequest, MatrixEvent, NotifyTimelineUpdateRequest, PaginationStatus,
+    TimelinePagination, ToDeviceEvent, TurnServer, UpdateStateRequest, WidgetError, WireMessage,
 };
-use widget_matrix_backend::{RoomSink, RoomSubjects, Subscription, ToDeviceSink, TurnServerSink};
+use widget_matrix_backend::{
+    RoomSink, RoomSubjects, Subscription, TimelineSink, TimelineUpdate, ToDeviceSink, TurnServerSink,
+};
 
 use super::{access, WidgetHostDriver};
 
@@ -75,6 +79,14 @@ impl ToDeviceSink for DriverSink {
     }
 }
 
+impl TimelineSink for DriverSink {
+    fn on_timeline_update(&self, update: TimelineUpdate) {
+        if let Some(driver) = self.0.upgrade() {
+            driver.forward_timeline_update(update);
+        }
+    }
+}
+
 impl TurnServerSink for DriverSink {
     fn on_turn_server(&self, server: TurnServer) {
         if let Some(driver) = self.0.upgrade() {
@@ -88,7 +100,8 @@ impl WidgetHostDriver {
         Arc::new(DriverSink(self.this.clone()))
     }
 
-    /// Replace the room and to-device subscriptions with ones matching the approved capabilities.
+    /// Replace the room, to-device and timeline subscriptions with ones matching the approved
+    /// capabilities.
     ///
     /// The backend may call the sink from inside `subscribe_*`, so no driver lock is held here.
     /// A refused subscription only means that no live events arrive; the protocol has no message
@@ -97,6 +110,7 @@ impl WidgetHostDriver {
         let approved = self.approved();
         self.room_subscription.cancel();
         self.to_device_subscription.cancel();
+        self.timeline_subscription.cancel();
 
         let subjects = subjects_for(&approved);
         if !subjects.is_empty() {
@@ -119,6 +133,16 @@ impl WidgetHostDriver {
                 Ok(subscription) => self.to_device_subscription.replace(subscription),
                 Err(e) => log::warn!(
                     "the backend refused the to-device subscription, no messages are forwarded: {}",
+                    e.reason()
+                ),
+            }
+        }
+        if approved.has(&Capability::NotifyTimelineUpdate) {
+            log::debug!("subscribing to timeline updates");
+            match self.backend.subscribe_timeline(self.backend.room_id(), self.sink()) {
+                Ok(subscription) => self.timeline_subscription.replace(subscription),
+                Err(e) => log::warn!(
+                    "the backend refused the timeline subscription, no timeline updates are sent: {}",
                     e.reason()
                 ),
             }
@@ -163,6 +187,17 @@ impl WidgetHostDriver {
         }
     }
 
+    /// Tell the widget about a change of the timeline cache with `notify_timeline_update`.
+    /// `decrypted` names only the events the widget may read; an update that leaves nothing to
+    /// say is not sent.
+    fn forward_timeline_update(&self, update: TimelineUpdate) {
+        let approved = self.approved();
+        let request = timeline_notification(&approved, update);
+        if request.pagination.is_some() || request.reset || !request.decrypted.is_empty() {
+            self.push(HostRequest::NotifyTimelineUpdate { request });
+        }
+    }
+
     /// Forward a to-device message as `forward_to_device` if the widget holds the capability for
     /// its type.
     fn forward_to_device_message(&self, message: ToDeviceEvent) {
@@ -192,6 +227,32 @@ fn subjects_for(approved: &[Capability]) -> RoomSubjects {
         }
     }
     subjects
+}
+
+/// The `notify_timeline_update` body for a backend's [`TimelineUpdate`].
+fn timeline_notification(approved: &[Capability], update: TimelineUpdate) -> NotifyTimelineUpdateRequest {
+    let pagination = match (update.pagination, update.pagination_error) {
+        (Some(status), error) => Some(TimelinePagination {
+            status,
+            error: error.map(|reason| WidgetError::new(format!("Pagination failed: {reason}"))),
+        }),
+        // An error alone means the pagination is over: the status is `idle` again.
+        (None, Some(reason)) => Some(TimelinePagination {
+            status: PaginationStatus::Idle,
+            error: Some(WidgetError::new(format!("Pagination failed: {reason}"))),
+        }),
+        (None, None) => None,
+    };
+    NotifyTimelineUpdateRequest {
+        pagination,
+        reset: update.reset,
+        decrypted: update
+            .decrypted
+            .into_iter()
+            .filter(|e| access::may_read_timeline(approved, e))
+            .map(|e| e.event_id)
+            .collect(),
+    }
 }
 
 /// The to-device message types to subscribe to for a set of approved capabilities.
@@ -240,8 +301,8 @@ mod tests {
         // The widget's own actions (send, read) subscribe to nothing.
         let widget_only = [
             Capability::send_event("x"),
-            Capability::read_events("x"),
-            Capability::read_state_events("x", None::<&str>),
+            Capability::read_timeline("x"),
+            Capability::PaginateTimeline,
             Capability::send_to_device("x"),
         ];
         assert!(subjects_for(&widget_only).is_empty());

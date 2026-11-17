@@ -8,7 +8,7 @@
  *
  *     source ":" action [ "." modifier ] [ ":" data ]          action = namespace "." name
  *     widget:org.matrix.mscXXXX.send_event.timeline:m.room.message
- *     widget:org.matrix.msc2876.read_events.timeline:m.room.message
+ *     widget:org.matrix.mscXXXX.read_timeline:m.room.message
  *
  * Every legacy capability maps to a fixed set of new ones ({@link expandLegacyCapability}). The
  * wrapper requests that set from the host, and reports a legacy capability to the widget as
@@ -28,7 +28,6 @@ export const STABLE_NAMESPACE = "m";
  * `crates/widget-actions/src/capabilities.rs`.
  */
 const ACTION_NAMESPACES: Record<string, string> = {
-  read_events: "org.matrix.msc2876",
   read_relations: "org.matrix.msc3869",
   update_delayed_event: "org.matrix.msc4157",
   get_rtc_transports: "org.matrix.msc4515",
@@ -134,21 +133,24 @@ const LEGACY_RULES: LegacyRule[] = [
   { prefix: MSC2762, body: "send.event:", expand: (t) => [widgetCapability(`send_event.timeline:${t}`)] },
   { prefix: MSC2762, body: "send.state_event:", expand: (t) => [widgetCapability(`send_event.state:${t}`)] },
   {
-    // One legacy capability for reading, reading relations and being sent new events.
+    // One legacy capability for reading, reading relations and being sent new events. Reading
+    // (the legacy `read_events`, readEvents.ts) is the timeline cache, paginated while short.
     prefix: MSC2762,
     body: "receive.event:",
     expand: (t) => [
-      widgetCapability(`read_events.timeline:${t}`),
+      widgetCapability(`read_timeline:${t}`),
       widgetCapability(`read_relations:${t}`),
       hostCapability(`forward_event.timeline:${t}`),
+      widgetCapability("paginate_timeline"),
+      hostCapability("notify_timeline_update"),
     ],
   },
   {
-    // One legacy capability for reading state, state updates and state events in the timeline.
+    // One legacy capability for reading state, state updates and state events in the timeline. A
+    // legacy state read is answered from the `update_state` pushes (readEvents.ts).
     prefix: MSC2762,
     body: "receive.state_event:",
     expand: (t) => [
-      widgetCapability(`read_events.state:${t}`),
       hostCapability(`update_state:${t}`),
       hostCapability(`forward_event.state:${t}`),
     ],

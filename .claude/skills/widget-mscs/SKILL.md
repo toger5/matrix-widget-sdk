@@ -88,7 +88,7 @@ grep -hoE 'rename = "[a-z]+\.[^"]+"' crates/widget-actions/src/actions/{widget,h
 
 | MSC | title | used here for |
 |---|---|---|
-| 2876 | Allowing widgets to read events in a room (closed, rolled into MSC2762) | `read_events` |
+| 2876 | Allowing widgets to read events in a room (closed, rolled into MSC2762) | `read_events`: legacy only, via the compat wrapper; replaced by the MSCXXXX timeline-reading draft (`spec/patch/new/timeline-reading.md`: `read_timeline`, `paginate_timeline`, `notify_timeline_update`) |
 | 3869 | Read event relations with the Widget API | `read_relations` |
 | 4157 | Delayed Events (widget api); client-server side: MSC4140 | `update_delayed_event`, `send_event` with `delay` |
 | 4515 | RTC Transports discovery for widgets | `get_rtc_transports` |

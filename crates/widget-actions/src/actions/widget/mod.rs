@@ -10,7 +10,7 @@
 //! * One variant per action. A body of `{}` is a unit variant.
 //! * Every action is `<namespace>.<name>` (MSC4412 "Action naming").
 //! * `#[serde(rename = "...")]` is the name this crate **sends**: the unstable spelling of the MSC
-//!   that defines the action (`org.matrix.msc2876.read_events`; `org.matrix.msc4412` for the three
+//!   that defines the action (`org.matrix.msc3869.read_relations`; `org.matrix.msc4412` for the three
 //!   core actions; the placeholder `org.matrix.mscXXXX` where no MSC exists yet).
 //! * `alias` is the other name it **accepts**: the future stable name `m.<name>`. Names without a
 //!   namespace and legacy names are not accepted; `packages/widget-compat-wrapper` translates them.
@@ -25,11 +25,12 @@ use super::{expect, parse_tagged, split_tagged};
 use crate::{
     ActionError, DelegateRtcLivekitDelayedLeaveRequest, DownloadFileRequest, DownloadFileResponse,
     GetClientContextResponse, GetMatrixContextResponse, GetRtcLivekitTokenRequest, GetRtcLivekitTokenResponse,
-    MediaConfigResponse, NavigateRequest, OpenIdToken, ReadEventsRequest, ReadEventsResponse, ReadRelationsRequest,
-    ReadRelationsResponse, ReadRoomAccountDataRequest, ReadRoomAccountDataResponse, RequestCapabilitiesRequest,
-    RtcTransportsResponse, SearchUserDirectoryRequest, SearchUserDirectoryResponse, SendEventRequest,
-    SendEventResponse, SendToDeviceRequest, SetAlwaysOnScreenRequest, SetAlwaysOnScreenResponse, Source,
-    UpdateDelayedEventRequest, UploadFileRequest, UploadFileResponse, WireMessage,
+    MediaConfigResponse, NavigateRequest, OpenIdToken, PaginateTimelineRequest, PaginateTimelineResponse,
+    ReadRelationsRequest, ReadRelationsResponse, ReadRoomAccountDataRequest, ReadRoomAccountDataResponse,
+    ReadTimelineRequest, ReadTimelineResponse, RequestCapabilitiesRequest, RtcTransportsResponse,
+    SearchUserDirectoryRequest, SearchUserDirectoryResponse, SendEventRequest, SendEventResponse, SendToDeviceRequest,
+    SetAlwaysOnScreenRequest, SetAlwaysOnScreenResponse, Source, UpdateDelayedEventRequest, UploadFileRequest,
+    UploadFileResponse, WireMessage,
 };
 
 pub(crate) mod download_file;
@@ -40,9 +41,10 @@ pub(crate) mod get_openid;
 pub(crate) mod get_rtc_transports;
 pub(crate) mod navigate;
 pub(crate) mod notify_ready;
-pub(crate) mod read_events;
+pub(crate) mod paginate_timeline;
 pub(crate) mod read_relations;
 pub(crate) mod read_room_account_data;
+pub(crate) mod read_timeline;
 pub(crate) mod request_capabilities;
 pub(crate) mod rtc_livekit;
 pub(crate) mod search_user_directory;
@@ -70,9 +72,13 @@ pub enum WidgetRequest {
     /// Send a to-device message. Requires `widget:…send_to_device:<type>`.
     #[serde(rename = "org.matrix.mscXXXX.send_to_device", alias = "m.send_to_device")]
     SendToDevice { request: SendToDeviceRequest },
-    /// Read events from the room. Requires a `widget:…read_events.*` capability.
-    #[serde(rename = "org.matrix.msc2876.read_events", alias = "m.read_events")]
-    ReadEvents { request: ReadEventsRequest },
+    /// Read events from the client's timeline cache. Results are filtered by the
+    /// `widget:…read_timeline:<type>` capabilities.
+    #[serde(rename = "org.matrix.mscXXXX.read_timeline", alias = "m.read_timeline")]
+    ReadTimeline { request: ReadTimelineRequest },
+    /// Ask the client to extend its timeline cache backwards. Requires `widget:…paginate_timeline`.
+    #[serde(rename = "org.matrix.mscXXXX.paginate_timeline", alias = "m.paginate_timeline")]
+    PaginateTimeline { request: PaginateTimelineRequest },
     /// Read the events relating to one event. Results are filtered by the
     /// `widget:…read_relations:<type>` capabilities.
     #[serde(rename = "org.matrix.msc3869.read_relations", alias = "m.read_relations")]
@@ -151,8 +157,10 @@ pub enum WidgetResponse {
     /// `{}`
     #[serde(rename = "org.matrix.mscXXXX.send_to_device", alias = "m.send_to_device")]
     SendToDevice,
-    #[serde(rename = "org.matrix.msc2876.read_events", alias = "m.read_events")]
-    ReadEvents { response: ReadEventsResponse },
+    #[serde(rename = "org.matrix.mscXXXX.read_timeline", alias = "m.read_timeline")]
+    ReadTimeline { response: ReadTimelineResponse },
+    #[serde(rename = "org.matrix.mscXXXX.paginate_timeline", alias = "m.paginate_timeline")]
+    PaginateTimeline { response: PaginateTimelineResponse },
     #[serde(rename = "org.matrix.msc3869.read_relations", alias = "m.read_relations")]
     ReadRelations { response: ReadRelationsResponse },
     /// `{}`
@@ -284,7 +292,11 @@ mod tests {
             ("watch_turn_servers", "org.matrix.mscXXXX.watch_turn_servers"),
             ("unwatch_turn_servers", "org.matrix.mscXXXX.unwatch_turn_servers"),
             ("set_always_on_screen", "org.matrix.mscXXXX.set_always_on_screen"),
-            ("read_events", "m.read_events"),
+            // `read_events` (MSC2876) was replaced by `read_timeline`; it is unknown in every spelling.
+            ("read_events", "m.read_timeline"),
+            ("m.read_events", "org.matrix.mscXXXX.read_timeline"),
+            ("org.matrix.msc2876.read_events", "org.matrix.mscXXXX.paginate_timeline"),
+            ("org.matrix.mscXXXX.read_events", "m.paginate_timeline"),
             ("org.matrix.msc4412.matrix_context", "org.matrix.mscXXXX.get_matrix_context"),
             ("org.matrix.msc4412.get_matrix_context", "m.get_matrix_context"),
             ("org.matrix.msc4412.client_context", "org.matrix.mscXXXX.get_client_context"),

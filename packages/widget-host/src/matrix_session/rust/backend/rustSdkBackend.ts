@@ -1,33 +1,35 @@
 import {
   BackendError,
   RelationDirection,
-  StateKeySelector,
   type JsonValue,
   type MatrixBackend,
   type MatrixEvent,
   type MediaConfigResponse,
   type MediaFile,
   type OpenIdToken,
+  type PaginationStatus,
   type RelationsChunk,
   type RoomAccountData,
   type RoomSink,
   type RoomSubjects,
   type SearchUserDirectoryResponse,
   type Subscription,
+  type TimelineChunk,
+  type TimelineFilter,
+  type TimelineSink,
   type ToDeviceDelivery,
   type ToDeviceMessage,
   type ToDeviceSink,
   type TurnServerSink,
 } from "@matrix-widget-tools/widget-host-bindings";
-import { ClientError, DelayedEventUpdateAction, MediaSource, RtcTransport, stateEventTypeFromString, type ClientLike, type RoomLike } from "matrix-sdk-uniffi-js";
+import { ClientError, DelayedEventUpdateAction, MediaSource, RtcTransport, type ClientLike, type RoomLike } from "matrix-sdk-uniffi-js";
 
-import { rawToMatrixEvent, stateToMatrixEvent } from "./events";
+import { RoomTimelines } from "../../roomTimelines";
+import { TimelineFeed, walkCache, type CachedEvent } from "../../timelineFeed";
+import { onTimelineChanged } from "../roomData";
+import { rawToMatrixEvent } from "./events";
 import { subscribeRoomFeed } from "./roomFeed";
 import { subscribeTurnServers } from "./turnServer";
-
-/** How many older events one `read_events` may make the SDK load while looking for matches. */
-const READ_PAGE_SIZE = 100;
-const READ_MAX_PAGES = 5;
 
 /**
  * `MatrixBackend` for one room of a matrix-rust-sdk client (`matrix-sdk-uniffi-js`).
@@ -40,24 +42,47 @@ const READ_MAX_PAGES = 5;
  * State is read from the SDK's store. That is complete for every state type only because the
  * session subscribes to the room with its full state before creating the backend.
  *
+ * The timeline cache of `read_timeline` is the room's event cache (`eventsRaw`); its pagination is
+ * the session's `RoomTimelines`, shared with the RoomTimeline and the room's other widgets. Resets
+ * and late decryptions come from `subscribeToTimelineChangesRaw` (an addition to the ffi).
+ *
  * To-device messages are only sent encrypted; a widget asking for an unencrypted send gets an error.
  */
 export class RustSdkBackend implements MatrixBackend {
   private readonly subscriptions = new Set<Subscription>();
+  private readonly feed: TimelineFeed;
 
   private constructor(
     private readonly client: ClientLike,
     private readonly room: RoomLike,
     private readonly profile: { displayName: string; avatarUrl: string },
-  ) {}
+    timelines: RoomTimelines,
+  ) {
+    const roomId = room.id();
+    this.feed = new TimelineFeed(timelines, roomId, {
+      paginate: (count) => room.paginateEventsRawBackwards(count).catch(rethrow),
+      watchDecrypted: (report) => {
+        const handle = room.subscribeToTimelineChangesRaw({
+          onReset: () => undefined,
+          // The redactions the event cache applies in place are not decryptions.
+          onDecrypted: (events) => report(events.map((json) => rawToMatrixEvent(json, roomId)).filter((ev) => !isRedacted(ev.unsigned))),
+        });
+        return () => handle.cancel();
+      },
+    });
+  }
 
-  /** The trait's identity getters are synchronous, so the profile is fetched up front. */
-  static async create(client: ClientLike, room: RoomLike): Promise<RustSdkBackend> {
+  /**
+   * The trait's identity getters are synchronous, so the profile is fetched up front. `timelines`
+   * is the session's (paginations are shared); without it the backend keeps its own.
+   */
+  static async create(client: ClientLike, room: RoomLike, timelines?: RoomTimelines): Promise<RustSdkBackend> {
     const [displayName, avatarUrl] = await Promise.all([
       client.displayName().catch(() => client.userId()),
       client.avatarUrl().catch(() => undefined),
     ]);
-    return new RustSdkBackend(client, room, { displayName, avatarUrl: avatarUrl ?? "" });
+    const ownTimelines = timelines ?? new RoomTimelines((_roomId, changed) => onTimelineChanged(room, changed));
+    return new RustSdkBackend(client, room, { displayName, avatarUrl: avatarUrl ?? "" }, ownTimelines);
   }
 
   // ---- Identity ----
@@ -124,31 +149,15 @@ export class RustSdkBackend implements MatrixBackend {
 
   // ---- Read half ----
 
-  /**
-   * The newest `limit` events of a type, oldest first, from the SDK's event cache. If the cache
-   * holds too few, older events are loaded, up to a bound: a rare type is not searched for through
-   * the whole history of the room.
-   */
-  async readRoomEvents(roomId: string, eventType: string, msgtype: string | undefined, limit: number, _since: string | undefined): Promise<MatrixEvent[]> {
-    const room = this.sdkRoom(roomId);
-    const matching = async () =>
-      (await room.eventsRaw().catch(rethrow))
-        .map((json) => rawToMatrixEvent(json, roomId))
-        .filter((ev) => ev.eventType === eventType && (msgtype === undefined || (ev.content as { msgtype?: unknown } | undefined)?.msgtype === msgtype));
-
-    let events = await matching();
-    for (let page = 0; events.length < limit && page < READ_MAX_PAGES; page++) {
-      const reachedStart = await room.paginateEventsRawBackwards(READ_PAGE_SIZE).catch(rethrow);
-      events = await matching();
-      if (reachedStart) break;
-    }
-    return events.slice(-limit);
+  /** The event cache, newest first; events it could not decrypt (`m.room.encrypted`) are skipped. */
+  async timelineRead(roomId: string, from: string | undefined, limit: number, filter: TimelineFilter[]): Promise<TimelineChunk> {
+    const cached = await this.cachedEvents(roomId);
+    return { events: walkCache(cached, from, limit, filter), pagination: this.feed.status(cached[0]?.eventType) };
   }
 
-  async readRoomState(roomId: string, eventType: string, stateKey: StateKeySelector): Promise<MatrixEvent[]> {
-    const key = StateKeySelector.Key.instanceOf(stateKey) ? stateKey.inner.key : undefined;
-    const state = await this.sdkRoom(roomId).stateEvents(stateEventTypeFromString(eventType)).catch(rethrow);
-    return state.filter((ev) => key === undefined || ev.stateKey === key).map((ev) => stateToMatrixEvent(ev, eventType, roomId));
+  async timelinePaginateBackwards(roomId: string, limit: number | undefined): Promise<PaginationStatus> {
+    const cached = await this.cachedEvents(roomId);
+    return this.feed.paginate(limit, cached[0]?.eventType);
   }
 
   /** `to` is not passed on: the SDK pages with `from` only. */
@@ -228,6 +237,11 @@ export class RustSdkBackend implements MatrixBackend {
     return this.track(subscribeRoomFeed(this.sdkRoom(roomId), subjects, sink));
   }
 
+  subscribeTimeline(roomId: string, sink: TimelineSink): Subscription {
+    this.sdkRoom(roomId);
+    return this.track(this.feed.subscribe(sink));
+  }
+
   subscribeToDevice(eventTypes: string[], sink: ToDeviceSink): Subscription {
     const handle = this.client.subscribeToCustomToDeviceMessages(eventTypes, {
       onMessage: ({ eventType, senderId, content, encryptionInfo }) =>
@@ -254,6 +268,19 @@ export class RustSdkBackend implements MatrixBackend {
     return room;
   }
 
+  private async cachedEvents(roomId: string): Promise<CachedEvent[]> {
+    const raw = await this.sdkRoom(roomId).eventsRaw().catch(rethrow);
+    return raw.map((json) => {
+      const { event_id: eventId, type, content } = JSON.parse(json) as { event_id?: string; type?: string; content?: { msgtype?: unknown } };
+      return {
+        eventId: eventId ?? "",
+        eventType: type === "m.room.encrypted" ? undefined : type,
+        msgtype: content?.msgtype,
+        toEvent: () => rawToMatrixEvent(json, roomId),
+      };
+    });
+  }
+
   /** Remember a subscription until it is cancelled, so that `dispose` can end the ones left. */
   private track(subscription: Subscription): Subscription {
     const tracked: Subscription = {
@@ -270,6 +297,8 @@ export class RustSdkBackend implements MatrixBackend {
     return this.client.updateDelayedEvent(delayId, action, undefined).catch(rethrow);
   }
 }
+
+const isRedacted = (unsigned: JsonValue | undefined) => typeof unsigned === "object" && unsigned !== null && "redacted_because" in unsigned;
 
 const fail = (reason: string) => new BackendError.Failed({ errcode: undefined, status: undefined, reason });
 

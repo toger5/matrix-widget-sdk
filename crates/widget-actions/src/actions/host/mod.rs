@@ -5,12 +5,13 @@ use serde::{Deserialize, Serialize};
 
 use super::{expect, parse_tagged, split_tagged};
 use crate::{
-    ActionError, JsonValue, MatrixEvent, Source, ToDeviceEvent, TurnServer, UpdateCapabilitiesRequest,
-    UpdateLanguageRequest, UpdateStateRequest, UpdateVisibilityRequest, WireMessage,
+    ActionError, JsonValue, MatrixEvent, NotifyTimelineUpdateRequest, Source, ToDeviceEvent, TurnServer,
+    UpdateCapabilitiesRequest, UpdateLanguageRequest, UpdateStateRequest, UpdateVisibilityRequest, WireMessage,
 };
 
 pub(crate) mod forward_event;
 pub(crate) mod forward_to_device;
+pub(crate) mod notify_timeline_update;
 pub(crate) mod update_capabilities;
 pub(crate) mod update_language;
 pub(crate) mod update_state;
@@ -59,6 +60,10 @@ pub enum HostRequest {
     /// The client started or stopped showing the widget. Needs `host:…update_visibility`.
     #[serde(rename = "org.matrix.mscXXXX.update_visibility", alias = "m.update_visibility")]
     UpdateVisibility { request: UpdateVisibilityRequest },
+    /// The timeline cache changed in a way `forward_event` does not cover (pagination status,
+    /// reset, late decryption). Needs `host:…notify_timeline_update`.
+    #[serde(rename = "org.matrix.mscXXXX.notify_timeline_update", alias = "m.notify_timeline_update")]
+    NotifyTimelineUpdate { request: NotifyTimelineUpdateRequest },
     /// An action this crate does not know; see [`WidgetRequest::Unknown`](crate::WidgetRequest::Unknown).
     #[serde(other)]
     Unknown,
@@ -87,6 +92,8 @@ pub enum HostResponse {
     UpdateLanguage,
     #[serde(rename = "org.matrix.mscXXXX.update_visibility", alias = "m.update_visibility")]
     UpdateVisibility,
+    #[serde(rename = "org.matrix.mscXXXX.notify_timeline_update", alias = "m.notify_timeline_update")]
+    NotifyTimelineUpdate,
     /// A response to an action this crate does not know; the raw body is in the [`WireMessage`].
     #[serde(other)]
     Unknown,

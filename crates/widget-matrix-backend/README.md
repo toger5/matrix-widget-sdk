@@ -25,7 +25,7 @@ impl MatrixBackend for MySdkBackend {
     fn room_id(&self) -> String { self.room.room_id().to_string() }
     async fn send_room_event(&self, room_id: String, event_type: String, content: JsonValue)
         -> Result<String, BackendError> { /* room.send_raw(…) → event id */ }
-    // read_room_events, read_room_state, openid_token, …
+    // timeline_read, timeline_paginate_backwards, subscribe_timeline, openid_token, …
 
     // The one method with substance: register listeners for the requested event types,
     // hand the sink the current state of every requested state type right away, forward new
@@ -36,7 +36,9 @@ impl MatrixBackend for MySdkBackend {
 ```
 
 Errors are `BackendError::Failed { errcode, status, reason }`; the driver forwards `errcode`
-and `status` to the widget as `matrix_api_error`.
+and `status` to the widget as `matrix_api_error`. `timeline_read` answers a `from` it does not
+cache with `BackendError::EventNotCached { event_id }`, which the widget gets as
+`…event_not_cached`.
 
 With the `uniffi` feature the trait can be implemented in Kotlin / Swift / Python / TypeScript.
 
@@ -48,7 +50,10 @@ A complete implementation over plain vectors, for tests and the browser test hos
 let backend = InMemoryBackend::new("!room:example.org".into(), "@alice:example.org".into());
 backend.inject(event);                 // as if it arrived from sync; notifies subscriptions
 backend.fail_sends(Some("boom".into()));
-let sent = backend.timeline();         // what the widget sent
+let sent = backend.timeline();         // what the widget sent; also the timeline cache of `timeline_read`
+// A widget's `paginate_timeline` stays pending until the test resolves it:
+if let Some(pending) = backend.pending_pagination() { /* pending.limit: the widget's hint */ }
+backend.resolve_pagination(older_events, /* start_reached */ false); // or fail_pagination(..), reset_timeline()
 ```
 
 ![Test setup](../../docs/diagrams/07-test-setup.svg)

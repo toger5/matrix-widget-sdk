@@ -34,11 +34,11 @@ wrapper's templating result (`userId`, `baseUrl`, `parentUrl`, ...). The same ob
 to the console once on load, so headless runs can read it.
 
 New (`/new/`): `request_capabilities`, `notify_ready`, send `m.room.message`, send state
-`m.room.topic`, read `m.room.message`, read state `m.room.topic`, `get_matrix_context`,
-`get_client_context`. The default capability list (`new/capabilities.ts`) uses the names of
+`m.room.topic`, `read_timeline` (the newest 10, then "older" from the oldest event read so far),
+`paginate_timeline` (limit 5), `get_matrix_context`, `get_client_context`. The default capability list (`new/capabilities.ts`) uses the names of
 `docs/spec-appendix/capability-naming-proposal.md`, one capability per action, e.g.
 `widget:org.matrix.mscXXXX.send_event.timeline:m.room.message`. Incoming `forward_event`,
-`update_state` and `update_capabilities` are logged and the state panel shows the SDK's state.
+`update_state`, `notify_timeline_update` and `update_capabilities` are logged and the state panel shows the SDK's state.
 
 The **webview** buttons of the new widget are about its own iframe, which a host with strict
 iframes builds with `sandbox="allow-scripts allow-same-origin"` and nothing in `allow`:

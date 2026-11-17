@@ -8,11 +8,12 @@
 
 use widget_actions::{
     Base64File, Capability, CapabilitySet, DownloadFileRequest, DownloadFileResponse, GetClientContextResponse,
-    GetMatrixContextResponse, GetRtcLivekitTokenResponse, HostRequest, ReadEventsRequest, ReadEventsResponse,
-    ReadRelationsRequest, ReadRelationsResponse, ReadRoomAccountDataRequest, ReadRoomAccountDataResponse,
-    RtcTransportsResponse, SendEventRequest, SendEventResponse, SendToDeviceRequest, SetAlwaysOnScreenResponse,
-    UpdateCapabilitiesRequest, UpdateDelayedEventAction, UpdateDelayedEventRequest, UploadFileRequest,
-    UploadFileResponse, WidgetError, WidgetRequest, WidgetResponse, WireMessage,
+    GetMatrixContextResponse, GetRtcLivekitTokenResponse, HostRequest, PaginateTimelineRequest,
+    PaginateTimelineResponse, ReadRelationsRequest, ReadRelationsResponse, ReadRoomAccountDataRequest,
+    ReadRoomAccountDataResponse, ReadTimelineRequest, ReadTimelineResponse, RtcTransportsResponse, SendEventRequest,
+    SendEventResponse, SendToDeviceRequest, SetAlwaysOnScreenResponse, UpdateCapabilitiesRequest,
+    UpdateDelayedEventAction, UpdateDelayedEventRequest, UploadFileRequest, UploadFileResponse, WidgetError,
+    WidgetRequest, WidgetResponse, WireMessage,
 };
 use widget_matrix_backend::{BackendError, MediaFile, ToDeviceMessage};
 
@@ -20,9 +21,8 @@ use super::access;
 use super::WidgetHostDriver;
 use crate::{PlatformError, WebviewPolicy};
 
-/// Number of events `read_events` returns when the widget gives no `limit`.
-const DEFAULT_READ_LIMIT: u32 = 50;
-/// Upper bound for the `limit` of `read_events`.
+/// Upper bound for the `limit` of `read_timeline` and `paginate_timeline` (the MSC allows
+/// clamping).
 const MAX_READ_LIMIT: u32 = 1000;
 
 /// A `limit` from the wire for the backend. On the wire a limit is a `u64`, so that any number a
@@ -89,7 +89,8 @@ impl WidgetHostDriver {
                 self.send_to_device(request).await?;
                 W::SendToDevice
             }
-            R::ReadEvents { request } => W::ReadEvents { response: self.read_events(request).await? },
+            R::ReadTimeline { request } => W::ReadTimeline { response: self.read_timeline(request).await? },
+            R::PaginateTimeline { request } => W::PaginateTimeline { response: self.paginate_timeline(request).await? },
             R::ReadRelations { request } => W::ReadRelations { response: self.read_relations(request).await? },
             R::ReadRoomAccountData { request } => {
                 W::ReadRoomAccountData { response: self.read_room_account_data(request).await? }
@@ -298,31 +299,39 @@ impl WidgetHostDriver {
         Ok(())
     }
 
-    /// `read_events`: check the rooms and the event type, read from the backend, and drop what the
-    /// widget may not read (e.g. other state keys or msgtypes).
-    async fn read_events(&self, request: ReadEventsRequest) -> Result<ReadEventsResponse, WidgetError> {
+    /// `read_timeline`: reduce the widget's filter to what it may read, read the timeline cache,
+    /// and drop anything else the backend returned. Never contacts the homeserver.
+    async fn read_timeline(&self, request: ReadTimelineRequest) -> Result<ReadTimelineResponse, WidgetError> {
         let approved = self.approved();
-        let room_id = self.backend.room_id();
-        access::check_rooms(&room_id, request.room_ids.as_ref())?;
-        if !approved.allows_read_type(&request.event_type, request.is_state()) {
-            let needed = if request.is_state() {
-                Capability::read_state_events(&request.event_type, None::<&str>)
-            } else {
-                Capability::read_events(&request.event_type)
-            };
-            return Err(access::missing(&needed));
-        }
-        let limit = request.limit.map_or(DEFAULT_READ_LIMIT, backend_limit).clamp(1, MAX_READ_LIMIT);
-        let events = match request.state_key {
-            Some(selector) => self.backend.read_room_state(room_id, request.event_type, selector).await,
-            None => {
-                self.backend.read_room_events(room_id, request.event_type, request.msgtype, limit, request.since).await
-            }
-        }
-        .map_err(backend_error("Failed to read events"))?;
-        let mut events: Vec<_> = events.into_iter().filter(|e| access::may_read(&approved, e)).collect();
+        let filter = access::timeline_filter(&approved, request.filter.as_deref())?;
+        let limit = request.limit.min(MAX_READ_LIMIT);
+        let chunk =
+            self.backend.timeline_read(self.backend.room_id(), request.from, limit, filter).await.map_err(|err| {
+                match err {
+                    BackendError::EventNotCached { event_id } => WidgetError::event_not_cached(&event_id),
+                    err => backend_error("Failed to read the timeline")(err),
+                }
+            })?;
+        let mut events: Vec<_> = chunk.events.into_iter().filter(|e| access::may_read_timeline(&approved, e)).collect();
         events.truncate(limit as usize);
-        Ok(ReadEventsResponse { events })
+        Ok(ReadTimelineResponse { events, pagination: chunk.pagination })
+    }
+
+    /// `paginate_timeline`: start (or join) a back-pagination of the timeline cache. Answers at
+    /// once; the outcome reaches the widget with `notify_timeline_update`.
+    ///
+    /// Not rate limited (the MSC says clients SHOULD); `docs/parity.md` lists it.
+    async fn paginate_timeline(
+        &self,
+        request: PaginateTimelineRequest,
+    ) -> Result<PaginateTimelineResponse, WidgetError> {
+        let limit = request.limit.map(|l| l.min(MAX_READ_LIMIT));
+        let pagination = self
+            .backend
+            .timeline_paginate_backwards(self.backend.room_id(), limit)
+            .await
+            .map_err(backend_error("Failed to paginate the timeline"))?;
+        Ok(PaginateTimelineResponse { pagination })
     }
 
     /// `read_relations`: the page is reduced to the related events the widget holds a
@@ -346,7 +355,8 @@ impl WidgetHostDriver {
         })
     }
 
-    /// `read_room_account_data`: the room rules of `read_events`, then the capability for the type.
+    /// `read_room_account_data`: the room rules (only the widget's own room), then the capability
+    /// for the type.
     async fn read_room_account_data(
         &self,
         request: ReadRoomAccountDataRequest,

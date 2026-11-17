@@ -180,6 +180,8 @@ pub struct WidgetHostDriver {
     to_device_subscription: SubscriptionSlot,
     /// Set while the widget watches TURN servers (MSC3846).
     turn_subscription: SubscriptionSlot,
+    /// Follows the approved `host:…notify_timeline_update` capability.
+    timeline_subscription: SubscriptionSlot,
     /// The driver itself, for the sinks it hands to the backend.
     this: Weak<WidgetHostDriver>,
 }
@@ -227,6 +229,7 @@ impl WidgetHostDriver {
             room_subscription: SubscriptionSlot::default(),
             to_device_subscription: SubscriptionSlot::default(),
             turn_subscription: SubscriptionSlot::default(),
+            timeline_subscription: SubscriptionSlot::default(),
             this: this.clone(),
         }))
     }
@@ -390,7 +393,7 @@ impl WidgetHostDriver {
     ///
     /// * Not used up: host capabilities (`host:…`, the host's pushes), webview capabilities (no
     ///   request uses them; both are dropped from `capabilities`) and the capabilities a request is
-    ///   checked against by its body (`send_event.*`, `read_events.*`, ...).
+    ///   checked against by its body (`send_event.*`, `read_timeline:*`, ...).
     /// * A single-use capability that is also auto-approved ([`set_auto_approved`](Self::set_auto_approved))
     ///   is granted again, without asking, each time the widget requests it: that is how a client
     ///   remembers "always" for it. Do not remember an approval of a single-use capability
@@ -470,6 +473,7 @@ impl WidgetHostDriver {
         self.room_subscription.cancel();
         self.to_device_subscription.cancel();
         self.turn_subscription.cancel();
+        self.timeline_subscription.cancel();
         self.load(iframe);
         true
     }
@@ -570,5 +574,6 @@ impl Drop for WidgetHostDriver {
         self.room_subscription.cancel();
         self.to_device_subscription.cancel();
         self.turn_subscription.cancel();
+        self.timeline_subscription.cancel();
     }
 }

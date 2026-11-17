@@ -115,13 +115,18 @@ export function loadOlderEvents(room: RoomLike, count: number): Promise<boolean>
 }
 
 /**
- * Call `listener` when a sync adds events to the room. The SDK reports nothing else (a pagination
- * resolves `loadOlderEvents`); a redaction arrives as an event, so it is seen too.
+ * Call `listener` when a sync adds events to the room, when the event cache replaces events it
+ * decrypted late, and with `reset` when it dropped its events (`subscribeToTimelineChangesRaw`, an
+ * addition to the ffi). A pagination resolves `loadOlderEvents` instead.
  */
-// TODO-FINDING rust-late-decryption-not-reported - `subscribeToEventsRaw` reports the events a sync appends, not an event the event cache replaces in place (decrypted late, when its room key arrives after the event; or redacted). The RoomTimeline shows such an event as it was until the next sync of the room adds an event. Options: an SDK addition that also reports replaced events, or re-reading the timeline on a timer. Not verified against a homeserver: when the SDK decrypts late, and whether a redaction redacts the cached event before the redaction event is reported.
-export function onTimelineChanged(room: RoomLike, listener: () => void): () => void {
-  const handle = room.subscribeToEventsRaw({ onEvents: () => listener() });
-  return () => handle.cancel();
+// TODO-FINDING rust-late-decryption-not-reported - The event cache reports a late decryption (and a reset) through `subscribeToTimelineChangesRaw`, but not a redaction it applies to a cached event in place: the RoomTimeline shows such an event as it was until the next sync of the room adds an event. Options: report replaced events of every kind in the SDK addition, or re-read the timeline on a timer. Not verified against a homeserver: when the SDK decrypts late, and whether a redaction redacts the cached event before the redaction event is reported.
+export function onTimelineChanged(room: RoomLike, listener: (reset?: boolean) => void): () => void {
+  const events = room.subscribeToEventsRaw({ onEvents: () => listener() });
+  const changes = room.subscribeToTimelineChangesRaw({ onReset: () => listener(true), onDecrypted: () => listener() });
+  return () => {
+    changes.cancel();
+    events.cancel();
+  };
 }
 
 /** The whole current state of a room, as the homeserver answers `GET /rooms/{roomId}/state`. */

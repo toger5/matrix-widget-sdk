@@ -8,11 +8,12 @@ use std::sync::{Arc, Mutex};
 use serde_json::{json, Value};
 use widget_actions::{
     Base64File, Capability, DownloadFileRequest, DownloadFileResponse, ErrorKind, GetClientContextResponse,
-    GetMatrixContextResponse, GetRtcLivekitTokenResponse, HostRequest, JsonValue, MatrixEvent, ReadEventsRequest,
-    ReadRelationsRequest, ReadRoomAccountDataRequest, RequestCapabilitiesRequest, RoomSelector, RtcTransportsResponse,
-    SendEventRequest, SendToDeviceRequest, SetAlwaysOnScreenResponse, Source, StateKeySelector, ToDeviceEvent,
-    TurnServer, UpdateCapabilitiesRequest, UpdateDelayedEventAction, UploadFileRequest, WidgetRequest, WidgetResponse,
-    WireMessage,
+    GetMatrixContextResponse, GetRtcLivekitTokenResponse, HostRequest, JsonValue, MatrixEvent,
+    NotifyTimelineUpdateRequest, PaginateTimelineRequest, PaginationStatus, ReadRelationsRequest,
+    ReadRoomAccountDataRequest, ReadTimelineRequest, ReadTimelineResponse, RequestCapabilitiesRequest, RoomSelector,
+    RtcTransportsResponse, SendEventRequest, SendToDeviceRequest, SetAlwaysOnScreenResponse, Source, TimelineFilter,
+    TimelinePagination, ToDeviceEvent, TurnServer, UpdateCapabilitiesRequest, UpdateDelayedEventAction,
+    UploadFileRequest, WidgetError, WidgetRequest, WidgetResponse, WireMessage,
 };
 use widget_matrix_backend::{BackendError, InMemoryBackend, MatrixBackend, MediaFile};
 
@@ -179,7 +180,7 @@ fn capability_negotiation() {
     );
 
     // A second round: `allowed` is always the full list.
-    let more = vec![Capability::read_events("m.room.topic")];
+    let more = vec![Capability::read_timeline("m.room.topic")];
     block(feed(
         &driver,
         WidgetRequest::RequestCapabilities { request: RequestCapabilitiesRequest { capabilities: more.clone() } },
@@ -193,7 +194,7 @@ fn capability_negotiation() {
         HostRequest::from_wire(&sent[0]).unwrap(),
         HostRequest::UpdateCapabilities {
             request: UpdateCapabilitiesRequest {
-                allowed: vec![Capability::send_event("m.room.message"), Capability::read_events("m.room.topic")]
+                allowed: vec![Capability::send_event("m.room.message"), Capability::read_timeline("m.room.topic")]
             }
         }
     );
@@ -274,7 +275,7 @@ fn msgtype_capabilities_narrow_sends_and_reads() {
         &platform,
         vec![
             Capability::send_message("m.text"),
-            Capability::read_messages("m.text"),
+            Capability::read_timeline_messages("m.text"),
             Capability::forward_messages("m.text"),
         ],
     );
@@ -302,15 +303,7 @@ fn msgtype_capabilities_narrow_sends_and_reads() {
     backend.inject(event("m.room.message", None, json!({"msgtype": "m.image", "body": "pic"})));
     assert!(platform.drain().is_empty());
 
-    block(feed(
-        &driver,
-        WidgetRequest::ReadEvents { request: ReadEventsRequest::timeline("m.room.message", None) },
-        "r",
-    ))
-    .unwrap();
-    let WidgetResponse::ReadEvents { response } = WidgetResponse::from_wire(&platform.drain()[0]).unwrap() else {
-        panic!()
-    };
+    let response = read_timeline(&driver, &platform, ReadTimelineRequest::newest(50)).unwrap();
     assert_eq!(response.events.len(), 1);
     assert_eq!(response.events[0].content["msgtype"], "m.text");
 }
@@ -455,9 +448,9 @@ fn read_relations_is_filtered_and_room_checked() {
         &driver,
         &platform,
         vec![
-            Capability::read_events("m.reaction"),
+            Capability::read_timeline("m.reaction"),
             Capability::forward_event("m.reaction"),
-            Capability::read_events("org.example.other"),
+            Capability::read_timeline("org.example.other"),
         ],
     );
     platform.drain();
@@ -471,104 +464,233 @@ fn read_relations_is_filtered_and_room_checked() {
     assert!(read(Some("!other:x"), "e").error().unwrap().message.contains("its own room"));
 }
 
+/// Feed a `read_timeline` and return the host's answer.
+fn read_timeline(
+    driver: &WidgetHostDriver,
+    platform: &RecordingPlatform,
+    request: ReadTimelineRequest,
+) -> Result<ReadTimelineResponse, WidgetError> {
+    block(feed(driver, WidgetRequest::ReadTimeline { request }, "read")).unwrap();
+    let reply = platform.drain().pop().unwrap();
+    match WidgetResponse::from_wire(&reply) {
+        Ok(WidgetResponse::ReadTimeline { response }) => Ok(response),
+        Err(widget_actions::ActionError::ErrorResponse { error }) => Err(error),
+        other => panic!("{other:?}"),
+    }
+}
+
+/// An event with its own ID (`event` gives every event the same one).
+fn event_with_id(event_id: &str, event_type: &str, content: Value) -> MatrixEvent {
+    MatrixEvent { event_id: event_id.into(), ..event(event_type, None, content) }
+}
+
+fn event_ids(response: &ReadTimelineResponse) -> Vec<&str> {
+    response.events.iter().map(|e| e.event_id.as_str()).collect()
+}
+
 #[test]
-fn read_events_room_ids_msgtype() {
+fn read_timeline_returns_what_the_widget_may_read_newest_first() {
     let (driver, backend, platform) = setup();
-    backend.inject(event("m.room.message", None, json!({"msgtype": "m.text", "body": "1"})));
-    backend.inject(event("m.room.message", None, json!({"msgtype": "m.image", "body": "2"})));
-    grant(&driver, &platform, vec![Capability::read_events("m.room.message")]);
-    let read = |room_ids: Option<RoomSelector>, msgtype: Option<&str>, id: &str| {
-        let mut request = ReadEventsRequest::timeline("m.room.message", None);
-        request.room_ids = room_ids;
-        request.msgtype = msgtype.map(Into::into);
-        block(feed(&driver, WidgetRequest::ReadEvents { request }, id)).unwrap();
-        platform.drain().pop().unwrap()
+    backend.inject(event_with_id("$t1", "m.room.message", json!({"msgtype": "m.text", "body": "1"})));
+    backend.inject(event_with_id("$i1", "m.room.message", json!({"msgtype": "m.image", "body": "2"})));
+    backend.inject(event_with_id("$r1", "m.reaction", json!({})));
+    backend.inject(event_with_id("$t2", "m.room.message", json!({"msgtype": "m.text", "body": "3"})));
+    backend.inject(MatrixEvent { state_key: Some("".into()), ..event_with_id("$topic", "m.room.topic", json!({})) });
+    backend.inject(event_with_id("$t3", "m.room.message", json!({"msgtype": "m.text", "body": "4"})));
+
+    // No capability: refused.
+    let err = read_timeline(&driver, &platform, ReadTimelineRequest::newest(10)).unwrap_err();
+    assert_eq!(err.kind(), ErrorKind::MissingCapability);
+    assert!(err.message.contains("read_timeline"), "{}", err.message);
+
+    grant(
+        &driver,
+        &platform,
+        vec![
+            Capability::read_timeline_messages("m.text"),
+            Capability::read_timeline("m.reaction"),
+            Capability::read_timeline("m.room.topic"),
+        ],
+    );
+    // Everything readable, newest first; the image is not readable. A state event of the
+    // timeline is read like any other.
+    let all = read_timeline(&driver, &platform, ReadTimelineRequest::newest(10)).unwrap();
+    assert_eq!(event_ids(&all), ["$t3", "$topic", "$t2", "$r1", "$t1"]);
+    assert_eq!(all.pagination, PaginationStatus::Idle);
+
+    // `limit` counts readable events; `from` continues below an event (exclusive).
+    let page = read_timeline(&driver, &platform, ReadTimelineRequest::newest(2)).unwrap();
+    assert_eq!(event_ids(&page), ["$t3", "$topic"]);
+    let next = ReadTimelineRequest { from: Some("$topic".into()), limit: 2, filter: None };
+    assert_eq!(event_ids(&read_timeline(&driver, &platform, next).unwrap()), ["$t2", "$r1"]);
+    // `from` may name an event the widget cannot read.
+    let below_image = ReadTimelineRequest { from: Some("$i1".into()), limit: 5, filter: None };
+    assert_eq!(event_ids(&read_timeline(&driver, &platform, below_image).unwrap()), ["$t1"]);
+
+    // The filter: an entry the widget may not read is dropped, not an error.
+    let filtered = ReadTimelineRequest {
+        from: None,
+        limit: 10,
+        filter: Some(vec![
+            TimelineFilter::new("m.room.message", None::<&str>),
+            TimelineFilter::new("m.room.name", None::<&str>),
+        ]),
     };
-    let events = |msg: WireMessage| match WidgetResponse::from_wire(&msg).unwrap() {
-        WidgetResponse::ReadEvents { response } => response.events,
+    assert_eq!(event_ids(&read_timeline(&driver, &platform, filtered).unwrap()), ["$t3", "$t2", "$t1"]);
+    // Nothing readable left in the filter: missing capability.
+    let images = ReadTimelineRequest {
+        from: None,
+        limit: 10,
+        filter: Some(vec![TimelineFilter::new("m.room.message", Some("m.image"))]),
+    };
+    let err = read_timeline(&driver, &platform, images).unwrap_err();
+    assert_eq!(err.kind(), ErrorKind::MissingCapability);
+    assert!(err.message.ends_with("read_timeline:m.room.message#m.image"), "{}", err.message);
+
+    // `from` not in the cache.
+    let gone = ReadTimelineRequest { from: Some("$gone".into()), limit: 10, filter: None };
+    let err = read_timeline(&driver, &platform, gone).unwrap_err();
+    assert_eq!(err.kind(), ErrorKind::EventNotCached);
+    assert_eq!(err.code, "org.matrix.mscXXXX.event_not_cached");
+}
+
+#[test]
+fn paginate_timeline_answers_at_once_and_notifies_the_outcome() {
+    let (driver, backend, platform) = setup();
+    backend.inject(event_with_id("$new", "m.room.message", json!({"body": "new"})));
+    let paginate = |limit: Option<u32>| {
+        block(feed(&driver, WidgetRequest::PaginateTimeline { request: PaginateTimelineRequest { limit } }, "p"))
+            .unwrap();
+        platform.drain()
+    };
+    let status = |msg: &WireMessage| match WidgetResponse::from_wire(msg).unwrap() {
+        WidgetResponse::PaginateTimeline { response } => response.pagination,
         other => panic!("{other:?}"),
     };
-    assert_eq!(events(read(None, Some("m.image"), "a")).len(), 1);
-    assert_eq!(events(read(None, None, "b")).len(), 2);
-    // `*` is every room the widget can read: its own.
-    assert_eq!(events(read(Some(RoomSelector::Any), None, "c")).len(), 2);
-    // The own room may be named without any further capability.
-    let own = Some(RoomSelector::Rooms { room_ids: vec!["!room:x".into()] });
-    assert_eq!(events(read(own, None, "d")).len(), 2);
-    // Another room cannot be read, alone or next to the own room.
-    let other = RoomSelector::Rooms { room_ids: vec!["!other:x".into()] };
-    assert!(read(Some(other), None, "g").error().unwrap().message.contains("its own room"));
-    let both = RoomSelector::Rooms { room_ids: vec!["!room:x".into(), "!other:x".into()] };
-    assert!(read(Some(both), None, "h").error().is_some());
+    let notification = |msg: &WireMessage| match HostRequest::from_wire(msg).unwrap() {
+        HostRequest::NotifyTimelineUpdate { request } => request,
+        other => panic!("{other:?}"),
+    };
+    let pagination = |status, error: Option<&str>| NotifyTimelineUpdateRequest {
+        pagination: Some(TimelinePagination { status, error: error.map(WidgetError::new) }),
+        ..Default::default()
+    };
+
+    // Without the capability: refused, nothing started.
+    let sent = paginate(None);
+    assert_eq!(sent[0].error().unwrap().kind(), ErrorKind::MissingCapability);
+    assert!(sent[0].error().unwrap().message.ends_with("widget:org.matrix.mscXXXX.paginate_timeline"));
+    assert_eq!(backend.pending_pagination(), None);
+
+    // Paginate without being notified: the answer only.
+    grant(&driver, &platform, vec![Capability::read_timeline("m.room.message"), Capability::PaginateTimeline]);
+    let sent = paginate(Some(5));
+    assert_eq!(sent.len(), 1);
+    assert_eq!(status(&sent[0]), PaginationStatus::Paginating);
+    assert_eq!(backend.pending_pagination().unwrap().limit, Some(5));
+    backend.resolve_pagination(vec![event_with_id("$old", "m.room.message", json!({"body": "old"}))], false);
+    assert!(platform.drain().is_empty());
+    let older = ReadTimelineRequest { from: Some("$new".into()), limit: 5, filter: None };
+    assert_eq!(event_ids(&read_timeline(&driver, &platform, older.clone()).unwrap()), ["$old"]);
+
+    // With `notify_timeline_update`: the start and the outcome are announced.
+    grant(&driver, &platform, vec![Capability::NotifyTimelineUpdate]);
+    let sent = paginate(None);
+    assert_eq!(sent.iter().map(short).collect::<Vec<_>>(), ["notify_timeline_update", "paginate_timeline"]);
+    assert_eq!(notification(&sent[0]), pagination(PaginationStatus::Paginating, None));
+    assert_eq!(status(&sent[1]), PaginationStatus::Paginating);
+    block(driver.handle_message_from_widget(sent[0].ack().to_json())).unwrap();
+    // Joining the running one announces nothing.
+    assert_eq!(status(&paginate(None)[0]), PaginationStatus::Paginating);
+
+    backend.fail_pagination("the homeserver is gone".into());
+    let sent = platform.drain();
+    assert_eq!(
+        notification(&sent[0]),
+        pagination(PaginationStatus::Idle, Some("Pagination failed: the homeserver is gone"))
+    );
+
+    paginate(None);
+    backend.resolve_pagination(vec![event_with_id("$first", "m.room.create", json!({}))], true);
+    let sent = platform.drain();
+    assert_eq!(notification(&sent[0]), pagination(PaginationStatus::StartReached, None));
+    // The new events are in the cache when the notification arrives; the type the widget cannot
+    // read is not returned.
+    let below_old = ReadTimelineRequest { from: Some("$old".into()), limit: 5, filter: None };
+    let response = read_timeline(&driver, &platform, below_old).unwrap();
+    assert!(response.events.is_empty());
+    assert_eq!(response.pagination, PaginationStatus::StartReached);
+    // At the start of the room nothing happens.
+    let sent = paginate(None);
+    assert_eq!(sent.len(), 1);
+    assert_eq!(status(&sent[0]), PaginationStatus::StartReached);
+}
+
+#[test]
+fn notify_timeline_update_follows_its_capability() {
+    let (driver, backend, platform) = setup();
+    backend.inject(event_with_id("$text", "m.room.message", json!({"msgtype": "m.text"})));
+    backend.inject(event_with_id("$image", "m.room.message", json!({"msgtype": "m.image"})));
+    backend.inject(event_with_id("$secret", "org.example.secret", json!({})));
+    let notification = || {
+        let sent = platform.drain();
+        assert!(sent.len() <= 1, "{sent:?}");
+        sent.first().map(|msg| match HostRequest::from_wire(msg).unwrap() {
+            HostRequest::NotifyTimelineUpdate { request } => request,
+            other => panic!("{other:?}"),
+        })
+    };
+
+    // Not subscribed without the capability, also when the widget reads.
+    grant(&driver, &platform, vec![Capability::read_timeline_messages("m.text")]);
+    backend.reset_timeline();
+    assert_eq!(notification(), None);
+
+    // `notify_timeline_update` alone tells the widget about gaps.
+    grant(&driver, &platform, vec![Capability::NotifyTimelineUpdate]);
+    backend.reset_timeline();
+    assert_eq!(notification(), Some(NotifyTimelineUpdateRequest { reset: true, ..Default::default() }));
+
+    // Decrypted events: only the IDs of those the widget may read. Nothing readable: no message.
+    backend.report_decrypted(vec!["$text".into(), "$image".into(), "$secret".into()]);
+    assert_eq!(notification().unwrap().decrypted, ["$text"]);
+    backend.report_decrypted(vec!["$image".into(), "$secret".into()]);
+    assert_eq!(notification(), None);
+
+    // Revoked: unsubscribed.
+    driver.revoke_capabilities(vec![Capability::NotifyTimelineUpdate]);
+    platform.drain();
+    backend.reset_timeline();
+    assert_eq!(notification(), None);
 }
 
 #[test]
 fn reading_and_forwarding_are_separate_capabilities() {
     let (driver, backend, platform) = setup();
     let read = |id: &str| {
-        let request = ReadEventsRequest::timeline("m.room.message", None);
-        block(feed(&driver, WidgetRequest::ReadEvents { request }, id)).unwrap();
+        let request = ReadTimelineRequest {
+            from: None,
+            limit: 10,
+            filter: Some(vec![TimelineFilter::new("m.room.message", None::<&str>)]),
+        };
+        block(feed(&driver, WidgetRequest::ReadTimeline { request }, id)).unwrap();
         platform.drain().pop().unwrap()
     };
 
-    // `forward_event` only: new events are pushed, but `read_events` is refused.
+    // `forward_event` only: new events are pushed, but `read_timeline` is refused.
     grant(&driver, &platform, vec![Capability::forward_event("m.room.message")]);
     backend.inject(event("m.room.message", None, json!({"body": "1"})));
     let sent = platform.drain();
     assert_eq!(sent.iter().map(short).collect::<Vec<_>>(), ["forward_event"]);
-    assert!(read("r1").error().unwrap().message.contains("read_events.timeline:m.room.message"));
+    assert!(read("r1").error().unwrap().message.contains("read_timeline:m.room.message"));
 
-    // `read_events` only (another type): readable, but nothing is pushed.
-    grant(&driver, &platform, vec![Capability::read_events("m.reaction")]);
+    // `read_timeline` only (another type): readable, but nothing is pushed.
+    grant(&driver, &platform, vec![Capability::read_timeline("m.reaction")]);
     backend.inject(event("m.reaction", None, json!({})));
     assert!(platform.drain().is_empty());
-    block(feed(&driver, WidgetRequest::ReadEvents { request: ReadEventsRequest::timeline("m.reaction", None) }, "r2"))
-        .unwrap();
-    let WidgetResponse::ReadEvents { response } = WidgetResponse::from_wire(&platform.drain()[0]).unwrap() else {
-        panic!()
-    };
+    let response = read_timeline(&driver, &platform, ReadTimelineRequest::newest(10)).unwrap();
     assert_eq!(response.events.len(), 1);
-}
-
-#[test]
-fn read_events_filters_by_capability() {
-    let (driver, backend, platform) = setup();
-    backend.inject(event("m.room.topic", Some(""), json!({"topic": "t"})));
-    backend.inject(event("m.room.member", Some("@me:x"), json!({"membership": "join"})));
-    backend.inject(event("m.room.member", Some("@other:x"), json!({"membership": "join"})));
-    backend.inject(event("m.room.message", None, json!({"body": "1"})));
-    backend.inject(event("m.room.message", None, json!({"body": "2"})));
-
-    let read_members =
-        WidgetRequest::ReadEvents { request: ReadEventsRequest::state("m.room.member", StateKeySelector::Any) };
-    block(feed(&driver, read_members.clone(), "r0")).unwrap();
-    assert!(platform.drain()[0].error().is_some());
-
-    grant(
-        &driver,
-        &platform,
-        vec![Capability::read_state_events("m.room.member", Some("@me:x")), Capability::read_events("m.room.message")],
-    );
-
-    block(feed(&driver, read_members, "r1")).unwrap();
-    let WidgetResponse::ReadEvents { response } = WidgetResponse::from_wire(&platform.drain()[0]).unwrap() else {
-        panic!()
-    };
-    // Only the state key we are allowed to see.
-    assert_eq!(response.events.len(), 1);
-    assert_eq!(response.events[0].state_key.as_deref(), Some("@me:x"));
-
-    block(feed(
-        &driver,
-        WidgetRequest::ReadEvents { request: ReadEventsRequest::timeline("m.room.message", Some(1)) },
-        "r2",
-    ))
-    .unwrap();
-    let WidgetResponse::ReadEvents { response } = WidgetResponse::from_wire(&platform.drain()[0]).unwrap() else {
-        panic!()
-    };
-    assert_eq!(response.events.len(), 1);
-    assert_eq!(response.events[0].content["body"], "2");
+    assert_eq!(response.events[0].event_type, "m.reaction");
 }
 
 /// Request `caps` and approve them, returning what was sent after `update_capabilities`.
@@ -599,7 +721,11 @@ fn approving_capabilities_subscribes_with_derived_subjects() {
     assert!(backend.room_subscriptions().is_empty());
 
     // Neither do the widget's read capabilities: reading is a request, not a subscription.
-    grant_and_drain(&driver, &platform, vec![Capability::read_events("m.room.message")]);
+    grant_and_drain(
+        &driver,
+        &platform,
+        vec![Capability::read_timeline("m.room.message"), Capability::PaginateTimeline],
+    );
     assert!(backend.room_subscriptions().is_empty());
 
     grant_and_drain(&driver, &platform, vec![Capability::forward_event("m.room.message")]);
@@ -896,6 +1022,16 @@ fn read_style_actions_need_their_capabilities() {
     ))
     .unwrap();
     assert!(platform.drain()[0].error().is_some());
+    // `room_ids`: `*` and the own room are the widget's room; another room cannot be read.
+    let read = |room_ids: RoomSelector, id: &str| {
+        let request = ReadRoomAccountDataRequest { event_type: "m.tag".into(), room_ids: Some(room_ids) };
+        block(feed(&driver, WidgetRequest::ReadRoomAccountData { request }, id)).unwrap();
+        platform.drain().pop().unwrap()
+    };
+    assert!(read(RoomSelector::Any, "d").error().is_none());
+    assert!(read(RoomSelector::Rooms { room_ids: vec!["!room:x".into()] }, "e").error().is_none());
+    let both = RoomSelector::Rooms { room_ids: vec!["!room:x".into(), "!other:x".into()] };
+    assert!(read(both, "f").error().unwrap().message.contains("its own room"));
 }
 
 #[test]
@@ -1158,7 +1294,7 @@ fn update_state_and_forward_event_state_are_separate() {
     backend.inject(event("m.room.topic", Some("other"), json!({"topic": "x"})));
     assert!(platform.drain().is_empty());
 
-    // The legacy strings and the `read_events.state` capability give neither.
+    // The legacy strings and a `read_timeline` capability give neither.
     let (driver, backend, platform) = setup();
     backend.inject(event("m.room.topic", Some(""), json!({"topic": "t1"})));
     let sent = grant_and_drain(
@@ -1166,7 +1302,7 @@ fn update_state_and_forward_event_state_are_separate() {
         &platform,
         vec![
             Capability::parse("org.matrix.msc2762.receive.state_event:m.room.topic"),
-            Capability::read_state_events("m.room.topic", None::<&str>),
+            Capability::read_timeline("m.room.topic"),
         ],
     );
     assert!(sent.is_empty());

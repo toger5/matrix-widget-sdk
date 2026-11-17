@@ -180,9 +180,29 @@ table depends on the direction, because `send_event` and `send_to_device` are le
 | host → widget | `visibility` | `…update_visibility` |
 
 Everything else passes through unchanged (the host emits and accepts the unstable MSC spellings
-such as `org.matrix.msc2876.read_events` itself, see `docs/parity.md`), so an
+such as `org.matrix.msc3869.read_relations` itself, see `docs/parity.md`), so an
 action the host does not implement is answered by the host's own error response, which is
 forwarded to the widget as is.
+
+### Reading events (`src/readEvents.ts`)
+
+The host has no `org.matrix.msc2876.read_events`: it reads its timeline cache with
+`…read_timeline`, `…paginate_timeline` and `…notify_timeline_update`
+([draft](../../spec/patch/new/timeline-reading.md)). The wrapper answers the legacy action itself:
+
+- **Timeline read** (no `state_key`): `read_timeline` with the legacy `type` / `msgtype` as filter.
+  While the answer is short of `limit` and the host's pagination is `idle`, it sends
+  `paginate_timeline`, waits for the `notify_timeline_update` that ends it and reads on below the
+  oldest event it has. It stops at `limit`, at `start_reached`, at a failed or refused pagination
+  and after 7 seconds (under the 10 seconds a legacy widget waits), and answers with what it has,
+  **newest first** (as Element Web does). Without `limit` it answers from the cache only. `since`
+  is not supported.
+- **State read** (`state_key` a string or `true`): answered from the state the host pushed with
+  `update_state` (the wrapper keeps the last set per type); refused when the widget does not hold
+  `host:…update_state:<type>`.
+- `room_ids`: only the widget's room is served; a list without it reads nothing.
+- The host's `notify_timeline_update` is acknowledged by the wrapper and never reaches the legacy
+  widget.
 
 ### Capabilities (`src/capabilities.ts`)
 
@@ -194,8 +214,8 @@ and tells the widget a legacy capability is approved when the host approved **al
 |---|---|
 | `send.event:<t>` | `widget:…send_event.timeline:<t>` |
 | `send.state_event:<t>` | `widget:…send_event.state:<t>` |
-| `receive.event:<t>` | `widget:…read_events.timeline:<t>`, `widget:…read_relations:<t>`, `host:…forward_event.timeline:<t>` |
-| `receive.state_event:<t>` | `widget:…read_events.state:<t>`, `host:…update_state:<t>`, `host:…forward_event.state:<t>` |
+| `receive.event:<t>` | `widget:…read_timeline:<t>`, `widget:…read_relations:<t>`, `host:…forward_event.timeline:<t>`, `widget:…paginate_timeline`, `host:…notify_timeline_update` (the last three for the legacy `read_events`) |
+| `receive.state_event:<t>` | `host:…update_state:<t>` (also answers the legacy state reads), `host:…forward_event.state:<t>` |
 | `timeline:<room>` | nothing: never requested, never reported as approved |
 | `send.to_device:<t>` / `receive.to_device:<t>` | `widget:…send_to_device:<t>` / `host:…forward_to_device:<t>` |
 | `receive.room_account_data:<t>` | `widget:…read_room_account_data:<t>` |
@@ -214,7 +234,7 @@ and tells the widget a legacy capability is approved when the host approved **al
 `<t>` keeps its `#<msgtype>` / `#<state_key>` suffix.
 
 A capability embeds the wire name of its action, so `…` is the prefix the host sends that action
-with: `org.matrix.msc2876.` (`read_events`), `org.matrix.msc3869.` (`read_relations`),
+with: `org.matrix.msc3869.` (`read_relations`),
 `org.matrix.msc4157.` (`update_delayed_event`), `org.matrix.msc4515.` (`get_rtc_transports`),
 `org.matrix.msc3973.` (`search_user_directory`), `org.matrix.msc4039.` (`upload_file`,
 `download_file`, `get_media_config`), `org.matrix.msc4533.` (the LiveKit actions),

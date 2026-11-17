@@ -56,8 +56,8 @@ it again whenever the widget's webview capabilities change `sandbox` or `allow` 
 and the callback is called again with all of it (minus what the widget holds or gets without
 asking). One `approve_capabilities` answers every request so far.
 
-The driver subscribes to the backend itself once `host:…forward_event.*`, `host:…update_state` or
-`host:…forward_to_device` capabilities are approved. The
+The driver subscribes to the backend itself once `host:…forward_event.*`, `host:…update_state`,
+`host:…forward_to_device` or `host:…notify_timeline_update` capabilities are approved. The
 client does not push events anywhere.
 
 * Legacy widgets (`im.vector.modular.widgets`): the driver loads them through

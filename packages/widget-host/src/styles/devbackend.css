@@ -41,6 +41,10 @@
 .rt-hint b { color: var(--text); font-weight: 500; }
 .input[aria-readonly="true"] { background: transparent; border-style: dashed; color: var(--text-muted); }
 .ev-more { display: flex; justify-content: center; padding-top: 4px; }
+/* DevBackend: a widget's back-pagination waits to be resolved */
+.form.pag-req { border: 1px dashed var(--warning); }
+.pag-req-h { display: flex; align-items: center; gap: 6px; font-weight: 500; }
+.pag-req-h .ico { color: var(--warning); }
 
 .tool-btn { margin-top: 8px; height: 44px; flex: none; display: flex; align-items: center; gap: 10px; padding: 0 14px; border-radius: var(--r-4); border: 1px solid var(--border); background: var(--surface); font-weight: 500; }
 .tool-btn > span { flex: 1; }

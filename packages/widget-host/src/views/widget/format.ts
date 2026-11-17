@@ -50,7 +50,7 @@ interface SectionDef {
 
 /** The sections in their order. A capability of none of them is "Unknown to this app" (last). */
 const SECTIONS: SectionDef[] = [
-  { id: "read", title: "Read this room", phrase: "read this room", members: ["widget:read_events", "widget:read_relations", "host:forward_event", "host:update_state"] },
+  { id: "read", title: "Read this room", phrase: "read this room", members: ["widget:read_timeline", "widget:paginate_timeline", "widget:read_relations", "host:forward_event", "host:update_state", "host:notify_timeline_update"] },
   { id: "send", title: "Send as you", phrase: "send messages as you", members: ["widget:send_event.timeline", "widget:send_event.delayed", "widget:send_event.sticky", "widget:update_delayed_event"] },
   { id: "state", title: "Change the room", phrase: "change the room for everyone", members: ["widget:send_event.state"] },
   { id: "devices", title: "Direct messages to devices", phrase: "exchange hidden messages with devices", members: ["widget:send_to_device", "host:forward_to_device"] },
@@ -68,6 +68,7 @@ const RISKS: Record<string, string> = {
   "widget:send_event.state": "Changes the room for everyone",
   "widget:send_to_device": "Hidden from the room",
   "widget:get_openid": "Proves your identity to other servers",
+  "widget:paginate_timeline": "Makes requests to your homeserver",
 };
 /** The phrase of "You and your account" when it holds `get_openid`. */
 const OPENID_PHRASE = "prove who you are to other servers";
@@ -123,8 +124,8 @@ const SANDBOX: Record<string, { label: string; risk?: string }> = {
 const q = (type: string) => `“${type}”`;
 /** The label of each capability; `t` is its data (the event type). */
 const LABELS: Record<string, (t: string) => string> = {
-  "widget:read_events.timeline": (t) => (t === "m.room.message" ? "Read the messages of this room" : `Read ${q(t)} events of this room`),
-  "widget:read_events.state": (t) => `Read the ${q(t)} state of this room`,
+  "widget:read_timeline": (t) => (t === "m.room.message" ? "Read the messages of this room" : `Read ${q(t)} events of this room`),
+  "widget:paginate_timeline": () => "Load older events of this room",
   "widget:read_relations": (t) => `Read ${q(t)} events that refer to a message`,
   "host:forward_event.timeline": (t) => (t === "m.room.message" ? "Receive new messages of this room" : `Receive new ${q(t)} events`),
   "host:forward_event.state": (t) => `Receive changes of the ${q(t)} state`,
@@ -154,13 +155,14 @@ const LABELS: Record<string, (t: string) => string> = {
   "host:update_theme": () => "Be told when the theme changes",
   "host:update_language": () => "Be told when the language changes",
   "host:update_visibility": () => "Be told when it is shown or hidden",
+  "host:notify_timeline_update": () => "Be told when older events arrive or the history changes",
   "webview:allow": (t) => ALLOW[t]?.label ?? `Use ${q(t)} of your browser`,
   "webview:sandbox": (t) => SANDBOX[t]?.label ?? `Sandbox: ${q(t)}`,
 };
 
 /**
- * `widget:org.matrix.msc2876.read_events.timeline:m.room.message` → key
- * `widget:read_events.timeline`, data `m.room.message`; `webview:org.matrix.mscXXXX.allow:camera` → key
+ * `widget:org.matrix.mscXXXX.send_event.timeline:m.room.message` → key
+ * `widget:send_event.timeline`, data `m.room.message`; `webview:org.matrix.mscXXXX.allow:camera` → key
  * `webview:allow`, data `camera`. The namespace is not checked (the driver decides what is known);
  * `undefined` if the action is none of the table.
  */

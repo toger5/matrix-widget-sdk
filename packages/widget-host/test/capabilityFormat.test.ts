@@ -29,7 +29,7 @@ const TEST_WIDGET_WEBVIEW = WEBVIEW_CAPABILITIES.split(",");
 const OTHERS = ["widget:org.matrix.msc4533.delegate_rtc_livekit_delayed_leave", `host:${X}forward_event.sticky`];
 
 const SHORT = [
-  "widget:org.matrix.msc2876.read_events.timeline:m.room.message",
+  `widget:${X}read_timeline:m.room.message`,
   `host:${X}forward_event.timeline:m.room.message`,
   `widget:${X}send_event.timeline:m.room.message`,
   `widget:${X}send_event.delayed`,
@@ -40,7 +40,7 @@ const sentence = (parts: { text: string; bold?: boolean }[]) => parts.map((p) =>
 
 describe("capability prompt copy", () => {
   it("knows, labels and sorts every capability of the widget API", () => {
-    expect(TEST_WIDGET).toHaveLength(33);
+    expect(TEST_WIDGET).toHaveLength(34);
     for (const capability of [...TEST_WIDGET, ...OTHERS]) {
       expect(capabilityIsKnown(capability), capability).toBe(true);
       expect(capabilityLabel(capability), capability).toBeTruthy();
@@ -83,7 +83,8 @@ describe("capability prompt copy", () => {
       ["app", "This app"],
       ["other", "Unknown to this app"],
     ]);
-    expect(all.filter((s) => s.risky).map((s) => s.id)).toEqual(["send", "state", "devices", "account", "browser"]);
+    // "read": `paginate_timeline` makes requests to the homeserver.
+    expect(all.filter((s) => s.risky).map((s) => s.id)).toEqual(["read", "send", "state", "devices", "account", "browser"]);
     // the phrase of "You and your account" when it holds `get_openid`
     expect(all.find((s) => s.id === "account")?.phrase).toBe("prove who you are to other servers");
     expect(capabilitySections([`widget:${X}get_matrix_context`])[0].phrase).toBe("know who you are");
@@ -108,8 +109,14 @@ describe("capability prompt copy", () => {
   });
 
   it("labels with the event type of the capability", () => {
-    expect(capabilityLabel("widget:org.matrix.msc2876.read_events.timeline:m.room.message")).toBe("Read the messages of this room");
-    expect(capabilityLabel("widget:org.matrix.msc2876.read_events.state:m.room.topic")).toBe("Read the “m.room.topic” state of this room");
+    expect(capabilityLabel(`widget:${X}read_timeline:m.room.message`)).toBe("Read the messages of this room");
+    expect(capabilityLabel(`widget:${X}read_timeline:m.reaction`)).toBe("Read “m.reaction” events of this room");
+    expect(capabilityLabel(`widget:${X}paginate_timeline`)).toBe("Load older events of this room");
+    expect(capabilityRisk(`widget:${X}paginate_timeline`)).toBe("Makes requests to your homeserver");
+    expect(capabilityLabel(`host:${X}notify_timeline_update`)).toBe("Be told when older events arrive or the history changes");
+    for (const timeline of [`widget:${X}read_timeline:m.room.message`, `widget:${X}paginate_timeline`, `host:${X}notify_timeline_update`]) {
+      expect(capabilitySection(timeline), timeline).toBe("read");
+    }
     expect(capabilityLabel(`host:${X}update_state:m.room.member#@a:x`)).toBe("Be told the current “m.room.member#@a:x” state");
     expect(capabilityLabel("widget:com.beeper.read_room_account_data:m.tag")).toBe("Read your “m.tag” data of this room");
     expect(capabilityLabel(`widget:${X}share_screen`)).toBeUndefined();
@@ -120,7 +127,7 @@ describe("capability prompt copy", () => {
 describe("browser permissions (webview capabilities)", () => {
   const W = `webview:${X}`;
   const call = [
-    "widget:org.matrix.msc2876.read_events.timeline:m.rtc.member",
+    `widget:${X}read_timeline:m.rtc.member`,
     "widget:org.matrix.msc4533.get_rtc_livekit_token",
     `${W}allow:camera`,
     `${W}allow:microphone`,

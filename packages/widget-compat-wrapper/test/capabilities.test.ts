@@ -21,12 +21,17 @@ const MIGRATION: [string, string | undefined, string[]][] = [
   [
     "org.matrix.msc2762.receive.event:m.room.message",
     "m.receive.event:m.room.message",
-    ["widget:org.matrix.msc2876.read_events.timeline:m.room.message", "widget:org.matrix.msc3869.read_relations:m.room.message", "host:org.matrix.mscXXXX.forward_event.timeline:m.room.message"],
+    [
+      "widget:org.matrix.mscXXXX.read_timeline:m.room.message",
+      "widget:org.matrix.msc3869.read_relations:m.room.message",
+      "host:org.matrix.mscXXXX.forward_event.timeline:m.room.message",
+      "widget:org.matrix.mscXXXX.paginate_timeline", "host:org.matrix.mscXXXX.notify_timeline_update",
+    ],
   ],
   [
     "org.matrix.msc2762.receive.state_event:m.room.member",
     "m.receive.state_event:m.room.member",
-    ["widget:org.matrix.msc2876.read_events.state:m.room.member", "host:org.matrix.mscXXXX.update_state:m.room.member", "host:org.matrix.mscXXXX.forward_event.state:m.room.member"],
+    ["host:org.matrix.mscXXXX.update_state:m.room.member", "host:org.matrix.mscXXXX.forward_event.state:m.room.member"],
   ],
   ["org.matrix.msc3819.send.to_device:m.call.invite", "m.send.to_device:m.call.invite", ["widget:org.matrix.mscXXXX.send_to_device:m.call.invite"]],
   ["org.matrix.msc3819.receive.to_device:m.call.invite", "m.receive.to_device:m.call.invite", ["host:org.matrix.mscXXXX.forward_to_device:m.call.invite"]],
@@ -80,7 +85,9 @@ describe("new capability names", () => {
     expect(widgetCapability("send_event.timeline:m.room.message")).toBe("widget:org.matrix.mscXXXX.send_event.timeline:m.room.message");
     expect(hostCapability("update_theme")).toBe("host:org.matrix.mscXXXX.update_theme");
     // An action with an MSC keeps that MSC's prefix, exactly as the action is sent.
-    expect(widgetCapability("read_events.state:m.room.topic")).toBe("widget:org.matrix.msc2876.read_events.state:m.room.topic");
+    expect(widgetCapability("read_relations:m.reaction")).toBe("widget:org.matrix.msc3869.read_relations:m.reaction");
+    // The timeline reading draft has no MSC number yet: the placeholder.
+    expect(widgetCapability("read_timeline:m.room.message")).toBe("widget:org.matrix.mscXXXX.read_timeline:m.room.message");
     expect(widgetCapability("navigate")).toBe("widget:org.matrix.msc2931.navigate");
     expect(widgetCapability("read_room_account_data:m.tag")).toBe("widget:com.beeper.read_room_account_data:m.tag");
     expect(widgetCapability("upload_file")).toBe("widget:org.matrix.msc4039.upload_file");
@@ -95,7 +102,9 @@ describe("new capability names", () => {
     for (const capability of all) expect(capability).toMatch(schema);
     // Actions with modifiers never appear without one, and no capability names a room.
     for (const capability of all) {
-      expect(capability).not.toMatch(/\.(send_event|read_events|forward_event)(:|$)/);
+      expect(capability).not.toMatch(/\.(send_event|forward_event)(:|$)/);
+      // `read_events` is legacy only: the wrapper answers it itself.
+      expect(capability).not.toMatch(/read_events/);
       expect(capability).not.toMatch(/\.room(:|$)/);
     }
   });
@@ -112,12 +121,12 @@ describe("expandLegacyCapability", () => {
       "widget:org.matrix.mscXXXX.send_event.timeline:m.room.message#m.text",
     ]);
     expect(expandLegacyCapability("org.matrix.msc2762.receive.event:m.room.message#m.text")).toEqual([
-      "widget:org.matrix.msc2876.read_events.timeline:m.room.message#m.text",
+      "widget:org.matrix.mscXXXX.read_timeline:m.room.message#m.text",
       "widget:org.matrix.msc3869.read_relations:m.room.message#m.text",
       "host:org.matrix.mscXXXX.forward_event.timeline:m.room.message#m.text",
+      "widget:org.matrix.mscXXXX.paginate_timeline", "host:org.matrix.mscXXXX.notify_timeline_update",
     ]);
     expect(expandLegacyCapability("org.matrix.msc2762.receive.state_event:m.room.member#@alice:example.org")).toEqual([
-      "widget:org.matrix.msc2876.read_events.state:m.room.member#@alice:example.org",
       "host:org.matrix.mscXXXX.update_state:m.room.member#@alice:example.org",
       "host:org.matrix.mscXXXX.forward_event.state:m.room.member#@alice:example.org",
     ]);
@@ -174,16 +183,18 @@ describe("capabilitiesToRequest", () => {
 
 describe("collapseApproved", () => {
   const receive = "org.matrix.msc2762.receive.event:m.room.message";
-  const [read, relations, forward] = expandLegacyCapability(receive);
+  const [read, relations, forward, paginate, notify] = expandLegacyCapability(receive);
 
   it("reports a legacy capability when its whole expansion is approved", () => {
-    expect(collapseApproved([receive], [read, relations, forward])).toEqual([receive]);
+    expect(collapseApproved([receive], [read, relations, forward, paginate, notify])).toEqual([receive]);
     // in the widget's own spelling, whichever it used
-    expect(collapseApproved(["m.receive.event:m.room.message"], [read, relations, forward])).toEqual(["m.receive.event:m.room.message"]);
+    expect(collapseApproved(["m.receive.event:m.room.message"], [read, relations, forward, paginate, notify])).toEqual(["m.receive.event:m.room.message"]);
   });
 
   it("does not report a partially approved capability", () => {
     expect(collapseApproved([receive], [read, forward])).toEqual([]);
+    // Reading without paginating or being notified is not what a legacy reader was promised.
+    expect(collapseApproved([receive], [read, relations, forward])).toEqual([]);
     expect(collapseApproved([receive], [])).toEqual([]);
     expect(collapseApproved(["org.matrix.msc4039.upload_file"], ["widget:org.matrix.msc4039.upload_file"])).toEqual([]);
   });
@@ -199,13 +210,19 @@ describe("collapseApproved", () => {
     expect(normalizeCapability("widget:org.matrix.msc2931.navigate")).toBe("widget:org.matrix.msc2931.navigate");
     expect(normalizeCapability("m.sticker")).toBe("m.sticker");
     expect(
-      collapseApproved([receive], ["widget:m.read_events.timeline:m.room.message", "widget:m.read_relations:m.room.message", "host:m.forward_event.timeline:m.room.message"]),
+      collapseApproved([receive], [
+        "widget:m.read_timeline:m.room.message",
+        "widget:m.read_relations:m.room.message",
+        "host:m.forward_event.timeline:m.room.message",
+        "widget:m.paginate_timeline",
+        "host:m.notify_timeline_update",
+      ]),
     ).toEqual([receive]);
   });
 
   it("keeps the requested order, reports each capability once and ignores the implicit ones", () => {
     const navigate = "org.matrix.msc2931.navigate";
-    const approved = [...IMPLICIT_CAPABILITIES, "widget:org.matrix.msc2931.navigate", read, relations, forward, "m.sticker"];
+    const approved = [...IMPLICIT_CAPABILITIES, "widget:org.matrix.msc2931.navigate", read, relations, forward, paginate, notify, "m.sticker"];
     expect(collapseApproved([navigate, "m.sticker", receive, navigate], approved)).toEqual([navigate, "m.sticker", receive]);
     // Only what the widget asked for is reported, whatever else the host approved.
     expect(collapseApproved([navigate], approved)).toEqual([navigate]);

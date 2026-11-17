@@ -1,19 +1,22 @@
 import {
   BackendError,
   RelationDirection,
-  StateKeySelector,
   type JsonValue,
   type MatrixBackend,
   type MatrixEvent,
   type MediaConfigResponse,
   type MediaFile,
   type OpenIdToken,
+  type PaginationStatus,
   type RelationsChunk,
   type RoomAccountData,
   type RoomSink,
   type RoomSubjects,
   type SearchUserDirectoryResponse,
   type Subscription,
+  type TimelineChunk,
+  type TimelineFilter,
+  type TimelineSink,
   type ToDeviceDelivery,
   type ToDeviceMessage,
   type ToDeviceSink,
@@ -31,6 +34,9 @@ import {
   type SendToDeviceContentMap,
 } from "matrix-js-sdk";
 
+import { RoomTimelines } from "../../roomTimelines";
+import { TimelineFeed, walkCache, type CachedEvent } from "../../timelineFeed";
+import { loadOlderEvents, onTimelineChanged } from "../roomData";
 import { fail, isUnsupported, toBackendError, wrap } from "./errors";
 import { isReadable, toMatrixEvent } from "./events";
 
@@ -38,24 +44,37 @@ import { isReadable, toMatrixEvent } from "./events";
  * `MatrixBackend` for one room of a matrix-js-sdk client: what the widget host driver needs from
  * the Matrix client, mapped to js-sdk calls. Sends go through the SDK (so they are encrypted in
  * encrypted rooms), reads come from the SDK's local copy of the room, and subscriptions listen to
- * the SDK's sync.
+ * the SDK's sync. The timeline cache of `read_timeline` is the room's live timeline; its
+ * pagination is the session's `RoomTimelines`, shared with the RoomTimeline and the room's other
+ * widgets.
  *
  * With `../session.ts` this is the only code that imports matrix-js-sdk.
  */
 export class JsSdkBackend implements MatrixBackend {
   private readonly subscriptions = new Set<() => void>();
+  private readonly feed: TimelineFeed;
 
   private constructor(
     private readonly client: MatrixClient,
     private readonly boundRoomId: string,
     private readonly profile: { displayName: string; avatarUrl: string },
-  ) {}
+    timelines: RoomTimelines,
+  ) {
+    this.feed = new TimelineFeed(timelines, boundRoomId, {
+      paginate: (count) => loadOlderEvents(client, boundRoomId, count),
+      watchDecrypted: (report) => this.watchDecrypted(report),
+    });
+  }
 
-  /** The trait's identity getters are synchronous, so the profile is fetched up front. */
-  static async create(client: MatrixClient, roomId: string): Promise<JsSdkBackend> {
+  /**
+   * The trait's identity getters are synchronous, so the profile is fetched up front. `timelines`
+   * is the session's (paginations are shared); without it the backend keeps its own.
+   */
+  static async create(client: MatrixClient, roomId: string, timelines?: RoomTimelines): Promise<JsSdkBackend> {
     const userId = client.getSafeUserId();
     const profile = await client.getProfileInfo(userId).catch(() => undefined);
-    return new JsSdkBackend(client, roomId, { displayName: profile?.displayname ?? userId, avatarUrl: profile?.avatar_url ?? "" });
+    const ownTimelines = timelines ?? new RoomTimelines((id, changed) => onTimelineChanged(client, id, changed));
+    return new JsSdkBackend(client, roomId, { displayName: profile?.displayname ?? userId, avatarUrl: profile?.avatar_url ?? "" }, ownTimelines);
   }
 
   // ---- Identity ----
@@ -149,22 +168,26 @@ export class JsSdkBackend implements MatrixBackend {
 
   // ---- Read half ----
 
-  /** From the SDK's live timeline (decrypted); `since` is not used, the widget gets the most recent events. */
-  async readRoomEvents(roomId: string, eventType: string, msgtype: string | undefined, limit: number, _since: string | undefined): Promise<MatrixEvent[]> {
-    const events = this.room(roomId)
-      .getLiveTimeline()
-      .getEvents()
-      .filter((ev) => isReadable(ev) && ev.getType() === eventType && (msgtype === undefined || ev.getContent().msgtype === msgtype));
-    return (limit > 0 ? events.slice(-limit) : events).map((ev) => toMatrixEvent(ev, roomId));
+  /**
+   * The live timeline is the cache: no local echoes of what is still being sent, and events the
+   * SDK could not decrypt are skipped (they still count as cached for `from`).
+   */
+  async timelineRead(roomId: string, from: string | undefined, limit: number, filter: TimelineFilter[]): Promise<TimelineChunk> {
+    const events = this.cachedEvents(roomId);
+    const cache: CachedEvent[] = events.map((ev) => {
+      const readable = isReadable(ev);
+      return {
+        eventId: ev.getId() ?? "",
+        eventType: readable ? ev.getType() : undefined,
+        msgtype: readable ? ev.getContent().msgtype : undefined,
+        toEvent: () => toMatrixEvent(ev, roomId),
+      };
+    });
+    return { events: walkCache(cache, from, limit, filter), pagination: this.feed.status(events[0]?.getType()) };
   }
 
-  async readRoomState(roomId: string, eventType: string, stateKey: StateKeySelector): Promise<MatrixEvent[]> {
-    const state = this.room(roomId).currentState;
-    if (StateKeySelector.Key.instanceOf(stateKey)) {
-      const event = state.getStateEvents(eventType, stateKey.inner.key);
-      return event ? [toMatrixEvent(event, roomId)] : [];
-    }
-    return state.getStateEvents(eventType).map((ev) => toMatrixEvent(ev, roomId));
+  async timelinePaginateBackwards(roomId: string, limit: number | undefined): Promise<PaginationStatus> {
+    return this.feed.paginate(limit, this.cachedEvents(roomId)[0]?.getType());
   }
 
   async relations(
@@ -284,6 +307,13 @@ export class JsSdkBackend implements MatrixBackend {
     return subscription;
   }
 
+  /** Pagination status changes, gaps of the sync (`RoomEvent.TimelineReset`) and late decryptions. */
+  subscribeTimeline(roomId: string, sink: TimelineSink): Subscription {
+    this.room(roomId);
+    const subscription = this.feed.subscribe(sink);
+    return this.track(() => subscription.cancel());
+  }
+
   subscribeToDevice(eventTypes: string[], sink: ToDeviceSink): Subscription {
     const types = new Set(eventTypes);
     const onMessage = ({ message, encryptionInfo }: { message: { type: string; sender: string; content: unknown }; encryptionInfo: unknown }) => {
@@ -313,6 +343,54 @@ export class JsSdkBackend implements MatrixBackend {
   }
 
   // ---- Helpers ----
+
+  /** The events of the live timeline that are in the room (sent, with an id), oldest first. */
+  private cachedEvents(roomId: string): SdkEvent[] {
+    return this.room(roomId)
+      .getLiveTimeline()
+      .getEvents()
+      .filter((ev) => !ev.status && ev.getId() !== undefined);
+  }
+
+  /**
+   * Report the events of the live timeline that the SDK could not decrypt before and now did
+   * (`MatrixEventEvent.Decrypted` after a failure). Not run against a homeserver: which of
+   * `ClientEvent.Event` and `MatrixEventEvent.Decrypted` reports the failure first.
+   */
+  private watchDecrypted(report: (events: MatrixEvent[]) => void): () => void {
+    const roomId = this.boundRoomId;
+    const room = this.client.getRoom(roomId);
+    const failed = new Set(this.cachedEventsOr(roomId).filter((ev) => ev.isDecryptionFailure()).map((ev) => ev.getId()));
+    const onDecrypted = (event: SdkEvent) => {
+      const eventId = event.getId();
+      if (event.getRoomId() !== roomId || eventId === undefined) return;
+      if (event.isDecryptionFailure()) {
+        failed.add(eventId);
+        return;
+      }
+      if (!failed.delete(eventId) || !isReadable(event)) return;
+      if (room?.getLiveTimeline().getEvents().includes(event)) report([toMatrixEvent(event, roomId)]);
+    };
+    // An event that arrives undecryptable is remembered, whichever event tells first.
+    const onEvent = (event: SdkEvent) => {
+      const eventId = event.getId();
+      if (event.getRoomId() === roomId && eventId !== undefined && event.isDecryptionFailure()) failed.add(eventId);
+    };
+    this.client.on(ClientEvent.Event, onEvent);
+    this.client.on(MatrixEventEvent.Decrypted, onDecrypted);
+    return () => {
+      this.client.off(ClientEvent.Event, onEvent);
+      this.client.off(MatrixEventEvent.Decrypted, onDecrypted);
+    };
+  }
+
+  private cachedEventsOr(roomId: string): SdkEvent[] {
+    try {
+      return this.cachedEvents(roomId);
+    } catch {
+      return [];
+    }
+  }
 
   private room(roomId: string): Room {
     const room = this.client.getRoom(roomId);

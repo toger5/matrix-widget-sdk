@@ -2,7 +2,7 @@
 //! trait, driver callbacks, widget client). Types that only ever appear as the body of one action
 //! live with that action under `actions/`.
 
-use serde::{de::Error as _, Deserialize, Deserializer, Serialize, Serializer};
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::{ActionError, JsonValue};
@@ -100,46 +100,42 @@ pub struct OpenIdToken {
     pub expires_in: u64,
 }
 
-/// Which state keys a `read_events` request is interested in.
-///
-/// On the wire this is either a string (one state key) or the boolean `true` (all state keys),
-/// following MSC2876.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+/// The pagination status of the room's timeline cache (MSCXXXX, `spec/patch/new/timeline-reading.md`):
+/// in `read_timeline`, `paginate_timeline` and `notify_timeline_update`, and in the backend.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
-pub enum StateKeySelector {
-    Any,
-    Key { key: String },
+pub enum PaginationStatus {
+    /// The cache does not reach the start of the room, and no pagination is running.
+    #[default]
+    Idle,
+    /// The client is fetching older events from the homeserver.
+    Paginating,
+    /// The cache contains the room's first event.
+    StartReached,
 }
 
-impl StateKeySelector {
-    pub fn key(key: impl Into<String>) -> Self {
-        Self::Key { key: key.into() }
-    }
-
-    pub fn matches(&self, state_key: &str) -> bool {
-        match self {
-            StateKeySelector::Any => true,
-            StateKeySelector::Key { key } => key == state_key,
-        }
-    }
+/// One entry of the `filter` of `read_timeline`: an event type, for `m.room.message` optionally
+/// one `msgtype`. Also what the backend filters the timeline cache with.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+pub struct TimelineFilter {
+    #[serde(rename = "type")]
+    pub event_type: String,
+    /// Only for `m.room.message`: only events with this `msgtype`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub msgtype: Option<String>,
 }
 
-impl Serialize for StateKeySelector {
-    fn serialize<S: Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
-        match self {
-            StateKeySelector::Any => s.serialize_bool(true),
-            StateKeySelector::Key { key } => s.serialize_str(key),
-        }
+impl TimelineFilter {
+    pub fn new(event_type: impl Into<String>, msgtype: Option<impl Into<String>>) -> Self {
+        Self { event_type: event_type.into(), msgtype: msgtype.map(Into::into) }
     }
-}
 
-impl<'de> Deserialize<'de> for StateKeySelector {
-    fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
-        match Value::deserialize(d)? {
-            Value::Bool(true) => Ok(StateKeySelector::Any),
-            Value::String(key) => Ok(StateKeySelector::Key { key }),
-            other => Err(D::Error::custom(format!("state_key must be a string or `true`, got {other}"))),
-        }
+    /// Whether `event` matches: same type, and the same `msgtype` if the filter names one.
+    pub fn matches(&self, event: &MatrixEvent) -> bool {
+        self.event_type == event.event_type
+            && self.msgtype.as_deref().is_none_or(|m| event.content.0.get("msgtype").and_then(Value::as_str) == Some(m))
     }
 }
 
@@ -157,5 +153,26 @@ mod tests {
         let parsed = MatrixEvent::from_value(ev.clone()).unwrap();
         assert!(parsed.is_state());
         assert_eq!(parsed.to_value(), ev);
+    }
+
+    #[test]
+    fn timeline_filter_matches_type_and_msgtype() {
+        let event = |t: &str, content| MatrixEvent {
+            event_type: t.into(),
+            sender: "@a:b".into(),
+            event_id: "$e".into(),
+            room_id: "!r:b".into(),
+            origin_server_ts: 1,
+            state_key: None,
+            content: JsonValue(content),
+            unsigned: None,
+        };
+        let text = event("m.room.message", json!({"msgtype": "m.text"}));
+        assert!(TimelineFilter::new("m.room.message", None::<&str>).matches(&text));
+        assert!(TimelineFilter::new("m.room.message", Some("m.text")).matches(&text));
+        assert!(!TimelineFilter::new("m.room.message", Some("m.image")).matches(&text));
+        assert!(!TimelineFilter::new("m.room.message", Some("m.text")).matches(&event("m.room.message", json!({}))));
+        assert!(!TimelineFilter::new("m.reaction", None::<&str>).matches(&text));
+        assert_eq!(serde_json::to_value(PaginationStatus::StartReached).unwrap(), "start_reached");
     }
 }

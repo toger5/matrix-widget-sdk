@@ -44,9 +44,19 @@ api.onTurnServer((server: unknown) => log("update_turn_servers", server));
 api.onThemeChange((theme: unknown) => log("update_theme", theme));
 api.onLanguageChange((lang: string) => log("update_language", lang));
 api.onVisibilityChange((visible: boolean) => log("update_visibility", visible));
+api.onTimelineUpdate((update: unknown) => log("notify_timeline_update", update));
 api.onCapabilitiesChanged((allowed: string[]) => (log("update_capabilities", { allowed }), refresh()));
 
 const content = () => ({ msgtype: "m.text", body: valueOf("body") });
+
+/** The oldest event `read_timeline` returned so far: where "read older" continues. */
+const oldest = { id: "" };
+const readTimeline = async (from?: string) => {
+  const result = (await api.readTimeline({ ...(from === undefined ? {} : { from }), limit: 10 })) as { events: { event_id: string }[]; pagination: string };
+  const last = result.events.at(-1);
+  if (last) oldest.id = last.event_id;
+  return result;
+};
 
 /** The Permissions Policy features this widget's iframe may use, as Chromium reports them (`document.featurePolicy`). */
 const FEATURES = ["camera", "microphone", "display-capture", "clipboard-write", "fullscreen", "autoplay"];
@@ -91,8 +101,9 @@ mount("MSC4412 test widget (widget-base-sdk)", [
   button("delayed: cancel", () => api.updateDelayedEvent(lastDelay.id, "cancel")),
   button("send sticky m.rtc.member (30s)", () => api.sendStickyEvent("m.rtc.member", { from: "new widget" }, 30000)),
   button("send to-device org.example.ping", () => api.sendToDevice("org.example.ping", false, TO_DEVICE_MESSAGES)),
-  button("read m.room.message (limit 10)", () => api.readEvents("m.room.message", 10)),
-  button("read state m.room.topic", () => api.readState("m.room.topic", undefined)),
+  button("read_timeline (limit 10)", () => readTimeline()),
+  button("read_timeline older (limit 10)", () => readTimeline(oldest.id || undefined)),
+  button("paginate_timeline (limit 5)", () => api.paginateTimeline(5)),
   button("get_openid", () => api.requestOpenIdToken()),
   button("navigate to matrix.to", () => api.navigate("https://matrix.to/#/#matrix:matrix.org")),
   button("set_always_on_screen true", () => api.setAlwaysOnScreen(true)),

@@ -396,7 +396,7 @@ class JsSdkSession implements LiveSession {
   /** A `MatrixBackend` bound to `roomId`; `dispose()` it when the room view closes. */
   async backendFor(roomId: string): Promise<JsSdkBackend> {
     if (!this.client.getRoom(roomId)) throw new Error(`unknown room ${roomId}`);
-    return JsSdkBackend.create(this.client, roomId);
+    return JsSdkBackend.create(this.client, roomId, this.timelines);
   }
 
   /** Device verification: `./verification`. */

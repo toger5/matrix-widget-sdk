@@ -1,10 +1,11 @@
 /**
- * The "Timeline" section of the room box. Stories `sidepanel-devbackendview--timeline*`,
+ * The "Timeline" section of the room box. Stories `sidepanel-devbackendview--timeline*`
+ * (a widget's pagination request: `sidepanel-devbackendview--timeline-pagination-requested`),
  * `sidepanel-roomtoolsview--timeline`.
  */
 import { useId, useMemo, useState, type FormEvent } from "react";
 
-import { OLDER_EVENTS_PER_LOAD, type MockedTimelineEvent, type RoomId, type RoomToolsViewModel, type ScheduledEvent } from "../../appViewModel";
+import { OLDER_EVENTS_PER_LOAD, type MockedPagination, type MockedTimelineEvent, type RoomId, type RoomToolsViewModel, type ScheduledEvent } from "../../appViewModel";
 import type { RawEvent } from "../../session";
 import { useDispatch } from "../env";
 import { previewOf } from "../helpers";
@@ -26,6 +27,8 @@ const FORMS: { form: SendForm; label: string }[] = [
 
 /** How many events the list renders at first, and per "Show more". */
 const PAGE = 100;
+/** How many messages "Resolve pagination" offers to generate when the widget gave no number. */
+const DEFAULT_PAGINATION_EVENTS = 20;
 
 interface Props {
   /** "account": a real room: the sender is the account (read-only), "Scheduled" lists what was scheduled here, older events can be loaded. */
@@ -38,6 +41,8 @@ interface Props {
   atStart: boolean;
   loadingOlder: boolean;
   scheduled: ScheduledEvent[];
+  /** DevBackend: the pagination of the room's timeline cache; a widget's request is resolved here. */
+  pagination?: MockedPagination;
   /** The default sender (DevBackend), or the only one (account). */
   userId?: string;
   /** Suggestions for the sender field. */
@@ -46,7 +51,7 @@ interface Props {
 
 const keyOf = (event: RawEvent, index: number) => (typeof event.event_id === "string" ? event.event_id : `#${index}`);
 
-export function TimelineSection({ mode, roomId, sendForm, events, atStart, loadingOlder, scheduled, userId = "", members }: Props) {
+export function TimelineSection({ mode, roomId, sendForm, events, atStart, loadingOlder, scheduled, pagination, userId = "", members }: Props) {
   const dispatch = useDispatch();
   const senders = useId();
   const account = mode === "account";
@@ -232,6 +237,11 @@ export function TimelineSection({ mode, roomId, sendForm, events, atStart, loadi
         </>
       )}
 
+      {pagination?.requested && (
+        // A new request (another limit) starts with its own default.
+        <PaginationRequest key={pagination.requested.limit ?? "none"} roomId={roomId} limit={pagination.requested.limit} />
+      )}
+
       <Sub title="Events">
         <em className="count">{shown.length < newest.length ? `${shown.length} of ${newest.length}` : newest.length}</em>
       </Sub>
@@ -270,6 +280,51 @@ export function TimelineSection({ mode, roomId, sendForm, events, atStart, loadi
           </Button>
         </div>
       )}
+    </>
+  );
+}
+
+/**
+ * DevBackend: a widget asked for older events (`paginate_timeline`) and waits. "Resolve pagination"
+ * generates the messages before the oldest event and tells the widgets.
+ */
+function PaginationRequest({ roomId, limit }: { roomId: RoomId; limit?: number }) {
+  const dispatch = useDispatch();
+  const [count, setCount] = useState(String(limit ?? DEFAULT_PAGINATION_EVENTS));
+  const [startReached, setStartReached] = useState(false);
+  const [error, setError] = useState<string>();
+  const submit = (e: FormEvent) => {
+    e.preventDefault();
+    const n = Number(count);
+    if (count.trim() === "" || !Number.isInteger(n) || n < 0 || n > 1000) {
+      setError("A whole number from 0 to 1000.");
+      return;
+    }
+    setError(undefined);
+    dispatch({ type: "mock/resolvePagination", roomId, count: n, startReached });
+  };
+  return (
+    <>
+      <Sub title="Pagination" />
+      <form className="form pag-req" aria-label="Pagination request" onSubmit={submit}>
+        <p className="pag-req-h">
+          <Icon name="clock" size={13} />
+          <span>Pagination requested: {limit === undefined ? "no number given" : `${limit} event${limit === 1 ? "" : "s"}`}</span>
+        </p>
+        <p className="hint">A widget waits for older events. Resolving adds random messages before the oldest event and tells the widgets.</p>
+        <Field label="Messages to generate">
+          <input className="input" type="number" min={0} max={1000} step={1} inputMode="numeric" value={count} onChange={(e) => setCount(e.target.value)} />
+        </Field>
+        <FormError error={error} />
+        <div className="inline-row">
+          <Toggle on={startReached} label="Start reached" onChange={setStartReached} />
+          <span>Start reached</span>
+          <span className="sp" />
+          <Button kind="primary" sm type="submit">
+            Resolve pagination
+          </Button>
+        </div>
+      </form>
     </>
   );
 }

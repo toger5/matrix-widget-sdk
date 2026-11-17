@@ -8,7 +8,6 @@
 
 /** Unstable namespace of each action that has an MSC; every other action uses the placeholder. */
 const NAMESPACES: Record<string, string> = {
-  read_events: "org.matrix.msc2876",
   read_relations: "org.matrix.msc3869",
   update_delayed_event: "org.matrix.msc4157",
   get_rtc_transports: "org.matrix.msc4515",
@@ -28,13 +27,14 @@ const host = (rest: string): string => `host:${namespace(rest)}.${rest}`;
 /** A webview capability (`sandbox:<token>`, `allow:<feature>`): about the iframe, not an action; the namespace of its MSC draft. */
 const webview = (rest: string): string => `webview:org.matrix.mscXXXX.${rest}`;
 
-/** Messages and the room topic: send, read, and be told about new ones. */
+/** Messages and the room topic: send, read the timeline cache (and page it), and be told about new ones. */
 export const DEFAULT_CAPABILITIES = [
   widget("send_event.timeline:m.room.message"),
-  widget("read_events.timeline:m.room.message"),
+  widget("read_timeline:m.room.message"),
+  widget("paginate_timeline"),
+  host("notify_timeline_update"),
   host("forward_event.timeline:m.room.message"),
   widget("send_event.state:m.room.topic"),
-  widget("read_events.state:m.room.topic"),
   host("update_state:m.room.topic"),
   host("forward_event.state:m.room.topic"),
 ].join(",");
@@ -50,7 +50,7 @@ export const DELAYED_CAPABILITIES = [
 /** Reactions (MSC3869 relations) between the test widgets' own messages. */
 export const RELATION_CAPABILITIES = [
   widget("send_event.timeline:m.reaction"),
-  widget("read_events.timeline:m.reaction"),
+  widget("read_timeline:m.reaction"),
   widget("read_relations:m.reaction"),
   host("forward_event.timeline:m.reaction"),
 ].join(",");

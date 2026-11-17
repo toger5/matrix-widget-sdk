@@ -232,6 +232,7 @@ Each room has these sections:
   - send event (also delayed), with a menu of predefined forms so that users don't need to know the raw JSON: message, sticker, RTC member, image/audio. The default is a predefined form; the last option is raw JSON with a text editor.
   - "Scheduled": the delayed events sent from here (with the DevBackend also those of widgets): send now, restart, cancel
   - the list of events, newest first; with a Matrix account the ones the session holds, then "Load older events"
+  - DevBackend: a widget's request for older events (`paginate_timeline`) waits until it is resolved here: "Pagination requested: N events", how many random messages to generate (N, else 20), "Start reached", "Resolve pagination". The widgets are told.
 
 **Sending to a real room**
 
@@ -297,7 +298,7 @@ Every state of the UI. Each is one story in Storybook, a sketch story (`Sketch/â
     - No rooms yet
     - Room dropdown open (rooms + add room)
     - State: shortcuts, send state with the widget form / the Element Call form / as raw JSON, state explorer, edit state
-    - Timeline: send event with a predefined form, send event as raw JSON, send delayed event, event list
+    - Timeline: send event with a predefined form, send event as raw JSON, send delayed event, event list, a widget's pagination request
     - Tools: collapsed (the "Client Backend Tool" and "Media Backend Tool" buttons) / Client Backend Tool open below the room box (resize handle, minimise button): WidgetHostBehavior, To-device messages / Media Backend Tool open (media list)
     - "Leave DevBackend" text button at the bottom (part of every DevBackendView state)
 - PictureInPicturePanel

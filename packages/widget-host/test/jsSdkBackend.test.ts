@@ -3,7 +3,7 @@
  * TypeScript, behind the real `WidgetHostDriver` wasm. The js-sdk client is faked: the test checks
  * which SDK calls each widget action turns into, and what the SDK's events turn into for the widget.
  */
-import { ClientEvent, MatrixError, MatrixEventEvent, RoomStateEvent, type MatrixClient } from "matrix-js-sdk";
+import { ClientEvent, MatrixError, MatrixEventEvent, RoomEvent, RoomStateEvent, type MatrixClient } from "matrix-js-sdk";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { JsSdkBackend } from "../src/matrix_session/js/backend/jsSdkBackend";
@@ -19,6 +19,7 @@ function fakeEvent(raw: { type: string; content: Record<string, unknown>; state_
   return {
     undecrypted,
     getRoomId: () => ROOM,
+    getId: () => event.event_id,
     getType: () => (undecrypted ? "m.room.encrypted" : event.type),
     getContent: () => event.content,
     getStateKey: () => event.state_key,
@@ -36,6 +37,10 @@ function fakeClient(overrides: Record<string, unknown> = {}) {
   const timeline: FakeEvent[] = [];
   const state = new Map<string, FakeEvent>();
   let failure: unknown;
+  /** The token of the live timeline: `null` once a pagination reached the start of the room. */
+  let paginationToken: string | null = "t0";
+  /** The running `paginateEventTimeline`, ended by `resolvePagination`. */
+  let finishPagination: ((events: FakeEvent[], startReached: boolean) => void) | undefined;
 
   const emit = (name: string, ...args: unknown[]) => listeners.get(name)?.forEach((listener) => (listener as (...a: unknown[]) => void)(...args));
   /** Record the call; answer with `result`, or reject while `failSends` is set. */
@@ -51,8 +56,10 @@ function fakeClient(overrides: Record<string, unknown> = {}) {
     emit(ClientEvent.Event, event);
   };
 
+  const liveTimeline = { getEvents: () => timeline, getPaginationToken: () => paginationToken };
   const room = {
-    getLiveTimeline: () => ({ getEvents: () => timeline }),
+    roomId: ROOM,
+    getLiveTimeline: () => liveTimeline,
     currentState: {
       getStateEvents: (type: string, stateKey?: string) =>
         stateKey === undefined ? [...state.entries()].filter(([key]) => key.startsWith(`${type}\n`)).map(([, ev]) => ev) : (state.get(`${type}\n${stateKey}`) ?? null),
@@ -87,6 +94,17 @@ function fakeClient(overrides: Record<string, unknown> = {}) {
     sendToDevice: record("sendToDevice", {}),
     queueToDevice: record("queueToDevice", undefined),
     getCrypto: () => undefined,
+    // Like the real client: the older events are in the live timeline when the promise resolves (whether there may be more).
+    paginateEventTimeline: (eventTimeline: unknown, options: { backwards: boolean; limit: number }) => {
+      calls.push(["paginateEventTimeline", eventTimeline === liveTimeline, options]);
+      return new Promise<boolean>((resolve) => {
+        finishPagination = (events, startReached) => {
+          timeline.unshift(...events);
+          if (startReached) paginationToken = null;
+          resolve(!startReached);
+        };
+      });
+    },
     ...overrides,
   };
 
@@ -101,6 +119,12 @@ function fakeClient(overrides: Record<string, unknown> = {}) {
       emit(RoomStateEvent.Events, event);
     },
     failSends: (error: unknown) => void (failure = error),
+    /** End the running pagination with `events` (oldest first). */
+    resolvePagination(events: FakeEvent[], startReached: boolean) {
+      if (!finishPagination) throw new Error("no pagination runs");
+      finishPagination(events, startReached);
+      finishPagination = undefined;
+    },
     listenerCount: () => [...listeners.values()].reduce((sum, set) => sum + set.size, 0),
   };
 }
@@ -114,6 +138,10 @@ describeBackendContract("JsSdkBackend", async () => {
     userId: USER,
     receiveState: fake.receiveState,
     failSends: (message) => fake.failSends(new Error(message)),
+    resolvePagination: async (events, startReached) => {
+      fake.resolvePagination(events.map((raw) => fakeEvent(raw)), startReached);
+      await tick();
+    },
     dispose: () => backend.dispose(),
   };
 });
@@ -170,6 +198,51 @@ describe("JsSdkBackend behind the driver", () => {
     expect(error).toContain("M_FORBIDDEN");
     expect(error).toContain("not allowed");
     expect(error).toContain("403");
+  });
+
+  it("timeline cache: skips undecryptable events, tells the widget about late decryptions, resets and failed paginations", async () => {
+    const { ask, grant, pushed, receive, emit, client } = await setup({
+      paginateEventTimeline: async () => {
+        throw new MatrixError({ errcode: "M_LIMIT_EXCEEDED", error: "slow down" }, 429);
+      },
+    });
+    await grant([`widget:${X}read_timeline:m.room.message`, `widget:${X}paginate_timeline`, `host:${X}notify_timeline_update`]);
+    const plain = fakeEvent({ type: "m.room.message", content: { body: "plain" }, event_id: "$plain" });
+    const secret = Object.assign(fakeEvent({ type: "m.room.message", content: { body: "secret" }, event_id: "$secret" }, true), { isDecryptionFailure: () => true });
+    const other = Object.assign(fakeEvent({ type: "org.example.secret", content: {}, event_id: "$other" }, true), { isDecryptionFailure: () => true });
+    receive(plain);
+    receive(secret);
+    receive(other);
+    await tick();
+    pushed("");
+
+    // The undecryptable event is skipped, but it is in the cache for `from`.
+    const read = await ask(`${X}read_timeline`, { limit: 10 });
+    expect((read.events as { event_id: string }[]).map((e) => e.event_id)).toEqual(["$plain"]);
+    expect(((await ask(`${X}read_timeline`, { from: "$secret", limit: 10 })).events as unknown[]).length).toBe(1);
+
+    // Decrypted late: the widget is told the IDs it may read, and reads it.
+    for (const event of [secret, other]) {
+      event.getType = () => event.getEffectiveEvent().type;
+      event.isDecryptionFailure = () => false;
+      emit(MatrixEventEvent.Decrypted, event);
+    }
+    await tick();
+    expect(pushed(`${X}notify_timeline_update`)).toEqual([{ decrypted: ["$secret"] }]);
+    expect(((await ask(`${X}read_timeline`, { limit: 10 })).events as { event_id: string }[]).map((e) => e.event_id)).toEqual(["$secret", "$plain"]);
+
+    // A gap in the sync replaced the live timeline.
+    emit(RoomEvent.TimelineReset, client.getRoom(ROOM));
+    await tick();
+    expect(pushed(`${X}notify_timeline_update`)).toEqual([{ reset: true }]);
+
+    // A failed pagination: back to idle, with the error.
+    expect(await ask(`${X}paginate_timeline`, {})).toEqual({ pagination: "paginating" });
+    await tick();
+    const [start, end] = pushed(`${X}notify_timeline_update`);
+    expect(start).toEqual({ pagination: { status: "paginating" } });
+    expect(end).toMatchObject({ pagination: { status: "idle", error: { code: "org.matrix.msc4412.unknown" } } });
+    expect(JSON.stringify(end)).toContain("slow down");
   });
 
   it("forwards an encrypted event only once it is decrypted", async () => {

@@ -34,7 +34,9 @@ await api.requestCapabilities([
 await api.notifyReady();                                           // host shows the widget
 
 await api.sendEvent("m.room.message", { msgtype: "m.text", body: "hi" });
-const history = await api.readEvents("m.room.message", 20);
+// The timeline cache, newest first; older events with `from`; `paginateTimeline` asks the client
+// to fetch more, and `onTimelineUpdate` says when they are there (spec/patch/new/timeline-reading.md).
+const { events, pagination } = await api.readTimeline({ limit: 20 });
 
 // An OpenID token: the host grants `widget:…get_openid` for one token at a time, so this requests
 // the capability when needed (the user is usually asked) and rejects when it is refused.

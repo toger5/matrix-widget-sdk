@@ -28,7 +28,8 @@ change depends on real SDK behaviour; the open questions are in `implementation_
 | `src/matrix_session/js/backend/` | `JsSdkBackend`, `events.ts`, `errors.ts` |
 | `src/matrix_session/js/accountStore.ts` | `AccountStore`: one `localStorage` entry per login, legacy migration; SDK free, used by both (finding `account-store-location`) |
 | `src/matrix_session/verificationCancel.ts` | the reason text of a verification cancel code; SDK free, used by both |
-| `src/matrix_session/roomTimelines.ts` | `RoomTimelines`: the start of the room, a running pagination and the listeners of each room's RoomTimeline; SDK free, used by both |
+| `src/matrix_session/roomTimelines.ts` | `RoomTimelines`: the start of the room, a running pagination and the listeners of each room's RoomTimeline (told about resets and failed paginations); SDK free, used by both, and shared by the session with its backends, so a widget's `paginate_timeline` and the RoomTimeline's "Load older events" are one pagination |
+| `src/matrix_session/timelineFeed.ts` | `TimelineFeed`, `walkCache`: a backend's timeline cache for widgets (`timelineRead`, `timelinePaginateBackwards`, `subscribeTimeline`) on `RoomTimelines`; SDK free. The cache is the js live timeline / the rust event cache; late decryptions come from `MatrixEventEvent.Decrypted` / `subscribeToTimelineChangesRaw` (sdk-addition) |
 | `src/matrix_session/memory/devBackend.ts` | the DevBackend: the same `LiveSession` without a homeserver (its device is always verified) |
 | `src/app/runtime/deviceVerification.ts` | `AccountVerification`: `verified` and the verification flows of one account, for the controller |
 | `oidc-callback.html` | the OAuth redirect target, opened in the login popup |

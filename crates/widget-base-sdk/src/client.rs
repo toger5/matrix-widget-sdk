@@ -10,12 +10,12 @@ use serde_json::Value;
 use widget_actions::{
     ActionError, Base64File, Capability, DelegateRtcLivekitDelayedLeaveRequest, DownloadFileRequest, ErrorKind,
     GetClientContextResponse, GetMatrixContextResponse, GetRtcLivekitTokenRequest, HostRequest, JsonValue, MatrixEvent,
-    MediaConfigResponse, MessageKind, NavigateRequest, OpenIdToken, ReadEventsRequest, ReadRelationsRequest,
-    ReadRelationsResponse, ReadRoomAccountDataRequest, RequestCapabilitiesRequest, RoomAccountData,
-    SearchUserDirectoryRequest, SearchUserDirectoryResponse, SendEventRequest, SendEventResponse, SendToDeviceRequest,
-    SetAlwaysOnScreenRequest, StateKeySelector, ToDeviceEvent, TurnServer, UpdateDelayedEventAction,
-    UpdateDelayedEventRequest, UploadFileRequest, UploadFileResponse, WidgetError, WidgetRequest, WidgetResponse,
-    WireMessage,
+    MediaConfigResponse, MessageKind, NavigateRequest, NotifyTimelineUpdateRequest, OpenIdToken,
+    PaginateTimelineRequest, PaginationStatus, ReadRelationsRequest, ReadRelationsResponse, ReadRoomAccountDataRequest,
+    ReadTimelineRequest, ReadTimelineResponse, RequestCapabilitiesRequest, RoomAccountData, SearchUserDirectoryRequest,
+    SearchUserDirectoryResponse, SendEventRequest, SendEventResponse, SendToDeviceRequest, SetAlwaysOnScreenRequest,
+    ToDeviceEvent, TurnServer, UpdateDelayedEventAction, UpdateDelayedEventRequest, UploadFileRequest,
+    UploadFileResponse, WidgetError, WidgetRequest, WidgetResponse, WireMessage,
 };
 
 use crate::WidgetClientError;
@@ -66,6 +66,11 @@ pub trait WidgetDelegate {
 
     /// The client started or stopped showing the widget (`update_visibility`).
     fn on_visibility_change(&self, _visible: bool) {}
+
+    /// The client's timeline cache changed in a way `forward_event` does not cover
+    /// (`notify_timeline_update`): a new pagination status, a reset, events that became
+    /// decryptable. Read again with [`WidgetClient::read_timeline`].
+    fn on_timeline_update(&self, _update: NotifyTimelineUpdateRequest) {}
 
     /// The host sent `update_capabilities`. `allowed` is the complete set the widget holds now:
     /// it may have grown (a request was granted) or shrunk (the host took capabilities away).
@@ -438,22 +443,29 @@ impl WidgetClient {
         self.call(WidgetRequest::SendEvent { request }, pick!(SendEvent { response } => response))
     }
 
-    /// Read recent timeline events of a type. Needs `widget:…read_events.timeline:<type>`.
-    pub fn read_events(
+    /// Read the client's timeline cache, newest first, from the event older than `request.from`
+    /// (or the newest). Needs `widget:…read_timeline:<type>` for every type to read; the client
+    /// returns only those. Fewer than `limit` events: nothing more is cached below; the
+    /// `pagination` status says whether [`paginate_timeline`](Self::paginate_timeline) can fetch
+    /// more. `from` not cached is the error `…event_not_cached`.
+    pub fn read_timeline(
         &self,
-        event_type: impl Into<String>,
-        limit: Option<u64>,
-    ) -> impl Future<Output = Result<Vec<MatrixEvent>, WidgetClientError>> + 'static {
-        self.read_events_request(ReadEventsRequest::timeline(event_type, limit))
+        request: ReadTimelineRequest,
+    ) -> impl Future<Output = Result<ReadTimelineResponse, WidgetClientError>> + 'static {
+        self.call(WidgetRequest::ReadTimeline { request }, pick!(ReadTimeline { response } => response))
     }
 
-    /// Read current state events of a type. Needs `widget:…read_events.state:<type>[#<state_key>]`.
-    pub fn read_state(
+    /// Ask the client to extend its timeline cache backwards; `limit` is a hint. Answers at once
+    /// with the status (`paginating`, or `start_reached`); the outcome arrives through
+    /// [`WidgetDelegate::on_timeline_update`]. Needs `widget:…paginate_timeline`.
+    pub fn paginate_timeline(
         &self,
-        event_type: impl Into<String>,
-        state_key: StateKeySelector,
-    ) -> impl Future<Output = Result<Vec<MatrixEvent>, WidgetClientError>> + 'static {
-        self.read_events_request(ReadEventsRequest::state(event_type, state_key))
+        limit: Option<u32>,
+    ) -> impl Future<Output = Result<PaginationStatus, WidgetClientError>> + 'static {
+        self.call(
+            WidgetRequest::PaginateTimeline { request: PaginateTimelineRequest { limit } },
+            pick!(PaginateTimeline { response } => response.pagination),
+        )
     }
 
     /// Send a to-device message (MSC3819): `messages` is `user_id -> device_id -> content`
@@ -594,14 +606,6 @@ impl WidgetClient {
         self.call(WidgetRequest::ReadRelations { request }, pick!(ReadRelations { response } => response))
     }
 
-    /// Send any `read_events` request as is (`msgtype`, `room_ids`, `since`, ...).
-    pub fn read_events_request(
-        &self,
-        request: ReadEventsRequest,
-    ) -> impl Future<Output = Result<Vec<MatrixEvent>, WidgetClientError>> + 'static {
-        self.call(WidgetRequest::ReadEvents { request }, pick!(ReadEvents { response } => response.events))
-    }
-
     // ---- incoming ---------------------------------------------------------------------------
 
     /// Feed a JSON message received from the host. Acknowledgements are sent through the
@@ -708,6 +712,10 @@ impl WidgetClient {
             HostRequest::UpdateVisibility { request } => {
                 self.send(msg.ack());
                 self.delegate.on_visibility_change(request.visible);
+            }
+            HostRequest::NotifyTimelineUpdate { request } => {
+                self.send(msg.ack());
+                self.delegate.on_timeline_update(request);
             }
             HostRequest::Unknown => {
                 log::warn!("the host sent the unknown action {} ({})", msg.action, msg.request_id);
@@ -846,17 +854,25 @@ mod tests {
         block(fut).unwrap();
 
         // Wrong shaped success body
-        let fut = client.read_events("m.room.message", Some(3));
+        let fut = client.read_timeline(ReadTimelineRequest::newest(3));
         let sent = rec.drain();
+        assert_eq!(sent[0].action, "org.matrix.mscXXXX.read_timeline");
         assert_eq!(sent[0].request_body()["limit"], 3);
         client.handle_message_from_host(&sent[0].response_to(json!({"events": "nope"})).to_json()).unwrap();
         assert!(matches!(block(fut), Err(WidgetClientError::Protocol(ActionError::InvalidBody { .. }))));
+
+        let fut = client.paginate_timeline(Some(20));
+        let sent = rec.drain();
+        assert_eq!(sent[0].action, "org.matrix.mscXXXX.paginate_timeline");
+        assert_eq!(sent[0].request_body(), json!({"limit": 20}));
+        client.handle_message_from_host(&sent[0].response_to(json!({"pagination": "paginating"})).to_json()).unwrap();
+        assert_eq!(block(fut).unwrap(), PaginationStatus::Paginating);
     }
 
     #[test]
     fn capabilities_flow() {
         let (client, rec) = setup();
-        let caps = vec![Capability::send_event("a"), Capability::read_events("b")];
+        let caps = vec![Capability::send_event("a"), Capability::read_timeline("b")];
         let fut = client.request_capabilities(caps.clone());
         assert_eq!(client.state().pending_requested, caps);
         let sent = rec.drain();
@@ -875,7 +891,7 @@ mod tests {
         assert_eq!(sent[0].response_body(), json!({}));
         assert_eq!(rec.caps_changed.get(), 1);
         assert!(client.has_capability(&Capability::send_event("a")));
-        assert!(!client.has_capability(&Capability::read_events("b")));
+        assert!(!client.has_capability(&Capability::read_timeline("b")));
         assert!(client.state().pending_requested.is_empty());
 
         // `allowed` is the full list: it replaces what the widget held ...
@@ -883,12 +899,12 @@ mod tests {
             HostRequest::UpdateCapabilities { request: UpdateCapabilitiesRequest { allowed } }.into_wire(id)
         };
         client
-            .handle_message(update(vec![Capability::send_event("a"), Capability::read_events("b")], "host-2"))
+            .handle_message(update(vec![Capability::send_event("a"), Capability::read_timeline("b")], "host-2"))
             .unwrap();
         assert_eq!(client.state().approved.len(), 2);
         // ... so the host can take capabilities away again.
-        client.handle_message(update(vec![Capability::read_events("b")], "host-3")).unwrap();
-        assert_eq!(client.state().approved, vec![Capability::read_events("b")]);
+        client.handle_message(update(vec![Capability::read_timeline("b")], "host-3")).unwrap();
+        assert_eq!(client.state().approved, vec![Capability::read_timeline("b")]);
         assert!(!client.has_capability(&Capability::send_event("a")));
         assert_eq!(rec.caps_changed.get(), 3);
 

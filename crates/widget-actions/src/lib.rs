@@ -26,6 +26,7 @@ mod json;
 mod matrix;
 mod wire;
 
+pub use actions::host::notify_timeline_update::{NotifyTimelineUpdateRequest, TimelinePagination};
 pub use actions::host::update_capabilities::UpdateCapabilitiesRequest;
 pub use actions::host::update_language::UpdateLanguageRequest;
 pub use actions::host::update_state::UpdateStateRequest;
@@ -37,9 +38,12 @@ pub use actions::widget::get_matrix_context::GetMatrixContextResponse;
 pub use actions::widget::get_media_config::MediaConfigResponse;
 pub use actions::widget::get_rtc_transports::RtcTransportsResponse;
 pub use actions::widget::navigate::NavigateRequest;
-pub use actions::widget::read_events::{ReadEventsRequest, ReadEventsResponse, RoomSelector};
+pub use actions::widget::paginate_timeline::{PaginateTimelineRequest, PaginateTimelineResponse};
 pub use actions::widget::read_relations::{ReadRelationsRequest, ReadRelationsResponse, RelationDirection};
-pub use actions::widget::read_room_account_data::{ReadRoomAccountDataRequest, ReadRoomAccountDataResponse};
+pub use actions::widget::read_room_account_data::{
+    ReadRoomAccountDataRequest, ReadRoomAccountDataResponse, RoomSelector,
+};
+pub use actions::widget::read_timeline::{ReadTimelineRequest, ReadTimelineResponse};
 pub use actions::widget::request_capabilities::RequestCapabilitiesRequest;
 pub use actions::widget::rtc_livekit::{
     DelegateRtcLivekitDelayedLeaveRequest, GetRtcLivekitTokenRequest, GetRtcLivekitTokenResponse,
@@ -59,8 +63,8 @@ pub use error::ActionError;
 pub use file::Base64File;
 pub use json::JsonValue;
 pub use matrix::{
-    matrix_event_from_json, matrix_event_to_json, MatrixEvent, OpenIdToken, RoomAccountData, StateKeySelector,
-    ToDeviceEvent, TurnServer,
+    matrix_event_from_json, matrix_event_to_json, MatrixEvent, OpenIdToken, PaginationStatus, RoomAccountData,
+    TimelineFilter, ToDeviceEvent, TurnServer,
 };
 pub use wire::{
     ErrorKind, MatrixApiError, MatrixErrorResponse, MessageKind, Source, WidgetError, WireMessage, ACTION_TIMEOUT_MS,

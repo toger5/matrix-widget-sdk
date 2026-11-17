@@ -8,9 +8,9 @@
  * What is account-scoped on a real homeserver (media, to-device messages, TURN credentials, RTC
  * transports) is kept in sync across the rooms' backends here.
  */
-import { InMemoryBackend, type InMemoryBackendLike, type MatrixEvent, type TurnServer } from "@matrix-widget-tools/widget-host-bindings";
+import { InMemoryBackend, PaginationStatus, type InMemoryBackendLike, type MatrixEvent, type TurnServer } from "@matrix-widget-tools/widget-host-bindings";
 
-import type { MockedRoomData, MockedStateEvent, MockedTimelineEvent, ScheduledEvent, ToDeviceMessage } from "../../appViewModel";
+import type { MockedPagination, MockedRoomData, MockedStateEvent, MockedTimelineEvent, ScheduledEvent, ToDeviceMessage } from "../../appViewModel";
 import { describesWidget } from "../../lib/widgetEvents";
 import type { AccountInfo, LiveSession, RawEvent, RoomBackend, RoomDetails, RoomExport, RoomMember, RoomSummary, RoomTimeline } from "../../session";
 import { WIDGET_EVENT_TYPES, type StateEvent } from "../../widgetStateEvent";
@@ -78,6 +78,8 @@ interface RoomContent {
   /** For `toSeed()`. */
   state: MockedStateEvent[];
   scheduled: ScheduledEvent[];
+  /** The pagination of the timeline cache (widgets' `paginate_timeline`). */
+  pagination: MockedPagination;
   /** Oldest first, as plain Matrix JSON: what `roomState()` and `timeline()` hand out. */
   raw: { state: RawEvent[]; timeline: RawEvent[] };
 }
@@ -117,9 +119,19 @@ const EMPTY_CONTENT: RoomContent = {
   widgetEvents: [],
   state: [],
   scheduled: [],
+  pagination: { status: "idle" },
   raw: { state: [], timeline: [] },
 };
 const NO_SCHEDULED: ScheduledEvent[] = [];
+/** The most messages "Resolve pagination" generates at once. */
+export const MAX_GENERATED_EVENTS = 1000;
+const GREETINGS = ["Hi all,", "Quick note:", "Reminder:", "FYI", "Hm,", "Agreed.", "Back from lunch;", "Ok so"] as const;
+const TOPICS = ["the build is green again", "who has the slides?", "standup moved to 10:30", "the widget loads now", "let's call later", "see the thread above", "nice work!", "the room key arrived"] as const;
+const PAGINATION_STATUS: Record<PaginationStatus, MockedPagination["status"]> = {
+  [PaginationStatus.Idle]: "idle",
+  [PaginationStatus.Paginating]: "paginating",
+  [PaginationStatus.StartReached]: "start_reached",
+};
 
 const asObject = (value: unknown): Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
@@ -309,6 +321,7 @@ export class DevBackend implements LiveSession {
         rooms: this.roomsData,
         userId: this.user,
         scheduled: content?.scheduled ?? NO_SCHEDULED,
+        ...(content ? { pagination: content.pagination } : {}),
         toDevice: this.toDeviceData,
         failSends: this.sendsFail,
         media: this.mediaData,
@@ -342,8 +355,11 @@ export class DevBackend implements LiveSession {
     for (const room of this.mocked.values()) {
       const timeline = room.store.timeline();
       const delayed = room.store.delayedEvents();
-      // Every write to the state also appends to the timeline, so the timeline stands for both.
-      const stamp = `${timeline.length} ${timeline.at(-1)?.eventId ?? ""} ${delayed.map((d) => `${d.delayId}:${d.restarts}`).join(",")}`;
+      // Every write to the state also appends to the timeline, so the timeline stands for both. A
+      // resolved pagination adds older events (the length), a widget's request changes the status.
+      const pending = room.store.pendingPagination();
+      const pagination = `${room.store.paginationStatus()} ${pending ? (pending.limit ?? "any") : "-"}`;
+      const stamp = `${timeline.length} ${timeline.at(-1)?.eventId ?? ""} ${delayed.map((d) => `${d.delayId}:${d.restarts}`).join(",")} ${pagination}`;
       if (stamp !== room.stamp) {
         room.stamp = stamp;
         room.content = this.read(room, timeline, delayed, now);
@@ -474,6 +490,46 @@ export class DevBackend implements LiveSession {
     room.firstSeen.clear();
     this.skeleton(room, name);
     this.refresh();
+  }
+
+  /**
+   * "Resolve pagination": end the back-pagination a widget asked for (`paginate_timeline`) with
+   * `count` random messages (`m.room.message` / `m.text`, random senders and bodies) older than the
+   * oldest event of the room, and with "start reached" if `startReached`. The backend tells the
+   * widgets (`notify_timeline_update`). Works without a request too: it adds older history.
+   */
+  resolvePagination(roomId: string, count: number, startReached: boolean): void {
+    if (!Number.isInteger(count) || count < 0 || count > MAX_GENERATED_EVENTS) throw new Error(`the number of messages has to be a whole number from 0 to ${MAX_GENERATED_EVENTS}`);
+    const room = this.room(roomId);
+    const oldest = room.content.raw.timeline[0]?.origin_server_ts;
+    const before = typeof oldest === "number" && oldest > 0 ? oldest : Date.now();
+    const server = serverOf(this.user);
+    const senders = [this.user, ...["bob", "carol", "dave"].map((name) => `@${name}:${server}`)];
+    const pick = <T>(list: readonly T[]): T => list[Math.floor(Math.random() * list.length)];
+    const events: MatrixEvent[] = Array.from({ length: count }, (_, i) => ({
+      eventType: "m.room.message",
+      sender: pick(senders),
+      eventId: `$dev${++this.counter}`,
+      roomId: room.id,
+      // Oldest first, a minute apart, ending a minute before the oldest event.
+      originServerTs: BigInt(Math.max(0, before - (count - i) * 60_000)),
+      stateKey: undefined,
+      content: { msgtype: "m.text", body: `${pick(GREETINGS)} ${pick(TOPICS)}` },
+      unsigned: undefined,
+    }));
+    room.store.resolvePagination(events, startReached);
+    this.refresh();
+  }
+
+  /** Fail the back-pagination a widget asked for: the widgets get `message` as the error. */
+  failPagination(roomId: string, message: string): void {
+    this.room(roomId).store.failPagination(message);
+    this.refresh();
+  }
+
+  /** Tell the room's widgets that the timeline cache is no longer continuous (`notify_timeline_update` with `reset`). */
+  resetTimeline(roomId: string): void {
+    this.room(roomId).store.resetTimeline();
   }
 
   /**
@@ -936,6 +992,12 @@ export class DevBackend implements LiveSession {
       };
     });
 
+    const pending = room.store.pendingPagination();
+    const pagination: MockedPagination = {
+      status: PAGINATION_STATUS[room.store.paginationStatus()],
+      ...(pending ? { requested: pending.limit === undefined ? {} : { limit: pending.limit } } : {}),
+    };
+
     return {
       name: asString(state.get("m.room.name\n")?.name) ?? room.id,
       avatarUrl: asString(state.get("m.room.avatar\n")?.url),
@@ -945,6 +1007,7 @@ export class DevBackend implements LiveSession {
       widgetEvents,
       state: stateEvents.map((event) => ({ type: event.eventType, stateKey: event.stateKey ?? "", content: asObject(event.content) })),
       scheduled,
+      pagination,
       raw: { state: stateEvents.map(raw), timeline: timeline.map(raw) },
     };
   }

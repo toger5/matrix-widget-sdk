@@ -29,8 +29,9 @@ Do not reopen these without asking Timo.
     placeholder `org.matrix.mscXXXX` for actions without an MSC, `org.matrix.msc4412` for the
     three core actions (which have no capability). The stable `m` is accepted when parsing. The
     action → namespace table is repeated per language, see section 2.
-  - One capability per action. `send_event`, `read_events` and `forward_event` always carry
-    `timeline` or `state`; they have no bare form.
+  - One capability per action. `send_event` and `forward_event` always carry `timeline` or
+    `state`; they have no bare form. (`read_events` is gone: `read_timeline` replaced it, and
+    only the compat wrapper understands it.)
   - No capability names a room. One widget, one room.
   - The source `webview` is about no action: one token of the widget iframe's `sandbox`
     (`webview:org.matrix.mscXXXX.sandbox:<token>`) or `allow` (`webview:…allow:<feature>`), value
@@ -68,7 +69,7 @@ A rename also means renaming the file, the variant and the body types, so the co
 - `Capability` variant and its doc comment.
 - Without data: one row in `UNIT_CAPABILITIES`. With data: a head constant, an arm in
   `with_data` (parse) and an arm in `parts` (format).
-- A constructor (`Capability::read_events(..)`) if the capability carries data.
+- A constructor (`Capability::read_timeline(..)`) if the capability carries data.
 - Matching: an `allows_*` method on `Capability` and on the `CapabilitySet` trait and its impl.
 - Tests in the same file: add the string to `all()`; add near-misses to
   `strings_outside_the_scheme_are_other`; extend `matching` / `each_action_has_its_own_capability`.

@@ -3,10 +3,10 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard};
 
 use crate::{
-    BackendError, JsonValue, MatrixBackend, MatrixEvent, MediaConfig, MediaFile, OpenIdToken, RelationDirection,
-    RelationsChunk, RoomAccountData, RoomSink, RoomSubjects, StateKeySelector, Subscription, ToDeviceDelivery,
-    ToDeviceEvent, ToDeviceMessage, ToDeviceSink, TurnServer, TurnServerSink, UserDirectorySearchResult,
-    UserDirectoryUser,
+    BackendError, JsonValue, MatrixBackend, MatrixEvent, MediaConfig, MediaFile, OpenIdToken, PaginationStatus,
+    RelationDirection, RelationsChunk, RoomAccountData, RoomSink, RoomSubjects, Subscription, TimelineChunk,
+    TimelineFilter, TimelineSink, TimelineUpdate, ToDeviceDelivery, ToDeviceEvent, ToDeviceMessage, ToDeviceSink,
+    TurnServer, TurnServerSink, UserDirectorySearchResult, UserDirectoryUser,
 };
 
 /// A [`MatrixBackend`] backed by plain vectors. Intended for tests and prototypes.
@@ -15,6 +15,11 @@ use crate::{
 /// inspected with [`InMemoryBackend::timeline`] / [`InMemoryBackend::state`]. Use
 /// [`InMemoryBackend::inject`] to simulate events arriving from sync. Both paths notify live
 /// subscriptions like a real client would, so the widget sees its own sends echoed too.
+///
+/// The timeline is also the *timeline cache* of `timeline_read`. A back-pagination
+/// (`timeline_paginate_backwards`) never finishes by itself: it stays pending until the test or
+/// the test host resolves it with [`resolve_pagination`](InMemoryBackend::resolve_pagination)
+/// (older events) or [`fail_pagination`](InMemoryBackend::fail_pagination).
 #[derive(Debug)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Object))]
 pub struct InMemoryBackend {
@@ -29,6 +34,7 @@ pub struct InMemoryBackend {
     room_subscribers: Subscribers<RoomSubscriber>,
     to_device_subscribers: Subscribers<ToDeviceSubscriber>,
     turn_subscribers: Subscribers<Arc<dyn TurnServerSink>>,
+    timeline_subscribers: Subscribers<Arc<dyn TimelineSink>>,
 }
 
 /// The subscriptions of one kind, each with what its subscriber asked for (`T`).
@@ -99,6 +105,12 @@ impl std::fmt::Debug for dyn ToDeviceSink {
     }
 }
 
+impl std::fmt::Debug for dyn TimelineSink {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("TimelineSink")
+    }
+}
+
 impl std::fmt::Debug for dyn TurnServerSink {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str("TurnServerSink")
@@ -135,9 +147,22 @@ pub struct SentToDeviceMessage {
     pub encrypted: bool,
 }
 
+/// A back-pagination a widget asked for that has not been resolved yet.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+pub struct PendingPagination {
+    /// The `limit` hint of the first request that is still waiting, if it gave one.
+    pub limit: Option<u32>,
+}
+
 #[derive(Debug, Default)]
 struct Inner {
+    /// Oldest first. Also the timeline cache.
     timeline: Vec<MatrixEvent>,
+    /// The pagination status of the timeline cache.
+    pagination: PaginationStatus,
+    /// The back-pagination waiting to be resolved, while `pagination` is `Paginating`.
+    pending_pagination: Option<PendingPagination>,
     /// (event type, state key) -> event
     state: BTreeMap<(String, String), MatrixEvent>,
     /// Scheduled (MSC4140) events by delay id. Nothing fires them automatically; a test fires
@@ -212,6 +237,7 @@ impl InMemoryBackend {
             room_subscribers: Default::default(),
             to_device_subscribers: Default::default(),
             turn_subscribers: Default::default(),
+            timeline_subscribers: Default::default(),
         })
     }
 
@@ -307,12 +333,70 @@ impl InMemoryBackend {
         Ok(event)
     }
 
+    /// The pagination status of the timeline cache.
+    pub fn pagination_status(&self) -> PaginationStatus {
+        self.inner().pagination
+    }
+
+    /// The back-pagination a widget started and nobody resolved yet.
+    pub fn pending_pagination(&self) -> Option<PendingPagination> {
+        self.inner().pending_pagination
+    }
+
+    /// Finish a back-pagination: put `events` (oldest first) before the oldest event of the
+    /// timeline, as if fetched from the homeserver, then set the status to `StartReached` or
+    /// `Idle` and tell the timeline subscribers. Works with no pagination pending too. The
+    /// current state is not changed by older state events.
+    pub fn resolve_pagination(&self, events: Vec<MatrixEvent>, start_reached: bool) {
+        let status = if start_reached { PaginationStatus::StartReached } else { PaginationStatus::Idle };
+        {
+            let mut inner = self.inner();
+            inner.timeline.splice(0..0, events);
+            inner.pagination = status;
+            inner.pending_pagination = None;
+        }
+        self.notify_timeline(TimelineUpdate::pagination(status));
+    }
+
+    /// Fail the pending back-pagination with `message`: the status goes back to `Idle`, and the
+    /// timeline subscribers get the error.
+    pub fn fail_pagination(&self, message: String) {
+        {
+            let mut inner = self.inner();
+            inner.pagination = PaginationStatus::Idle;
+            inner.pending_pagination = None;
+        }
+        self.notify_timeline(TimelineUpdate {
+            pagination: Some(PaginationStatus::Idle),
+            pagination_error: Some(message),
+            ..Default::default()
+        });
+    }
+
+    /// Tell the timeline subscribers that the cache is no longer continuous (`reset`), as after a
+    /// limited sync. The stored timeline stays as it is.
+    pub fn reset_timeline(&self) {
+        self.notify_timeline(TimelineUpdate::reset());
+    }
+
+    /// Tell the timeline subscribers that the stored events `event_ids` became decryptable (this
+    /// store never has undecryptable events; this is for tests of the driver). Unknown IDs are
+    /// skipped.
+    pub fn report_decrypted(&self, event_ids: Vec<String>) {
+        let decrypted: Vec<MatrixEvent> =
+            self.inner().timeline.iter().filter(|e| event_ids.contains(&e.event_id)).cloned().collect();
+        self.notify_timeline(TimelineUpdate { decrypted, ..Default::default() });
+    }
+
     /// Forget all stored events. Room and user id stay. Subscribers learn that every state type
-    /// they follow is now empty.
+    /// they follow is now empty, and timeline subscribers get a `reset`; the pagination status
+    /// goes back to `Idle`.
     pub fn clear(&self) {
         {
             let mut inner = self.inner();
             inner.timeline.clear();
+            inner.pagination = PaginationStatus::Idle;
+            inner.pending_pagination = None;
             inner.state.clear();
             inner.delayed.clear();
             inner.to_device_sent.clear();
@@ -324,6 +408,7 @@ impl InMemoryBackend {
                 sub.target.sink.on_state_events(event_type.clone(), Vec::new());
             }
         }
+        self.notify_timeline(TimelineUpdate::reset());
     }
 
     /// Make every subsequent send from the widget fail with `message`, or succeed again when
@@ -386,6 +471,13 @@ impl InMemoryBackend {
             if event.is_state() && subjects.state_event_types.contains(&event.event_type) {
                 sink.on_state_events(event.event_type.clone(), self.state_of_type(&event.event_type));
             }
+        }
+    }
+
+    /// Tell every timeline subscription about `update`, with no lock held.
+    fn notify_timeline(&self, update: TimelineUpdate) {
+        for sub in self.timeline_subscribers.live() {
+            sub.target.on_timeline_update(update.clone());
         }
     }
 
@@ -566,44 +658,65 @@ impl MatrixBackend for InMemoryBackend {
         self.fire_delayed_event(delay_id).map(|_| ())
     }
 
-    /// `since` is ignored: this store has no pagination tokens.
-    async fn read_room_events(
+    /// The stored timeline is the cache. Every event in it is decrypted.
+    async fn timeline_read(
         &self,
         room_id: String,
-        event_type: String,
-        msgtype: Option<String>,
+        from: Option<String>,
         limit: u32,
-        _since: Option<String>,
-    ) -> Result<Vec<MatrixEvent>, BackendError> {
+        filter: Vec<TimelineFilter>,
+    ) -> Result<TimelineChunk, BackendError> {
         self.check_room(&room_id)?;
         let inner = self.inner();
-        let mut events: Vec<MatrixEvent> = inner
-            .timeline
+        let end = match &from {
+            None => inner.timeline.len(),
+            Some(from) => inner
+                .timeline
+                .iter()
+                .position(|e| &e.event_id == from)
+                .ok_or_else(|| BackendError::event_not_cached(from))?,
+        };
+        let events = inner.timeline[..end]
             .iter()
             .rev()
-            .filter(|e| e.event_type == event_type && e.state_key.is_none())
-            .filter(|e| msgtype.as_deref().is_none_or(|m| e.content.get("msgtype").and_then(|v| v.as_str()) == Some(m)))
+            .filter(|e| filter.iter().any(|f| f.matches(e)))
             .take(limit as usize)
             .cloned()
             .collect();
-        events.reverse();
-        Ok(events)
+        Ok(TimelineChunk { events, pagination: inner.pagination })
     }
 
-    async fn read_room_state(
+    /// Never fetches anything: the pagination stays pending until
+    /// [`resolve_pagination`](InMemoryBackend::resolve_pagination) or
+    /// [`fail_pagination`](InMemoryBackend::fail_pagination).
+    async fn timeline_paginate_backwards(
         &self,
         room_id: String,
-        event_type: String,
-        state_key: StateKeySelector,
-    ) -> Result<Vec<MatrixEvent>, BackendError> {
+        limit: Option<u32>,
+    ) -> Result<PaginationStatus, BackendError> {
         self.check_room(&room_id)?;
-        let inner = self.inner();
-        Ok(inner
-            .state
-            .iter()
-            .filter(|((t, k), _)| *t == event_type && state_key.matches(k))
-            .map(|(_, e)| e.clone())
-            .collect())
+        let started = {
+            let mut inner = self.inner();
+            match inner.pagination {
+                PaginationStatus::StartReached => return Ok(PaginationStatus::StartReached),
+                PaginationStatus::Paginating => {
+                    // Joins the running one; a hint fills in one the first request did not give.
+                    if let Some(pending) = inner.pending_pagination.as_mut() {
+                        pending.limit = pending.limit.or(limit);
+                    }
+                    false
+                }
+                PaginationStatus::Idle => {
+                    inner.pagination = PaginationStatus::Paginating;
+                    inner.pending_pagination = Some(PendingPagination { limit });
+                    true
+                }
+            }
+        };
+        if started {
+            self.notify_timeline(TimelineUpdate::pagination(PaginationStatus::Paginating));
+        }
+        Ok(PaginationStatus::Paginating)
     }
 
     /// Relations are found through `content["m.relates_to"]`; `from` / `to` are ignored and no
@@ -786,6 +899,15 @@ impl MatrixBackend for InMemoryBackend {
         Ok(self.to_device_subscribers.add(ToDeviceSubscriber { event_types, sink }))
     }
 
+    fn subscribe_timeline(
+        &self,
+        room_id: String,
+        sink: Arc<dyn TimelineSink>,
+    ) -> Result<Arc<dyn Subscription>, BackendError> {
+        self.check_room(&room_id)?;
+        Ok(self.timeline_subscribers.add(sink))
+    }
+
     fn subscribe_turn_servers(&self, sink: Arc<dyn TurnServerSink>) -> Result<Arc<dyn Subscription>, BackendError> {
         let subscription = self.turn_subscribers.add(sink);
         let current = self.inner().turn_server.clone();
@@ -878,32 +1000,21 @@ mod tests {
             b.send_state_event(room(), "m.room.topic".into(), "".into(), json!({"topic": "b"}).into()).await.unwrap();
             b.send_state_event(room(), "m.room.member".into(), "@me:x".into(), json!({}).into()).await.unwrap();
 
-            let msgs = b.read_room_events(room(), "m.room.message".into(), None, 1, None).await.unwrap();
-            assert_eq!(msgs.len(), 1);
-            assert_eq!(msgs[0].content["body"], "2");
-            assert_eq!(b.read_room_events(room(), "m.room.message".into(), None, 10, None).await.unwrap().len(), 2);
+            let messages = || vec![TimelineFilter::new("m.room.message", None::<&str>)];
+            let msgs = b.timeline_read(room(), None, 1, messages()).await.unwrap();
+            assert_eq!(msgs.events.len(), 1);
+            assert_eq!(msgs.events[0].content["body"], "2");
+            assert_eq!(msgs.pagination, PaginationStatus::Idle);
+            assert_eq!(b.timeline_read(room(), None, 10, messages()).await.unwrap().events.len(), 2);
             // msgtype narrows
-            let text =
-                b.read_room_events(room(), "m.room.message".into(), Some("m.text".into()), 10, None).await.unwrap();
-            assert_eq!(text.len(), 1);
-            assert!(b
-                .read_room_events(room(), "m.room.message".into(), Some("m.image".into()), 10, None)
-                .await
-                .unwrap()
-                .is_empty());
+            let text = vec![TimelineFilter::new("m.room.message", Some("m.text"))];
+            assert_eq!(b.timeline_read(room(), None, 10, text).await.unwrap().events.len(), 1);
+            let image = vec![TimelineFilter::new("m.room.message", Some("m.image"))];
+            assert!(b.timeline_read(room(), None, 10, image).await.unwrap().events.is_empty());
 
-            let topic = b.read_room_state(room(), "m.room.topic".into(), StateKeySelector::Any).await.unwrap();
-            assert_eq!(topic.len(), 1);
-            assert_eq!(topic[0].content["topic"], "b");
-            assert!(b
-                .read_room_state(room(), "m.room.member".into(), StateKeySelector::key("@x:x"))
-                .await
-                .unwrap()
-                .is_empty());
-            assert_eq!(
-                b.read_room_state(room(), "m.room.member".into(), StateKeySelector::key("@me:x")).await.unwrap().len(),
-                1
-            );
+            let topics = b.state().into_iter().filter(|e| e.event_type == "m.room.topic").collect::<Vec<_>>();
+            assert_eq!(topics.len(), 1);
+            assert_eq!(topics[0].content["topic"], "b");
 
             b.set_fail_sends(Some(BackendError::forbidden("no")));
             let err = b.send_room_event(room(), "m.x".into(), json!({}).into()).await.unwrap_err();
@@ -914,7 +1025,8 @@ mod tests {
             // Any other room is refused everywhere.
             let other = "!other:x".to_string();
             assert!(b.send_room_event(other.clone(), "m.x".into(), json!({}).into()).await.is_err());
-            assert!(b.read_room_events(other, "m.x".into(), None, 1, None).await.is_err());
+            assert!(b.timeline_read(other.clone(), None, 1, vec![]).await.is_err());
+            assert!(b.timeline_paginate_backwards(other, None).await.is_err());
         });
     }
 
@@ -1230,5 +1342,123 @@ mod tests {
         let sink = Arc::new(RecordingSink::default());
         let err = b.subscribe_room("!other:x".into(), RoomSubjects::default(), sink).err().unwrap();
         assert_eq!(err.errcode(), Some("M_NOT_FOUND"));
+    }
+
+    /// Records every timeline update.
+    #[derive(Default)]
+    struct TimelineRecorder(Mutex<Vec<TimelineUpdate>>);
+
+    impl TimelineRecorder {
+        fn drain(&self) -> Vec<TimelineUpdate> {
+            std::mem::take(&mut *self.0.lock().unwrap())
+        }
+    }
+
+    impl TimelineSink for TimelineRecorder {
+        fn on_timeline_update(&self, update: TimelineUpdate) {
+            self.0.lock().unwrap().push(update);
+        }
+    }
+
+    fn ids(chunk: &TimelineChunk) -> Vec<&str> {
+        chunk.events.iter().map(|e| e.event_id.as_str()).collect()
+    }
+
+    #[test]
+    fn timeline_read_walks_the_cache_from_newest_to_oldest() {
+        futures::executor::block_on(async {
+            let b = InMemoryBackend::new(room(), "@me:x".into());
+            for body in ["a", "b", "c", "d", "e"] {
+                b.inject(event("m.room.message", None, body));
+            }
+            b.inject(event("m.reaction", None, "r"));
+            b.inject(event("m.room.topic", Some(""), "topic"));
+            let all = vec![
+                TimelineFilter::new("m.room.message", None::<&str>),
+                TimelineFilter::new("m.room.topic", None::<&str>),
+            ];
+
+            let newest = b.timeline_read(room(), None, 3, all.clone()).await.unwrap();
+            // State events of the timeline are read like any other; the reaction is filtered out.
+            assert_eq!(ids(&newest), ["$topic", "$e", "$d"]);
+            let older = b.timeline_read(room(), Some("$d".into()), 3, all.clone()).await.unwrap();
+            assert_eq!(ids(&older), ["$c", "$b", "$a"]);
+            // `from` itself need not match the filter; fewer than `limit` means the cache ends.
+            let below = b.timeline_read(room(), Some("$r".into()), 10, all.clone()).await.unwrap();
+            assert_eq!(ids(&below), ["$e", "$d", "$c", "$b", "$a"]);
+            assert!(b.timeline_read(room(), Some("$a".into()), 3, all.clone()).await.unwrap().events.is_empty());
+            // An empty filter matches nothing.
+            assert!(b.timeline_read(room(), None, 3, vec![]).await.unwrap().events.is_empty());
+
+            let err = b.timeline_read(room(), Some("$gone".into()), 3, all).await.unwrap_err();
+            assert_eq!(err, BackendError::event_not_cached("$gone"));
+        });
+    }
+
+    #[test]
+    fn pagination_waits_for_the_test_host() {
+        futures::executor::block_on(async {
+            let b = InMemoryBackend::new(room(), "@me:x".into());
+            b.inject(event("m.room.message", None, "new"));
+            let sink = Arc::new(TimelineRecorder::default());
+            let sub = b.subscribe_timeline(room(), sink.clone()).unwrap();
+            assert!(sink.drain().is_empty(), "nothing on subscribe");
+            assert_eq!(b.pending_pagination(), None);
+
+            assert_eq!(b.timeline_paginate_backwards(room(), None).await.unwrap(), PaginationStatus::Paginating);
+            assert_eq!(sink.drain(), [TimelineUpdate::pagination(PaginationStatus::Paginating)]);
+            // A second request joins the running one; its hint fills the missing one.
+            assert_eq!(b.timeline_paginate_backwards(room(), Some(5)).await.unwrap(), PaginationStatus::Paginating);
+            assert!(sink.drain().is_empty());
+            assert_eq!(b.pending_pagination(), Some(PendingPagination { limit: Some(5) }));
+            assert_eq!(b.pagination_status(), PaginationStatus::Paginating);
+            let messages = vec![TimelineFilter::new("m.room.message", None::<&str>)];
+            assert_eq!(
+                b.timeline_read(room(), None, 5, messages.clone()).await.unwrap().pagination,
+                PaginationStatus::Paginating
+            );
+
+            // Resolving puts the events before the oldest one, then tells the subscribers.
+            b.resolve_pagination(
+                vec![event("m.room.message", None, "old1"), event("m.room.message", None, "old2")],
+                false,
+            );
+            assert_eq!(sink.drain(), [TimelineUpdate::pagination(PaginationStatus::Idle)]);
+            assert_eq!(b.pending_pagination(), None);
+            let chunk = b.timeline_read(room(), Some("$new".into()), 5, messages.clone()).await.unwrap();
+            assert_eq!(ids(&chunk), ["$old2", "$old1"]);
+            assert_eq!(chunk.pagination, PaginationStatus::Idle);
+
+            // A failure goes back to idle with the error.
+            b.timeline_paginate_backwards(room(), Some(3)).await.unwrap();
+            assert_eq!(b.pending_pagination(), Some(PendingPagination { limit: Some(3) }));
+            b.fail_pagination("timeout".into());
+            let updates = sink.drain();
+            assert_eq!(updates.len(), 2);
+            assert_eq!(updates[1].pagination, Some(PaginationStatus::Idle));
+            assert_eq!(updates[1].pagination_error.as_deref(), Some("timeout"));
+
+            // At the start of the room nothing more happens.
+            b.timeline_paginate_backwards(room(), None).await.unwrap();
+            b.resolve_pagination(vec![], true);
+            sink.drain();
+            assert_eq!(b.timeline_paginate_backwards(room(), None).await.unwrap(), PaginationStatus::StartReached);
+            assert!(sink.drain().is_empty());
+            assert_eq!(b.pending_pagination(), None);
+
+            // Reset, late decryption, clear.
+            b.reset_timeline();
+            b.report_decrypted(vec!["$old1".into(), "$unknown".into()]);
+            let updates = sink.drain();
+            assert_eq!(updates[0], TimelineUpdate::reset());
+            assert_eq!(updates[1].decrypted.iter().map(|e| e.event_id.as_str()).collect::<Vec<_>>(), ["$old1"]);
+            b.clear();
+            assert_eq!(sink.drain(), [TimelineUpdate::reset()]);
+            assert_eq!(b.pagination_status(), PaginationStatus::Idle);
+
+            sub.cancel();
+            b.reset_timeline();
+            assert!(sink.drain().is_empty());
+        });
     }
 }

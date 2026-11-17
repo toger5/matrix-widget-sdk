@@ -10,7 +10,8 @@
 //! SDK can serve both. It has a *send/read* half (the driver asks the backend to send or read)
 //! and a *subscribe* half: [`MatrixBackend::subscribe_room`] registers a [`RoomSink`] that the
 //! backend feeds with new timeline events and with the current room state until the returned
-//! [`Subscription`] is cancelled. The driver subscribes itself whenever the widget's capabilities
+//! [`Subscription`] is cancelled; [`MatrixBackend::subscribe_timeline`] does the same for the
+//! changes of the timeline cache ([`TimelineSink`]). The driver subscribes itself whenever the widget's capabilities
 //! change, so a host does not push events anywhere; it only implements the subscription.
 //!
 //! One backend instance is bound to **one room** (the room the widget lives in). Every method
@@ -25,11 +26,13 @@ mod in_memory;
 use std::sync::Arc;
 
 pub use error::BackendError;
-pub use in_memory::{DelayedEvent, DelegatedDelayedLeave, InMemoryBackend, SentToDeviceMessage, StoredMedia};
+pub use in_memory::{
+    DelayedEvent, DelegatedDelayedLeave, InMemoryBackend, PendingPagination, SentToDeviceMessage, StoredMedia,
+};
 pub use widget_actions::{
-    JsonValue, MatrixEvent, MediaConfigResponse as MediaConfig, OpenIdToken, RelationDirection, RoomAccountData,
-    SearchUserDirectoryResponse as UserDirectorySearchResult, StateKeySelector, ToDeviceEvent, TurnServer,
-    UserDirectoryUser,
+    JsonValue, MatrixEvent, MediaConfigResponse as MediaConfig, OpenIdToken, PaginationStatus, RelationDirection,
+    RoomAccountData, SearchUserDirectoryResponse as UserDirectorySearchResult, TimelineFilter, ToDeviceEvent,
+    TurnServer, UserDirectoryUser,
 };
 
 /// One to-device message to send: its recipient device and the content for that device
@@ -72,6 +75,45 @@ pub struct RelationsChunk {
     pub prev_batch: Option<String>,
 }
 
+/// One read of the timeline cache ([`MatrixBackend::timeline_read`]).
+#[derive(Debug, Clone, PartialEq, Default)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+pub struct TimelineChunk {
+    /// The matching events, **newest first**.
+    pub events: Vec<MatrixEvent>,
+    /// The pagination status of the cache at the time of the read.
+    pub pagination: PaginationStatus,
+}
+
+/// A change of the timeline cache that `forward_event` does not cover
+/// ([`TimelineSink::on_timeline_update`]). Every part is optional.
+#[derive(Debug, Clone, PartialEq, Default)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+pub struct TimelineUpdate {
+    /// The new pagination status, after the fetched events are in the cache.
+    pub pagination: Option<PaginationStatus>,
+    /// Why a pagination failed (then `pagination` is `Idle`).
+    pub pagination_error: Option<String>,
+    /// The cache is no longer continuous (a limited sync left a gap, the cache was dropped or
+    /// rebuilt).
+    pub reset: bool,
+    /// Cached events that could not be decrypted before and now are, decrypted. The driver passes
+    /// on the IDs of those the widget may read.
+    pub decrypted: Vec<MatrixEvent>,
+}
+
+impl TimelineUpdate {
+    /// Only a new pagination status.
+    pub fn pagination(status: PaginationStatus) -> Self {
+        Self { pagination: Some(status), ..Default::default() }
+    }
+
+    /// Only `reset`.
+    pub fn reset() -> Self {
+        Self { reset: true, ..Default::default() }
+    }
+}
+
 /// What a subscriber wants delivered for a room, by event type.
 ///
 /// Timeline delivery matches on the event type alone, so a state event type listed here is
@@ -105,6 +147,13 @@ pub trait RoomSink: Send + Sync {
     /// first call per type is the set at subscription time; later calls follow every change.
     /// An empty vector means there is no such state.
     fn on_state_events(&self, event_type: String, events: Vec<MatrixEvent>);
+}
+
+/// Where a backend delivers the changes of the timeline cache. Implemented by the driver; every
+/// call returns at once and may come from inside [`MatrixBackend::subscribe_timeline`].
+#[cfg_attr(feature = "uniffi", uniffi::export)]
+pub trait TimelineSink: Send + Sync {
+    fn on_timeline_update(&self, update: TimelineUpdate);
 }
 
 /// Where a backend delivers to-device messages of the subscribed types. Implemented by the
@@ -234,25 +283,32 @@ pub trait MatrixBackend: Send + Sync {
 
     // ---- Read half ----
 
-    /// Read the most recent timeline events of `event_type`, newest last, at most `limit`.
-    /// `msgtype` narrows `m.room.message` events to one `msgtype`; `since` is an opaque
-    /// pagination token from an earlier read (MSC2876), which an implementation may ignore.
-    async fn read_room_events(
+    /// Read the client's timeline cache of the room (MSCXXXX `read_timeline`), never the
+    /// homeserver: walk from the event older than `from` (exclusive; from the newest event when
+    /// `None`) towards older events, and collect the events matching any entry of `filter` until
+    /// there are `limit` of them or the cache ends. Events the client cannot decrypt are left
+    /// out. The events come back **newest first**, with the pagination status of the cache.
+    ///
+    /// The driver has already reduced `filter` to what the widget may read; it is never empty.
+    /// `from` not in the cache is [`BackendError::EventNotCached`].
+    async fn timeline_read(
         &self,
         room_id: String,
-        event_type: String,
-        msgtype: Option<String>,
+        from: Option<String>,
         limit: u32,
-        since: Option<String>,
-    ) -> Result<Vec<MatrixEvent>, BackendError>;
+        filter: Vec<TimelineFilter>,
+    ) -> Result<TimelineChunk, BackendError>;
 
-    /// Read current state events of `event_type` matching `state_key`.
-    async fn read_room_state(
+    /// Extend the timeline cache backwards (MSCXXXX `paginate_timeline`). Returns **at once**
+    /// with the status: `Paginating` when a back-pagination started or one was already running
+    /// (`limit` is a hint for its size), `StartReached` when there is nothing older. The outcome
+    /// goes to the [`TimelineSink`]s: the new status once the fetched events are in the cache,
+    /// or `Idle` with `pagination_error` when it failed.
+    async fn timeline_paginate_backwards(
         &self,
         room_id: String,
-        event_type: String,
-        state_key: StateKeySelector,
-    ) -> Result<Vec<MatrixEvent>, BackendError>;
+        limit: Option<u32>,
+    ) -> Result<PaginationStatus, BackendError>;
 
     /// `GET /rooms/{room_id}/relations/{event_id}[/{rel_type}[/{event_type}]]` (MSC3869), decrypted.
     /// `limit`, `from`, `to` and `direction` are the endpoint's query parameters; absent means
@@ -337,6 +393,16 @@ pub trait MatrixBackend: Send + Sync {
         room_id: String,
         subjects: RoomSubjects,
         sink: Arc<dyn RoomSink>,
+    ) -> Result<Arc<dyn Subscription>, BackendError>;
+
+    /// Deliver the changes of the timeline cache of `room_id` ([`TimelineUpdate`]: pagination
+    /// status, reset, late decryptions) to `sink` until the returned subscription is cancelled.
+    /// Synchronous, as [`subscribe_room`](Self::subscribe_room). Nothing is delivered on
+    /// subscribe.
+    fn subscribe_timeline(
+        &self,
+        room_id: String,
+        sink: Arc<dyn TimelineSink>,
     ) -> Result<Arc<dyn Subscription>, BackendError>;
 
     /// Deliver every to-device message of `event_types` to `sink` until the returned

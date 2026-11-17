@@ -29,7 +29,7 @@ export function DevBackendView({ roomTools, roomId, canLeave }: DevBackendViewPr
 
   return (
     <>
-      <RoomBox mode="devBackend" rooms={data.rooms} roomId={roomId} roomTools={roomTools} userId={data.userId} scheduled={data.scheduled} />
+      <RoomBox mode="devBackend" rooms={data.rooms} roomId={roomId} roomTools={roomTools} userId={data.userId} scheduled={data.scheduled} pagination={data.pagination} />
       {tools.open === "client" ? (
         <>
           <ToolSeparator tool="client" heightShare={tools.heightShare} />

@@ -86,6 +86,7 @@ The Dev tools of a Matrix account (`sidepanel-roomtoolsview--*`) are **not reach
 | `sidepanel-devbackendview--timeline` | `devbackendTimeline.spec.ts` › message form: the event is added to the timeline and forwarded to the widget |
 | `sidepanel-devbackendview--timeline-raw-json` | `devbackendTimeline.spec.ts` › raw JSON form: invalid JSON shows an error and sends nothing, a valid event is sent |
 | `sidepanel-devbackendview--timeline-delayed` | `devbackendTimeline.spec.ts` › delayed event: it is listed under “Scheduled”; “Cancel” drops it and “Send now” sends it |
+| `sidepanel-devbackendview--timeline-pagination-requested` | `devbackendTimeline.spec.ts` › a widget's pagination waits for “Resolve pagination”: the generated messages reach the widget, then the start of the room |
 | `sidepanel-devbackendview--tools-collapsed` | `devbackend.spec.ts` › media tool: open (closing the client tool), upload a file, copy its MXC URI, minimise |
 | `sidepanel-devbackendview-state--element-call` | `devbackendState.spec.ts` › the Element Call form writes the call widget as Element Web describes it, and the compat wrapper fills in its URL |
 | `sidepanel-devbackendview-state--raw-json` | `devbackendState.spec.ts` › send state and the state explorer: the sent event is listed by type and key |

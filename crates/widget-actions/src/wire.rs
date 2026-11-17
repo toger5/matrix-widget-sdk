@@ -205,6 +205,9 @@ pub enum ErrorKind {
     /// `matrix_api_error`: a Matrix API request made for the widget failed;
     /// [`WidgetError::matrix_api_error`] carries the homeserver's answer.
     MatrixApiError,
+    /// `event_not_cached`: the event a `read_timeline` should start at (`from`) is not in the
+    /// client's timeline cache (MSCXXXX, `spec/patch/new/timeline-reading.md`). Placeholder namespace.
+    EventNotCached,
     /// `unknown`, and every code this crate does not recognise.
     Unknown,
 }
@@ -217,6 +220,7 @@ impl ErrorKind {
             Self::MissingCapability => (MSC4412_NAMESPACE, "missing_capability"),
             Self::InvalidRequest => (MSC4412_NAMESPACE, "invalid_request"),
             Self::MatrixApiError => (PLACEHOLDER_NAMESPACE, "matrix_api_error"),
+            Self::EventNotCached => (PLACEHOLDER_NAMESPACE, "event_not_cached"),
             Self::Unknown => (MSC4412_NAMESPACE, "unknown"),
         }
     }
@@ -230,7 +234,7 @@ impl ErrorKind {
     /// The kind of `code`. Both the unstable and the stable (`m.`) spelling are recognised; any
     /// other code is [`ErrorKind::Unknown`], as MSC4412 demands.
     pub fn of(code: &str) -> Self {
-        [Self::UnknownAction, Self::MissingCapability, Self::InvalidRequest, Self::MatrixApiError]
+        [Self::UnknownAction, Self::MissingCapability, Self::InvalidRequest, Self::MatrixApiError, Self::EventNotCached]
             .into_iter()
             .find(|kind| {
                 let (namespace, name) = kind.parts();
@@ -326,6 +330,11 @@ impl WidgetError {
     /// `invalid_request`: the request body is incomplete or invalid.
     pub fn invalid_request(message: impl Into<String>) -> Self {
         Self::of(ErrorKind::InvalidRequest, message)
+    }
+
+    /// `event_not_cached`: `event_id` (the `from` of a `read_timeline`) is not in the timeline cache.
+    pub fn event_not_cached(event_id: &str) -> Self {
+        Self::of(ErrorKind::EventNotCached, format!("Event not in the timeline cache: {event_id}"))
     }
 
     /// What the `code` means; unrecognised codes are [`ErrorKind::Unknown`].
@@ -485,6 +494,10 @@ mod tests {
         // Stable spellings are recognised; anything else is `unknown`.
         assert_eq!(ErrorKind::of("m.unknown_action"), ErrorKind::UnknownAction);
         assert_eq!(ErrorKind::of("m.matrix_api_error"), ErrorKind::MatrixApiError);
+        assert_eq!(ErrorKind::of("m.event_not_cached"), ErrorKind::EventNotCached);
+        assert_eq!(ErrorKind::of("org.matrix.mscXXXX.event_not_cached"), ErrorKind::EventNotCached);
+        assert_eq!(WidgetError::event_not_cached("$e").code, "org.matrix.mscXXXX.event_not_cached");
+        assert_eq!(ErrorKind::of("org.matrix.msc4412.event_not_cached"), ErrorKind::Unknown);
         assert_eq!(ErrorKind::of("org.example.out_of_coffee"), ErrorKind::Unknown);
         assert_eq!(ErrorKind::of("unknown_action"), ErrorKind::Unknown);
 

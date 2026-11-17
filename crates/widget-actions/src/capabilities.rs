@@ -12,7 +12,6 @@ use crate::{PLACEHOLDER_NAMESPACE, STABLE_NAMESPACE};
 /// `allow`) are about no action: theirs is the namespace of their MSC draft.
 fn namespace_of(head: &str) -> &'static str {
     match head.split('.').next().unwrap_or(head) {
-        "read_events" => "org.matrix.msc2876",
         "read_relations" => "org.matrix.msc3869",
         "update_delayed_event" => "org.matrix.msc4157",
         "get_rtc_transports" => "org.matrix.msc4515",
@@ -54,8 +53,7 @@ const MAX_WEBVIEW_VALUE: usize = 64;
 // Heads (`action[.modifier]`) of the capabilities that carry an event type as data.
 const SEND_EVENT_TIMELINE: &str = "send_event.timeline";
 const SEND_EVENT_STATE: &str = "send_event.state";
-const READ_EVENTS_TIMELINE: &str = "read_events.timeline";
-const READ_EVENTS_STATE: &str = "read_events.state";
+const READ_TIMELINE: &str = "read_timeline";
 const READ_RELATIONS: &str = "read_relations";
 const READ_ROOM_ACCOUNT_DATA: &str = "read_room_account_data";
 const SEND_TO_DEVICE: &str = "send_to_device";
@@ -81,11 +79,13 @@ static UNIT_CAPABILITIES: &[(&str, &str, Capability)] = &[
     (WIDGET, "set_always_on_screen", Capability::SetAlwaysOnScreen),
     (WIDGET, "get_matrix_context", Capability::GetMatrixContext),
     (WIDGET, "get_client_context", Capability::GetClientContext),
+    (WIDGET, "paginate_timeline", Capability::PaginateTimeline),
     (HOST, "forward_event.sticky", Capability::ForwardStickyEvent),
     (HOST, "update_turn_servers", Capability::UpdateTurnServers),
     (HOST, "update_theme", Capability::UpdateTheme),
     (HOST, "update_language", Capability::UpdateLanguage),
     (HOST, "update_visibility", Capability::UpdateVisibility),
+    (HOST, "notify_timeline_update", Capability::NotifyTimelineUpdate),
 ];
 
 /// The event type whose timeline capabilities may be narrowed to one `msgtype` with `#<msgtype>`
@@ -101,7 +101,7 @@ const ROOM_MESSAGE: &str = "m.room.message";
 /// source ":" action [ "." modifier ] [ ":" data ]        action = namespace "." name
 ///
 /// widget:org.matrix.mscXXXX.send_event.timeline:m.room.message#m.text
-/// widget:org.matrix.msc2876.read_events.state:m.room.topic
+/// widget:org.matrix.mscXXXX.read_timeline:m.room.message#m.text
 /// widget:org.matrix.msc2931.navigate
 /// host:org.matrix.mscXXXX.update_state:m.room.member#@a:x
 /// ```
@@ -113,8 +113,8 @@ const ROOM_MESSAGE: &str = "m.room.message";
 ///   unstable name of the MSC that defines it (emitted by `Display`) or the stable `m.<name>`
 ///   (accepted when parsing, emitted by [`Capability::to_stable_string`]). The same name under
 ///   any other namespace is a different action and not a capability of this crate.
-/// * `send_event`, `read_events` and `forward_event` always carry a `timeline` or `state`
-///   modifier; there is no bare `widget:m.send_event:<type>`.
+/// * `send_event` and `forward_event` always carry a `timeline` or `state` modifier; there is no
+///   bare `widget:m.send_event:<type>`.
 /// * The data is an event type. For timeline events `m.room.message#<msgtype>` narrows to one
 ///   `msgtype`; for state events `<type>#<state_key>` narrows to one state key.
 ///
@@ -141,11 +141,11 @@ pub enum Capability {
     SendStickyEvent,
     /// May call `update_delayed_event`.
     UpdateDelayedEvent,
-    /// `read_events` of timeline events of `event_type`; for `m.room.message` optionally one
-    /// `msgtype` only.
-    ReadEvents { event_type: String, msgtype: Option<String> },
-    /// `read_events` of state events of `event_type`, optionally one state key only.
-    ReadStateEvents { event_type: String, state_key: Option<String> },
+    /// `read_timeline` returning events of `event_type` from the timeline cache; for
+    /// `m.room.message` optionally one `msgtype` only.
+    ReadTimeline { event_type: String, msgtype: Option<String> },
+    /// May call `paginate_timeline` (causes requests to the homeserver).
+    PaginateTimeline,
     /// `read_relations` returning related events of `event_type`; for `m.room.message` optionally
     /// one `msgtype` only.
     ReadRelations { event_type: String, msgtype: Option<String> },
@@ -200,6 +200,8 @@ pub enum Capability {
     UpdateLanguage,
     /// The host sends `update_visibility`.
     UpdateVisibility,
+    /// The host sends `notify_timeline_update`.
+    NotifyTimelineUpdate,
 
     // ---- the webview the widget runs in (source `webview`) ------------------------------------
     /// A token of the `sandbox` attribute of the widget's iframe (`allow-popups`, `allow-forms`, ...),
@@ -230,19 +232,14 @@ impl Capability {
         Self::SendStateEvent { event_type: event_type.into(), state_key: state_key.map(Into::into) }
     }
 
-    /// `widget:…read_events.timeline:<event_type>`.
-    pub fn read_events(event_type: impl Into<String>) -> Self {
-        Self::ReadEvents { event_type: event_type.into(), msgtype: None }
+    /// `widget:…read_timeline:<event_type>`.
+    pub fn read_timeline(event_type: impl Into<String>) -> Self {
+        Self::ReadTimeline { event_type: event_type.into(), msgtype: None }
     }
 
-    /// `widget:…read_events.timeline:m.room.message#<msgtype>`.
-    pub fn read_messages(msgtype: impl Into<String>) -> Self {
-        Self::ReadEvents { event_type: ROOM_MESSAGE.into(), msgtype: Some(msgtype.into()) }
-    }
-
-    /// `widget:…read_events.state:<event_type>[#<state_key>]`.
-    pub fn read_state_events(event_type: impl Into<String>, state_key: Option<impl Into<String>>) -> Self {
-        Self::ReadStateEvents { event_type: event_type.into(), state_key: state_key.map(Into::into) }
+    /// `widget:…read_timeline:m.room.message#<msgtype>`.
+    pub fn read_timeline_messages(msgtype: impl Into<String>) -> Self {
+        Self::ReadTimeline { event_type: ROOM_MESSAGE.into(), msgtype: Some(msgtype.into()) }
     }
 
     /// `widget:…read_relations:<event_type>`.
@@ -339,13 +336,9 @@ impl Capability {
                 let (event_type, state_key) = state();
                 Self::SendStateEvent { event_type, state_key }
             }
-            (WIDGET, READ_EVENTS_TIMELINE) => {
+            (WIDGET, READ_TIMELINE) => {
                 let (event_type, msgtype) = timeline();
-                Self::ReadEvents { event_type, msgtype }
-            }
-            (WIDGET, READ_EVENTS_STATE) => {
-                let (event_type, state_key) = state();
-                Self::ReadStateEvents { event_type, state_key }
+                Self::ReadTimeline { event_type, msgtype }
             }
             (WIDGET, READ_RELATIONS) => {
                 let (event_type, msgtype) = timeline();
@@ -380,8 +373,7 @@ impl Capability {
         match self {
             Self::SendEvent { event_type, msgtype } => typed(WIDGET, SEND_EVENT_TIMELINE, event_type, msgtype),
             Self::SendStateEvent { event_type, state_key } => typed(WIDGET, SEND_EVENT_STATE, event_type, state_key),
-            Self::ReadEvents { event_type, msgtype } => typed(WIDGET, READ_EVENTS_TIMELINE, event_type, msgtype),
-            Self::ReadStateEvents { event_type, state_key } => typed(WIDGET, READ_EVENTS_STATE, event_type, state_key),
+            Self::ReadTimeline { event_type, msgtype } => typed(WIDGET, READ_TIMELINE, event_type, msgtype),
             Self::ReadRelations { event_type, msgtype } => typed(WIDGET, READ_RELATIONS, event_type, msgtype),
             Self::ReadRoomAccountData { event_type } => typed(WIDGET, READ_ROOM_ACCOUNT_DATA, event_type, &None),
             Self::SendToDevice { event_type } => typed(WIDGET, SEND_TO_DEVICE, event_type, &None),
@@ -450,22 +442,12 @@ impl Capability {
         }
     }
 
-    /// Does this capability allow returning the given event from `read_events`? Arguments as in
-    /// [`allows_send`](Self::allows_send).
-    pub fn allows_read(&self, event_type: &str, state_key: Option<&str>, msgtype: Option<&str>) -> bool {
-        match (self, state_key) {
-            (Self::ReadEvents { event_type: t, msgtype: m }, None) => matches_timeline(t, m, event_type, msgtype),
-            (Self::ReadStateEvents { event_type: t, state_key: k }, Some(sk)) => matches_state(t, k, event_type, sk),
-            _ => false,
-        }
-    }
-
-    /// Does this capability allow a `read_events` request for this type at all? Individual results
-    /// still need [`allows_read`](Self::allows_read).
-    pub fn allows_read_type(&self, event_type: &str, is_state: bool) -> bool {
-        match (self, is_state) {
-            (Self::ReadEvents { event_type: t, .. }, false) => t == event_type,
-            (Self::ReadStateEvents { event_type: t, .. }, true) => t == event_type,
+    /// Does this capability allow returning an event of this type (and, for `m.room.message`, this
+    /// `msgtype`) from `read_timeline`? State events of the timeline are read like any other: the
+    /// state key plays no role.
+    pub fn allows_read_timeline(&self, event_type: &str, msgtype: Option<&str>) -> bool {
+        match self {
+            Self::ReadTimeline { event_type: t, msgtype: m } => matches_timeline(t, m, event_type, msgtype),
             _ => false,
         }
     }
@@ -591,8 +573,7 @@ impl<'de> Deserialize<'de> for Capability {
 /// Convenience for a list of capabilities.
 pub trait CapabilitySet {
     fn allows_send(&self, event_type: &str, state_key: Option<&str>, msgtype: Option<&str>) -> bool;
-    fn allows_read(&self, event_type: &str, state_key: Option<&str>, msgtype: Option<&str>) -> bool;
-    fn allows_read_type(&self, event_type: &str, is_state: bool) -> bool;
+    fn allows_read_timeline(&self, event_type: &str, msgtype: Option<&str>) -> bool;
     fn allows_read_relation(&self, event_type: &str, msgtype: Option<&str>) -> bool;
     fn allows_forward(&self, event_type: &str, state_key: Option<&str>, msgtype: Option<&str>) -> bool;
     fn allows_update_state(&self, event_type: &str, state_key: &str) -> bool;
@@ -608,12 +589,8 @@ impl<T: AsRef<[Capability]>> CapabilitySet for T {
         self.as_ref().iter().any(|c| c.allows_send(event_type, state_key, msgtype))
     }
 
-    fn allows_read(&self, event_type: &str, state_key: Option<&str>, msgtype: Option<&str>) -> bool {
-        self.as_ref().iter().any(|c| c.allows_read(event_type, state_key, msgtype))
-    }
-
-    fn allows_read_type(&self, event_type: &str, is_state: bool) -> bool {
-        self.as_ref().iter().any(|c| c.allows_read_type(event_type, is_state))
+    fn allows_read_timeline(&self, event_type: &str, msgtype: Option<&str>) -> bool {
+        self.as_ref().iter().any(|c| c.allows_read_timeline(event_type, msgtype))
     }
 
     fn allows_read_relation(&self, event_type: &str, msgtype: Option<&str>) -> bool {
@@ -664,14 +641,12 @@ mod tests {
             ("widget:m.send_event.delayed", Capability::SendDelayedEvent),
             ("widget:m.send_event.sticky", Capability::SendStickyEvent),
             ("widget:m.update_delayed_event", Capability::UpdateDelayedEvent),
-            ("widget:m.read_events.timeline:m.reaction", Capability::read_events("m.reaction")),
-            ("widget:m.read_events.timeline:m.room.message#", Capability::read_messages("")),
+            ("widget:m.read_timeline:m.reaction", Capability::read_timeline("m.reaction")),
+            ("widget:m.read_timeline:m.room.message#", Capability::read_timeline_messages("")),
+            ("widget:m.read_timeline:m.room.message#m.text", Capability::read_timeline_messages("m.text")),
             // `#` only splits for m.room.message
-            ("widget:m.read_events.timeline:org.x#y", Capability::read_events("org.x#y")),
-            (
-                "widget:m.read_events.state:m.room.member#@a:b",
-                Capability::read_state_events("m.room.member", Some("@a:b")),
-            ),
+            ("widget:m.read_timeline:org.x#y", Capability::read_timeline("org.x#y")),
+            ("widget:m.paginate_timeline", Capability::PaginateTimeline),
             ("widget:m.read_relations:m.reaction", Capability::read_relations("m.reaction")),
             (
                 "widget:m.read_relations:m.room.message#m.text",
@@ -706,6 +681,7 @@ mod tests {
             ("host:m.update_theme", Capability::UpdateTheme),
             ("host:m.update_language", Capability::UpdateLanguage),
             ("host:m.update_visibility", Capability::UpdateVisibility),
+            ("host:m.notify_timeline_update", Capability::NotifyTimelineUpdate),
             ("webview:m.sandbox:allow-popups", Capability::webview_sandbox("allow-popups")),
             ("webview:m.sandbox:allow-same-origin", Capability::webview_sandbox("allow-same-origin")),
             ("webview:m.allow:camera", Capability::webview_allow("camera")),
@@ -737,7 +713,9 @@ mod tests {
             ("widget:org.matrix.mscXXXX.send_event.timeline:m.x", Capability::send_event("m.x")),
             ("widget:org.matrix.mscXXXX.send_event.delayed", Capability::SendDelayedEvent),
             ("widget:org.matrix.msc4157.update_delayed_event", Capability::UpdateDelayedEvent),
-            ("widget:org.matrix.msc2876.read_events.timeline:m.x", Capability::read_events("m.x")),
+            ("widget:org.matrix.mscXXXX.read_timeline:m.x", Capability::read_timeline("m.x")),
+            ("widget:org.matrix.mscXXXX.paginate_timeline", Capability::PaginateTimeline),
+            ("host:org.matrix.mscXXXX.notify_timeline_update", Capability::NotifyTimelineUpdate),
             ("widget:org.matrix.msc3869.read_relations:m.x", Capability::read_relations("m.x")),
             ("widget:com.beeper.read_room_account_data:m.tag", Capability::read_room_account_data("m.tag")),
             ("widget:org.matrix.msc4039.upload_file", Capability::UploadFile),
@@ -858,7 +836,7 @@ mod tests {
                 assert_ne!(head, other_head);
             }
         }
-        // 20 of the 43 strings in `all()` are unit capabilities; every one must be in the table.
+        // 22 of the 45 strings in `all()` are unit capabilities; every one must be in the table.
         let units = all().into_iter().filter(|(raw, _)| raw.matches(':').count() == 1).count();
         assert_eq!(units, UNIT_CAPABILITIES.len());
     }
@@ -869,12 +847,18 @@ mod tests {
             // An action with modifiers has no capability without one.
             "widget:m.send_event:m.room.message",
             "widget:m.send_event",
+            // `read_events` (MSC2876) is gone in every spelling: `read_timeline` replaced it.
+            "widget:m.read_events.timeline:m.room.message",
+            "widget:m.read_events.state:m.room.member",
+            "widget:org.matrix.msc2876.read_events.timeline:m.room.message",
+            "widget:org.matrix.msc2876.read_events.state:m.room.topic",
             "widget:m.read_events:m.room.message",
             "host:m.forward_event:m.room.message",
             // Unknown modifier, or a modifier on an action that has none.
             "widget:m.send_event.type:m.room.message",
             "widget:m.send_event.room:!r:x",
-            "widget:m.read_events.room:!r:x",
+            "widget:m.read_timeline.timeline:m.room.message",
+            "widget:m.read_timeline.state:m.room.member",
             "host:m.update_state.state:m.room.topic",
             "widget:m.navigate.now",
             // Wrong source for the action.
@@ -893,6 +877,14 @@ mod tests {
             "widget:org.matrix.msc4412.navigate",
             "widget:org.matrix.mscXXXX.navigate",
             "widget:org.matrix.mscXXXX.read_events.timeline:m.room.message",
+            "widget:org.matrix.msc2876.read_timeline:m.room.message",
+            "widget:m.read_timeline",
+            "widget:m.read_timeline:",
+            "widget:m.paginate_timeline:m.room.message",
+            "host:m.paginate_timeline",
+            "widget:m.notify_timeline_update",
+            "host:m.read_timeline:m.room.message",
+            "host:m.notify_timeline_update:m.room.message",
             "widget:org.matrix.msc2876.send_event.timeline:m.room.message",
             "widget:org.matrix.msc4412.get_matrix_context",
             "host:org.matrix.msc2762.forward_event.timeline:m.room.message",
@@ -984,8 +976,8 @@ mod tests {
         let caps = vec![
             Capability::send_event("m.room.message"),
             Capability::send_state_event("m.room.topic", None::<&str>),
-            Capability::read_state_events("m.room.member", Some("@me:x")),
-            Capability::read_messages("m.text"),
+            Capability::read_timeline("m.room.member"),
+            Capability::read_timeline_messages("m.text"),
             Capability::read_relations("m.reaction"),
             Capability::forward_messages("m.image"),
             Capability::forward_state_event("m.room.topic", Some("")),
@@ -1003,14 +995,12 @@ mod tests {
         assert!(caps.allows_send("m.room.topic", Some("anything"), None));
         assert!(!caps.allows_send("m.room.topic", None, None));
 
-        assert!(caps.allows_read("m.room.member", Some("@me:x"), None));
-        assert!(!caps.allows_read("m.room.member", Some("@you:x"), None));
-        assert!(caps.allows_read("m.room.message", None, Some("m.text")));
-        assert!(!caps.allows_read("m.room.message", None, Some("m.image")));
-        assert!(!caps.allows_read("m.room.message", None, None));
-        assert!(caps.allows_read_type("m.room.member", true));
-        assert!(!caps.allows_read_type("m.room.member", false));
-        assert!(caps.allows_read_type("m.room.message", false));
+        assert!(caps.allows_read_timeline("m.room.member", None));
+        assert!(caps.allows_read_timeline("m.room.message", Some("m.text")));
+        assert!(!caps.allows_read_timeline("m.room.message", Some("m.image")));
+        assert!(!caps.allows_read_timeline("m.room.message", None));
+        assert!(!caps.allows_read_timeline("m.room.topic", None));
+        assert!(!caps.has(&Capability::PaginateTimeline));
 
         assert!(caps.allows_read_relation("m.reaction", None));
         assert!(!caps.allows_read_relation("m.room.message", Some("m.text")));
@@ -1026,30 +1016,34 @@ mod tests {
     #[test]
     fn each_action_has_its_own_capability() {
         // Sending, reading, forwarding and state updates never imply each other.
-        let read = vec![Capability::read_events("m.x"), Capability::read_state_events("m.s", None::<&str>)];
-        assert!(read.allows_read("m.x", None, None));
+        let read = vec![Capability::read_timeline("m.x"), Capability::read_timeline("m.s")];
+        assert!(read.allows_read_timeline("m.x", None));
         assert!(!read.allows_forward("m.x", None, None));
         assert!(!read.allows_read_relation("m.x", None));
         assert!(!read.allows_send("m.x", None, None));
         assert!(!read.allows_update_state("m.s", ""));
         assert!(!read.allows_forward("m.s", Some(""), None));
+        // Reading does not allow paginating or being notified, and the other way round.
+        assert!(!read.has(&Capability::PaginateTimeline));
+        assert!(!read.has(&Capability::NotifyTimelineUpdate));
+        let paginate = vec![Capability::PaginateTimeline, Capability::NotifyTimelineUpdate];
+        assert!(!paginate.allows_read_timeline("m.x", None));
 
         let forward = vec![Capability::forward_event("m.x"), Capability::forward_state_event("m.s", None::<&str>)];
         assert!(forward.allows_forward("m.x", None, None));
         assert!(forward.allows_forward("m.s", Some("k"), None));
-        assert!(!forward.allows_read("m.x", None, None));
-        assert!(!forward.allows_read_type("m.x", false));
+        assert!(!forward.allows_read_timeline("m.x", None));
         assert!(!forward.allows_update_state("m.s", "k"));
 
         let update = vec![Capability::update_state("m.s", Some("k"))];
         assert!(update.allows_update_state("m.s", "k"));
         assert!(!update.allows_update_state("m.s", "other"));
         assert!(!update.allows_forward("m.s", Some("k"), None));
-        assert!(!update.allows_read("m.s", Some("k"), None));
+        assert!(!update.allows_read_timeline("m.s", None));
 
         let relations = vec![Capability::read_relations("m.x")];
         assert!(relations.allows_read_relation("m.x", None));
-        assert!(!relations.allows_read("m.x", None, None));
+        assert!(!relations.allows_read_timeline("m.x", None));
     }
 
     #[test]

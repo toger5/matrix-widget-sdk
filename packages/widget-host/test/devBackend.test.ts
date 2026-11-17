@@ -37,8 +37,58 @@ describeBackendContract("InMemoryBackend (a room of the DevBackend)", async () =
     userId: dev.userId,
     receiveState: (type, stateKey, content) => void dev.sendState(roomId, { type, stateKey, content }),
     failSends: (message) => dev.store(roomId).failSends(message),
+    resolvePagination: async (events, startReached) =>
+      dev.store(roomId).resolvePagination(
+        events.map(({ type, content }, i) => ({ eventType: type, sender: "@old:dev.local", eventId: `$old${i}`, roomId, originServerTs: 1n, stateKey: undefined, content, unsigned: undefined })),
+        startReached,
+      ),
     dispose: () => backend.dispose(),
   };
+});
+
+describe("DevBackend: a widget's pagination", () => {
+  it("is shown while it waits; “Resolve pagination” adds random messages before the oldest event and tells the widget", async () => {
+    const dev = new DevBackend();
+    const roomId = dev.addRoom({ name: "Lab" });
+    const changed = vi.fn();
+    dev.subscribe(changed);
+    const { ask, grant, pushed } = behindDriver(await dev.backendFor(roomId));
+    await grant([`widget:${X}read_timeline:m.room.message`, `widget:${X}paginate_timeline`, `host:${X}notify_timeline_update`]);
+    expect(dev.snapshot(roomId).pagination).toEqual({ status: "idle" });
+
+    expect(await ask(`${X}paginate_timeline`, { limit: 5 })).toEqual({ pagination: "paginating" });
+    // The host calls `refresh()` after every widget message.
+    expect(dev.refresh()).toBe(true);
+    expect(changed).toHaveBeenCalled();
+    expect(dev.snapshot(roomId).pagination).toEqual({ status: "paginating", requested: { limit: 5 } });
+    pushed("");
+
+    const oldest = (await dev.timeline(roomId)).events[0];
+    dev.resolvePagination(roomId, 5, false);
+    await tick();
+    expect(pushed(`${X}notify_timeline_update`)).toEqual([{ pagination: { status: "idle" } }]);
+    expect(dev.snapshot(roomId).pagination).toEqual({ status: "idle" });
+    const { events } = await dev.timeline(roomId);
+    const added = events.slice(0, 5);
+    expect(events[5]).toEqual(oldest);
+    for (const event of added) {
+      expect(event).toMatchObject({ type: "m.room.message", content: { msgtype: "m.text" } });
+      expect(event.origin_server_ts as number).toBeLessThan(oldest.origin_server_ts as number);
+    }
+    // Oldest first, a minute apart.
+    expect((added[1].origin_server_ts as number) - (added[0].origin_server_ts as number)).toBe(60_000);
+    const read = await ask(`${X}read_timeline`, { limit: 10 });
+    expect((read.events as { event_id: string }[]).map((e) => e.event_id)).toEqual(added.map((e) => e.event_id).reverse());
+
+    // Once more, with the start of the room.
+    await ask(`${X}paginate_timeline`, {});
+    dev.refresh();
+    expect(dev.snapshot(roomId).pagination).toEqual({ status: "paginating", requested: {} });
+    dev.resolvePagination(roomId, 0, true);
+    expect(dev.snapshot(roomId).pagination).toEqual({ status: "start_reached" });
+    expect(await ask(`${X}paginate_timeline`, {})).toEqual({ pagination: "start_reached" });
+    expect(() => dev.resolvePagination(roomId, -1, false)).toThrow(/whole number/);
+  });
 });
 
 describe("DevBackend: rooms", () => {
@@ -645,8 +695,8 @@ describe("DevBackend: copy to DevBackend", () => {
 
     // A widget reads the copy under the new room id.
     const { ask, grant } = behindDriver(await dev.backendFor(room));
-    await grant(["widget:org.matrix.msc2876.read_events.timeline:m.room.message"]);
-    const read = await ask("org.matrix.msc2876.read_events", { type: "m.room.message", limit: 10 });
+    await grant([`widget:${X}read_timeline:m.room.message`]);
+    const read = await ask(`${X}read_timeline`, { limit: 10 });
     expect(read.events).toEqual([expect.objectContaining({ event_id: "$msg", room_id: room, unsigned: { age: 5 } })]);
 
     // A second copy is a second room.
