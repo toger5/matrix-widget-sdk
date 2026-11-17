@@ -237,13 +237,17 @@ per start (`WidgetInstanceViewModel.webview`, rendered by `WidgetIframes` in `sr
 - A grant applies with a restart of the widget: the runtime (`src/app/runtime/widgetRuntime.ts`)
   reports `webviewChanged` once the widget holds a webview capability its iframe lacks (after the
   driver's `update_capabilities` went out); the controller keeps it for the widget's next starts
-  (`webviewKept`, forgotten when the widget stops) and starts it again with a new generation, whose
-  iframe has it. The widget's request for it is then granted at once, without a prompt or another
-  restart. A denial changes nothing; revoking an applied one (driver panel) restarts the widget
+  (`webviewKept`, forgotten when the widget stops, and only for the URL it was granted to: a start
+  after the widget's state event named another URL does not get it) and starts it again with a new
+  generation, whose iframe has it. The widget's request for it is then granted at once, without a
+  prompt or another restart. A denial changes nothing; revoking an applied one (driver panel) restarts the widget
   without it; "Add" of a webview capability in the driver panel ("Add and restart") restarts it with it.
   The driver panel shows the attributes of the iframe under "Webview of this load". A widget that
   restarts more than twice within 10 s for this fails instead (a guard; it should not happen).
 - Remembered webview capabilities (`rememberCapabilities`) are in the iframe from the first start.
+  They are remembered per widget (account, room, event type and state key) like all its capabilities,
+  not per URL: a room widget whose state event names another URL keeps them (a local widget forgets
+  them).
 - A legacy widget's iframe (the compat wrapper) has Element Web's set from the start
   (`LEGACY_WEBVIEW` in `src/widgetStateEvent.ts`): the wrapper requests it and gets it without a
   prompt or a restart; the wrapper gives the legacy widget's own iframe the same set.

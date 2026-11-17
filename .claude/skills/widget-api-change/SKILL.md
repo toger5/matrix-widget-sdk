@@ -85,7 +85,8 @@ A rename also means renaming the file, the variant and the body types, so the co
   namespace is the one of their MSC draft (`namespace_of`: the placeholder). The strings are
   repeated in the compat wrapper (`webviewCapability`, `LEGACY_SANDBOX` / `LEGACY_ALLOW` /
   `LEGACY_WEBVIEW_CAPABILITIES`, `normalizeCapability`), the host (`LEGACY_WEBVIEW` in
-  `src/widgetStateEvent.ts`; `test/webview.test.ts` compares it with the wrapper's) and the test
+  `src/widgetStateEvent.ts`, `test/webview.test.ts` compares it with the wrapper's; the namespace in
+  `canonicalWebview` of `src/lib/webview.ts`) and the test
   widget (`WEBVIEW_CAPABILITIES`, not in its default list). A new source needs its own arms in
   `with_data` / `parts` and the same treatment.
 

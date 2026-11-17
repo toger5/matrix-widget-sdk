@@ -211,6 +211,24 @@ test("a widget restarted a third time within 10 s for its webview capabilities i
   await expect(host.iframe(NEW)).toHaveAttribute("allow", "camera 'src'; microphone 'src'");
 });
 
+test("what was granted to the widget's iframe is not carried to another URL: a reload after its state event changed starts strict", async ({ host }) => {
+  await readyQuietWidget(host);
+  await grantCameraAndMicrophone(host);
+  await expect(host.iframe(NEW)).toHaveAttribute("allow", "camera 'src'; microphone 'src'");
+  // Another member points the widget elsewhere; the running widget keeps its page until it is reloaded.
+  const other = `${QUIET}&changed=1`;
+  await host.dispatch({ type: "roomTools/sendState", roomId: LAB, event: { type: "m.widget", stateKey: "widget-1", content: { name: "New test widget", url: other, uses_widget_api: true } } });
+  const eventUrl = async () => {
+    const rooms = (await host.main()).data.rooms;
+    return rooms.status === "ready" ? rooms.value.find((r) => r.id === LAB)?.widgetEvents?.find((e) => e.type === "m.widget")?.content.url : undefined;
+  };
+  await expect.poll(eventUrl).toBe(other);
+  await host.dispatch({ type: "widget/reload", widgetId: NEW });
+  await expect(host.iframe(NEW)).toHaveAttribute("src", other);
+  await expect(host.iframe(NEW)).toHaveAttribute("allow", "");
+  expect((await webview(host, NEW))?.applied).toEqual([]);
+});
+
 test("the driver panel shows the webview of this load; adding a webview capability restarts the widget with it", async ({ host }) => {
   await readyQuietWidget(host);
   await host.button("Dev tools of New test widget").click();

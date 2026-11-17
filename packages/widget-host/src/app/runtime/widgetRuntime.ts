@@ -16,7 +16,7 @@ import { capabilityIsKnown, WidgetHostDriver, type DriverSnapshot, type MatrixBa
 import { MAX_STATS_BUCKETS, STATS_BUCKET_MS, type WebviewAttributes, type WidgetDevToolsData, type WidgetInstanceId, type WidgetMessage } from "../../appViewModel";
 import { loadCapabilities, saveCapabilities } from "../../lib/capabilityStore";
 import { onDriverLog } from "../../lib/hostLogging";
-import { sameWebview, webviewCapabilities, webviewFor } from "../../lib/webview";
+import { canonicalWebview, sameWebview, webviewCapabilities, webviewFor } from "../../lib/webview";
 import { LEGACY_AUTO_APPROVED, LEGACY_WEBVIEW, type ResolvedWidget } from "../../widgetStateEvent";
 import { Store } from "../store";
 
@@ -259,11 +259,12 @@ export class WidgetRuntime {
    */
   revoke(capabilities: string[] | "all"): void {
     const approved = this.driver.snapshot().approved;
-    const revoked = capabilities === "all" ? [...new Set([...approved, ...this.preApproved(), ...this.keptWebview])] : capabilities;
+    // A webview capability in either spelling (`canonicalWebview`): what is kept and remembered may be spelled the other way.
+    const revoked = (capabilities === "all" ? [...new Set([...approved, ...this.preApproved(), ...this.keptWebview])] : capabilities).map(canonicalWebview);
     this.driver.revokeCapabilities(revoked);
     // A revoked webview capability is no longer applied from the next start on (`checkWebview` starts it again at once).
     this.keptWebview = this.keptWebview.filter((cap) => !revoked.includes(cap));
-    this.remember(this.preApproved().filter((cap) => !revoked.includes(cap)));
+    this.remember(this.preApproved().filter((cap) => !revoked.includes(canonicalWebview(cap))));
     this.log("info", `revoked ${revoked.length} ${revoked.length === 1 ? "capability" : "capabilities"}`);
     this.refreshCapabilities();
   }
@@ -274,7 +275,9 @@ export class WidgetRuntime {
    *
    * TODO-FINDING driver-grant-capability - the driver can only grant what a pending request contains (`approve_capabilities`), so a capability cannot be handed to a running widget. "Add" therefore pre-approves: the capability joins the auto-approved set and is granted without a prompt the next time the widget asks for it. A real grant needs a new driver method (widget-api-change checklist), and the protocol question whether a host may grant what was not requested.
    */
-  grant(capability: string): void {
+  grant(typed: string): void {
+    // A webview capability in the driver's spelling, so that revoking it (from the driver's lists) finds it.
+    const capability = canonicalWebview(typed);
     this.denied.delete(capability);
     this.remember([...this.preApproved(), capability]);
     this.log("info", `pre-approved ${capability}: granted without a prompt the next time the widget asks`);

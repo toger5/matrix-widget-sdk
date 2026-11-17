@@ -183,6 +183,35 @@ describe("WidgetRuntime and webview capabilities", () => {
     expect(started({}, [POPUPS]).runtime.webview.sandbox).toBe("allow-scripts allow-same-origin allow-popups");
   });
 
+  it("treats both spellings of a webview capability alike: added in the stable one, revoked as the driver lists it", async () => {
+    const first = started();
+    first.runtime.grant("webview:m.allow:camera");
+    await tick();
+    expect(first.events.webviewChanged).toHaveBeenCalledExactlyOnceWith([CAMERA]);
+    // Kept in the stable spelling, revoked in the driver's: the next start is without it.
+    const { runtime, events } = started({}, ["webview:m.allow:camera"]);
+    expect(runtime.webview).toEqual({ applied: [CAMERA], sandbox: STRICT.sandbox, allow: "camera 'src'" });
+    runtime.revoke([CAMERA]);
+    await tick();
+    expect(events.webviewChanged).toHaveBeenCalledExactlyOnceWith([]);
+  });
+
+  it("asks about a legacy client's set when an MSC4411 widget requests it: only a legacy widget gets it without asking", async () => {
+    const { runtime, events, updates, fromWidget } = started();
+    await fromWidget(`${CORE}request_capabilities`, { capabilities: [...LEGACY_WEBVIEW_CAPABILITIES] });
+    const base = [`webview:${X}sandbox:allow-same-origin`, `webview:${X}sandbox:allow-scripts`];
+    const asked = LEGACY_WEBVIEW_CAPABILITIES.filter((c) => !base.includes(c));
+    expect(asked).toHaveLength(13);
+    expect(events.capabilitiesRequested).toHaveBeenCalledOnce();
+    expect(new Set(events.capabilitiesRequested.mock.calls[0][0]?.requested)).toEqual(new Set(asked));
+    expect(runtime.webview).toEqual({ applied: [], ...STRICT });
+    // Denied: the widget holds the base only, and its iframe stays strict.
+    runtime.answerCapabilities([], asked);
+    expect(new Set(updates().at(-1))).toEqual(new Set(base));
+    await tick();
+    expect(events.webviewChanged).not.toHaveBeenCalled();
+  });
+
   it("builds a legacy widget's iframe like a legacy client's; the compat wrapper's request needs no prompt and no restart", async () => {
     const { runtime, events, updates, fromWidget } = started({ legacy: true });
     expect(runtime.webview.sandbox.split(" ")).toEqual(expect.arrayContaining(INNER_SANDBOX.split(" ")));

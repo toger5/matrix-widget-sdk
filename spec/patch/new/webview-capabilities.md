@@ -5,7 +5,8 @@
 > (`packages/widget-host/src/app/runtime/widgetRuntime.ts`, `src/app/controller.ts`), the compat
 > wrapper's legacy set (`packages/widget-compat-wrapper/src/capabilities.ts`
 > `LEGACY_WEBVIEW_CAPABILITIES`, `src/wrapper.ts` `innerIframe`). The widget host's permission
-> prompt does not label them yet (they are listed as unknown to it).
+> prompt lists them as "Browser permissions", with risk marks
+> (`packages/widget-host/src/views/widget/format.ts`).
 > Related patches: [`../msc4411/strict-webview-defaults.md`](../msc4411/strict-webview-defaults.md)
 > (the strict default this builds on), [`../msc4412/capability-sources.md`](../msc4412/capability-sources.md)
 > (the capability source `webview`). Remove this block when opening the MSC.
@@ -142,9 +143,10 @@ opens the widget, the client remembers them and loads it with them right away.
 
  * The `sandbox` attribute is the base tokens plus every granted `sandbox` token.
  * The `allow` attribute lists every granted feature with the allowlist `'src'`: the feature is
-   delegated to the origin of the iframe's `src` only, never to other pages the widget navigates to
-   or embeds (`camera 'src'; microphone 'src'`). Without a granted feature it is empty, which
-   delegates nothing.
+   delegated to the origin of the iframe's `src` only, not to a page of another origin the widget
+   navigates to (`camera 'src'; microphone 'src'`); a page the widget embeds gets it only if the
+   widget delegates it in turn (as a compatibility wrapper does). Without a granted feature it is
+   empty, which delegates nothing.
  * A client builds the attributes from the tokens itself, after checking each value again; it never
    copies a string of the widget into them.
 
@@ -220,8 +222,8 @@ webview capabilities), except `allow-same-origin` for a legacy widget of the wra
    prompt.
  * Values are single tokens of a fixed alphabet, and the client builds the attributes itself, so a
    capability cannot inject a second token, an allowlist (`camera *`) or another attribute.
- * Features are delegated with `'src'`: a page the widget navigates to, or embeds, from another
-   origin does not inherit them.
+ * Features are delegated with `'src'`: a page of another origin the widget navigates to does not
+   get them, and a page it embeds only if the widget delegates them itself.
  * A compatibility wrapper holds the legacy set on behalf of the legacy widget (MSC4412, "Security
    considerations": hosts should only use a wrapper they trust).
 

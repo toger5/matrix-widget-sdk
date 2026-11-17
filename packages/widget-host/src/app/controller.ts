@@ -164,9 +164,11 @@ export class AppController {
   private readonly runtimes = new Map<WidgetInstanceId, WidgetRuntime>();
   /**
    * Per running widget: the webview capabilities its next start applies besides the remembered and the
-   * legacy ones (`WidgetRuntimeEvents.webviewChanged`). Kept across reloads, forgotten when it stops.
+   * legacy ones (`WidgetRuntimeEvents.webviewChanged`), and the URL of the iframe they were granted to.
+   * Kept across reloads, forgotten when it stops; a start of another URL (the state event changed) does
+   * not get them.
    */
-  private readonly webviewKept = new Map<WidgetInstanceId, string[]>();
+  private readonly webviewKept = new Map<WidgetInstanceId, { url: string; capabilities: string[] }>();
   /** Per running widget: when it was started again for its webview capabilities (the loop guard). */
   private readonly webviewReloads = new Map<WidgetInstanceId, number[]>();
   /** Room backends of the active account, shared by the widgets of a room and released with the last one. */
@@ -556,6 +558,12 @@ export class AppController {
     const id = widgetInstanceId(roomId, key);
     const accountId = m.activeAccountId;
     const old = m.widgets[id];
+    // What was granted to the iframe of another URL (the widget's state event changed since) is not this page's.
+    const keptFor = (url: string) => {
+      const kept = this.webviewKept.get(id);
+      return kept?.url === url ? kept.capabilities : undefined;
+    };
+    if (!keptFor(widget.url)) this.webviewKept.delete(id);
     this.setMain((mm) => ({
       ...mm,
       widgets: { ...mm.widgets, [id]: { id, roomId, widgetKey: key, widget, load: { state: "loading" }, alwaysOnScreen: old?.alwaysOnScreen ?? false, prompts: {}, generation: undefined } },
@@ -573,7 +581,7 @@ export class AppController {
           autoApproveCapabilities: () => behavior().autoApproveCapabilities,
           theme: () => this.resolvedTheme(),
           notifyReadyTimeoutMs: this.notifyReadyTimeoutMs,
-          keptWebview: this.webviewKept.get(id),
+          keptWebview: keptFor(widget.url),
           events: {
             ready: () => this.setWidget(id, (w) => ({ ...w, load: { state: "ready" } })),
             failed: (error) => this.setWidget(id, (w) => (w.load.state === "ready" ? w : { ...w, load: { state: "failed", error } })),
@@ -756,7 +764,7 @@ export class AppController {
     // TODO-FINDING webview-restart-asks-again - only the webview capabilities are kept across this restart. Without remembered capabilities the new start asks again for the widget's other capabilities, approved together with the webview one a moment ago. Option: carry everything the widget held across a webview restart (not across a manual reload).
     const widget = this.main?.widgets[id];
     if (!widget) return;
-    this.webviewKept.set(id, kept);
+    this.webviewKept.set(id, { url: widget.widget.url, capabilities: kept });
     const now = Date.now();
     const recent = (this.webviewReloads.get(id) ?? []).filter((at) => now - at < WEBVIEW_RELOAD_WINDOW_MS);
     if (recent.length >= MAX_WEBVIEW_RELOADS) {
