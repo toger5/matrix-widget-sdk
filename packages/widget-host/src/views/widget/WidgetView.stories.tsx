@@ -123,6 +123,18 @@ export const Failed: Story = {
   parameters: { size: [700, 440] },
 };
 
+const SAME_SITE = widgetVm("design", "call", { load: { state: "sameOrigin" } });
+const SAME_SITE_WIDGET = { ...SAME_SITE, widget: { ...SAME_SITE.widget, url: "https://app.example.org/call/" } };
+
+/** A widget on this app's own site, dev tools disabled: it cannot be opened. */
+export const SameOrigin: Story = { args: { widget: SAME_SITE_WIDGET }, parameters: { size: [700, 440] } };
+
+/** The same with dev tools enabled: "Open anyway". */
+export const SameOriginDevTools: Story = {
+  args: { widget: SAME_SITE_WIDGET, devTools: { open: false, dock: "top", panels: [], size: { top: 240, side: 360 } } },
+  parameters: { size: [700, 440] },
+};
+
 /** Capability prompt: summary and sections. Everything is checked at first. The risky parts of the summary come first, in bold; a warning icon marks risky rows and their section. */
 export const CapabilityPrompt: Story = {
   args: { widget: widgetVm("design", "call", { prompts: { capabilities: capabilities(SHORT) } }) },

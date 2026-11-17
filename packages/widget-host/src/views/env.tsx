@@ -39,7 +39,7 @@ export interface ViewEnv {
   avatar: (mxcUrl: string) => Promise<string | undefined>;
   /**
    * The driver's widget state event parser (`src/lib/widgetEvents.ts`): which state events are
-   * widgets, what their iframe loads, the URL check of the widget forms. Pass it to `roomWidgets`.
+   * widgets, what their iframe loads, the check of the widget forms. Pass it to `roomWidgets`.
    */
   widgetEvents: WidgetEventParser;
   /**
@@ -87,7 +87,7 @@ export const DEFAULT_VIEW_ENV: ViewEnv = {
   useRoomState: () => LOADING_STATE,
   avatar: async () => undefined,
   // Without the app (no provider) nothing is a widget and no URL passes.
-  widgetEvents: { resolve: () => undefined, urlProblem: () => "no widget parser" },
+  widgetEvents: { resolve: () => undefined },
 };
 
 export const ViewEnvContext = createContext<ViewEnv>(DEFAULT_VIEW_ENV);

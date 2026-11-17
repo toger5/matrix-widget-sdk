@@ -292,8 +292,8 @@ driver.start();
 The driver decides what the iframe loads and with which `sandbox` and `allow`: the widget's URL as
 the URL check serialised it (for a legacy widget the compat wrapper), strict attributes unless the
 widget holds webview capabilities. `parseWidgetStateEvent` and the constructor check the URL, also
-against the client's own origin (`EmbedOptions.clientOrigin`); `embedUrlProblem` is that check
-alone. A grant of a webview capability applies with a new iframe: the driver calls `loadIframe`
+against the client's own origin (`EmbedOptions.clientOrigin`); to check a URL alone (a form),
+parse a minimal event `{ name, url }` of type `m.widget`. A grant of a webview capability applies with a new iframe: the driver calls `loadIframe`
 again and grants the reloaded page what it held without asking.
 
 A real client replaces `InMemoryBackend` with its own `MatrixBackend` object (a matrix-js-sdk
@@ -498,3 +498,7 @@ an MSC4412 host. Smaller gaps (`redact_event`, `parent_delay_id`, `\#` escaping 
 capabilities, the order of the TURN watch acknowledgement) and the full comparison with
 matrix-widget-api and matrix-rust-rtc are in [`docs/parity.md`](docs/parity.md). Unknown
 capability strings and actions are kept as `Other` / `Unknown`, so they can be added on top.
+
+## License
+
+Apache License 2.0, see [`LICENSE`](LICENSE).

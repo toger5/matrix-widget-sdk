@@ -165,6 +165,8 @@ export class AppController {
   private readonly runtimes = new Map<WidgetInstanceId, WidgetRuntime>();
   /** Per running widget: when its iframe was loaded again for its webview capabilities (the loop guard). */
   private readonly webviewReloads = new Map<WidgetInstanceId, number[]>();
+  /** Per widget on this host's origin: the URL the user agreed to load ("Open anyway"). In memory only. */
+  private readonly sameOriginConsent = new Map<WidgetInstanceId, string>();
   /** Room backends of the active account, shared by the widgets of a room and released with the last one. */
   private readonly backends = new Map<RoomId, { backend: Promise<RoomBackend>; refs: number }>();
   /** Per account, newest first; persisted for Matrix accounts. */
@@ -542,7 +544,7 @@ export class AppController {
     void entry.backend.then((backend) => backend.dispose()).catch(() => undefined);
   }
 
-  /** Start a widget of a room of the active account. Its tab is the caller's business. */
+  /** Start a widget of a room of the active account. Its tab is the caller's business. A widget on this host's origin may ask first. */
   private startWidget(roomId: RoomId, key: WidgetKey): boolean {
     const session = this.activeSession();
     const m = this.main;
@@ -552,10 +554,13 @@ export class AppController {
     const id = widgetInstanceId(roomId, key);
     const accountId = m.activeAccountId;
     const old = m.widgets[id];
+    const sameOrigin = !!found.sameOrigin;
+    const asks = sameOrigin && !(this.vm.settings.devTools && this.sameOriginConsent.get(id) === widget.url);
     this.setMain((mm) => ({
       ...mm,
-      widgets: { ...mm.widgets, [id]: { id, roomId, widgetKey: key, widget, load: { state: "loading" }, alwaysOnScreen: old?.alwaysOnScreen ?? false, prompts: {}, generation: undefined } },
+      widgets: { ...mm.widgets, [id]: { id, roomId, widgetKey: key, widget, load: { state: asks ? "sameOrigin" : "loading" }, alwaysOnScreen: !asks && (old?.alwaysOnScreen ?? false), prompts: {}, generation: undefined } },
     }));
+    if (asks) return true;
     const stillWanted = () => this.main?.activeAccountId === accountId && !!this.main.widgets[id] && !this.runtimes.has(id);
     this.acquireBackend(session, roomId).then(
       (backend) => {
@@ -568,6 +573,7 @@ export class AppController {
             id,
             widget,
             backend,
+            sameOrigin,
             capabilityKey: behavior().rememberCapabilities ? capabilityStoreKey(session.userId, roomId, key) : undefined,
             autoApproveCapabilities: () => behavior().autoApproveCapabilities,
             theme: () => this.resolvedTheme(),
@@ -786,6 +792,16 @@ export class AppController {
       this.runtimes.delete(id);
       this.releaseBackend(widget.roomId);
     }
+    void this.startWidget(widget.roomId, widget.widgetKey);
+    // A widget without a tab (always on screen) has no place to ask.
+    if (this.main?.widgets[id]?.load.state === "sameOrigin" && this.workspace && !findWidgetTab(this.workspace, id)) this.stopWidget(id, false);
+  }
+
+  /** "Open anyway" (dev tools only). */
+  private openSameOrigin(id: WidgetInstanceId): void {
+    const widget = this.main?.widgets[id];
+    if (widget?.load.state !== "sameOrigin" || !this.vm.settings.devTools) return;
+    this.sameOriginConsent.set(id, widget.widget.url);
     void this.startWidget(widget.roomId, widget.widgetKey);
   }
 
@@ -1183,6 +1199,7 @@ export class AppController {
     this.stopOAuth?.();
     for (const verification of this.verifications.values()) verification.stop(VERIFICATION_STOPPED);
     if (this.main) this.stopAllWidgets();
+    this.sameOriginConsent.clear();
     this.notifyReadyTimeoutMs = seed.notifyReadyTimeoutMs;
     this.stopWatchingRooms?.();
     // The DevBackend validates its seed strictly: hand it its own fields only.
@@ -1291,6 +1308,7 @@ export class AppController {
         const settings = { ...this.vm.settings, ...intent.settings };
         if (this.devActive) settings.devBackend = true;
         this.store.update((vm) => ({ ...vm, settings }));
+        // TODO-FINDING dev-tools-off-same-origin-widget - a widget opened with "Open anyway" keeps running when dev tools are turned off, until it is closed or reloaded.
         this.pushTheme();
         // Dev tools off with the DevBackend inactive: the Dev tools are gone, and so is their panel.
         if (!devToolsAvailable(this.vm)) this.setMain((m) => (m.sidePanel.view === "roomTools" ? { ...m, sidePanel: { ...m.sidePanel, view: undefined } } : m));
@@ -1398,6 +1416,8 @@ export class AppController {
       // widgets
       case "widget/reload":
         return this.reloadWidget(intent.widgetId);
+      case "widget/openSameOrigin":
+        return this.openSameOrigin(intent.widgetId);
       case "widget/answerCapabilities": {
         const prompt = this.main?.widgets[intent.widgetId]?.prompts.capabilities;
         // "Approve" is blocked for a moment after the card appeared or a request added to it; the view shows it, this enforces it. "Deny all" is never blocked.
@@ -1594,9 +1614,8 @@ function widgetEventProblem(event: StateEvent): string | undefined {
   if (!WIDGET_EVENT_TYPES.includes(event.type)) return `${event.type} is not a widget state event type`;
   if (!event.state_key) return "the widget ID (state key) is missing";
   if (typeof event.content.url !== "string") return "the content has no url";
-  // The URL first; then a widget type with a string `url` that describes no widget is an `m.widget` without a name.
-  const resolved = hostWidgetEvents.resolve(event);
-  return hostWidgetEvents.urlProblem(event.content.url) ?? (resolved ? resolved.problem : "the content has no name");
+  // The URL first (checked with a name), then a widget type with a string `url` that describes no widget is an `m.widget` without a name.
+  return hostWidgetEvents.resolve({ ...event, content: { name: "x", ...event.content } })?.problem ?? (hostWidgetEvents.resolve(event) ? undefined : "the content has no name");
 }
 
 /** `HostSeed.localWidgets`, checked like the widgets of the DevBackend's seed. */

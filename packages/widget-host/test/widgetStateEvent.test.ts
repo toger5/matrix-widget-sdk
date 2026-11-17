@@ -9,7 +9,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { InMemoryBackend, WidgetHostDriver, widgetEventTypes, type EmbedOptions, type WidgetIframe } from "@matrix-widget-sdk/host";
 
-import { embedOptions, hostWidgetEvents, ownWidgetDirs, reasonOf, widgetEventParser, wrapperUrl } from "../src/lib/widgetEvents";
+import { embedOptions, hostWidgetEvents, ownWidgetDirs, reasonOf, sameOriginOptions, widgetEventParser, wrapperUrl } from "../src/lib/widgetEvents";
 import { roomWidgets } from "../src/views/helpers";
 import { localWidgetKey, WIDGET_EVENT_TYPES, widgetKey, type StateEvent } from "../src/widgetStateEvent";
 import "./harness";
@@ -23,7 +23,8 @@ const WRAPPER = "http://localhost:5173/widget_compatibility_wrapper/";
  */
 /** `EmbedOptions` of this host, or of this host with the compat wrapper at a URL. */
 const optionsOf = (options: EmbedOptions | string = embedOptions()) => (typeof options === "string" ? embedOptions(options) : options);
-const widgetUrlProblem = (url: string, options?: EmbedOptions | string) => widgetEventParser(optionsOf(options)).urlProblem(url);
+/** The driver's URL check, as the parser applies it to a minimal `m.widget` with this URL (the driver's constructor applies the same). */
+const widgetUrlProblem = (url: string, options?: EmbedOptions | string) => widgetEventParser(optionsOf(options)).resolve({ type: "m.widget", state_key: "x", content: { name: "x", url } })?.problem;
 
 function resolveWidget(event: StateEvent, options?: EmbedOptions | string) {
   const { widget, problem } = widgetEventParser(optionsOf(options)).resolve(event) ?? { problem: "the event describes no widget" };
@@ -94,7 +95,6 @@ describe("the compat wrapper is no widget", () => {
 
   it.each(Object.entries(TABLE.compat_wrapper.refused))("refuses %s, for both widget kinds", (_, url) => {
     expect(widgetUrlProblem(url, wrapper)).toBe(LOADS_THE_WRAPPER);
-    expect(parser.urlProblem(url)).toBe(LOADS_THE_WRAPPER);
     expect(() => resolveWidget(newWidget(url), wrapper)).toThrow(LOADS_THE_WRAPPER);
     expect(() => resolveWidget(legacyWidget(url), wrapper)).toThrow(LOADS_THE_WRAPPER);
     expect(parser.resolve(newWidget(url))).toMatchObject({ widget: { name: "W", url, widgetId: "w" }, problem: LOADS_THE_WRAPPER });
@@ -108,7 +108,7 @@ describe("the compat wrapper is no widget", () => {
   it("is the compat wrapper of this host by default", () => {
     const own = wrapperUrl();
     expect(widgetUrlProblem(`${own}?legacy_widget_url=javascript:top.__pwned=1//&legacy_widget_id=evil`)).toBe(LOADS_THE_WRAPPER);
-    expect(hostWidgetEvents.urlProblem(own)).toBe(LOADS_THE_WRAPPER);
+    expect(hostWidgetEvents.resolve(newWidget(own))?.problem).toBe(LOADS_THE_WRAPPER);
   });
 
   it("is chosen by `?wrapper=` only on this host's origin: the driver grants the wrapper a legacy client's capabilities without asking", () => {
@@ -137,12 +137,18 @@ describe("no widget on this host's origin but its own test widgets", () => {
   const options = { ...embedOptions(`${client}/widget_compatibility_wrapper/`, client), ownWidgetDirs: dirs };
   const parser = widgetEventParser(options);
 
-  it.each(Object.entries(TABLE.client_origin.refused))("refuses %s, for both widget kinds", (_, url) => {
-    expect(widgetUrlProblem(url, options)).toBe(ON_THE_CLIENTS_ORIGIN);
-    expect(parser.urlProblem(url)).toBe(ON_THE_CLIENTS_ORIGIN);
+  it.each(Object.entries(TABLE.client_origin.refused))("refuses %s, for both widget kinds, unless the user agreed to it", (_, url) => {
     expect(() => resolveWidget(newWidget(url), options)).toThrow(ON_THE_CLIENTS_ORIGIN);
     expect(() => resolveWidget(legacyWidget(url), options)).toThrow(ON_THE_CLIENTS_ORIGIN);
-    expect(parser.resolve(newWidget(url))).toMatchObject({ widget: { name: "W", url, widgetId: "w" }, problem: ON_THE_CLIENTS_ORIGIN });
+    // It can be added and listed; it loads once the user agreed (the driver without the client origin).
+    expect(parser.resolve(newWidget(url))).toEqual({ widget: expect.objectContaining({ name: "W", url, widgetId: "w" }), sameOrigin: true });
+    expect(parser.resolve(legacyWidget(url))).toMatchObject({ sameOrigin: true });
+    expect(resolveWidget(newWidget(url), sameOriginOptions(options)).url).toBe(new URL(url).href);
+  });
+
+  it("does not take the compat wrapper for a page of its origin", () => {
+    const wrapperPage = `${client}/widget_compatibility_wrapper/?legacy_widget_url=${encodeURIComponent(`${client}/x/`)}`;
+    expect(parser.resolve(newWidget(wrapperPage))).toEqual({ widget: expect.anything(), problem: LOADS_THE_WRAPPER });
   });
 
   it.each(Object.entries({ ...TABLE.client_origin.own_widgets, ...TABLE.client_origin.other_origins }))("allows %s", (_, url) => {
@@ -153,7 +159,7 @@ describe("no widget on this host's origin but its own test widgets", () => {
   it("knows its origin only in a browser: outside one (these tests) the check is off", () => {
     expect(embedOptions().clientOrigin).toBeUndefined();
     expect(widgetUrlProblem(`${client}/some/widget/`)).toBeUndefined();
-    expect(widgetUrlProblem(`${client}/some/widget/`, embedOptions(wrapperUrl(), client))).toBe(ON_THE_CLIENTS_ORIGIN);
+    expect(widgetEventParser(embedOptions(wrapperUrl(), client)).resolve(newWidget(`${client}/some/widget/`))?.sameOrigin).toBe(true);
   });
 
   it("takes the test widgets' directory as its own, unless it holds the host itself", () => {

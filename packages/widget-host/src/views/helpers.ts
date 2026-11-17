@@ -11,6 +11,8 @@ export interface RoomWidget {
   /** The widget's definition, when the host may load it: what a `WidgetRuntime` is started from. */
   widget?: WidgetDefinition;
   problem?: string;
+  /** A page of this host's origin: it asks before it loads. */
+  sameOrigin?: true;
   /** A local widget ("Add widget", only in this host): `key` is its `localWidgetKey`. */
   local?: true;
 }
@@ -26,8 +28,8 @@ export function roomWidgets(parser: WidgetEventParser, room: Pick<RoomSummary, "
     const resolution = parser.resolve(event);
     if (!resolution) return [];
     const key = isLocal ? localWidgetKey(event) : widgetKey(event);
-    const { widget, problem } = resolution;
-    return [{ key, name: widget.name, event, ...(problem ? { problem } : { widget }), ...(isLocal ? { local: true as const } : {}) }];
+    const { widget, problem, sameOrigin } = resolution;
+    return [{ key, name: widget.name, event, ...(problem ? { problem } : { widget, ...(sameOrigin && { sameOrigin }) }), ...(isLocal ? { local: true as const } : {}) }];
   };
   return [...(room?.widgetEvents ?? []).flatMap((e) => listed(e, false)), ...local.flatMap((e) => listed(e, true))];
 }

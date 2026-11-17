@@ -147,8 +147,9 @@ match parse_widget_state_event(event_type, state_key, content, options.clone()) 
   iframe's `src` (WHATWG, the `url` crate). A URL that an iframe resolves against the page that
   embeds it (`https:example.org`, `http:/path`) is refused: it has to name its own host (`//` after
   the scheme). The texts name the scheme, never the URL.
-* `embed_url_problem(url, options)` is that check for both kinds, with `EmbedOptions`
-  (`wrapper_url`, `client_origin`, `own_widget_dirs`, `allow_http`): `widget_url_problem`, **no page
+* `parse_widget_state_event` and `WidgetHostDriver::new` make that check for both kinds, with
+  `EmbedOptions` (`wrapper_url`, `client_origin`, `own_widget_dirs`, `allow_http`):
+  `widget_url_problem`, **no page
   of the client's compat wrapper** ("a widget cannot load this client's compat wrapper"), and **no
   page of the client's own origin** (below). A client usually serves the wrapper from its own origin with
   `allow-same-origin`, and the wrapper loads the `legacy_widget_url` of its own URL: an `m.widget`
@@ -174,9 +175,9 @@ match parse_widget_state_event(event_type, state_key, content, options.clone()) 
   `legacy_widget_data` in its query (see the wrapper's README; they replace any the wrapper URL
   has), and always uses the widget API. The wrapper checks the legacy URL again, before and after
   templating.
-* Foreign code calls `parse_widget_state_event`, `widget_url_problem`, `embed_url_problem`,
+* Foreign code calls `parse_widget_state_event`, `widget_url_problem`,
   `widget_event_types`, `webview_attributes` and `legacy_auto_approved` (TypeScript:
-  `parseWidgetStateEvent`, `embedUrlProblem`, `webviewAttributes`, `legacyAutoApproved`, …;
+  `parseWidgetStateEvent`, `webviewAttributes`, `legacyAutoApproved`, …;
   `EmbedOptions`, `WidgetDefinition`, `WidgetIframe` and `WebviewAttributes` are plain objects).
 
 ### More diagrams

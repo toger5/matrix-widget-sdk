@@ -10,12 +10,12 @@
   widget host builds every iframe from that (`packages/widget-host/src/app/runtime/widgetRuntime.ts`,
   `src/app/AppRoot.tsx` `WidgetIframes`). A widget without the widget API is shown at once and its
   messages are refused (`DriverError::NoWidgetApi`). Widgets of the
-  client's own origin are refused by `embed_url_problem` (`parse_widget_state_event`,
-  `WidgetHostDriver::new`;
-  `crates/matrix-widget-host-driver/src/widget_url.rs`, `EmbedOptions`); the widget host passes
-  `location.origin`, with one deliberate exception for a developer tool: the test widgets it ships
+  client's own origin are refused by `parse_widget_state_event` and `WidgetHostDriver::new`
+  (`crates/matrix-widget-host-driver/src/widget_url.rs`, `EmbedOptions`); the widget host passes
+  `location.origin`, with two deliberate exceptions for a developer tool: the test widgets it ships
   itself (`ownWidgetDirs` in `packages/widget-host/src/lib/widgetEvents.ts`, the dev site serves them
-  from the host's origin). The compat wrapper gives its inner iframe the legacy set, without
+  from the host's origin), and, with its dev tools on, a widget the user chose to open anyway from
+  the prompt that explains the risk. The compat wrapper gives its inner iframe the legacy set, without
   `allow-same-origin` for a legacy widget on its own origin
   (`packages/widget-compat-wrapper/src/wrapper.ts` `innerIframe`). The webview capabilities
   themselves: [`../new/webview-capabilities.md`](../new/webview-capabilities.md); the capability

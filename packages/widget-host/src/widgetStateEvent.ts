@@ -15,10 +15,11 @@ export interface StateEvent {
 
 /** The driver's widget state event parser with this host's options, as views get it (`ViewEnv.widgetEvents`). */
 export interface WidgetEventParser {
-  /** The widget `event` describes, with a `problem` if the host must not load it (listed, disabled); `undefined` if it describes none. */
-  resolve(event: StateEvent): { widget: WidgetDefinition; problem?: string } | undefined;
-  /** Why a URL cannot be loaded as a widget, or `undefined` when it can. */
-  urlProblem(url: string): string | undefined;
+  /**
+   * The widget `event` describes, with a `problem` if the host must not load it (listed, disabled);
+   * `undefined` if it describes none. `sameOrigin`: a page of this host's origin, which asks before it loads.
+   */
+  resolve(event: StateEvent): { widget: WidgetDefinition; problem?: string; sameOrigin?: true } | undefined;
 }
 
 /** Every state event type that describes a widget: `widgetEventTypes()` of the driver (a test compares them). */

@@ -62,6 +62,8 @@ function stage(name) {
   const dir = join(stageRoot, name);
   rmSync(dir, { recursive: true, force: true });
   mkdirSync(dir, { recursive: true });
+  // npm always packs a LICENSE, whatever `files` lists.
+  cpSync(join(root, "LICENSE"), join(dir, "LICENSE"));
   return dir;
 }
 

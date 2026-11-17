@@ -113,7 +113,7 @@ bindings scripts set their own target dir for that reason.
    arguments work), `derive(uniffi::Record)` / `uniffi::Enum` / `uniffi::Error` on the types, all
    behind `cfg_attr` so the plain Rust build has no UniFFI. Re-export it from the crate's `lib.rs`.
    Examples: `capability_is_known` (`matrix-widget-actions`), `parse_widget_state_event`,
-   `widget_url_problem`, `embed_url_problem`, `legacy_auto_approved` (`matrix-widget-host-driver`).
+   `widget_url_problem`, `legacy_auto_approved` (`matrix-widget-host-driver`).
 2. `cargo build --features uniffi -p matrix-widget-host-driver`, then `npm run bindings`; check the
    generated name and shape in `src/generated/matrix_widget_host_driver.ts` (or `matrix_widget_actions.ts`).
 3. Use it from the model or the controller of the host (`src/lib/`, `src/app/`), never from a view.

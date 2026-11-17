@@ -9,6 +9,8 @@
 .wv-state code { padding: 4px 8px; border-radius: var(--r-2); background: var(--surface-2); color: var(--text-muted); }
 .wv-state .btn, .wv-state .inline-row { margin-top: 8px; }
 .wv-state .inline-row .btn { margin-top: 0; }
+.wv-state .ico.warning { color: var(--warning); }
+.wv-state .muted b { font-size: inherit; font-weight: 600; color: var(--text); }
 .spinner { width: 28px; height: 28px; border-radius: 50%; border: 3px solid var(--surface-3); border-top-color: var(--text); }
 @media (prefers-reduced-motion: no-preference) { .spinner { animation: spin 0.9s linear infinite; } }
 @keyframes spin { to { transform: rotate(360deg); } }

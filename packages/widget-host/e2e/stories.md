@@ -139,6 +139,8 @@ The Dev tools of a Matrix account (`sidepanel-roomtoolsview--*`) are **not reach
 | `widget-widgetview--ready` | `widget.spec.ts` › a widget is loading until it sends notify_ready |
 | `widget-widgetview--loading` | `widget.spec.ts` › a widget is loading until it sends notify_ready |
 | `widget-widgetview--failed` | `widget.spec.ts` › a widget that never answers fails: retry starts it again, close tab gives up |
+| `widget-widgetview--same-origin` | `overview.spec.ts` › a widget on this host's own origin: added in the form, listed like any widget; opening it asks first: without dev tools "Close tab" only |
+| `widget-widgetview--same-origin-dev-tools` | `overview.spec.ts` › a widget on this host's own origin: added in the form, listed like any widget; opening it asks first: without dev tools "Close tab" only |
 | `widget-widgetview--capability-prompt` | `widget.spec.ts` › capability prompt: a section's checkbox checks its rows; approving nothing is not offered |
 | `widget-widgetview--capability-prompt-long` | `widget.spec.ts` › capability prompt: deny all, then approve a subset; the widget's actions succeed or fail accordingly (the test widget's 33 capabilities; it asks for none this app does not know) |
 | `widget-widgetview--capability-prompt-merged` | `widget.spec.ts` › a request while the prompt is open joins it: the choices stay, the new one is marked, Approve is blocked again, one answer for both (the story's progress bar is drawn full, the screenshot ends animations) |

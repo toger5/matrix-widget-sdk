@@ -37,8 +37,8 @@
 //! [`WidgetDefinition`] reads the widget state events of a room (MSC4411 `m.widget`, and the
 //! legacy `im.vector.modular.widgets`): [`parse_widget_state_event`] tells which events are
 //! widgets and whether the client may load one, after the URL check ([`widget_url_problem`], and
-//! [`embed_url_problem`]: never the client's own compat wrapper, never a page of the client's own
-//! origin, see [`EmbedOptions`]). [`WidgetHostDriver::new`] makes the same check and decides what
+//! never the client's own compat wrapper, never a page of the client's own origin, see
+//! [`EmbedOptions`]). [`WidgetHostDriver::new`] makes the same check and decides what
 //! the iframe loads; a legacy widget is loaded through the compat wrapper and gets
 //! [`legacy_auto_approved`] without asking.
 //!
@@ -92,7 +92,7 @@ pub use widget_event::{
     parse_widget_state_event, widget_event_types, LegacyWidget, WidgetDefinition, WidgetEventError, WIDGET_EVENT_TYPE,
     WIDGET_EVENT_TYPES, WIDGET_EVENT_TYPE_LEGACY, WIDGET_EVENT_TYPE_UNSTABLE,
 };
-pub use widget_url::{embed_url_problem, widget_url_problem, EmbedOptions};
+pub use widget_url::{widget_url_problem, EmbedOptions};
 
 #[cfg(feature = "uniffi")]
 uniffi::setup_scaffolding!();

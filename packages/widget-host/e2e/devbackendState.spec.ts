@@ -174,7 +174,7 @@ test("the widget form sends any custom widget: it starts empty, only http(s) URL
   await form.getByLabel("Name").fill("Whiteboard");
   await form.getByLabel("URL").fill("javascript:alert(1)");
   await form.getByRole("button", { name: "Send" }).click();
-  await expect(form.getByRole("alert")).toHaveText("The URL must start with http:// or https://.");
+  await expect(form.getByRole("alert")).toHaveText("The URL cannot be embedded: javascript: URLs are not allowed, only http: and https:.");
   expect(await stateOf(host, "m.widget", "widget-2")).toBeUndefined();
   await form.getByLabel("URL").fill("http://localhost:5175/new/?board=1");
   await form.getByRole("button", { name: "Send" }).click();
@@ -215,7 +215,7 @@ test("the Element Call form writes the call widget as Element Web describes it, 
 
   await form.getByLabel("Element Call URL").fill("javascript:alert(1)");
   await form.getByRole("button", { name: "Send" }).click();
-  await expect(form.getByRole("alert")).toContainText("must start with http");
+  await expect(form.getByRole("alert")).toHaveText("The Element Call URL cannot be embedded: javascript: URLs are not allowed, only http: and https:.");
 
   // The legacy test widget stands in for Element Call (which is loaded from the internet), to see the URL the compat wrapper loads.
   await form.getByLabel("Element Call URL").fill("http://localhost:5175/legacy/#ignored");

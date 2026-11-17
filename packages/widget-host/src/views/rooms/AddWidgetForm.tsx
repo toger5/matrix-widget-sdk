@@ -124,7 +124,6 @@ function TargetSeg({ target, onChange }: { target: AddWidgetTarget; onChange: (t
 export function AddWidgetForm({ roomId, roomEvents, localEvents, edit, write, userId, initial, onClose }: AddWidgetFormProps) {
   const dispatch = useDispatch();
   const { widgetEvents } = useViewEnv();
-  const { urlProblem } = widgetEvents;
   const [draft, setDraft] = useState<AddWidgetDraft>(() => ({
     form: "testWidget",
     target: "local",
@@ -145,14 +144,14 @@ export function AddWidgetForm({ roomId, roomEvents, localEvents, edit, write, us
   }, [sent, write, roomEvents, onClose]);
 
   const build = (): StateEvent | string => {
-    if (edit) return buildWidgetEvent(draft.widget, urlProblem, { base: edit.content });
+    if (edit) return buildWidgetEvent(draft.widget, widgetEvents, { base: edit.content });
     switch (draft.form) {
       case "testWidget":
         return buildTestWidgetEvent(draft.testWidget, userId);
       case "widget":
-        return buildWidgetEvent(draft.widget, urlProblem, { userId });
+        return buildWidgetEvent(draft.widget, widgetEvents, { userId });
       case "elementCall":
-        return buildElementCallEvent(draft.call, urlProblem, userId);
+        return buildElementCallEvent(draft.call, widgetEvents, userId);
       case "json":
         return parseWidgetEvent(draft.json, widgetEvents);
     }

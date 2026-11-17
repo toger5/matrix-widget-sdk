@@ -48,7 +48,7 @@ interface Props {
 
 export function SendStateForm({ roomId, form, state, userId }: Props) {
   const dispatch = useDispatch();
-  const { urlProblem } = useViewEnv().widgetEvents;
+  const { widgetEvents } = useViewEnv();
   const [testWidget, setTestWidget] = useState(() => newTestWidgetDraft(freeWidgetId(asStateEvents(state))));
   const [widget, setWidget] = useState(() => newWidgetDraft(freeWidgetId(asStateEvents(state))));
   const [call, setCall] = useState(NEW_ELEMENT_CALL);
@@ -62,9 +62,9 @@ export function SendStateForm({ roomId, form, state, userId }: Props) {
       case "testWidget":
         return asMocked(buildTestWidgetEvent(testWidget, userId));
       case "widget":
-        return asMocked(buildWidgetEvent(widget, urlProblem, { userId }));
+        return asMocked(buildWidgetEvent(widget, widgetEvents, { userId }));
       case "elementCall":
-        return asMocked(buildElementCallEvent(call, urlProblem, userId));
+        return asMocked(buildElementCallEvent(call, widgetEvents, userId));
       case "raw": {
         if (!raw.type.trim()) return "The event type is missing.";
         const content = parseJsonObject(raw.content);

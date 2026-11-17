@@ -118,6 +118,10 @@ test("Add widget, only in this host: listed as “Local”, nothing is sent; it 
   await host.story("rooms-roomoverview--add-widget-custom");
   await form.getByRole("textbox", { name: "Widget ID" }).fill("widget-1");
   await form.getByRole("textbox", { name: "Name" }).fill("Local test widget");
+  // A page of the compat wrapper is refused, and the form says why.
+  await form.getByRole("textbox", { name: "URL" }).fill(new URL("/widget_compatibility_wrapper/?legacy_widget_url=x", host.page.url()).href);
+  await form.getByRole("button", { name: "Add widget" }).click();
+  await expect(form.getByRole("alert")).toContainText("The URL cannot be embedded: a widget cannot load this client's compat wrapper.");
   await form.getByRole("textbox", { name: "URL" }).fill("http://localhost:5175/new/");
   await form.getByRole("button", { name: "Add widget" }).click();
   await expect(form).toHaveCount(0);
@@ -137,6 +141,50 @@ test("Add widget, only in this host: listed as “Local”, nothing is sent; it 
   await prompt.getByRole("button", { name: /^Approve \d+ selected$/ }).click();
   await expect.poll(() => rememberedKeys(host)).toEqual(["local:m.widget/widget-1", NEW_WIDGET]);
   await host.ready(widgetId(LAB, "local:m.widget/widget-1"));
+});
+
+test("a widget on this host's own origin can be added; opening it asks first, \"Open anyway\" only with dev tools", async ({ host }) => {
+  await host.populate("lab", { sidePanel: null, open: [{ room: LAB }] });
+  const overview = host.page.getByTestId("room-overview");
+  await overview.getByRole("button", { name: "Add widget" }).click();
+  const form = overview.getByRole("form", { name: "Add widget" });
+  await form.getByRole("tab", { name: "Widget", exact: true }).click();
+  // A static file of the host: harmless, and ready once loaded (no widget API).
+  const url = new URL("/demo/notes.txt", host.page.url()).href;
+  await form.getByRole("textbox", { name: "Widget ID" }).fill("own-page");
+  await form.getByRole("textbox", { name: "Name" }).fill("Own page");
+  await form.getByRole("textbox", { name: "URL" }).fill(url);
+  await form.getByRole("switch", { name: "Uses the widget API" }).click();
+  await form.getByRole("button", { name: "Add widget" }).click();
+  await expect(form).toHaveCount(0);
+
+  const id = widgetId(LAB, "local:m.widget/own-page");
+  const open = overview.getByRole("button", { name: "Open Own page" });
+  const ask = host.page.getByTestId("widget-same-origin");
+  await open.click();
+  await expect(ask.getByRole("group", { name: "Own page runs on this app's own site" })).toHaveAccessibleDescription(
+    `It comes from ${new URL(url).origin}, like this app itself, so it could read and change your data and your login here. Open it only if you trust it as much as this site.`,
+  );
+  await expect(host.iframe(id)).toHaveCount(0);
+  await host.story("widget-widgetview--same-origin-dev-tools");
+
+  // "Open anyway" loads it; a reload does not ask again, another URL does.
+  await ask.getByRole("button", { name: "Open anyway" }).click();
+  await host.ready(id);
+  await expect(host.iframe(id)).toHaveAttribute("src", url);
+  await host.dispatch({ type: "widget/reload", widgetId: id });
+  await host.ready(id);
+  const moved = { type: "m.widget", state_key: "own-page", content: { name: "Own page", url: `${url}?v=2`, uses_widget_api: false } };
+  await host.dispatch({ type: "room/addWidget", roomId: LAB, event: moved, target: "local" });
+  await expect(ask).toBeVisible();
+  await ask.getByRole("button", { name: "Close tab" }).click();
+  expect((await host.main()).widgets[id]).toBeUndefined();
+
+  // Without dev tools it cannot be opened.
+  await host.dispatch({ type: "settings/set", settings: { devTools: false } });
+  await open.click();
+  await expect(ask.getByRole("button")).toHaveText(["Close tab"]);
+  await host.story("widget-widgetview--same-origin");
 });
 
 test("Add widget, Paste JSON: a whole state event, other fields ignored; not a widget type or not an http(s) URL is refused in the form", async ({ host }) => {

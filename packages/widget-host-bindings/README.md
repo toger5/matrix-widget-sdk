@@ -161,10 +161,11 @@ but which allows nothing), e.g. to set the latter apart in a permission prompt.
 Which state events are widgets, and what to load for one, is the driver's too (see its README):
 `parseWidgetStateEvent(eventType, stateKey, content, options)` returns a `WidgetDefinition` (`name`,
 `url`, `usesWidgetApi`, `legacy?`, …) for a widget the client may load; it makes the check the
-driver's constructor makes with the same `options`. `widgetUrlProblem(url, allowHttp)` is the URL
-check alone, `embedUrlProblem(url, options)` the whole check (also: no page of the compat wrapper at
-`options.wrapperUrl`, no page of `options.clientOrigin` outside `options.ownWidgetDirs`; `options` is
-the plain object `EmbedOptions { wrapperUrl?, clientOrigin?, ownWidgetDirs, allowHttp }`), and
+driver's constructor makes with the same `options` (the URL check, and no page of the compat
+wrapper at `options.wrapperUrl`, no page of `options.clientOrigin` outside `options.ownWidgetDirs`;
+`options` is the plain object `EmbedOptions { wrapperUrl?, clientOrigin?, ownWidgetDirs, allowHttp }`;
+to check a URL alone, as a form does, parse a minimal `m.widget` event `{ name, url }`).
+`widgetUrlProblem(url, allowHttp)` is the URL check without the options, and
 `widgetEventTypes()` the event types to read. The parser and the constructor throw a
 `WidgetEventError` (`NotAWidgetType`, `Removed`, `Refused`; `Refused` carries the whole definition
 in `widget`, to list it disabled). Errors of the bindings carry their fields in `inner`

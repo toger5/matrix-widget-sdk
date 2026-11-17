@@ -21,6 +21,7 @@ const DOCKS = [
 ] as const satisfies readonly { dock: WidgetDevToolsLayout["dock"]; icon: IconName }[];
 
 const STATUS: Record<WidgetInstanceViewModel["load"]["state"], { cls: string; label: string }> = {
+  sameOrigin: { cls: "wait", label: "Widget waits for “Open”" },
   ready: { cls: "ok", label: "Widget is ready" },
   loading: { cls: "wait", label: "Widget is loading" },
   failed: { cls: "err", label: "Widget failed to load" },

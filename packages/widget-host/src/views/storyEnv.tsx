@@ -18,7 +18,7 @@ const LAB_STATE: RoomStateData = { state: { status: "ready", value: MOCKED_ROOM_
 /**
  * A stand-in for the driver's parser (stories load no wasm): every widget type with a string `url`
  * (and, MSC4411, a string `name` for `m.widget`) is a widget, and one with an absolute http(s) URL may
- * be loaded. The URL check is coarser than the driver's.
+ * be loaded (one of Storybook's origin asks first). The URL check is coarser than the driver's.
  */
 const STORY_WIDGET_EVENTS: WidgetEventParser = {
   resolve(event) {
@@ -35,10 +35,9 @@ const STORY_WIDGET_EVENTS: WidgetEventParser = {
       usesWidgetApi: !legacy && event.content.uses_widget_api === true,
       legacy: legacy ? { widgetType: undefined, waitForIframeLoad: event.content.waitForIframeLoad !== false, data: undefined } : undefined,
     };
-    const problem = STORY_WIDGET_EVENTS.urlProblem(url);
-    return problem ? { widget, problem } : { widget };
+    if (!URL.canParse(url) || !/^https?:$/.test(new URL(url).protocol)) return { widget, problem: "the URL is not an absolute http: or https: URL" };
+    return new URL(url).origin === globalThis.location?.origin ? { widget, sameOrigin: true } : { widget };
   },
-  urlProblem: (url) => (URL.canParse(url) && /^https?:$/.test(new URL(url).protocol) ? undefined : "the URL is not an absolute http: or https: URL"),
 };
 
 /** `DEV_TOOLS_DATA` with the run duration of the design ("3 m 12 s") when the stories load, instead of the fixture's fixed date. */

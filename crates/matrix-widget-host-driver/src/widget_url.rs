@@ -5,12 +5,12 @@
 use percent_encoding::percent_decode_str;
 use url::{Origin, Url};
 
-/// Why [`embed_url_problem`] refuses a page of the client's compat wrapper.
+/// Why [`checked_embed_url`] refuses a page of the client's compat wrapper.
 const LOADS_THE_WRAPPER: &str = "a widget cannot load this client's compat wrapper";
-/// Why [`embed_url_problem`] refuses a page of the client's own origin.
+/// Why [`checked_embed_url`] refuses a page of the client's own origin.
 const ON_THE_CLIENTS_ORIGIN: &str = "a widget cannot be a page of this client's own origin";
 
-/// What a client tells [`embed_url_problem`], [`parse_widget_state_event`](crate::parse_widget_state_event)
+/// What a client tells [`parse_widget_state_event`](crate::parse_widget_state_event)
 /// and [`WidgetHostDriver::new`](crate::WidgetHostDriver::new) about itself.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
@@ -60,39 +60,6 @@ pub fn widget_url_problem(url: &str, allow_http: bool) -> Option<String> {
     checked_widget_url(url, allow_http).err()
 }
 
-/// Why a client must not load `url` as a widget (of either kind), or `None` when it can:
-/// [`widget_url_problem`] (with [`EmbedOptions::allow_http`]); `url` is a page of the client's
-/// compat wrapper ([`EmbedOptions::wrapper_url`]); or it is a page of the client's own origin
-/// ([`EmbedOptions::client_origin`]) outside the client's own widget directories.
-/// [`parse_widget_state_event`](crate::parse_widget_state_event) and
-/// [`WidgetHostDriver::new`](crate::WidgetHostDriver::new) refuse the same URLs.
-///
-/// A client typically serves the compat wrapper from its own origin, and the wrapper loads whatever
-/// its `legacy_widget_url` parameter names into an iframe of its own. A widget whose URL is the
-/// wrapper (with a `legacy_widget_url` of the widget's choosing) would run on the client's origin.
-/// Only the wrapper's directory is refused, not its whole origin: a deployment may serve widgets
-/// from the same origin under other paths (this repository's dev site does). A page counts as the
-/// wrapper's when a web server could answer it with the wrapper: the same origin, and a path in the
-/// wrapper's directory (its path up to the last `/`) or that directory without its trailing slash,
-/// compared after percent-decoding, with dot segments resolved, repeated slashes as one and in
-/// lower case (Vite's dev server serves the wrapper for `/widget%5Fcompatibility%5Fwrapper/`,
-/// `/WIDGET_COMPATIBILITY_WRAPPER/`, `//widget_compatibility_wrapper/` and
-/// `/x/..%2Fwidget_compatibility_wrapper/`). A `wrapper_url` that is no widget URL itself
-/// ([`widget_url_problem`] with `http:`) cannot be loaded, so nothing is a page of it.
-///
-/// Every widget iframe gets `allow-scripts allow-same-origin` (the base of the webview
-/// capabilities, `crate::webview`), so a page of the client's own origin in one would not be
-/// sandboxed from the client: it could reach the client's window, storage and logins
-/// (`spec/patch/msc4411/strict-webview-defaults.md`). Such pages are refused, whole origin, unless
-/// they are in one of [`EmbedOptions::own_widget_dirs`]: same origin, and the path in the
-/// directory both as written and as a server may read it (decoded, dot segments resolved, in lower
-/// case; see above), so that `/widgets/..%2F` and `/WIDGETS/` (on a case-sensitive server another
-/// page, maybe the client itself) are not in `/widgets/`.
-#[cfg_attr(feature = "uniffi", uniffi::export)]
-pub fn embed_url_problem(url: &str, options: EmbedOptions) -> Option<String> {
-    checked_embed_url(url, &options).err()
-}
-
 /// [`widget_url_problem`], with the URL as the check parsed it.
 pub(crate) fn checked_widget_url(url: &str, allow_http: bool) -> Result<Url, String> {
     let allowed = if allow_http { "http: and https:" } else { "https:" };
@@ -116,7 +83,35 @@ pub(crate) fn checked_widget_url(url: &str, allow_http: bool) -> Result<Url, Str
     }
 }
 
-/// [`embed_url_problem`], with the URL as the check parsed it.
+/// Why a client must not load `url` as a widget (of either kind), with the URL as the check parsed it:
+/// [`widget_url_problem`] (with [`EmbedOptions::allow_http`]); `url` is a page of the client's
+/// compat wrapper ([`EmbedOptions::wrapper_url`]); or it is a page of the client's own origin
+/// ([`EmbedOptions::client_origin`]) outside the client's own widget directories.
+/// [`parse_widget_state_event`](crate::parse_widget_state_event) and
+/// [`WidgetHostDriver::new`](crate::WidgetHostDriver::new) run it; a client checks a URL through
+/// them.
+///
+/// A client typically serves the compat wrapper from its own origin, and the wrapper loads whatever
+/// its `legacy_widget_url` parameter names into an iframe of its own. A widget whose URL is the
+/// wrapper (with a `legacy_widget_url` of the widget's choosing) would run on the client's origin.
+/// Only the wrapper's directory is refused, not its whole origin: a deployment may serve widgets
+/// from the same origin under other paths (this repository's dev site does). A page counts as the
+/// wrapper's when a web server could answer it with the wrapper: the same origin, and a path in the
+/// wrapper's directory (its path up to the last `/`) or that directory without its trailing slash,
+/// compared after percent-decoding, with dot segments resolved, repeated slashes as one and in
+/// lower case (Vite's dev server serves the wrapper for `/widget%5Fcompatibility%5Fwrapper/`,
+/// `/WIDGET_COMPATIBILITY_WRAPPER/`, `//widget_compatibility_wrapper/` and
+/// `/x/..%2Fwidget_compatibility_wrapper/`). A `wrapper_url` that is no widget URL itself
+/// ([`widget_url_problem`] with `http:`) cannot be loaded, so nothing is a page of it.
+///
+/// Every widget iframe gets `allow-scripts allow-same-origin` (the base of the webview
+/// capabilities, `crate::webview`), so a page of the client's own origin in one would not be
+/// sandboxed from the client: it could reach the client's window, storage and logins
+/// (`spec/patch/msc4411/strict-webview-defaults.md`). Such pages are refused, whole origin, unless
+/// they are in one of [`EmbedOptions::own_widget_dirs`]: same origin, and the path in the
+/// directory both as written and as a server may read it (decoded, dot segments resolved, in lower
+/// case; see above), so that `/widgets/..%2F` and `/WIDGETS/` (on a case-sensitive server another
+/// page, maybe the client itself) are not in `/widgets/`.
 pub(crate) fn checked_embed_url(url: &str, options: &EmbedOptions) -> Result<Url, String> {
     let parsed = checked_widget_url(url, options.allow_http)?;
     let wrapper = options.wrapper_url.as_deref().and_then(|wrapper| checked_widget_url(wrapper, true).ok());
@@ -138,7 +133,7 @@ fn client_origin(options: &EmbedOptions) -> Option<Origin> {
 }
 
 /// Whether a web server could answer `url` with a page of the compat wrapper at `wrapper` (see
-/// [`embed_url_problem`]).
+/// [`checked_embed_url`]).
 fn is_compat_wrapper_page(url: &Url, wrapper: &Url) -> bool {
     if url.origin() != wrapper.origin() {
         return false;
@@ -150,7 +145,7 @@ fn is_compat_wrapper_page(url: &Url, wrapper: &Url) -> bool {
     path == directory || path.starts_with(&format!("{directory}/"))
 }
 
-/// Whether `url` is a page in the own widget directory `dir` (see [`embed_url_problem`]): the
+/// Whether `url` is a page in the own widget directory `dir` (see [`checked_embed_url`]): the
 /// opposite direction of [`is_compat_wrapper_page`], so a page counts only if it is in the
 /// directory however a server reads it.
 fn is_own_widget_page(url: &Url, dir: &str) -> bool {
@@ -199,6 +194,10 @@ mod tests {
     use serde::Deserialize;
 
     use super::*;
+
+    fn embed_url_problem(url: &str, options: EmbedOptions) -> Option<String> {
+        checked_embed_url(url, &options).err()
+    }
 
     /// The shared table of `tests/widget_urls.json`; the host's vitest reads it too.
     #[derive(Deserialize)]

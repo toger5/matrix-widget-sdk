@@ -186,16 +186,6 @@ test("a legacy widget gets a legacy client's iframe, outside and inside the comp
   await expect(inner).toHaveAttribute("allow", "microphone; camera; encrypted-media; autoplay; display-capture; clipboard-write; clipboard-read; fullscreen");
 });
 
-test("a widget on the host's own origin is listed disabled with the reason, and nothing runs", async ({ host }) => {
-  const url = new URL("/some/widget/", host.page.url()).href;
-  const widget = { type: "m.widget", state_key: "same-origin", content: { name: "Same origin widget", url, uses_widget_api: true } };
-  await host.populate({ userId: "@alice:dev.local", rooms: [{ id: LAB, name: "Widget lab", widgets: [widget] }], sidePanel: null, open: [{ room: LAB, widgets: ["m.widget/same-origin"] }] });
-  const refused = host.button("Same origin widget cannot be opened: a widget cannot be a page of this client's own origin");
-  await expect(refused).toHaveAttribute("aria-disabled", "true");
-  expect((await host.main()).widgets).toEqual({});
-  await expect(host.page.locator("iframe")).toHaveCount(0);
-});
-
 test("allow-top-navigation is never in the prompt and never granted", async ({ host }) => {
   await readyQuietWidget(host);
   const before = (await generation(host, NEW))!;

@@ -11,7 +11,7 @@
 //! 1. [`WidgetDefinition::parse`]: a state event becomes the widget it describes, or the reason it
 //!    describes none (another event type, a removed widget).
 //! 2. `WidgetDefinition::embed` (crate-private): the widget becomes the URL of its iframe
-//!    (webview), or the reason it must not be loaded ([`embed_url_problem`](crate::embed_url_problem)).
+//!    (webview), or the reason it must not be loaded (`checked_embed_url`).
 //!    A legacy widget is loaded through the compat wrapper, with its URL template and data as
 //!    query parameters of the wrapper's URL.
 //!
@@ -144,7 +144,7 @@ impl WidgetDefinition {
         })
     }
 
-    /// What the iframe (webview) of this widget loads, after the URL check ([`embed_url_problem`](crate::embed_url_problem):
+    /// What the iframe (webview) of this widget loads, after the URL check (`checked_embed_url`:
     /// [`widget_url_problem`](crate::widget_url_problem), no page of the compat wrapper at
     /// `options.wrapper_url` and no page of the client's own origin, for widgets of both kinds).
     ///
@@ -195,7 +195,7 @@ impl WidgetDefinition {
 /// The widget a state event describes, if this client can open it: [`WidgetDefinition::parse`]
 /// (`content` is the event content as JSON), then the check a
 /// [`WidgetHostDriver`](crate::WidgetHostDriver) makes when it is created from the definition (the
-/// URL check [`embed_url_problem`](crate::embed_url_problem), and for a legacy widget the compat
+/// URL check `checked_embed_url`, and for a legacy widget the compat
 /// wrapper of `options`).
 ///
 /// * `Ok`: a widget to list; create a driver from it to open it.

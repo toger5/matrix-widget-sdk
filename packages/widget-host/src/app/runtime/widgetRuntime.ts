@@ -14,7 +14,7 @@ import { MAX_STATS_BUCKETS, STATS_BUCKET_MS, type WidgetDevToolsData, type Widge
 import { loadCapabilities, saveCapabilities } from "../../lib/capabilityStore";
 import { onDriverLog } from "../../lib/hostLogging";
 import { canonicalWebview, isWebviewCapability } from "../../lib/webview";
-import { embedOptions } from "../../lib/widgetEvents";
+import { embedOptions, sameOriginOptions } from "../../lib/widgetEvents";
 import type { WidgetDefinition, WidgetIframe } from "../../widgetStateEvent";
 import { Store } from "../store";
 
@@ -51,6 +51,8 @@ export interface WidgetRuntimeOptions {
   id: WidgetInstanceId;
   /** The widget's definition (`hostWidgetEvents.resolve`). The driver refuses one the host must not load: the constructor throws. */
   widget: WidgetDefinition;
+  /** A page of this host's origin the user agreed to load (`sameOriginOptions`). */
+  sameOrigin?: boolean;
   backend: MatrixBackend;
   /** Where approved capabilities are remembered (`capabilityStoreKey`); `undefined`: the widget is asked at every start. */
   capabilityKey?: string;
@@ -176,7 +178,7 @@ export class WidgetRuntime {
     };
 
     // Throws for a widget the host must not load (`WidgetEventError.Refused`; `reasonOf`).
-    this.driver = new WidgetHostDriver(widget, embedOptions(), backend, platform);
+    this.driver = new WidgetHostDriver(widget, options.sameOrigin ? sameOriginOptions() : embedOptions(), backend, platform);
     this.cleanup.push(() => window.clearTimeout(this.readyTimer));
 
     const onMessage = (ev: MessageEvent) => {

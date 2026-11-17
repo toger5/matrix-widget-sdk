@@ -1,10 +1,10 @@
 /**
- * The driver's widget state event parser (`parse_widget_state_event`, `embed_url_problem`) with
+ * The driver's widget state event parser (`parse_widget_state_event`) with
  * what this host says about itself. It tells which events are widgets and whether the host may
  * load them; what goes into the iframe a `WidgetHostDriver` says when the widget runs.
  * Views get `hostWidgetEvents` as `ViewEnv.widgetEvents` (they must not import the bindings).
  */
-import { embedUrlProblem, parseWidgetStateEvent, WidgetEventError, type EmbedOptions } from "@matrix-widget-sdk/host";
+import { parseWidgetStateEvent, WidgetEventError, type EmbedOptions } from "@matrix-widget-sdk/host";
 
 import { TEST_WIDGETS_URL } from "../exampleWidgets";
 import type { StateEvent, WidgetEventParser } from "../widgetStateEvent";
@@ -27,8 +27,8 @@ export const wrapperUrl = () => {
 };
 
 /**
- * The test widgets this host ships itself: the one exception to "no widget on this host's origin"
- * (the dev site serves them there). A directory that holds this host itself is no exception.
+ * The test widgets this host ships itself: the exception to "a widget on this host's origin asks
+ * first" (the dev site serves them there). A directory that holds this host itself is no exception.
  */
 export const ownWidgetDirs = (hostBase = hostBaseUrl(), dir = TEST_WIDGETS_URL): string[] => (hostBase.startsWith(new URL("./", dir).href) ? [] : [dir]);
 
@@ -40,15 +40,22 @@ export const embedOptions = (wrapper = wrapperUrl(), clientOrigin = globalThis.l
   allowHttp: true,
 });
 
+/** `options` for a widget on this host's origin the user agreed to load ("Open anyway"). */
+export const sameOriginOptions = (options: EmbedOptions = embedOptions()): EmbedOptions => ({ ...options, clientOrigin: undefined });
+
 /** The text of an error of the parser or the driver's constructor (the classes carry the reason, not the Rust message). */
 export function reasonOf(e: unknown): string {
   if (WidgetEventError.Refused.instanceOf(e) || WidgetEventError.Removed.instanceOf(e)) return e.inner.reason;
   return e instanceof Error ? e.message : String(e);
 }
 
-/** The parser for `options`. `resolve` remembers its answer per event object (state events are never changed in place). */
+/**
+ * The parser for `options`. `resolve` remembers its answer per event object (state events are never
+ * changed in place). A refused widget that passes without the client origin is `sameOrigin`.
+ */
 export function widgetEventParser(options = embedOptions()): WidgetEventParser {
   type Resolution = ReturnType<WidgetEventParser["resolve"]>;
+  const relaxed = sameOriginOptions(options);
   const known = new WeakMap<StateEvent, Resolution>();
   // The URL and the widget id as the event has them: the bindings drop a leading U+FEFF of a string
   // they return, and the driver made from the definition must check the event's URL.
@@ -57,7 +64,9 @@ export function widgetEventParser(options = embedOptions()): WidgetEventParser {
     try {
       return { widget: { ...parseWidgetStateEvent(event.type, event.state_key, event.content, options), ...own(event) } };
     } catch (e) {
-      return WidgetEventError.Refused.instanceOf(e) ? { widget: { ...e.inner.widget, ...own(event) }, problem: e.inner.reason } : undefined;
+      if (!WidgetEventError.Refused.instanceOf(e)) return undefined;
+      const widget = { ...e.inner.widget, ...own(event) };
+      return passes(event, relaxed) ? { widget, sameOrigin: true } : { widget, problem: e.inner.reason };
     }
   };
   return {
@@ -65,8 +74,16 @@ export function widgetEventParser(options = embedOptions()): WidgetEventParser {
       if (!known.has(event)) known.set(event, resolve(event));
       return known.get(event);
     },
-    urlProblem: (url) => embedUrlProblem(url, options),
   };
+}
+
+function passes(event: StateEvent, options: EmbedOptions): boolean {
+  try {
+    parseWidgetStateEvent(event.type, event.state_key, event.content, options);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 /** The parser of this host. */

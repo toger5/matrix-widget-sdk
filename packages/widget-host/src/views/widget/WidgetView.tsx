@@ -41,15 +41,16 @@ export function WidgetView({ widget, devTools, compact = false, tab, initialExpa
       {dev && <DevTools widget={widget} layout={dev} initialExpandedMessage={initialExpandedMessage} initialStatsSeries={initialStatsSeries} />}
       <div className="wv-widget">
         <WidgetSlot widgetId={widget.id}>{widgetStandIn?.(widget, compact)}</WidgetSlot>
-        <WidgetState widget={widget} compact={compact} tab={tab} initialUnchecked={initialUnchecked} initialAlways={initialAlways} />
+        <WidgetState widget={widget} devTools={devTools !== undefined} compact={compact} tab={tab} initialUnchecked={initialUnchecked} initialAlways={initialAlways} />
       </div>
     </div>
   );
 }
 
-/** What covers the widget: failed, the capability prompt or loading. Nothing while it simply runs. */
-function WidgetState({ widget, compact, tab, initialUnchecked, initialAlways }: Pick<WidgetViewProps, "widget" | "compact" | "tab" | "initialUnchecked" | "initialAlways">) {
+/** What covers the widget: failed, a prompt or loading. Nothing while it simply runs. */
+function WidgetState({ widget, devTools, compact, tab, initialUnchecked, initialAlways }: Pick<WidgetViewProps, "widget" | "compact" | "tab" | "initialUnchecked" | "initialAlways"> & { devTools: boolean }) {
   const dispatch = useDispatch();
+  const id = useId();
   const widgetId = widget.id;
   const { name, url } = widget.widget;
   const { load, prompts } = widget;
@@ -80,6 +81,30 @@ function WidgetState({ widget, compact, tab, initialUnchecked, initialAlways }: 
             <Button kind="primary" icon="refresh" onClick={() => dispatch({ type: "widget/reload", widgetId })}>
               Retry
             </Button>
+            {tab && <Button onClick={() => dispatch({ type: "tab/close", panelId: tab.panelId, tabId: tab.tabId })}>Close tab</Button>}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Never in a PiP box: a widget that asks is not always on screen.
+  if (load.state === "sameOrigin") {
+    return (
+      <div className="wv-over" data-testid="widget-same-origin">
+        <div className="wv-state" role="group" aria-labelledby={`${id}-t`} aria-describedby={`${id}-s`}>
+          <Icon name="alert" size={30} className="warning" />
+          <b id={`${id}-t`}>{name} runs on this app's own site</b>
+          <span className="muted" id={`${id}-s`}>
+            It comes from <b>{new URL(url).origin}</b>, like this app itself, so it could read and change your data and your login here.
+            {devTools && " Open it only if you trust it as much as this site."}
+          </span>
+          <div className="inline-row">
+            {devTools && (
+              <Button kind="primary" onClick={() => dispatch({ type: "widget/openSameOrigin", widgetId })}>
+                Open anyway
+              </Button>
+            )}
             {tab && <Button onClick={() => dispatch({ type: "tab/close", panelId: tab.panelId, tabId: tab.tabId })}>Close tab</Button>}
           </div>
         </div>

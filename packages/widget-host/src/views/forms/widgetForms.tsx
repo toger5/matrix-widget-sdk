@@ -21,8 +21,11 @@ export function freeWidgetId(events: Iterable<Pick<StateEvent, "type" | "state_k
   return `widget-${n}`;
 }
 
-/** The URL check of the driver (`ViewEnv.widgetEvents.urlProblem`): the forms check a URL as the host does before it embeds a widget. */
-export type UrlProblem = WidgetEventParser["urlProblem"];
+/** The event a form built, or why the host would not embed it (`ViewEnv.widgetEvents`, the driver's parser). */
+const checked = (event: StateEvent, widgetEvents: WidgetEventParser, what = "URL"): StateEvent | string => {
+  const problem = widgetEvents.resolve(event)?.problem;
+  return problem ? `The ${what} cannot be embedded: ${problem}.` : event;
+};
 
 // ---------------------------------------------------------------------------------------------
 // The widget form
@@ -52,16 +55,15 @@ export const widgetDraftOf = (event: StateEvent): WidgetDraft => ({
  * changes (editing keeps the fields the form does not show); without it a legacy widget gets
  * `type: "m.custom"`, `waitForIframeLoad` and `userId` as its `creatorUserId`.
  */
-export function buildWidgetEvent(draft: WidgetDraft, urlProblem: UrlProblem, { userId, base }: { userId?: string; base?: Record<string, unknown> } = {}): StateEvent | string {
+export function buildWidgetEvent(draft: WidgetDraft, widgetEvents: WidgetEventParser, { userId, base }: { userId?: string; base?: Record<string, unknown> } = {}): StateEvent | string {
   const stateKey = draft.stateKey.trim();
   if (!stateKey) return "The widget ID is missing.";
   if (!draft.name.trim()) return "The name is missing.";
-  if (urlProblem(draft.url.trim())) return "The URL must start with http:// or https://.";
   const common = { name: draft.name.trim(), url: draft.url.trim() };
   const legacy = draft.type === LEGACY_TYPE;
   const from = base ?? (legacy ? { type: "m.custom", waitForIframeLoad: true, ...(userId ? { creatorUserId: userId } : {}) } : {});
   const content = legacy ? { ...from, ...common } : { ...from, ...common, uses_widget_api: draft.usesWidgetApi };
-  return { type: draft.type, state_key: stateKey, content };
+  return checked({ type: draft.type, state_key: stateKey, content }, widgetEvents);
 }
 
 /** The fields of the widget form: any custom widget. `locked`: editing a widget, its event type and ID are fixed. */
@@ -210,11 +212,10 @@ export function elementCallEvent({ url, intent, stateKey, userId }: { url: strin
 }
 
 /** The state event of an Element Call draft, or what is wrong with it. */
-export function buildElementCallEvent(draft: ElementCallDraft, urlProblem: UrlProblem, userId?: string): StateEvent | string {
+export function buildElementCallEvent(draft: ElementCallDraft, widgetEvents: WidgetEventParser, userId?: string): StateEvent | string {
   const stateKey = draft.stateKey.trim();
   if (!stateKey) return "The widget ID is missing.";
-  if (urlProblem(draft.url.trim())) return "The Element Call URL must start with http:// or https://.";
-  return elementCallEvent({ url: draft.url.trim(), intent: draft.intent, stateKey, userId });
+  return checked(elementCallEvent({ url: draft.url.trim(), intent: draft.intent, stateKey, userId }), widgetEvents, "Element Call URL");
 }
 
 export function ElementCallFields({ draft, onChange }: { draft: ElementCallDraft; onChange: (draft: ElementCallDraft) => void }) {
@@ -261,8 +262,6 @@ export function parseWidgetEvent(text: string, widgetEvents: WidgetEventParser):
   const { url } = content as Record<string, unknown>;
   if (typeof url !== "string") return "The content has no url.";
   const event = { type, state_key: stateKey, content: content as Record<string, unknown> };
-  const resolution = widgetEvents.resolve(event);
-  if (!resolution) return "The content describes no widget: an m.widget needs a name.";
-  if (resolution.problem) return `The URL cannot be embedded: ${resolution.problem}.`;
-  return event;
+  if (!widgetEvents.resolve(event)) return "The content describes no widget: an m.widget needs a name.";
+  return checked(event, widgetEvents);
 }

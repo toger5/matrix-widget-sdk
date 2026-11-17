@@ -145,6 +145,10 @@ A widget's request for capabilities covers its WidgetTab with a permission card 
 - A request that arrives while the card is open joins it: its capabilities are added checked and marked "New"; the choices made so far stay.
 - "Approve" is blocked for 3 s after the card appeared or a request added to it (a status line counts down). "Deny all" is never blocked.
 
+## Widget on this app's own site
+
+A page of this app's own origin (except the test widgets the app ships) is not isolated from the app. It can be added and is listed like any widget, but opening it shows a prompt in its place instead: why it is a risk, and "Close tab". With dev tools it also offers "Open anyway", remembered for this widget and URL until the app is reloaded.
+
 ## WidgetDevToolBar
 
 A toolbar for a single widget, with information like the driver state (approved capabilities) and a log of the messages.
@@ -337,6 +341,7 @@ Every state of the UI. Each is one story in Storybook, a sketch story (`Sketch/â
     - WidgetTab
       - WidgetView
         - Loading / failed to load
+        - A widget on this app's own site, before it loads: dev tools disabled ("Close tab" only) / enabled ("Open anyway")
         - Capability prompt: summary and sections / a long list, scrolled / a second request joined, "Approve" blocked / one OpenID capability, "Once", "Approve" blocked / a call widget asking for browser permissions
         - Dev tools: no (full widget)
         - Dev tools: yes
@@ -364,7 +369,7 @@ Notes for the implementation. They add to the design above, they do not change i
 **Widgets are iframes**
 
 - Moving an iframe in the DOM reloads it. To move a widget between a tab and the PictureInPicturePanel without a reload, every iframe stays where it is in one persistent layer and is displayed through a shadow DOM slot where the view shows the widget.
-- Only absolute `http:` / `https:` widget URLs are embedded, for both widget kinds (a legacy URL is checked as its template, so one starting with `$variable` is refused); any other widget is listed disabled, with the reason, and so is a page of this app's own origin (the sandbox does not separate it from the app), except the test widgets the app ships itself. The "Add widget" forms refuse such a URL; a stored local widget is checked again.
+- Only absolute `http:` / `https:` widget URLs are embedded, for both widget kinds (a legacy URL is checked as its template, so one starting with `$variable` is refused); any other widget is listed disabled, with the reason, and the "Add widget" forms refuse it; a stored local widget is checked again. A page of this app's own origin is [asked for](#widget-on-this-apps-own-site); the compat wrapper is never a widget.
 - A widget's iframe starts strict: `sandbox="allow-scripts allow-same-origin"`, nothing in `allow`. More comes only from the webview capabilities the widget asks for (Browser permissions); `allow-top-navigation` is never asked for nor granted. A legacy widget gets a legacy client's iframe (Element Web's, plus `fullscreen`) without asking.
 - Granting or revoking a webview capability restarts the widget with the new iframe; the restarted widget gets what it held without being asked again. Restarted a third time within 10 s for this, it fails: "The widget was restarted 2 times within 10 seconds to change the permissions of its iframe, and is stopped." ("Retry" starts it anew: strict again, unless its capabilities are remembered).
 - A local widget's key is `local:` plus its type and state key, so it never shares remembered capabilities with a room widget of the same ID; they are forgotten when its URL (of a legacy widget also its `data`, the values of the URL's variables) changes or it is removed. Local widgets are persisted with the account's layout and deleted on logout (the DevBackend's are kept in memory).

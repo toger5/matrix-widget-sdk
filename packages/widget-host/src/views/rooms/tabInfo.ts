@@ -33,7 +33,7 @@ export function tabInfo(main: MainViewModel, room: RoomSummary | undefined, tab:
   const key = widget?.widgetKey ?? (room && tab.widgetId.startsWith(`${room.id}|`) ? tab.widgetId.slice(room.id.length + 1) : tab.widgetId);
   const name = widget?.widget.name ?? roomWidgets(widgetEvents, room, room && localWidgetsOf(main, room.id)).find((w) => w.key === key)?.name ?? "Widget";
   const pinned = !!widget?.alwaysOnScreen;
-  return { name, title: `${name}${pinned ? " · always on screen" : ""}`, closeLabel: `Close ${name}`, widgetKey: key, pinned, load: widget?.load.state };
+  return { name, title: `${name}${pinned ? " · always on screen" : ""}`, closeLabel: `Close ${name}`, widgetKey: key, pinned, load: widget?.load.state === "sameOrigin" ? undefined : widget?.load.state };
 }
 
 /** "call.example.org" of a widget URL, for the second line of a widget row of the RoomOverview. */

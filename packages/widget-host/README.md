@@ -267,8 +267,8 @@ page of the host's own origin in such an iframe is not sandboxed from the host. 
 `window.top`, the logins in `localStorage` and IndexedDB. Four layers keep a widget state event
 (anyone who may send state to a room can send one) from putting script there:
 
-1. **The URL check** (the driver's `embed_url_problem`, in `parse_widget_state_event` and in the
-   driver's constructor): only absolute `http:` / `https:` URLs that name their own host, so no `javascript:`, `data:`, `blob:` or page-relative URL.
+1. **The URL check** (the driver's, in `parse_widget_state_event` and in the driver's
+   constructor): only absolute `http:` / `https:` URLs that name their own host, so no `javascript:`, `data:`, `blob:` or page-relative URL.
 2. **The compat wrapper is no widget**: its page runs on the host's origin and loads the
    `legacy_widget_url` of its own query, so an `m.widget` (or legacy widget) whose URL is a page of
    the wrapper's directory, `<host>/widget_compatibility_wrapper/…` in any spelling a server may
@@ -276,13 +276,14 @@ page of the host's own origin in such an iframe is not sandboxed from the host. 
    With `?wrapper=` the rule protects that wrapper, not the copy this host serves. `?wrapper=` is
    only taken on the host's own origin (`wrapperUrl`): the driver grants the wrapper a legacy
    client's capabilities without asking, so a link must not point it at another page.
-3. **No widget of the host's own origin**: every other page of `location.origin`, the host app
-   itself included (the dev server answers every unknown path with it), is listed disabled too: "a
-   widget cannot be a page of this client's own origin" (`embedOptions` in `src/lib/widgetEvents.ts`,
-   the driver's `EmbedOptions.client_origin`). The one exception is deliberate, for this developer
-   tool: the test widgets the host ships itself, when the build serves them from its origin
+3. **No widget of the host's own origin without asking**: the driver refuses every other page of
+   `location.origin`, the host app itself included (the dev server answers every unknown path with
+   it; `embedOptions` in `src/lib/widgetEvents.ts`, the driver's `EmbedOptions.client_origin`).
+   Opening one shows a prompt instead; only with dev tools does it offer "Open anyway", which gives
+   that widget's driver no client origin (`sameOriginOptions`). The test widgets the host ships
+   itself need no prompt, when the build serves them from its origin
    (`VITE_TEST_WIDGETS_URL` on the [dev site](../../README.md#dev-site-github-pages); `ownWidgetDirs`,
-   never a directory that holds the host). They run with `allow-same-origin` on the host's origin.
+   never a directory that holds the host). Both run with `allow-same-origin` on the host's origin.
 4. **The wrapper's own check**: it loads only absolute `http:` / `https:` URLs, before and after
    templating (its README), also when another client or another copy of the host embeds it; and a
    legacy widget of its own origin without `allow-same-origin`.

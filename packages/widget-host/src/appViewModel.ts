@@ -454,7 +454,8 @@ export interface WidgetInstanceViewModel {
   widgetKey: WidgetKey;
   /** The widget as its state event describes it: name, URL (as the event has it), legacy or not. */
   widget: WidgetDefinition;
-  load: { state: "loading" } | { state: "ready" } | { state: "failed"; error: string };
+  /** `sameOrigin`: a page of this app's origin asks before it loads (no runtime yet). stories `widget-widgetview--same-origin*` */
+  load: { state: "sameOrigin" } | { state: "loading" } | { state: "ready" } | { state: "failed"; error: string };
   /**
    * Counts the iframes of this widget: the driver asked for a new one (`WidgetRuntimeEvents.loadIframe`:
    * the first, or one with other `sandbox` / `allow`), or `widget/reload` started the widget again.
@@ -714,6 +715,7 @@ export type AppIntent =
   | { type: "tab/close"; panelId: PanelId; tabId: TabId } // Alt+W while a tab is shown; a widget tab stops its widget, unless it is always on screen: then it keeps running in the PiP panel (assumption, see designFeedback.md). The last tab returns the room view to its RoomOverview
   // widgets
   | { type: "widget/reload"; widgetId: WidgetInstanceId } // "Retry" of a failed widget and the reload button of its dev tool bar: stops it and starts it again (new iframe and driver, the current URL of its state event); its dev tools data starts empty
+  | { type: "widget/openSameOrigin"; widgetId: WidgetInstanceId } // "Open anyway" of a widget on this app's origin (dev tools only): loads it; remembered for this URL until the app reloads
   | { type: "widget/answerCapabilities"; widgetId: WidgetInstanceId; approved: string[]; always?: string[] } // "Approve N selected" / "Deny all" (`approved: []`) of the capability prompt: answers every request it holds; an approval before `approveBlockedUntil` is ignored. `always`: the one-use capabilities of `approved` chosen "Always", granted whenever the widget asks (remembered with the others, else while the widget runs)
   | { type: "widget/jumpToTab"; widgetId: WidgetInstanceId } // activates its tab, which takes it out of the PiP panel; opens the room panel again if it was closed
   | { type: "widget/close"; widgetId: WidgetInstanceId; confirmed?: boolean } // the close button in the PiP panel: stops (kills) the widget and closes its tab. The way to stop an always-on-screen widget. Asks first (confirm modal), because the widget still wants to stay on screen; the modal sends it again with `confirmed`

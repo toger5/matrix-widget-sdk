@@ -70,7 +70,7 @@ grep -rlE '(from |import\()"(matrix-js-sdk|matrix-sdk-uniffi-js)' src | grep -vE
 - What a view needs from the bindings reaches it as a value or a function, never as an import:
   through the view model (`CapabilityPromptViewModel.unknown`, from `capabilityIsKnown`) or
   through `ViewEnv` (`widgetEvents`, the driver's widget state event parser: pass it to
-  `roomWidgets`; the widget forms use its `urlProblem`). Stories get a fake (no wasm).
+  `roomWidgets`; the widget forms check the event they built with it). Stories get a fake (no wasm).
 - State only one view needs (a draft, a hover, an open menu) stays in `useState`.
 - `src/app/layout.ts` holds the pure transitions of panels, tabs and dev tools; they are unit
   tested in `test/layout.test.ts`.
@@ -119,11 +119,13 @@ grep -rlE '(from |import\()"(matrix-js-sdk|matrix-sdk-uniffi-js)' src | grep -vE
 - A widget runs once per account (`WidgetInstanceId` = `<room id>|<widget key>`). Switching the
   account stops every widget; its workspace starts them again.
 - Which state events are widgets and whether the host may load them is the driver's parser
-  (`parse_widget_state_event`, `widget_url_problem`, `embed_url_problem` in
-  `crates/matrix-widget-host-driver`; the last refuses the host's own compat wrapper and every other page
-  of the host's origin, except the test widgets it ships itself), used through
-  `src/lib/widgetEvents.ts` (`hostWidgetEvents.resolve` → `{ widget, problem? }`, `describesWidget`,
-  `wrapperUrl`, `embedOptions`, `ownWidgetDirs`). How a widget is embedded
+  (`parse_widget_state_event`, `widget_url_problem` in `crates/matrix-widget-host-driver`; it
+  refuses the host's own compat wrapper and every other page of the host's origin, except the test
+  widgets it ships itself), used through `src/lib/widgetEvents.ts` (`hostWidgetEvents.resolve` →
+  `{ widget, problem?, sameOrigin? }`, `describesWidget`, `wrapperUrl`, `embedOptions`,
+  `sameOriginOptions`, `ownWidgetDirs`). A page of the host's origin resolves as `sameOrigin` (no
+  problem): opening it shows a prompt (`load` "sameOrigin", no runtime) until "Open anyway"
+  (`widget/openSameOrigin`, dev tools only) starts it with `sameOriginOptions`. How a widget is embedded
   (directly, or through the compat wrapper for `im.vector.modular.widgets`) and what a legacy
   widget gets without asking (`legacy_auto_approved`) is decided by its driver, not by the host.
   `src/widgetStateEvent.ts` keeps the host's types (`StateEvent`, `WidgetEventParser`; it

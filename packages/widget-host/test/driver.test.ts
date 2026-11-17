@@ -285,13 +285,6 @@ describe("WidgetHostDriver through the JS bindings", () => {
     expect(() => new hostDriver.WidgetHostDriver(error.inner.widget, OPTIONS, backend.asBackend(), plain.platform)).toThrow();
   });
 
-  it("refuses a widget on the client's own origin, except in the client's own widget directories", () => {
-    const options = { wrapperUrl: undefined, clientOrigin: "http://localhost:5173", ownWidgetDirs: ["http://localhost:5173/widgets/"], allowHttp: true };
-    expect(hostDriver.embedUrlProblem("http://localhost:5173/", options)).toBe("a widget cannot be a page of this client's own origin");
-    expect(hostDriver.embedUrlProblem("http://localhost:5173/widgets/new/", options)).toBeUndefined();
-    expect(hostDriver.embedUrlProblem("http://localhost:5175/new/", options)).toBeUndefined();
-  });
-
   it("delivers log records to a host sink, filtered by level", async () => {
     const records: hostDriver.LogRecord[] = [];
     const { LogLevel } = hostDriver;
