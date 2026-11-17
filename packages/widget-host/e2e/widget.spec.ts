@@ -84,6 +84,18 @@ test("a widget that never answers fails: retry starts it again, close tab gives 
   expect((await host.main()).widgets[NEW]).toBeUndefined();
 });
 
+test("a widget that requested capabilities does not time out while the prompt is open", async ({ host }) => {
+  await host.populate(oneWidget("http://localhost:5175/new/?autostart=0", { notifyReadyTimeoutMs: 2_000 }));
+  await expect(host.iframe(NEW)).toBeAttached();
+  await press(host, NEW, "request_capabilities");
+  const prompt = host.page.getByTestId("capability-prompt");
+  await expect(prompt).toBeVisible();
+  // Well past the timeout: still waiting for the user, not failed.
+  await host.page.waitForTimeout(2_500);
+  await expect(host.page.getByTestId("widget-failed")).toHaveCount(0);
+  await expect(prompt).toBeVisible();
+});
+
 test("a failed widget becomes ready when the retry is answered", async ({ host }) => {
   await host.populate(oneWidget("http://localhost:5175/new/?autostart=0", { notifyReadyTimeoutMs: 300, behavior: { autoApproveCapabilities: true } }));
   const failed = host.page.getByTestId("widget-failed");

@@ -144,6 +144,8 @@ export class WidgetRuntime {
       onCapabilitiesRequested: (requested) => {
         this.asked = requested;
         later(() => {
+          // The widget is alive and may wait for the user's answer before `notify_ready`: it is not stale.
+          window.clearTimeout(this.readyTimer);
           if (options.autoApproveCapabilities()) this.answerCapabilities(requested, requested);
           else {
             const { singleUse } = this.driver.snapshot();
@@ -205,7 +207,10 @@ export class WidgetRuntime {
     this.refreshCapabilities();
   }
 
-  /** The widget has this long to become ready in the iframe just loaded (the driver's `onReady` stops the timer). */
+  /**
+   * The widget has this long to become ready in the iframe just loaded. The driver's `onReady`
+   * stops the timer, and so does its first capability request: the widget answered.
+   */
   private startReadyTimer(): void {
     window.clearTimeout(this.readyTimer);
     const timeoutMs = this.options.notifyReadyTimeoutMs ?? NOTIFY_READY_TIMEOUT_MS;
