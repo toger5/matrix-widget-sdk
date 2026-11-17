@@ -501,4 +501,10 @@ capability strings and actions are kept as `Other` / `Unknown`, so they can be a
 
 ## License
 
-Apache License 2.0, see [`LICENSE`](LICENSE).
+Everything in this repository is licensed under the Apache License 2.0 ([`LICENSE`](LICENSE)), except the
+widget host app in [`packages/widget-host`](packages/widget-host), which is licensed under the GNU Affero
+General Public License v3.0 ([`packages/widget-host/LICENSE`](packages/widget-host/LICENSE)), like Element Call.
+
+Every crate and npm package carries its own `LICENSE` file, so that it ends up in the published crate and npm
+package (`cargo package` only includes files from the crate's directory). The Apache-2.0 ones are copies of the
+root `LICENSE`.

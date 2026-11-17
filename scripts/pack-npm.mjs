@@ -58,12 +58,14 @@ function manifest(dir, fields) {
   };
 }
 
-function stage(name) {
+/** `source` is the package's directory in the repository; its LICENSE goes into the package. */
+function stage(name, source) {
   const dir = join(stageRoot, name);
   rmSync(dir, { recursive: true, force: true });
   mkdirSync(dir, { recursive: true });
   // npm always packs a LICENSE, whatever `files` lists.
-  cpSync(join(root, "LICENSE"), join(dir, "LICENSE"));
+  if (!existsSync(join(root, source, "LICENSE"))) fail(`${source}/LICENSE is missing (every package carries its own copy)`);
+  cpSync(join(root, source, "LICENSE"), join(dir, "LICENSE"));
   return dir;
 }
 
@@ -86,9 +88,9 @@ function packWidget() {
   const generated = readJson(join(pkg, "package.json"));
   // wasm-pack takes the version from Cargo.toml; an older one means an old build.
   if (generated.version !== version) fail(`crates/matrix-widget-sdk/pkg is version ${generated.version}, Cargo.toml ${version}; run \`npm run wasm\``);
-  const dir = stage("widget");
+  const dir = stage("widget", "crates/matrix-widget-sdk");
   for (const file of readdirSync(pkg)) {
-    if (file !== "package.json" && file !== ".gitignore") cpSync(join(pkg, file), join(dir, file), { recursive: true });
+    if (file !== "package.json" && file !== ".gitignore" && file !== "LICENSE") cpSync(join(pkg, file), join(dir, file), { recursive: true });
   }
   const files = generated.files.filter((f) => existsSync(join(pkg, f)));
   if (existsSync(join(pkg, "snippets"))) files.push("snippets");
@@ -126,7 +128,7 @@ async function packUniffiPackage({ source, name, description, keywords }) {
   checkSourceVersion(join(src, "package.json"));
   const wasm = join(src, "src/generated/wasm-bindgen/index_bg.wasm");
   requireFile(wasm, source === "widget-host-bindings" ? "`npm run bindings`" : `\`npm run bindings -w packages/${source}\``);
-  const dir = stage(name);
+  const dir = stage(name, `packages/${source}`);
 
   // Everything except the runtime the generated code imports is bundled.
   const external = Object.keys(sourceJson.dependencies ?? {});
@@ -184,7 +186,7 @@ async function packUniffiPackage({ source, name, description, keywords }) {
 function packCompatWrapper() {
   const src = join(root, "packages/widget-compat-wrapper");
   checkSourceVersion(join(src, "package.json"));
-  const dir = stage("compat-wrapper");
+  const dir = stage("compat-wrapper", "packages/widget-compat-wrapper");
   // The package's own vite, run by this node (as in build-dev-site.mjs: no npx download, no shell).
   const require = createRequire(join(src, "package.json"));
   const viteManifest = require.resolve("vite/package.json");

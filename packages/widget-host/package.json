@@ -1,6 +1,7 @@
 {
   "name": "@matrix-widget-tools/widget-host",
   "version": "0.1.0",
+  "license": "AGPL-3.0-only",
   "private": true,
   "type": "module",
   "description": "Widget host webapp on matrix-widget-host-driver (uniffi/wasm bindings): logs in with matrix-rust-sdk (or matrix-js-sdk) and opens the widgets of your rooms, or runs on an in-memory room for widget development and e2e testing",

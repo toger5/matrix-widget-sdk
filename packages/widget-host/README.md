@@ -342,3 +342,8 @@ The host's own Playwright tests are in `e2e/` ([`e2e/README.md`](e2e/README.md))
 Playwright's colour scheme emulation (a context's `colorScheme`, `"light"` by default) overrides, in Chromium, the scheme a widget iframe passes on: inside the widget `prefers-color-scheme` is then the emulated value, whatever the host's theme. Call `page.emulateMedia({ colorScheme: null })` to test what a widget sees ([`docs/widget-color-scheme.md`](../../docs/widget-color-scheme.md), section 4).
 
 Ports are fixed (`strictPort`): host 5173 (including the compat wrapper), widgets 5175.
+
+## License
+
+The widget host app is licensed under the GNU Affero General Public License v3.0 ([`LICENSE`](LICENSE)). The
+rest of the repository, including the crates and packages it is built on, is Apache-2.0.

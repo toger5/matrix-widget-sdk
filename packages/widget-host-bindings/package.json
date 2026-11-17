@@ -1,6 +1,7 @@
 {
   "name": "@matrix-widget-sdk/host",
   "version": "0.1.0",
+  "license": "Apache-2.0",
   "private": true,
   "type": "module",
   "description": "TypeScript bindings for the host side (matrix-widget-host-driver, matrix-widget-host-backend-interface, matrix-widget-actions), generated from the Rust UniFFI scaffolding with uniffi-bindgen-react-native for the web",

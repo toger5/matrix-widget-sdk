@@ -1,6 +1,7 @@
 {
   "name": "matrix-sdk-uniffi-js",
   "version": "0.1.0",
+  "license": "Apache-2.0",
   "private": true,
   "type": "module",
   "description": "matrix-rust-sdk (matrix-sdk-ffi) for the browser: TypeScript bindings and one wasm module, generated from the SDK's UniFFI scaffolding with uniffi-bindgen-react-native",

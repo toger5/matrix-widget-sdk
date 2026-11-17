@@ -1,6 +1,7 @@
 {
   "name": "@matrix-widget-tools/test-widgets",
   "version": "0.1.0",
+  "license": "Apache-2.0",
   "private": true,
   "type": "module",
   "description": "Two minimal test widgets: one on the legacy matrix-widget-api, one on matrix-widget-sdk (MSC4412)",
