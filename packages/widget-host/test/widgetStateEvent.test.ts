@@ -72,7 +72,13 @@ describe("widgetUrlProblem", () => {
     expect(widgetUrlProblem(url)).toEqual(expect.any(String));
   });
 
-  it.each([...ALLOWED, ...REFUSED])("answers like the WHATWG URL parser of Node: %s", (_, url) => {
+  /**
+   * Cases where Node versions disagree, so they are left out of the comparison (they are still
+   * checked by "allows" / "refuses" above). `https://xn--/`: UTS #46 makes an empty decoded
+   * punycode label an error, and Node ≤ 24.5 (ada 3.x) refuses it, but Node 24.22 (ada 4.0) accepts it.
+   */
+  const NODE_DEPENDENT = new Set(["invalid punycode"]);
+  it.each([...ALLOWED, ...REFUSED].filter(([label]) => !NODE_DEPENDENT.has(label)))("answers like the WHATWG URL parser of Node: %s", (_, url) => {
     expect(widgetUrlProblem(url)).toBe(reference(url));
   });
 
