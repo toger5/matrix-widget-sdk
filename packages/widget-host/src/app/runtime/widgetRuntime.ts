@@ -326,7 +326,8 @@ export class WidgetRuntime {
 
   /** What is granted without a prompt besides the legacy capabilities: the store, or without one what is kept while the widget runs. */
   private preApproved(): string[] {
-    return this.options.capabilityKey ? loadCapabilities(this.options.capabilityKey) : this.keptWhileRunning;
+    // Bound to the iframe's URL: a widget whose state event now points elsewhere is asked again.
+    return this.options.capabilityKey ? loadCapabilities(this.options.capabilityKey, this.driver.snapshot().iframe.url) : this.keptWhileRunning;
   }
 
   /**
@@ -336,7 +337,7 @@ export class WidgetRuntime {
   private remember(capabilities: string[]): void {
     const { capabilityKey } = this.options;
     const unique = [...new Set(capabilities)];
-    if (capabilityKey) saveCapabilities(capabilityKey, unique);
+    if (capabilityKey) saveCapabilities(capabilityKey, this.driver.snapshot().iframe.url, unique);
     else this.keptWhileRunning = unique;
     // The driver adds what a legacy widget gets anyway and what the iframe was built with.
     this.driver.setAutoApproved(unique);

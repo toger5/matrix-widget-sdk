@@ -130,8 +130,12 @@ test("revoking a webview capability restarts the widget without it", async ({ ho
   expect((await webview(host, NEW))?.applied).toEqual([MICROPHONE]);
 });
 
+/** Store `capabilities` as remembered for the lab's widget-1, approved for the iframe URL `url`. */
+const rememberFor = (host: Host, url: string, capabilities: string[]) =>
+  host.page.evaluate(([key, value]) => localStorage.setItem(key, value), ["widget_host_capabilities_v2 @alice:dev.local !lab:dev.local m.widget/widget-1", JSON.stringify({ url, capabilities })]);
+
 test("a remembered webview capability is in the iframe from the start, before any prompt", async ({ host }) => {
-  await host.page.evaluate(([key, value]) => localStorage.setItem(key, value), ["widget_host_capabilities_v2 @alice:dev.local !lab:dev.local m.widget/widget-1", JSON.stringify([CAMERA])]);
+  await rememberFor(host, QUIET, [CAMERA]);
   await host.populate(oneWidget(QUIET, { behavior: { rememberCapabilities: true } }));
   await expect(host.iframe(NEW)).toHaveAttribute("allow", "camera 'src'");
   const first = await generation(host, NEW);
@@ -142,6 +146,19 @@ test("a remembered webview capability is in the iframe from the start, before an
   await expect.poll(() => approved(host, NEW)).toEqual([CAMERA]);
   await expect(prompt(host)).toHaveCount(0);
   expect(await generation(host, NEW)).toBe(first);
+});
+
+test("what was remembered for another URL is not granted: the widget's state event was pointed elsewhere", async ({ host }) => {
+  await rememberFor(host, "http://localhost:5175/new/?autostart=0&before=1", [CAMERA]);
+  await host.populate(oneWidget(QUIET, { behavior: { rememberCapabilities: true } }));
+  await expect(host.iframe(NEW)).toHaveAttribute("allow", "");
+  await press(host, NEW, "notify_ready");
+  await host.ready(NEW);
+  await requestNext(host, NEW, [CAMERA]);
+  await press(host, NEW, "request_capabilities");
+  await expect(prompt(host)).toBeVisible();
+  // The entry of the other URL is gone: it is never handed to this page.
+  expect(await host.page.evaluate(() => localStorage.getItem("widget_host_capabilities_v2 @alice:dev.local !lab:dev.local m.widget/widget-1"))).toBeNull();
 });
 
 test("a legacy widget gets a legacy client's iframe, outside and inside the compat wrapper, without a prompt or a restart", async ({ host }) => {

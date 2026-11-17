@@ -251,7 +251,7 @@ test("remembered capabilities: a widget that is opened again is not asked a seco
   // The test widget asks for an OpenID token at the start too; that grant is for one token, never remembered.
   expect(granted).toContain(GET_OPENID);
   const remembered = granted.filter((c) => c !== GET_OPENID);
-  const stored = () => host.page.evaluate(() => Object.keys(localStorage).flatMap((key) => (key.startsWith("widget_host_capabilities_v2 ") ? (JSON.parse(localStorage.getItem(key)!) as string[]) : [])));
+  const stored = () => host.page.evaluate(() => Object.keys(localStorage).flatMap((key) => (key.startsWith("widget_host_capabilities_v2 ") ? (JSON.parse(localStorage.getItem(key)!) as { capabilities: string[] }).capabilities : [])));
   await expect.poll(stored).toEqual(remembered);
 
   // Opened again, it is asked about the OpenID capability only.
@@ -282,27 +282,20 @@ test("remembered capabilities: a widget that is opened again is not asked a seco
   await expect(prompt.getByRole("group", { name: "Unknown to this app" })).toBeVisible();
 });
 
-test("an approval remembered before OpenID became a one-use capability (store version 1) no longer hands out tokens", async ({ browser }) => {
+test("an approval remembered by store version 1 (no URL, and `get_openid` meant \"may ask\" then) is dropped: the widget is asked again", async ({ browser }) => {
   const context = await browser.newContext({ viewport: { width: 1280, height: 800 } });
   const fresh = new Host(await context.newPage());
   await fresh.page.goto("/?mode=memory");
-  // Version 1 held `get_openid` for every widget approved once; it meant "may ask", it would now mean "gets every token".
   const v1 = `widget_host_capabilities_v1 @alice:dev.local ${LAB} ${NEW_WIDGET}`;
   await fresh.page.evaluate((key) => localStorage.setItem(key, JSON.stringify(["widget:org.matrix.mscXXXX.send_event.timeline:m.room.message", "widget:org.matrix.mscXXXX.get_openid", "widget:m.get_openid"])), v1);
-  // The next start moves the entry to version 2 without it.
   await fresh.page.goto("/?mode=memory");
   await fresh.page.waitForFunction(() => window.widgetHost?.state().screen.kind === "main");
-  const stored = () => fresh.page.evaluate(() => Object.fromEntries(Object.keys(localStorage).filter((key) => key.startsWith("widget_host_capabilities_")).map((key) => [key, JSON.parse(localStorage.getItem(key)!) as string[]])));
-  expect(await stored()).toEqual({ [v1.replace("_v1 ", "_v2 ")]: [SEND_MESSAGE] });
+  expect(await fresh.page.evaluate(() => Object.keys(localStorage).filter((key) => key.startsWith("widget_host_capabilities_")))).toEqual([]);
 
-  // Opened with remembering on: the remembered capability is granted at once, the OpenID one is asked about.
   await fresh.populate("lab", { sidePanel: null, behavior: { rememberCapabilities: true }, open: [{ room: LAB, widgets: [NEW_WIDGET] }] });
   const prompt = fresh.page.getByTestId("capability-prompt");
   await expect(prompt.getByRole("checkbox", { name: escape(GET_OPENID) })).toBeVisible();
-  await expect(prompt.getByRole("checkbox", { name: escape(SEND_MESSAGE) })).toHaveCount(0);
-  await prompt.getByRole("button", { name: "Deny all" }).click();
-  await expect.poll(() => approved(fresh, NEW)).toContain(SEND_MESSAGE);
-  expect(await approved(fresh, NEW)).not.toContain(GET_OPENID);
+  await expect(prompt.getByRole("checkbox", { name: escape(SEND_MESSAGE) })).toBeVisible();
   await context.close();
 });
 
@@ -363,7 +356,7 @@ test("OpenID \"Always\": every next token without the card, remembered with the 
   await host.ready(NEW);
   const prompt = host.page.getByTestId("capability-prompt");
   const tokens = widgetLog(host, NEW).locator("pre", { hasText: /get_openid →.*access_token/ });
-  const stored = () => host.page.evaluate(() => Object.keys(localStorage).flatMap((key) => (key.startsWith("widget_host_capabilities_v2 ") ? (JSON.parse(localStorage.getItem(key)!) as string[]) : [])));
+  const stored = () => host.page.evaluate(() => Object.keys(localStorage).flatMap((key) => (key.startsWith("widget_host_capabilities_v2 ") ? (JSON.parse(localStorage.getItem(key)!) as { capabilities: string[] }).capabilities : [])));
   await host.button("Dev tools of New test widget").click();
   await host.page.getByRole("toolbar", { name: "Widget dev tools" }).getByRole("button", { name: /^Driver/ }).click();
   const driver = host.page.getByTestId("devtools-driver");

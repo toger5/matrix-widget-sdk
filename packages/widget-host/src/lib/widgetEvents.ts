@@ -11,8 +11,20 @@ import type { StateEvent, WidgetEventParser } from "../widgetStateEvent";
 
 const hostBaseUrl = () => new URL(import.meta.env.BASE_URL, globalThis.location?.origin ?? "http://localhost").href;
 
-/** Where legacy widgets are loaded through: the compat wrapper this host serves itself (`?wrapper=` overrides). */
-export const wrapperUrl = () => new URLSearchParams(globalThis.location?.search ?? "").get("wrapper") ?? `${hostBaseUrl()}widget_compatibility_wrapper/`;
+/**
+ * Where legacy widgets are loaded through: the compat wrapper this host serves itself. `?wrapper=`
+ * picks another copy on this host's origin (the dev site's other build of the host); one elsewhere is
+ * ignored: the driver grants the wrapper a legacy client's capabilities without asking (the room,
+ * camera, microphone, …), so a link must not choose that page. (A page of this origin can read this
+ * host's storage anyway.)
+ */
+export const wrapperUrl = () => {
+  const own = `${hostBaseUrl()}widget_compatibility_wrapper/`;
+  const asked = new URLSearchParams(globalThis.location?.search ?? "").get("wrapper");
+  if (asked === null || URL.parse(asked)?.origin === new URL(own).origin) return asked ?? own;
+  console.warn(`?wrapper= ignored: ${asked} is not on this host's origin`);
+  return own;
+};
 
 /**
  * The test widgets this host ships itself: the one exception to "no widget on this host's origin"

@@ -112,7 +112,9 @@ hands it to the driver of each widget of that room like any other `MatrixBackend
   other approvals (else it lasts while the widget runs). The **Driver** panel marks a held one-use
   grant "once". **Auto-approve capabilities** grants every token.
   Remembered capabilities are stored per account, room and widget (`localStorage`,
-  `widget_host_capabilities_v2 …`); the entries of version 1 lose their `get_openid` on start.
+  `widget_host_capabilities_v2 …`), together with the URL of the iframe they were approved for: a
+  start with another URL (the state event changed) finds nothing and asks again. Entries without a
+  URL (version 1, and older version 2 ones) are not used.
 - **Dev tools** (the side panel, opened with the cone button of the left bar; shown while dev tools
   are enabled or the DevBackend is active; it never switches accounts): the State and Timeline of
   one room at a time, with a dropdown to switch rooms.
@@ -250,9 +252,8 @@ iframe is the driver's: it tells the host what to build (`WidgetHostPlatform.loa
 - What was granted this way lasts as long as the driver: "Retry", Reload and a changed state event
   start a new driver, strict again unless the capabilities are remembered.
 - Remembered webview capabilities (`rememberCapabilities`) are in the iframe from the first start.
-  They are remembered per widget (account, room, event type and state key) like all its capabilities,
-  not per URL: a room widget whose state event names another URL keeps them (a local widget forgets
-  them).
+  They are remembered like all its capabilities: per widget (account, room, event type and state
+  key) and for the iframe's URL; a room widget whose state event names another URL is asked again.
 - A legacy widget's iframe (the compat wrapper) has Element Web's set from the start (the driver's
   `legacy_auto_approved`): the wrapper requests it and gets it without a prompt or a restart; the
   wrapper gives the legacy widget's own iframe the same set.
@@ -268,7 +269,9 @@ page of the host's own origin in such an iframe is not sandboxed from the host. 
    `legacy_widget_url` of its own query, so an `m.widget` (or legacy widget) whose URL is a page of
    the wrapper's directory, `<host>/widget_compatibility_wrapper/…` in any spelling a server may
    read the same way, is listed disabled: "a widget cannot load this client's compat wrapper".
-   With `?wrapper=` the rule protects that wrapper, not the copy this host serves.
+   With `?wrapper=` the rule protects that wrapper, not the copy this host serves. `?wrapper=` is
+   only taken on the host's own origin (`wrapperUrl`): the driver grants the wrapper a legacy
+   client's capabilities without asking, so a link must not point it at another page.
 3. **No widget of the host's own origin**: every other page of `location.origin`, the host app
    itself included (the dev server answers every unknown path with it), is listed disabled too: "a
    widget cannot be a page of this client's own origin" (`embedOptions` in `src/lib/widgetEvents.ts`,

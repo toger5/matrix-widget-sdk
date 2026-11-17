@@ -5,7 +5,7 @@
  * also compared with the WHATWG URL parser of Node, which the Rust check follows.
  */
 import { readFileSync } from "node:fs";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { InMemoryBackend, WidgetHostDriver, widgetEventTypes, type EmbedOptions, type WidgetIframe } from "@matrix-widget-tools/widget-host-bindings";
 
@@ -109,6 +109,26 @@ describe("the compat wrapper is no widget", () => {
     const own = wrapperUrl();
     expect(widgetUrlProblem(`${own}?legacy_widget_url=javascript:top.__pwned=1//&legacy_widget_id=evil`)).toBe(LOADS_THE_WRAPPER);
     expect(hostWidgetEvents.urlProblem(own)).toBe(LOADS_THE_WRAPPER);
+  });
+
+  it("is chosen by `?wrapper=` only on this host's origin: the driver grants the wrapper a legacy client's capabilities without asking", () => {
+    const at = (search: string) => {
+      vi.stubGlobal("location", { origin: "https://host.example", search });
+      vi.spyOn(console, "warn").mockImplementation(() => {});
+      try {
+        return wrapperUrl();
+      } finally {
+        vi.stubGlobal("location", undefined);
+        vi.restoreAllMocks();
+      }
+    };
+    const own = "https://host.example/widget_compatibility_wrapper/";
+    expect(at("")).toBe(own);
+    // The dev site: the other build of the host on the same origin.
+    expect(at("?wrapper=https://host.example/host-js/widget_compatibility_wrapper/")).toBe("https://host.example/host-js/widget_compatibility_wrapper/");
+    expect(at("?wrapper=https://evil.example/widget_compatibility_wrapper/")).toBe(own);
+    expect(at("?wrapper=javascript:top.__pwned=1//")).toBe(own);
+    expect(at("?wrapper=/relative/")).toBe(own);
   });
 });
 
