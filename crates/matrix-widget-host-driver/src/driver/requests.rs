@@ -259,6 +259,12 @@ impl WidgetHostDriver {
                 .send_sticky_event(room, event_type, content, duration)
                 .await
                 .map(|id| SendEventResponse::sent(&room_id, id)),
+            // Not through `/send`: a client would encrypt it, and before room version 11 `redacts`
+            // is a top-level field `/send` cannot set.
+            (None, None, None) if event_type == "m.room.redaction" => {
+                let (redacts, reason) = redaction_of(&content)?;
+                backend.redact_event(room, redacts, reason).await.map(|id| SendEventResponse::sent(&room_id, id))
+            }
             (None, None, None) => {
                 backend.send_room_event(room, event_type, content).await.map(|id| SendEventResponse::sent(&room_id, id))
             }
@@ -421,6 +427,17 @@ impl WidgetHostDriver {
 
 /// Turns a failed backend call into the widget's error: `"<context>: <reason>"` as the message,
 /// plus the Matrix error details (if the backend had any) as `matrix_api_error`.
+/// The target and reason of an `m.room.redaction`, from its content.
+fn redaction_of(content: &serde_json::Value) -> Result<(String, Option<String>), WidgetError> {
+    let Some(redacts) = content.get("redacts").and_then(|v| v.as_str()) else {
+        return Err(WidgetError::invalid_request(
+            "An m.room.redaction needs `content.redacts`, the id of the event to redact",
+        ));
+    };
+    let reason = content.get("reason").and_then(|v| v.as_str()).map(str::to_owned);
+    Ok((redacts.to_owned(), reason))
+}
+
 fn backend_error(context: &'static str) -> impl FnOnce(BackendError) -> WidgetError {
     move |err| {
         WidgetError::with_matrix_error(

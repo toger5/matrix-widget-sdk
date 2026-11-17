@@ -268,6 +268,24 @@ fn send_event_requires_capability() {
 }
 
 #[test]
+fn redactions_are_sent_with_redact_event() {
+    let (driver, backend, platform) = setup();
+    grant(&driver, &platform, vec![Capability::send_event("m.room.redaction")]);
+    backend.inject(event("m.room.message", None, json!({"body": "spam"})));
+    let target = backend.timeline()[0].event_id.clone();
+    let content = json!({"redacts": target, "reason": "spam"});
+    let reply = send(&driver, &platform, SendEventRequest::room_event("m.room.redaction", content.clone().into()));
+    assert!(reply.error().is_none(), "{reply:?}");
+    let [message, redaction] = &backend.timeline()[..] else { panic!("{:?}", backend.timeline()) };
+    assert_eq!(redaction.content.0, content);
+    assert_eq!(message.content.0, json!({}));
+    assert_eq!(message.unsigned.as_ref().unwrap()["redacted_because"]["event_id"], redaction.event_id);
+
+    let reply = send(&driver, &platform, SendEventRequest::room_event("m.room.redaction", json!({}).into()));
+    assert!(reply.error().unwrap().message.contains("content.redacts"));
+}
+
+#[test]
 fn msgtype_capabilities_narrow_sends_and_reads() {
     let (driver, backend, platform) = setup();
     grant(

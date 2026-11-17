@@ -220,6 +220,15 @@ pub trait MatrixBackend: Send + Sync {
         content: JsonValue,
     ) -> Result<String, BackendError>;
 
+    /// Redact an event (`/redact`, never encrypted). Returns the event id of the redaction. The
+    /// driver calls it for a `send_event` of an `m.room.redaction`.
+    async fn redact_event(
+        &self,
+        room_id: String,
+        event_id: String,
+        reason: Option<String>,
+    ) -> Result<String, BackendError>;
+
     /// Send a state event. Returns the event id the homeserver assigned.
     async fn send_state_event(
         &self,

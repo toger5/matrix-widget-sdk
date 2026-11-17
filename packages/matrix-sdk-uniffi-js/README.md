@@ -61,7 +61,7 @@ are.
 
 | File | Adds |
 |---|---|
-| `bindings/matrix-sdk-ffi/src/room/raw_events.rs` | `Room::events_raw`, `paginate_events_raw_backwards`, `subscribe_to_events_raw`: the room's event cache as JSON, any event type, decrypted. `Room::relations_raw`: one page of `/relations`, decrypted. `Room::account_data_raw`: room account data from the store |
+| `bindings/matrix-sdk-ffi/src/room/raw_events.rs` | `Room::events_raw`, `paginate_events_raw_backwards`, `subscribe_to_events_raw`: the room's event cache as JSON, any event type, decrypted. `Room::relations_raw`: one page of `/relations`, decrypted. `Room::account_data_raw`: room account data from the store. `Room::redact_raw`: `Room::redact` returning the redaction's event id |
 | `bindings/matrix-sdk-ffi/src/room/raw_timeline_changes.rs` | `Room::subscribe_to_timeline_changes_raw`: what the event cache does to the room's timeline that is neither a sync nor a pagination: `on_reset` (cleared or reset, or the listener lagged) and `on_decrypted` (events the redecryptor replaced in place, as JSON). For the widget host's `notify_timeline_update` and the RoomTimeline. Not verified against a homeserver |
 | `crates/matrix-sdk-ui/src/room_list_service/full_state.rs` | `RoomListService::set_room_subscriptions_with_full_state`: a room subscription with `required_state: [["*", "*"]]` instead of the SDK's fixed list |
 | `bindings/matrix-sdk-ffi/src/room_list_full_state.rs` | `RoomListService::subscribe_to_room_with_full_state`: the above for one room, returning once the state has arrived (or after a timeout) |

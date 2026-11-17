@@ -100,6 +100,10 @@ export class RustSdkBackend implements MatrixBackend {
     return this.sdkRoom(roomId).sendRaw(eventType, JSON.stringify(content), undefined).catch(rethrow);
   }
 
+  async redactEvent(roomId: string, eventId: string, reason: string | undefined): Promise<string> {
+    return this.sdkRoom(roomId).redactRaw(eventId, reason).catch(rethrow);
+  }
+
   async sendStateEvent(roomId: string, eventType: string, stateKey: string, content: JsonValue): Promise<string> {
     return this.sdkRoom(roomId).sendStateEventRaw(eventType, stateKey, JSON.stringify(content), undefined).catch(rethrow);
   }

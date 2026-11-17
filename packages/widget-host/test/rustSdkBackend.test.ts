@@ -90,6 +90,7 @@ function fakeSdk(sdk: { room?: Record<string, unknown>; client?: Record<string, 
       return eventId;
     },
     sendStateEventRaw: record("sendStateEventRaw", "$state"),
+    redactRaw: record("redactRaw", "$redaction"),
     sendDelayedEvent: record("sendDelayedEvent", "delay-1"),
     eventsRaw: async () => cached,
     // Like the SDK: the older events are in the event cache when the promise resolves (whether the start is reached).
@@ -220,6 +221,17 @@ describe("RustSdkBackend behind the driver", () => {
     expect(JSON.parse(sendRaw[2] as string)).toEqual({ msgtype: "m.text", body: "hi" });
     expect(sendState).toEqual(["sendStateEventRaw", "m.room.topic", "", JSON.stringify({ topic: "t" }), undefined]);
     expect(calls.filter((c) => c.method !== "GET")).toHaveLength(0);
+  });
+
+  it("sends a redaction with redact, not sendRaw", async () => {
+    watchFetch();
+    const { backend, ask, grant, sdkCalls } = await setup();
+    dispose = () => backend.dispose();
+    await grant([`widget:${X}send_event.timeline:m.room.redaction`]);
+    expect((await ask(`${X}send_event`, { type: "m.room.redaction", content: { redacts: "$target", reason: "spam" } })).event_id).toBe("$redaction");
+    expect(sdkCalls).toEqual([["redactRaw", "$target", "spam"]]);
+    const response = await ask(`${X}send_event`, { type: "m.room.redaction", content: {} });
+    expect(JSON.stringify(response.error)).toContain("content.redacts");
   });
 
   it("reports the homeserver's error code when an SDK call fails", async () => {

@@ -223,7 +223,7 @@ the method here has the same name and parameter order, so one adapter per Matrix
 | `restart_delayed_event(room_id, delay_id)` / `cancel_delayed_event(room_id, delay_id)` | same | |
 | – | `send_delayed_event_now(room_id, delay_id)` | MSC4140 `send` action; rtc never needs it |
 | `send_to_device_message(recipients, type, content) -> Vec<ToDeviceDelivery>` | `send_to_device_message(encrypted, type, messages: Vec<ToDeviceMessage>) -> Vec<ToDeviceDelivery>` | **raised**, see §4 |
-| `redact_event(room_id, event_id, reason?)` | – | widgets redact through `send_event` of `m.room.redaction`; not needed |
+| `redact_event(room_id, event_id, reason?)` | same, `-> event_id` | the driver calls it for a `send_event` of `m.room.redaction` (`redacts` and `reason` from the content): a redaction must not go through `/send`, which would encrypt it and cannot set the top-level `redacts` of rooms before version 11 |
 | `subscribe_room(room_id, subjects, sink) -> Subscription` | same (synchronous, as in rtc's uniffi layer) | `RoomSink` has `on_timeline_events` and `on_state_events`; rtc's `on_sticky_events`, `on_joined_members`, `on_encryption`, `on_redaction` are not needed by widgets (yet) |
 | `subscribe_to_device(event_types, sink) -> Subscription` | same | `ToDeviceSink::on_to_device_message(message)` |
 | – | `subscribe_turn_servers(sink) -> Subscription` | MSC3846; rtc gets transports from `rtc_transports` |
@@ -324,7 +324,6 @@ granted for one token at a time ([`spec/patch/msc4412/capability-lifetimes.md`](
 * **Receiving sticky events** (`host:…forward_event.sticky`): needs
   `RoomSink::on_sticky_events` and a `sticky` field on `MatrixEvent`. Sending is built; receiving
   follows when the MSC4354 shape settles.
-* **`redact_event`**: widgets redact via `send_event` of `m.room.redaction`.
 * **Rate limiting of `paginate_timeline`**: the timeline reading draft says clients SHOULD
   rate-limit it per widget (and answer `m.unknown`); the driver does not.
 * **`since` of the legacy `read_events`**: the compat wrapper ignores it, as every host of this

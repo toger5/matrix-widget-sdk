@@ -215,4 +215,11 @@ impl Room {
         let event = self.inner.account_data(RoomAccountDataEventType::from(event_type)).await?;
         Ok(event.map(|event| event.json().get().to_owned()))
     }
+
+    /// Redact an event like [`Room::redact`], but return the event id of the
+    /// redaction (a widget host reports it to the widget).
+    pub async fn redact_raw(&self, event_id: String, reason: Option<String>) -> Result<String, ClientError> {
+        let event_id = EventId::parse(event_id)?;
+        Ok(self.inner.redact(&event_id, reason.as_deref(), None).await?.event_id.to_string())
+    }
 }

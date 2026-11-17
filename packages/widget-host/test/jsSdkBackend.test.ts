@@ -85,6 +85,7 @@ function fakeClient(overrides: Record<string, unknown> = {}) {
       return { event_id: event.getEffectiveEvent().event_id };
     },
     sendStateEvent: record("sendStateEvent", { event_id: "$state" }),
+    redactEvent: record("redactEvent", { event_id: "$redaction" }),
     _unstable_sendStickyEvent: record("_unstable_sendStickyEvent", { event_id: "$sticky" }),
     _unstable_sendDelayedEvent: record("_unstable_sendDelayedEvent", { delay_id: "delay-1" }),
     _unstable_sendDelayedStateEvent: record("_unstable_sendDelayedStateEvent", { delay_id: "delay-2" }),
@@ -187,6 +188,15 @@ describe("JsSdkBackend behind the driver", () => {
       ["_unstable_restartScheduledDelayedEvent", "delay-1"],
       ["_unstable_cancelScheduledDelayedEvent", "delay-1"],
     ]);
+  });
+
+  it("sends a redaction with redactEvent, not sendEvent", async () => {
+    const { ask, grant, calls } = await setup();
+    await grant([`widget:${X}send_event.timeline:m.room.redaction`]);
+    expect((await ask(`${X}send_event`, { type: "m.room.redaction", content: { redacts: "$target", reason: "spam" } })).event_id).toBe("$redaction");
+    expect(calls).toEqual([["redactEvent", ROOM, "$target", undefined, { reason: "spam" }]]);
+    const response = await ask(`${X}send_event`, { type: "m.room.redaction", content: {} });
+    expect(JSON.stringify(response.error)).toContain("content.redacts");
   });
 
   it("passes the homeserver's error code on to the widget", async () => {

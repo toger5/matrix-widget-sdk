@@ -92,6 +92,10 @@ export class JsSdkBackend implements MatrixBackend {
     return (await wrap(this.client.sendEvent(roomId, eventType as never, content as never))).event_id;
   }
 
+  async redactEvent(roomId: string, eventId: string, reason: string | undefined): Promise<string> {
+    return (await wrap(this.client.redactEvent(roomId, eventId, undefined, { reason }))).event_id;
+  }
+
   async sendStateEvent(roomId: string, eventType: string, stateKey: string, content: JsonValue): Promise<string> {
     return (await wrap(this.client.sendStateEvent(roomId, eventType as never, content as never, stateKey))).event_id;
   }

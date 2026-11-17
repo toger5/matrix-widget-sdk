@@ -547,6 +547,16 @@ impl Inner {
         }
         self.timeline.push(event);
     }
+
+    /// Strip the content of the event (in the timeline and the state) and note the redaction in
+    /// its `unsigned`, as a homeserver does. Unlike the spec, no content key is kept.
+    fn redact(&mut self, event_id: &str, redaction: &MatrixEvent) {
+        let because = serde_json::json!({ "redacted_because": redaction });
+        for event in self.timeline.iter_mut().chain(self.state.values_mut()).filter(|e| e.event_id == event_id) {
+            event.content = JsonValue::object();
+            event.unsigned = Some(because.clone().into());
+        }
+    }
 }
 
 #[cfg_attr(feature = "uniffi", uniffi::export)]
@@ -584,6 +594,25 @@ impl MatrixBackend for InMemoryBackend {
     ) -> Result<String, BackendError> {
         self.check_room(&room_id)?;
         self.send(self.next_event(event_type, None, content))
+    }
+
+    /// Stored as an `m.room.redaction` with `redacts` in its content; the target's content is
+    /// removed.
+    async fn redact_event(
+        &self,
+        room_id: String,
+        event_id: String,
+        reason: Option<String>,
+    ) -> Result<String, BackendError> {
+        self.check_room(&room_id)?;
+        let mut content = serde_json::json!({ "redacts": event_id });
+        if let Some(reason) = reason {
+            content["reason"] = reason.into();
+        }
+        let redaction = self.next_event("m.room.redaction".into(), None, content.into());
+        let id = self.send(redaction.clone())?;
+        self.inner().redact(&event_id, &redaction);
+        Ok(id)
     }
 
     async fn send_state_event(
