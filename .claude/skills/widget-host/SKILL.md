@@ -5,7 +5,7 @@ description: Architecture of the widget host app (packages/widget-host) and how 
 
 # The widget host app
 
-`packages/widget-host` is a browser widget host on `widget-host-driver` (through
+`packages/widget-host` is a browser widget host on `matrix-widget-host-driver` (through
 `packages/widget-host-bindings`). It runs on a logged-in Matrix account (matrix-rust-sdk; a `js`
 build uses matrix-js-sdk) or on the DevBackend, mocked in-memory rooms. It is the debugging tool
 for widgets and the end-to-end test setup of this repository.
@@ -103,7 +103,7 @@ grep -rlE '(from |import\()"(matrix-js-sdk|matrix-sdk-uniffi-js)' src | grep -vE
   the driver call `loadIframe` again (`WidgetRuntimeEvents.loadIframe` → controller `loadIframe`:
   a new generation behind the loading state, no prompt, a reload guard). Runtime and driver stay;
   the driver grants the reloaded page what the widget held (`DriverSnapshot.carried`). The default
-  and the legacy set are the driver's (`crates/widget-host-driver/src/webview.rs`); changing them
+  and the legacy set are the driver's (`crates/matrix-widget-host-driver/src/webview.rs`); changing them
   is a security decision: ask first. `src/lib/webview.ts` only tells webview capabilities apart
   (`isWebviewCapability`, `canonicalWebview`).
 - `WidgetRuntime` owns the driver of one widget. The driver calls the platform callbacks
@@ -120,7 +120,7 @@ grep -rlE '(from |import\()"(matrix-js-sdk|matrix-sdk-uniffi-js)' src | grep -vE
   account stops every widget; its workspace starts them again.
 - Which state events are widgets and whether the host may load them is the driver's parser
   (`parse_widget_state_event`, `widget_url_problem`, `embed_url_problem` in
-  `crates/widget-host-driver`; the last refuses the host's own compat wrapper and every other page
+  `crates/matrix-widget-host-driver`; the last refuses the host's own compat wrapper and every other page
   of the host's origin, except the test widgets it ships itself), used through
   `src/lib/widgetEvents.ts` (`hostWidgetEvents.resolve` → `{ widget, problem? }`, `describesWidget`,
   `wrapperUrl`, `embedOptions`, `ownWidgetDirs`). How a widget is embedded

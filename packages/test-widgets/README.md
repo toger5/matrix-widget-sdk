@@ -6,7 +6,7 @@ each basic action. They only work when embedded by a widget host, for example `.
 | path | built on | protocol |
 |---|---|---|
 | `/legacy/` | [matrix-widget-api] | legacy (`api: fromWidget / toWidget`) |
-| `/new/` | `widget-base-sdk` (wasm, this repository) | MSC4412 (`source: widget / host`) |
+| `/new/` | `matrix-widget-sdk` (wasm, this repository) | MSC4412 (`source: widget / host`) |
 
 Both pages have the same layout: an **actions** column (capability list input, message body
 input, one button per action), a **state** panel, and a **log** of outgoing results and incoming
@@ -52,7 +52,7 @@ and `…:microphone`, not in the default list; the host restarts the widget to a
 | page | parameter | meaning |
 |---|---|---|
 | both | `autostart=0` | Do nothing on load. Default: the legacy widget requests capabilities and starts; the new widget sends `request_capabilities` and `notify_ready`. |
-| new | `log=<level>` | What widget-base-sdk writes to the console: `off`, `error`, `warn` (default), `info`, `debug`, `trace`. `logFilter=<spec>` adds `RUST_LOG`-style overrides per module. |
+| new | `log=<level>` | What matrix-widget-sdk writes to the console: `off`, `error`, `warn` (default), `info`, `debug`, `trace`. `logFilter=<spec>` adds `RUST_LOG`-style overrides per module. |
 | legacy | `widgetId` | The widget id, as legacy clients pass it. Required for the legacy transport. |
 | legacy | `parentUrl` | The widget only posts to this origin (as Element widgets do). Without it, `*`. The compat wrapper always sets it to itself. |
 

@@ -1,6 +1,6 @@
-> **Draft in matrix-widget-sdk.** Status: draft. Implemented here: `crates/widget-actions`
+> **Draft in matrix-widget-sdk.** Status: draft. Implemented here: `crates/matrix-widget-actions`
 > (`read_timeline.rs`, `paginate_timeline.rs`, `notify_timeline_update.rs`, `ErrorKind::EventNotCached`),
-> the driver (`crates/widget-host-driver`), the backend trait (`timeline_read`,
+> the driver (`crates/matrix-widget-host-driver`), the backend trait (`timeline_read`,
 > `timeline_paginate_backwards`, `subscribe_timeline`) with `InMemoryBackend` and both SDK backends of
 > `packages/widget-host`, the widget SDK (`readTimeline`, `paginateTimeline`, `onTimelineUpdate`); no
 > rate limiting of `m.paginate_timeline` (plan: `session_archive/todo-groups/21-timeline-reading.md`). Replaces this repository's

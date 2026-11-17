@@ -6,7 +6,7 @@
  * origin; `data:`, `blob:` and `about:` pages, and a URL the iframe resolves against the wrapper
  * page (`/x`, `http:/x`), would be pages of that origin too. So the wrapper loads only absolute
  * `http:` and `https:` URLs that name their own host: the rule of `widget_url_problem` in
- * `crates/widget-host-driver/src/widget_url.rs` (with `http:` allowed), and its texts, which name
+ * `crates/matrix-widget-host-driver/src/widget_url.rs` (with `http:` allowed), and its texts, which name
  * the scheme, never the URL.
  *
  * `parseConfig` checks the template in `legacy_widget_url`, so a refused widget fails before the

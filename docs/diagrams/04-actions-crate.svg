@@ -18,7 +18,7 @@
   </defs>
   <rect width="1200" height="1170" fill="#ffffff"/>
 
-  <text x="30" y="42" class="h1">widget-actions: wire envelope vs. typed actions</text>
+  <text x="30" y="42" class="h1">matrix-widget-actions: wire envelope vs. typed actions</text>
   <text x="30" y="66" class="s">No I/O, no state. Two layers: a generic envelope that always parses, and a typed tree that knows every action. Both sides of the protocol share it.</text>
 
   <!-- ================= Layer 1 ================= -->
@@ -94,7 +94,7 @@
   <text x="411" y="488" class="mb">WidgetRequest</text>
   <text x="560" y="488" class="s">widget asks the host</text>
   <text x="411" y="510" class="b">travels widget → host</text>
-  <text x="411" y="530" class="s">built by widget-base-sdk: <tspan font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="12">into_wire(id)</tspan></text>
+  <text x="411" y="530" class="s">built by matrix-widget-sdk: <tspan font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="12">into_wire(id)</tspan></text>
   <text x="411" y="548" class="s">handled by the driver (match → backend)</text>
   <text x="411" y="572" class="m">NotifyReady  RequestCapabilities { … }</text>
   <text x="411" y="588" class="m">SendEvent { request: SendEventRequest }</text>
@@ -108,7 +108,7 @@
   <text x="900" y="488" class="s">the host's answer to it</text>
   <text x="751" y="510" class="b">travels host → widget</text>
   <text x="751" y="530" class="s">built by the driver: <tspan font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="12">into_wire_reply(&amp;request)</tspan></text>
-  <text x="751" y="548" class="s">handled by widget-base-sdk (resolves the awaited call)</text>
+  <text x="751" y="548" class="s">handled by matrix-widget-sdk (resolves the awaited call)</text>
   <text x="751" y="572" class="m">NotifyReady                      {}</text>
   <text x="751" y="588" class="m">SendEvent { response: SendEventResponse }</text>
   <text x="751" y="604" class="m">GetOpenId { response: OpenIdToken }</text>
@@ -121,7 +121,7 @@
   <text x="560" y="684" class="s">host pushes to the widget</text>
   <text x="411" y="706" class="b">travels host → widget</text>
   <text x="411" y="726" class="s">built by the driver: <tspan font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="12">into_wire(uuid)</tspan></text>
-  <text x="411" y="744" class="s">handled by widget-base-sdk (callbacks)</text>
+  <text x="411" y="744" class="s">handled by matrix-widget-sdk (callbacks)</text>
   <text x="411" y="768" class="m">UpdateCapabilities  ForwardEvent { event }</text>
   <text x="411" y="784" class="m">UpdateState  ForwardToDevice  UpdateTheme</text>
   <text x="411" y="800" class="m">UpdateTurnServers  NotifyTimelineUpdate</text>
@@ -133,7 +133,7 @@
   <text x="751" y="684" class="mb">HostResponse</text>
   <text x="900" y="684" class="s">the widget's acknowledgement</text>
   <text x="751" y="706" class="b">travels widget → host</text>
-  <text x="751" y="726" class="s">built by widget-base-sdk: <tspan font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="12">into_wire_reply(&amp;request)</tspan></text>
+  <text x="751" y="726" class="s">built by matrix-widget-sdk: <tspan font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="12">into_wire_reply(&amp;request)</tspan></text>
   <text x="751" y="744" class="s">handled by the driver (clears awaiting_ack)</text>
   <text x="751" y="768" class="m">UpdateCapabilities  ForwardEvent  UpdateState …</text>
   <text x="751" y="792" class="b">every variant is a unit variant: the body is {}</text>

@@ -4,7 +4,7 @@
 - **Base:** `5fb0ac8c877820e89c84a955fa33d663c7adb42b`
 - **Status:** draft
 - **Implemented here:** the strict default and the legacy set: the driver's `webview_attributes`,
-  `WebviewPolicy` and `legacy_auto_approved` (`crates/widget-host-driver/src/webview.rs`). The
+  `WebviewPolicy` and `legacy_auto_approved` (`crates/matrix-widget-host-driver/src/webview.rs`). The
   driver hands the iframe's URL and attributes to the client (`WidgetHostPlatform::load_iframe`,
   `WidgetIframe`) and grants a legacy widget's compat wrapper the legacy set without asking; the
   widget host builds every iframe from that (`packages/widget-host/src/app/runtime/widgetRuntime.ts`,
@@ -12,7 +12,7 @@
   messages are refused (`DriverError::NoWidgetApi`). Widgets of the
   client's own origin are refused by `embed_url_problem` (`parse_widget_state_event`,
   `WidgetHostDriver::new`;
-  `crates/widget-host-driver/src/widget_url.rs`, `EmbedOptions`); the widget host passes
+  `crates/matrix-widget-host-driver/src/widget_url.rs`, `EmbedOptions`); the widget host passes
   `location.origin`, with one deliberate exception for a developer tool: the test widgets it ships
   itself (`ownWidgetDirs` in `packages/widget-host/src/lib/widgetEvents.ts`, the dev site serves them
   from the host's origin). The compat wrapper gives its inner iframe the legacy set, without

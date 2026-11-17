@@ -45,7 +45,7 @@
   <text x="470" y="124" class="h2">iframe: content.url</text>
   <rect x="738" y="110" width="100" height="22" rx="11" fill="#7c3aed"/>
   <text x="788" y="125" class="badge" text-anchor="middle">MSC4412</text>
-  <text x="470" y="147" class="b">new widget, e.g. on widget-base-sdk</text>
+  <text x="470" y="147" class="b">new widget, e.g. on matrix-widget-sdk</text>
   <text x="470" y="167" class="s">loaded directly, hidden until notify_ready (15 s)</text>
   <text x="470" y="183" class="s">no template variables in the URL</text>
   <text x="470" y="200" class="s">strict iframe; more only as webview:… capabilities</text>

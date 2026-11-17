@@ -59,7 +59,7 @@ test("a widget is loading until it sends notify_ready", async ({ host }) => {
   await press(host, NEW, "notify_ready");
   await host.ready(NEW);
   await expect(view.getByTestId("widget-loading")).toHaveCount(0);
-  await expect(host.frame(NEW).getByRole("heading", { name: "MSC4412 test widget (widget-base-sdk)" })).toBeVisible();
+  await expect(host.frame(NEW).getByRole("heading", { name: "MSC4412 test widget (matrix-widget-sdk)" })).toBeVisible();
   expect(await host.actions(NEW, "fromWidget")).toContainEqual(expect.stringMatching(/\.notify_ready$/));
   await host.story("widget-widgetview--ready");
 });

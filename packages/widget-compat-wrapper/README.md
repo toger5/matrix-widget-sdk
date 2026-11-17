@@ -20,7 +20,7 @@ and nothing else.
 
 ## How a client uses it during the transition
 
-The client speaks MSC4412 only (for example through `widget-host-driver`) and keeps one piece of
+The client speaks MSC4412 only (for example through `matrix-widget-host-driver`) and keeps one piece of
 transition code: a check on the widget state event.
 
 1. The client reads the widget state event of the room.
@@ -36,7 +36,7 @@ transition code: a check on the widget state event.
    ([Which URLs the wrapper loads](#which-urls-the-wrapper-loads)).
 
 That URL construction is the only client code specific to the transition. Once legacy widgets are
-gone, delete it and the wrapper. The host keeps no template engine at all. `widget-host-driver`
+gone, delete it and the wrapper. The host keeps no template engine at all. `matrix-widget-host-driver`
 has it: a `WidgetHostDriver` made from a legacy widget's definition, with the client's wrapper URL
 in `EmbedOptions`, hands the wrapper's URL to the client (`WidgetHostPlatform::load_iframe`). It
 makes the URL check of the widget and of the wrapper, and refuses a widget of either kind whose URL
@@ -97,7 +97,7 @@ in all):
 | `allow-forms`, `allow-popups`, `allow-popups-to-escape-sandbox`, `allow-same-origin`, `allow-scripts`, `allow-presentation`, `allow-downloads` | `microphone`, `camera`, `encrypted-media`, `autoplay`, `display-capture`, `clipboard-write`, `clipboard-read`, `fullscreen` |
 
 A host that keeps legacy widgets working grants them without a prompt and builds the wrapper's
-iframe with them from the start, so the request needs no reload (`widget-host-driver` does both for
+iframe with them from the start, so the request needs no reload (`matrix-widget-host-driver` does both for
 a legacy widget: `legacy_auto_approved`, the same set).
 The wrapper's own iframe for the legacy widget (`innerIframe` in `src/wrapper.ts`) always has these
 attributes (`INNER_SANDBOX`, `INNER_ALLOW`), whatever the host granted: a legacy widget cannot request
@@ -113,8 +113,8 @@ and the client gives its iframe `allow-same-origin`. A
 `javascript:` URL in the inner iframe would run on the client's origin, and `data:`, `blob:`,
 `about:` pages or a URL resolved against the wrapper page (`/x`, `http:/x`) would be pages of that
 origin. So the wrapper loads only an **absolute `http:` or `https:` URL that names its own host**:
-the rule of `widget_url_problem` in `widget-host-driver` (`src/url.ts`; its tests run the driver's
-URL table, `crates/widget-host-driver/tests/widget_urls.json`). It checks:
+the rule of `widget_url_problem` in `matrix-widget-host-driver` (`src/url.ts`; its tests run the driver's
+URL table, `crates/matrix-widget-host-driver/tests/widget_urls.json`). It checks:
 
 1. the template in `legacy_widget_url`, when it reads its configuration: a refused one stops the
    wrapper before it talks to the host (a template that starts with a `$variable` has no scheme
@@ -245,7 +245,7 @@ with: `org.matrix.msc3869.` (`read_relations`),
 - **Always requested**, whatever the widget asks for: `host:…update_theme`,
   `host:…update_language`, `host:…update_visibility`. The legacy api has no capability for these;
   a legacy host simply allows them. A host that wants the legacy behaviour grants them without a
-  prompt (`widget-host-driver` does for a legacy widget: `legacy_auto_approved`).
+  prompt (`matrix-widget-host-driver` does for a legacy widget: `legacy_auto_approved`).
 - **Webview capabilities** (`webview:…`) of a legacy client's iframe are requested when the wrapper
   starts (see [The iframes](#the-iframes)); the legacy widget cannot request any.
 - **`widget:…get_openid` is requested per token**, when the widget asks for one (see

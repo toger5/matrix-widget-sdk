@@ -1,8 +1,8 @@
 > **Draft in matrix-widget-sdk.** Status: draft. Implemented here: the capabilities
-> (`crates/widget-actions/src/capabilities.rs`, `Capability::WebviewSandbox` / `WebviewAllow`), the
-> host driver's policy and the iframe attributes (`crates/widget-host-driver/src/webview.rs`:
+> (`crates/matrix-widget-actions/src/capabilities.rs`, `Capability::WebviewSandbox` / `WebviewAllow`), the
+> host driver's policy and the iframe attributes (`crates/matrix-widget-host-driver/src/webview.rs`:
 > `WebviewPolicy`, `webview_attributes`), the reload (the driver's `WidgetHostPlatform::load_iframe`,
-> `crates/widget-host-driver/src/driver/mod.rs` `State::sync_iframe`; the reloaded page gets
+> `crates/matrix-widget-host-driver/src/driver/mod.rs` `State::sync_iframe`; the reloaded page gets
 > everything the widget held without asking, `DriverSnapshot::carried`), the widget host's new
 > iframe and its guard (`packages/widget-host/src/app/runtime/widgetRuntime.ts`,
 > `src/app/controller.ts` `loadIframe`), the compat

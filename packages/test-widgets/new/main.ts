@@ -1,8 +1,8 @@
 /**
- * MSC4412 test widget on widget-base-sdk (wasm). Connects to the parent on load; requesting
+ * MSC4412 test widget on matrix-widget-sdk (wasm). Connects to the parent on load; requesting
  * capabilities and `notify_ready` are buttons (clicked automatically unless `?autostart=0`).
  */
-import init, { WidgetApi, initLogging } from "widget-base-sdk";
+import init, { WidgetApi, initLogging } from "@matrix-widget-sdk/widget";
 
 import {
   DEFAULT_CAPABILITIES,
@@ -82,7 +82,7 @@ const webviewControls = (): Node[] => [
   }),
   button("webview: feature policy", featurePolicy),
 ];
-mount("MSC4412 test widget (widget-base-sdk)", [
+mount("MSC4412 test widget (matrix-widget-sdk)", [
   input(
     "caps",
     `${DEFAULT_CAPABILITIES},${DELAYED_CAPABILITIES},${RELATION_CAPABILITIES},${TO_DEVICE_CAPABILITIES},${EXTRA_CAPABILITIES}`,

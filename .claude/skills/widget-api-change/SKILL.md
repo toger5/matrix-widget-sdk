@@ -52,7 +52,7 @@ Do not reopen these without asking Timo.
   action meant for a new MSC, comes with a file in `spec/patch/` in the same change. See
   `spec/patch/README.md` and the `widget-mscs` skill.
 
-## 1. The action itself (Rust, `crates/widget-actions`)
+## 1. The action itself (Rust, `crates/matrix-widget-actions`)
 
 | what | where |
 |---|---|
@@ -64,7 +64,7 @@ Do not reopen these without asking Timo.
 
 A rename also means renaming the file, the variant and the body types, so the code matches the wire.
 
-## 2. The capability (Rust, `crates/widget-actions/src/capabilities.rs`)
+## 2. The capability (Rust, `crates/matrix-widget-actions/src/capabilities.rs`)
 
 - `Capability` variant and its doc comment.
 - Without data: one row in `UNIT_CAPABILITIES`. With data: a head constant, an arm in
@@ -85,13 +85,13 @@ A rename also means renaming the file, the variant and the body types, so the co
   namespace is the one of their MSC draft (`namespace_of`: the placeholder). The strings are
   repeated in the compat wrapper (`webviewCapability`, `LEGACY_SANDBOX` / `LEGACY_ALLOW` /
   `LEGACY_WEBVIEW_CAPABILITIES`, `normalizeCapability`; the driver's legacy set, `LEGACY_SANDBOX` /
-  `LEGACY_ALLOW` of `crates/widget-host-driver/src/webview.rs`, has to equal it: the host's
+  `LEGACY_ALLOW` of `crates/matrix-widget-host-driver/src/webview.rs`, has to equal it: the host's
   `test/webview.test.ts` compares `legacyAutoApproved()` with the wrapper's), the host (the
   namespace in `canonicalWebview` of `src/lib/webview.ts`) and the test
   widget (`WEBVIEW_CAPABILITIES`, not in its default list). A new source needs its own arms in
   `with_data` / `parts` and the same treatment.
 
-## 3. Host driver (`crates/widget-host-driver/src`)
+## 3. Host driver (`crates/matrix-widget-host-driver/src`)
 
 | what | where |
 |---|---|
@@ -101,7 +101,7 @@ A rename also means renaming the file, the variant and the body types, so the co
 | Handling the request, calling the backend | `driver/requests.rs` `answer` and its helpers |
 | What the driver subscribes to and forwards | `driver/subscriptions.rs` `subjects_for`, `to_device_types_for`, `forward_*` |
 | Public methods (`new(widget, options, backend, platform)`, `start`, `widget`, pushes, approval, revocation, single-use capabilities, `snapshot` → `DriverSnapshot`) | `driver/mod.rs`; these are exported over UniFFI, see section 6 |
-| Platform callbacks (`load_iframe`, `send_to_widget`, `on_capabilities_requested`, `on_ready`, ...) | `platform.rs` (`WidgetHostPlatform`); every implementation needs a new one: the host's `widgetRuntime.ts`, `test/harness.ts`, the Rust tests' platforms (`driver/tests.rs`, `crates/widget-base-sdk/tests/loopback.rs`), the README examples |
+| Platform callbacks (`load_iframe`, `send_to_widget`, `on_capabilities_requested`, `on_ready`, ...) | `platform.rs` (`WidgetHostPlatform`); every implementation needs a new one: the host's `widgetRuntime.ts`, `test/harness.ts`, the Rust tests' platforms (`driver/tests.rs`, `crates/matrix-widget-sdk/tests/loopback.rs`), the README examples |
 | Webview capabilities: which are granted without asking (base), never (`allow-top-navigation*`) or asked, the iframe attributes, and the iframe the platform builds (`WidgetIframe`) | `webview.rs` (`WebviewPolicy`, `webview_attributes`, exported); used in `driver/mod.rs` (`State::question`, `approve_capabilities`; `State::sync_iframe` loads the iframe again when the attributes change and carries what the widget held, `DriverSnapshot::carried`) and `driver/requests.rs` (`request_capabilities`) |
 | What a legacy widget (behind the compat wrapper) gets without asking, and its iframe | `webview.rs` (`legacy_auto_approved`, exported; `LEGACY_SANDBOX`, `LEGACY_ALLOW`), applied by the driver for a legacy definition |
 | A widget without the widget API (`uses_widget_api` not `true`): ready right after `load_iframe`, every message refused | `driver/mod.rs` (`load`, `handle_message_from_widget`), `error.rs` (`DriverError::NoWidgetApi`) |
@@ -111,7 +111,7 @@ A rename also means renaming the file, the variant and the body types, so the co
 Error messages name the capability (`Missing capability: <string>`, code `…missing_capability`);
 tests assert on them.
 
-## 4. Backend (`crates/widget-matrix-backend/src`)
+## 4. Backend (`crates/matrix-widget-host-backend-interface/src`)
 
 Only when the action needs something new from Matrix.
 
@@ -130,7 +130,7 @@ Only when the action needs something new from Matrix.
   `packages/widget-host/src/matrix_session/memory/devBackend.ts`.
 - The table in `docs/parity.md` §3 that compares the trait with matrix-rust-rtc.
 
-## 5. Widget SDK (`crates/widget-base-sdk`)
+## 5. Widget SDK (`crates/matrix-widget-sdk`)
 
 | what | where |
 |---|---|
@@ -144,9 +144,9 @@ A changed `js_name` breaks `packages/test-widgets/new/main.ts`.
 ## 6. Generated code (never edit, always rebuild)
 
 - `packages/widget-host-bindings/src/generated/**` and `rust_modules/`: `npm run bindings`
-  (ubrn, from the UniFFI scaffolding of `widget-host-driver`). `Capability` crosses the FFI as its
+  (ubrn, from the UniFFI scaffolding of `matrix-widget-host-driver`). `Capability` crosses the FFI as its
   string; records and methods become camelCase.
-- `crates/widget-base-sdk/pkg/`: `npm run wasm`.
+- `crates/matrix-widget-sdk/pkg/`: `npm run wasm`.
 - `packages/*/dist/`.
 
 `packages/widget-host/test/driver.test.ts` runs against the generated bindings, so it fails with
@@ -179,7 +179,7 @@ Ask for every change:
 - Does a legacy capability cover this action? Then `LEGACY_RULES` must expand to the new
   capability, otherwise legacy widgets silently lose the action.
 - Did a legacy host allow it without a capability? Then it belongs in `IMPLICIT_CAPABILITIES`,
-  and in the driver's `legacy_auto_approved` (`crates/widget-host-driver/src/webview.rs`).
+  and in the driver's `legacy_auto_approved` (`crates/matrix-widget-host-driver/src/webview.rs`).
 - The legacy names come from matrix-widget-api:
   `node_modules/matrix-widget-api/lib/interfaces/WidgetApiAction.d.ts` and `Capabilities.d.ts`.
 
@@ -205,7 +205,7 @@ A UI change in the host (a new button, panel or prompt) follows the `widget-host
 
 Logging needs no change for a new action: the driver and the client log every message by its
 action name. Only if the action's body carries a credential, add its name to `SECRET_ACTIONS` in
-`WireMessage::to_log_json` (`crates/widget-actions/src/wire.rs`) so trace logs redact it.
+`WireMessage::to_log_json` (`crates/matrix-widget-actions/src/wire.rs`) so trace logs redact it.
 
 ## 9. Docs
 
@@ -215,7 +215,7 @@ action name. Only if the action's body carries a credential, add its name to `SE
 | Changes to MSC text, new MSC drafts | `spec/patch/` (see its README) |
 | Action inventory (both directions), "Capability strings" table, decisions, "raised, not built" | `docs/parity.md` |
 | Action table, capability notes, JS and Rust examples, "Not (yet) covered" | `README.md` |
-| Crate READMEs | `crates/widget-actions/README.md`, `crates/widget-base-sdk/README.md`, `crates/widget-host-driver/README.md` |
+| Crate READMEs | `crates/matrix-widget-actions/README.md`, `crates/matrix-widget-sdk/README.md`, `crates/matrix-widget-host-driver/README.md` |
 | Package READMEs | `packages/widget-compat-wrapper/README.md`, `packages/widget-host/README.md`, `packages/widget-host-bindings/README.md`, `packages/test-widgets/README.md` |
 | Doc comments that name a capability or action | the action files, `actions/*/mod.rs`, `client.rs`, `wasm.rs`, the driver modules, `platform.rs` |
 
@@ -239,8 +239,8 @@ Keep them valid XML (`xmllint --noout`) and check that text still fits its box.
 cargo fmt --all --check
 cargo clippy --workspace --all-targets --all-features -- -D warnings
 cargo test --workspace
-cargo build --features uniffi -p widget-host-driver
-cargo build --target wasm32-unknown-unknown -p widget-base-sdk
+cargo build --features uniffi -p matrix-widget-host-driver
+cargo build --target wasm32-unknown-unknown -p matrix-widget-sdk
 npm run wasm && npm run bindings && npm run build --workspaces --if-present && npm test
 (cd packages/widget-host && npx playwright test)   # the host in DevBackend mode with both test widgets
 for f in docs/diagrams/*.svg; do xmllint --noout "$f"; done

@@ -5,7 +5,7 @@
 - **Status:** draft
 - **Implemented here:** the host driver merges a request into the open question and asks the
   platform about the whole of it, leaving out what the widget holds or gets without asking; one
-  `approve_capabilities` answers all requests (`crates/widget-host-driver/src/driver/requests.rs`
+  `approve_capabilities` answers all requests (`crates/matrix-widget-host-driver/src/driver/requests.rs`
   `request_capabilities`, `driver/mod.rs`, `platform.rs` `on_capabilities_requested`; tests
   `requests_while_one_is_pending_add_up`, `a_request_while_a_question_is_open_never_completes_it`,
   `held_capabilities_are_not_asked_again` in `driver/tests.rs`). The widget host shows one prompt,

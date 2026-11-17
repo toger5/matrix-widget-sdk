@@ -34,10 +34,10 @@ jobs:
       - run: cargo fmt --all --check
       - run: cargo clippy --workspace --all-targets --all-features -- -D warnings
       - run: cargo test --workspace
-      - run: cargo build --features uniffi -p widget-host-driver
-      - run: cargo build --target wasm32-unknown-unknown -p widget-base-sdk
+      - run: cargo build --features uniffi -p matrix-widget-host-driver
+      - run: cargo build --target wasm32-unknown-unknown -p matrix-widget-sdk
       # The crates release.yml publishes package and build on their own (RELEASING.md).
-      - run: cargo publish --dry-run -p widget-actions -p widget-logging -p widget-matrix-backend -p widget-host-driver
+      - run: cargo publish --dry-run -p matrix-widget-actions -p matrix-widget-logging -p matrix-widget-host-backend-interface -p matrix-widget-host-driver
 
   web:
     runs-on: ubuntu-latest
@@ -66,7 +66,7 @@ jobs:
             npx --yes publint@0.3.25 "$tgz"
           done
           for tgz in dist/npm/matrix-widget-sdk-widget-*.tgz dist/npm/matrix-widget-sdk-host-*.tgz; do
-            npx --yes @arethetypeswrong/cli@0.18.2 "$tgz" --profile esm-only
+            npx --yes @arethetypeswrong/cli@0.18.5 "$tgz" --profile esm-only
           done
       - run: npm run smoke:npm
       - uses: actions/upload-artifact@v4

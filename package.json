@@ -6,7 +6,7 @@
     "packages/*"
   ],
   "scripts": {
-    "wasm": "wasm-pack build crates/widget-base-sdk --target web --release",
+    "wasm": "wasm-pack build crates/matrix-widget-sdk --target web --release",
     "build": "npm run wasm && npm run bindings && npm run build --workspaces --if-present",
     "test": "npm test --workspaces --if-present",
     "dev": "concurrently -k -n host,widgets -c blue,green \"npm:dev -w packages/widget-host\" \"npm:dev -w packages/test-widgets\"",

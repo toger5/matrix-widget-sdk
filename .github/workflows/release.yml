@@ -1,6 +1,6 @@
 # Cuts a release: the npm packages (@matrix-widget-sdk/widget, /host, /compat-wrapper) to
-# npmjs.com and the host crates (widget-actions, widget-logging, widget-matrix-backend,
-# widget-host-driver) to crates.io, both with trusted publishing (no stored tokens), then the tag
+# npmjs.com and the host crates (matrix-widget-actions, matrix-widget-logging, matrix-widget-host-backend-interface,
+# matrix-widget-host-driver) to crates.io, both with trusted publishing (no stored tokens), then the tag
 # v<version> and a GitHub Release with the npm tarballs attached. See RELEASING.md for the one-time
 # setup and the procedure around it.
 #
@@ -137,7 +137,7 @@ jobs:
         run: |
           # In dependency order; cargo publishes them one after the other and waits for each.
           packages=()
-          for crate in widget-actions widget-logging widget-matrix-backend widget-host-driver; do
+          for crate in matrix-widget-actions matrix-widget-logging matrix-widget-host-backend-interface matrix-widget-host-driver; do
             if curl -sf -A "matrix-widget-sdk release workflow" "https://crates.io/api/v1/crates/$crate/$VERSION" > /dev/null; then
               echo "$crate $VERSION is already on crates.io, skipped."
             else

@@ -8,7 +8,7 @@ import { createRequire } from "node:module";
 import { describe, expect, it } from "vitest";
 
 import initWasm from "../../widget-host-bindings/src/generated/wasm-bindgen/index.js";
-import * as widgetActions from "../../widget-host-bindings/src/generated/widget_actions";
+import * as widgetActions from "../../widget-host-bindings/src/generated/matrix_widget_actions";
 import { DEFAULT_CAPABILITIES, DELAYED_CAPABILITIES, EXTRA_CAPABILITIES, RELATION_CAPABILITIES, TO_DEVICE_CAPABILITIES, WEBVIEW_CAPABILITIES } from "../../test-widgets/new/capabilities";
 import { LEGACY_WEBVIEW_CAPABILITIES } from "../../widget-compat-wrapper/src/capabilities";
 import { capabilityLabel, capabilityRisk, capabilitySection, capabilitySections, capabilitySummary, iframeTokens, splitCapability } from "../src/views/widget/format";

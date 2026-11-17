@@ -62,18 +62,18 @@ envelope fields and `uses_widget_api` are not prefixed) → Dependencies (MSC441
 
 | MSC part | here |
 |---|---|
-| MSC4411 `m.widget` content and event types (`m.widget`, `org.matrix.msc4411.widget`, legacy `im.vector.modular.widgets`): which events are widgets (removed ones have no string `name` / `url`), what a client loads (legacy: through the compat wrapper) | `crates/widget-host-driver/src/widget_event.rs` (`WidgetDefinition::parse`, the crate-private `embed`; exported as `parse_widget_state_event`, which runs both; `WidgetHostDriver::new` runs `embed` again and hands the URL to the platform with `load_iframe`); the browser host calls it through `packages/widget-host/src/lib/widgetEvents.ts` |
-| MSC4411 "Clients MUST validate the url" | `crates/widget-host-driver/src/widget_url.rs` (`widget_url_problem`: absolute http(s), WHATWG, not relative to the embedding page; `embed_url_problem` with `EmbedOptions`: also no page of the client's compat wrapper, no page of the client's own origin; table `tests/widget_urls.json`) |
-| MSC4411 iframe `sandbox` / `allow` (proposed strict default: `spec/patch/msc4411/strict-webview-defaults.md`) and the webview capabilities (draft `spec/patch/new/webview-capabilities.md`) | `crates/widget-host-driver/src/webview.rs` (`WebviewPolicy`, `webview_attributes`, `WidgetIframe`, the legacy set `legacy_auto_approved`), applied by the driver (`driver/mod.rs` `State::sync_iframe`, `WidgetHostPlatform::load_iframe` in `platform.rs`); the capability source in `crates/widget-actions/src/capabilities.rs`; the host: `packages/widget-host/src/app/runtime/widgetRuntime.ts`, `src/app/controller.ts` `loadIframe`, `src/app/AppRoot.tsx` `WidgetIframes`; legacy widgets: `packages/widget-compat-wrapper/src/wrapper.ts` (`innerIframe`) |
+| MSC4411 `m.widget` content and event types (`m.widget`, `org.matrix.msc4411.widget`, legacy `im.vector.modular.widgets`): which events are widgets (removed ones have no string `name` / `url`), what a client loads (legacy: through the compat wrapper) | `crates/matrix-widget-host-driver/src/widget_event.rs` (`WidgetDefinition::parse`, the crate-private `embed`; exported as `parse_widget_state_event`, which runs both; `WidgetHostDriver::new` runs `embed` again and hands the URL to the platform with `load_iframe`); the browser host calls it through `packages/widget-host/src/lib/widgetEvents.ts` |
+| MSC4411 "Clients MUST validate the url" | `crates/matrix-widget-host-driver/src/widget_url.rs` (`widget_url_problem`: absolute http(s), WHATWG, not relative to the embedding page; `embed_url_problem` with `EmbedOptions`: also no page of the client's compat wrapper, no page of the client's own origin; table `tests/widget_urls.json`) |
+| MSC4411 iframe `sandbox` / `allow` (proposed strict default: `spec/patch/msc4411/strict-webview-defaults.md`) and the webview capabilities (draft `spec/patch/new/webview-capabilities.md`) | `crates/matrix-widget-host-driver/src/webview.rs` (`WebviewPolicy`, `webview_attributes`, `WidgetIframe`, the legacy set `legacy_auto_approved`), applied by the driver (`driver/mod.rs` `State::sync_iframe`, `WidgetHostPlatform::load_iframe` in `platform.rs`); the capability source in `crates/matrix-widget-actions/src/capabilities.rs`; the host: `packages/widget-host/src/app/runtime/widgetRuntime.ts`, `src/app/controller.ts` `loadIframe`, `src/app/AppRoot.tsx` `WidgetIframes`; legacy widgets: `packages/widget-compat-wrapper/src/wrapper.ts` (`innerIframe`) |
 | MSC4411 URL templates (removed; legacy widgets only) | `packages/widget-compat-wrapper/src/template.ts` |
-| MSC4412 envelope, namespaces (`MSC4412_NAMESPACE`, `PLACEHOLDER_NAMESPACE`, `STABLE_NAMESPACE`), errors (`WidgetError`), timeouts | `crates/widget-actions/src/wire.rs` |
-| MSC4412 action naming: wire names, stable `m.` aliases | serde `rename` / `alias` in `crates/widget-actions/src/actions/{widget,host}/mod.rs` |
-| MSC4412 capability format (proposed sources of other MSCs: `spec/patch/msc4412/capability-sources.md`) | `crates/widget-actions/src/capabilities.rs`; all actions and their capabilities in `docs/spec-appendix/capability-naming-proposal.md` |
-| MSC4412 core actions | `crates/widget-actions/src/actions/widget/{notify_ready,request_capabilities}.rs`, `crates/widget-actions/src/actions/host/update_capabilities.rs`; handshake and approval in `crates/widget-host-driver/src/driver/` and `platform.rs` |
+| MSC4412 envelope, namespaces (`MSC4412_NAMESPACE`, `PLACEHOLDER_NAMESPACE`, `STABLE_NAMESPACE`), errors (`WidgetError`), timeouts | `crates/matrix-widget-actions/src/wire.rs` |
+| MSC4412 action naming: wire names, stable `m.` aliases | serde `rename` / `alias` in `crates/matrix-widget-actions/src/actions/{widget,host}/mod.rs` |
+| MSC4412 capability format (proposed sources of other MSCs: `spec/patch/msc4412/capability-sources.md`) | `crates/matrix-widget-actions/src/capabilities.rs`; all actions and their capabilities in `docs/spec-appendix/capability-naming-proposal.md` |
+| MSC4412 core actions | `crates/matrix-widget-actions/src/actions/widget/{notify_ready,request_capabilities}.rs`, `crates/matrix-widget-actions/src/actions/host/update_capabilities.rs`; handshake and approval in `crates/matrix-widget-host-driver/src/driver/` and `platform.rs` |
 | MSC4412 limited grants (proposed: `spec/patch/msc4412/capability-lifetimes.md`) | single use in the driver: `WidgetHostDriver::set_single_use` (`driver/mod.rs`), used up in `driver/requests.rs` `handle_request`; time limits are the platform's timer plus `revoke_capabilities` |
-| MSC4412 transport | widget: `crates/widget-base-sdk/src/wasm.rs`; host: `packages/widget-host/src/app/runtime/widgetRuntime.ts` |
+| MSC4412 transport | widget: `crates/matrix-widget-sdk/src/wasm.rs`; host: `packages/widget-host/src/app/runtime/widgetRuntime.ts` |
 | MSC4412 `uses_widget_api` | `widget_event.rs` (`WidgetDefinition.uses_widget_api`); the driver (`driver/mod.rs`): without it `on_ready` follows `load_iframe` at once and every message is refused (`DriverError::NoWidgetApi`, `error.rs`); a legacy widget always has the widget API (the compat wrapper speaks it) |
-| MSC4412 backwards compatibility | the driver rejects legacy messages (`DriverError::LegacyWidgetApi`, `crates/widget-host-driver/src/error.rs`); `packages/widget-compat-wrapper` runs legacy widgets |
+| MSC4412 backwards compatibility | the driver rejects legacy messages (`DriverError::LegacyWidgetApi`, `crates/matrix-widget-host-driver/src/error.rs`); `packages/widget-compat-wrapper` runs legacy widgets |
 | Comparison with matrix-widget-api, decisions, raised conflicts | `docs/parity.md` §1, §2, §4 |
 
 ## Related widget MSCs
@@ -83,7 +83,7 @@ Every action carries the unstable prefix of the MSC that defines it, or the plac
 the crate are legacy names in tests and comments):
 
 ```sh
-grep -hoE 'rename = "[a-z]+\.[^"]+"' crates/widget-actions/src/actions/{widget,host}/mod.rs | sort -u
+grep -hoE 'rename = "[a-z]+\.[^"]+"' crates/matrix-widget-actions/src/actions/{widget,host}/mod.rs | sort -u
 ```
 
 | MSC | title | used here for |

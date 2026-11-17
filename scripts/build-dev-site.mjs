@@ -119,7 +119,7 @@ function landingPage(v) {
     <h2>Test widgets</h2>
     <p>For the URL of a widget state event; they only work embedded in a widget host.</p>
     <ul>
-      <li>MSC4412 widget (widget-base-sdk), for an <code>m.widget</code> event: ${url("widgets/new/")}</li>
+      <li>MSC4412 widget (matrix-widget-sdk), for an <code>m.widget</code> event: ${url("widgets/new/")}</li>
       <li>Legacy widget (matrix-widget-api), for an <code>im.vector.modular.widgets</code> event: ${url("widgets/legacy/?widgetId=$matrix_widget_id")}</li>
       <li>The compat wrapper the host runs legacy widgets in: ${url("host/widget_compatibility_wrapper/")} (another copy on this origin can be chosen with <code>?wrapper=</code>)</li>
     </ul>

@@ -25,7 +25,7 @@ export const STABLE_NAMESPACE = "m";
 /**
  * The unstable namespace of each action that has an MSC: the prefix the host sends the action
  * with. Every other action uses {@link PLACEHOLDER_NAMESPACE}. Must match `namespace_of` in
- * `crates/widget-actions/src/capabilities.rs`.
+ * `crates/matrix-widget-actions/src/capabilities.rs`.
  */
 const ACTION_NAMESPACES: Record<string, string> = {
   read_relations: "org.matrix.msc3869",

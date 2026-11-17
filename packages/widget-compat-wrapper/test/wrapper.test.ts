@@ -7,7 +7,7 @@ import { INNER_ALLOW, INNER_SANDBOX, innerIframe, parseConfig } from "../src/wra
 
 /** The `client_origin` part of the driver's table of widget URLs: here the wrapper is on the client's origin. */
 const CLIENT_ORIGIN = (
-  JSON.parse(readFileSync(new URL("../../../crates/widget-host-driver/tests/widget_urls.json", import.meta.url), "utf8")) as {
+  JSON.parse(readFileSync(new URL("../../../crates/matrix-widget-host-driver/tests/widget_urls.json", import.meta.url), "utf8")) as {
     client_origin: { client: string } & Record<"refused" | "own_widgets" | "other_origins", Record<string, string>>;
   }
 ).client_origin;

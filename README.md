@@ -34,18 +34,18 @@ More diagrams (legacy widgets, wire format, the actions crate, capabilities, tes
 
 | crate | runs on | purpose |
 |---|---|---|
-| [`widget-actions`](crates/widget-actions) | everywhere, optional UniFFI | Plain data types: the wire envelope, typed `Action` tree (`WidgetRequest`, `HostRequest`, ...), capability strings, `MatrixEvent`. No I/O, no state. |
-| [`widget-base-sdk`](crates/widget-base-sdk) | widget side, wasm + JS | `WidgetClient`: tracks the session (capabilities, `notify_ready`), turns actions into async functions, answers host requests. On `wasm32` also exports the `WidgetApi` JS class wired to `window.parent.postMessage`. |
-| [`widget-host-driver`](crates/widget-host-driver) | host side, optional UniFFI | `WidgetHostDriver`: one instance per rendered widget. Feed it widget messages, it performs the handshake, checks capabilities, calls the backend, subscribes to the room for the approved `receive.*` capabilities and answers. Two callbacks reach the iframe: `load_iframe` says what to build (URL, `sandbox`, `allow`), `send_to_widget` carries JSON to it. Also reads the widget state events (MSC4411 `m.widget` and the legacy `im.vector.modular.widgets`): which are widgets, the URL check, the compat wrapper URL and the auto-approved set of a legacy widget. Its `cdylib` carries the UniFFI scaffolding of all three host crates. |
-| [`widget-matrix-backend`](crates/widget-matrix-backend) | host side, optional UniFFI | `MatrixBackend`: the trait a host implements once per Matrix SDK, shaped after matrix-rust-rtc's (send room / state / sticky / delayed / to-device, read events / state / relations / account data, OpenID, TURN, RTC transports, user directory, media config, LiveKit; subscribe to the room, to-device messages and TURN credentials). Ships `InMemoryBackend` for tests and the browser test host. See [`docs/parity.md`](docs/parity.md). |
-| [`widget-logging`](crates/widget-logging) | bindings only | The logger the bindings install: `RUST_LOG`-style filter, platform log output, optional host sink. See [Logging](#logging). |
+| [`matrix-widget-actions`](crates/matrix-widget-actions) | everywhere, optional UniFFI | Plain data types: the wire envelope, typed `Action` tree (`WidgetRequest`, `HostRequest`, ...), capability strings, `MatrixEvent`. No I/O, no state. |
+| [`matrix-widget-sdk`](crates/matrix-widget-sdk) | widget side, wasm + JS | `WidgetClient`: tracks the session (capabilities, `notify_ready`), turns actions into async functions, answers host requests. On `wasm32` also exports the `WidgetApi` JS class wired to `window.parent.postMessage`. |
+| [`matrix-widget-host-driver`](crates/matrix-widget-host-driver) | host side, optional UniFFI | `WidgetHostDriver`: one instance per rendered widget. Feed it widget messages, it performs the handshake, checks capabilities, calls the backend, subscribes to the room for the approved `receive.*` capabilities and answers. Two callbacks reach the iframe: `load_iframe` says what to build (URL, `sandbox`, `allow`), `send_to_widget` carries JSON to it. Also reads the widget state events (MSC4411 `m.widget` and the legacy `im.vector.modular.widgets`): which are widgets, the URL check, the compat wrapper URL and the auto-approved set of a legacy widget. Its `cdylib` carries the UniFFI scaffolding of all three host crates. |
+| [`matrix-widget-host-backend-interface`](crates/matrix-widget-host-backend-interface) | host side, optional UniFFI | `MatrixBackend`: the trait a host implements once per Matrix SDK, shaped after matrix-rust-rtc's (send room / state / sticky / delayed / to-device, read events / state / relations / account data, OpenID, TURN, RTC transports, user directory, media config, LiveKit; subscribe to the room, to-device messages and TURN credentials). Ships `InMemoryBackend` for tests and the browser test host. See [`docs/parity.md`](docs/parity.md). |
+| [`matrix-widget-logging`](crates/matrix-widget-logging) | bindings only | The logger the bindings install: `RUST_LOG`-style filter, platform log output, optional host sink. See [Logging](#logging). |
 | [`uniffi-bindgen`](crates/uniffi-bindgen) | tooling | Binary that generates Kotlin / Swift / Python bindings for the crates above. |
 
 Web packages (npm workspaces under `packages/`, see each README):
 
 | package | npm | what it is |
 |---|---|---|
-| [`widget-base-sdk`](crates/widget-base-sdk) (crate, built with wasm-pack) | [`@matrix-widget-sdk/widget`](https://www.npmjs.com/package/@matrix-widget-sdk/widget) | The widget side for JavaScript widgets, see [Widget (JavaScript)](#widget-javascript). |
+| [`matrix-widget-sdk`](crates/matrix-widget-sdk) (crate, built with wasm-pack) | [`@matrix-widget-sdk/widget`](https://www.npmjs.com/package/@matrix-widget-sdk/widget) | The widget side for JavaScript widgets, see [Widget (JavaScript)](#widget-javascript). |
 | [`widget-compat-wrapper`](packages/widget-compat-wrapper) | [`@matrix-widget-sdk/compat-wrapper`](https://www.npmjs.com/package/@matrix-widget-sdk/compat-wrapper) | Hosted widget that wraps a legacy matrix-widget-api widget and speaks MSC4412 to the host. Lets a client drop its legacy widget code during the transition. |
 | [`widget-host-bindings`](packages/widget-host-bindings) | [`@matrix-widget-sdk/host`](https://www.npmjs.com/package/@matrix-widget-sdk/host) | The host crates as TypeScript + one wasm module, generated with uniffi-bindgen-react-native (`web` flavour). A JS client implements `MatrixBackend` / `WidgetHostPlatform` against these. |
 | [`widget-host`](packages/widget-host) | | Browser host on `widget-host-bindings`: one app that logs in with matrix-rust-sdk (matrix-js-sdk in a `js` build) and opens the widgets of your rooms, or runs on mocked in-memory rooms (the DevBackend, chosen on the login screen or by URL parameters), with per-widget dev tools and the legacy/new embedding decision. For debugging widgets and for manual and e2e testing. The design is in [`appDesign.md`](packages/widget-host/appDesign.md). |
@@ -53,7 +53,7 @@ Web packages (npm workspaces under `packages/`, see each README):
 
 ```sh
 npm install
-npm run wasm      # widget-base-sdk for the test widgets (needs wasm-pack)
+npm run wasm      # matrix-widget-sdk for the test widgets (needs wasm-pack)
 npm run bindings  # host bindings via ubrn (needs wasm-bindgen-cli 0.2.129, see packages/widget-host-bindings)
 npm run dev       # host on :5173 (serves the compat wrapper at /widget_compatibility_wrapper/), widgets on :5175
 npm test          # wrapper unit tests
@@ -165,11 +165,11 @@ one capability per action, written `source:action[.modifier][:data]`.
 
 ```sh
 npm install @matrix-widget-sdk/widget
-# or from this repository: wasm-pack build crates/widget-base-sdk --target web --out-dir pkg
+# or from this repository: wasm-pack build crates/matrix-widget-sdk --target web --out-dir pkg
 ```
 
 ```js
-import init, { WidgetApi } from "@matrix-widget-sdk/widget";   // or "./pkg/widget_base_sdk.js"
+import init, { WidgetApi } from "@matrix-widget-sdk/widget";   // or "./pkg/matrix_widget_sdk.js"
 await init();                                       // loads the wasm next to the module (bundlers emit it)
 
 const api = WidgetApi.connectToParent();            // posts to window.parent, filters by event.source
@@ -198,7 +198,7 @@ to own the `postMessage` plumbing (e.g. to pin the host origin).
 
 ```rust
 use std::rc::Rc;
-use widget_base_sdk::{WidgetClient, WidgetDelegate};
+use matrix_widget_sdk::{WidgetClient, WidgetDelegate};
 
 struct Transport;                       // your postMessage / channel glue
 impl WidgetDelegate for Transport {
@@ -215,7 +215,7 @@ client.notify_ready().await?;
 
 ```rust
 use std::sync::Arc;
-use widget_host_driver::{parse_widget_state_event, EmbedOptions, WidgetHostDriver, WidgetHostPlatform, WidgetIframe};
+use matrix_widget_host_driver::{parse_widget_state_event, EmbedOptions, WidgetHostDriver, WidgetHostPlatform, WidgetIframe};
 
 struct Platform { /* handle to the iframe */ }
 impl WidgetHostPlatform for Platform {
@@ -302,8 +302,8 @@ backed one is the next step); `packages/widget-host` is the smallest complete ho
 ### Host (Kotlin / Swift / Python via UniFFI)
 
 ```sh
-cargo build --release --features uniffi -p widget-host-driver
-cargo run -p uniffi-bindgen -- generate --library target/release/libwidget_host_driver.dylib \
+cargo build --release --features uniffi -p matrix-widget-host-driver
+cargo run -p uniffi-bindgen -- generate --library target/release/libmatrix_widget_host_driver.dylib \
     --language kotlin --out-dir bindings/kotlin
 ```
 
@@ -321,7 +321,7 @@ depends on how the code is used:
 
 | you use | entry point | default without a call | records go to |
 |---|---|---|---|
-| widget, JavaScript (`widget-base-sdk` wasm) | `initLogging(level, filter?)` | `warn` | browser console |
+| widget, JavaScript (`matrix-widget-sdk` wasm) | `initLogging(level, filter?)` | `warn` | browser console |
 | host, JavaScript (`widget-host-bindings`) | `setupLogging(LogConfig.create({ level }))` | `warn` | browser console, and a `LogSink` |
 | host, Kotlin / Swift / Python | `setupLogging(LogConfig(level = ...))` | silent | logcat (tag `matrix-widget`) on Android, the unified log on iOS, stderr elsewhere, and a `LogSink` |
 | any crate from Rust | your own logger (`env_logger`, `tracing-log`, ...) | silent | wherever that logger writes |
@@ -342,17 +342,17 @@ Levels mean the same everywhere:
 | `trace` | the message bodies as JSON. Bodies that carry credentials (OpenID and LiveKit tokens, TURN passwords) are replaced by `"<redacted>"` |
 
 `filter` overrides the level per target in `RUST_LOG` syntax. Targets are Rust module paths and
-match by prefix: `widget_host_driver`, `widget_matrix_backend`, `widget_base_sdk`.
+match by prefix: `matrix_widget_host_driver`, `matrix_widget_host_backend_interface`, `matrix_widget_sdk`.
 
 ```js
 // widget
-import init, { initLogging } from "widget-base-sdk";
+import init, { initLogging } from "matrix-widget-sdk";
 await init();
-initLogging("debug");                                      // or ("warn", "widget_base_sdk::client=trace")
+initLogging("debug");                                      // or ("warn", "matrix_widget_sdk::client=trace")
 
 // host (web)
 import { LogConfig, LogLevel, setLogSink, setupLogging } from "@matrix-widget-sdk/host";
-setupLogging(LogConfig.create({ level: LogLevel.Info, filter: "widget_host_driver::driver=trace" }));
+setupLogging(LogConfig.create({ level: LogLevel.Info, filter: "matrix_widget_host_driver::driver=trace" }));
 setLogSink({ log: (record) => rageshake.append(`${record.target}: ${record.message}`) });   // optional
 ```
 
@@ -374,12 +374,12 @@ into the same stream.
 
 ```sh
 cargo test --workspace                                        # unit + loopback tests
-cargo build --target wasm32-unknown-unknown -p widget-base-sdk
-cargo build --features uniffi -p widget-host-driver           # FFI scaffolding compiles
+cargo build --target wasm32-unknown-unknown -p matrix-widget-sdk
+cargo build --features uniffi -p matrix-widget-host-driver           # FFI scaffolding compiles
 npm run bindings && npm run build --workspaces --if-present   # ubrn bindings + web packages
 ```
 
-`crates/widget-base-sdk/tests/loopback.rs` wires a `WidgetClient` to a `WidgetHostDriver` with an
+`crates/matrix-widget-sdk/tests/loopback.rs` wires a `WidgetClient` to a `WidgetHostDriver` with an
 `InMemoryBackend` and walks through the full lifecycle (capabilities → notify_ready → send →
 receive → read → state update). It is the best place to see the whole protocol in motion.
 

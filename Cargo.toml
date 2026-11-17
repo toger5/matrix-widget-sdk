@@ -1,11 +1,11 @@
 [workspace]
 resolver = "2"
 members = [
-    "crates/widget-actions",
-    "crates/widget-matrix-backend",
-    "crates/widget-logging",
-    "crates/widget-host-driver",
-    "crates/widget-base-sdk",
+    "crates/matrix-widget-actions",
+    "crates/matrix-widget-host-backend-interface",
+    "crates/matrix-widget-logging",
+    "crates/matrix-widget-host-driver",
+    "crates/matrix-widget-sdk",
     "crates/uniffi-bindgen",
 ]
 
@@ -17,10 +17,10 @@ license = "Apache-2.0"
 repository = "https://github.com/toger5/matrix-widget-sdk"
 
 [workspace.dependencies]
-widget-actions = { path = "crates/widget-actions", version = "0.1.0" }
-widget-matrix-backend = { path = "crates/widget-matrix-backend", version = "0.1.0" }
-widget-host-driver = { path = "crates/widget-host-driver", version = "0.1.0" }
-widget-logging = { path = "crates/widget-logging", version = "0.1.0" }
+matrix-widget-actions = { path = "crates/matrix-widget-actions", version = "0.1.0" }
+matrix-widget-host-backend-interface = { path = "crates/matrix-widget-host-backend-interface", version = "0.1.0" }
+matrix-widget-host-driver = { path = "crates/matrix-widget-host-driver", version = "0.1.0" }
+matrix-widget-logging = { path = "crates/matrix-widget-logging", version = "0.1.0" }
 
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"

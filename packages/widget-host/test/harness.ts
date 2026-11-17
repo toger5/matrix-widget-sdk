@@ -6,9 +6,9 @@ import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 
 import initWasm from "../../widget-host-bindings/src/generated/wasm-bindgen/index.js";
-import * as widgetActions from "../../widget-host-bindings/src/generated/widget_actions";
-import * as hostDriver from "../../widget-host-bindings/src/generated/widget_host_driver";
-import * as matrixBackend from "../../widget-host-bindings/src/generated/widget_matrix_backend";
+import * as widgetActions from "../../widget-host-bindings/src/generated/matrix_widget_actions";
+import * as hostDriver from "../../widget-host-bindings/src/generated/matrix_widget_host_driver";
+import * as matrixBackend from "../../widget-host-bindings/src/generated/matrix_widget_host_backend_interface";
 
 const require = createRequire(import.meta.url);
 await initWasm({ module_or_path: readFileSync(require.resolve("../../widget-host-bindings/src/generated/wasm-bindgen/index_bg.wasm")) });

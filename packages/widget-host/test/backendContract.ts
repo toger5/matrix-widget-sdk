@@ -4,7 +4,7 @@
  */
 import { afterEach, describe, expect, it } from "vitest";
 
-import type { MatrixBackend } from "../../widget-host-bindings/src/generated/widget_matrix_backend";
+import type { MatrixBackend } from "../../widget-host-bindings/src/generated/matrix_widget_host_backend_interface";
 import { X, behindDriver, tick } from "./harness";
 
 export interface BackendFixture {

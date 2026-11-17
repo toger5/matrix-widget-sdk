@@ -21,7 +21,7 @@
   <rect width="1200" height="800" fill="#ffffff"/>
 
   <text x="30" y="42" class="h1">How a widget integration is built</text>
-  <text x="30" y="66" class="s">widget-base-sdk lives only in the webview (wasm). The driver, backend and action crates live in the Matrix client and compile natively / through UniFFI.</text>
+  <text x="30" y="66" class="s">matrix-widget-sdk lives only in the webview (wasm). The driver, backend and action crates live in the Matrix client and compile natively / through UniFFI.</text>
 
   <!-- ============ Webview panel ============ -->
   <rect x="30" y="90" width="370" height="610" rx="14" fill="#faf5ff" stroke="#7c3aed" stroke-width="1.5" stroke-dasharray="6 4"/>
@@ -37,7 +37,7 @@
   <text x="225" y="255" class="s">JS class (wasm-bindgen)</text>
 
   <rect x="55" y="265" width="320" height="250" rx="10" fill="#f3e8ff" stroke="#7c3aed" stroke-width="1.5"/>
-  <text x="75" y="292" class="h2">widget-base-sdk</text>
+  <text x="75" y="292" class="h2">matrix-widget-sdk</text>
   <rect x="258" y="277" width="104" height="22" rx="11" fill="#7c3aed"/>
   <text x="310" y="292" class="badge" text-anchor="middle">wasm only</text>
   <text x="75" y="320" class="b">• WidgetClient: session state</text>
@@ -48,11 +48,11 @@
   <text x="75" y="422" class="b">• connectToParent() wires it to</text>
   <text x="75" y="440" class="s">   window.parent.postMessage</text>
   <rect x="75" y="460" width="280" height="38" rx="6" fill="#d1fae5" stroke="#059669"/>
-  <text x="215" y="484" class="b" text-anchor="middle">uses widget-actions (shared types)</text>
+  <text x="215" y="484" class="b" text-anchor="middle">uses matrix-widget-actions (shared types)</text>
 
   <text x="55" y="545" class="b" font-weight="700">Build</text>
-  <text x="55" y="565" class="m">wasm-pack build crates/widget-base-sdk</text>
-  <text x="55" y="583" class="s">→ widget_base_sdk.js + .wasm, shipped with the widget</text>
+  <text x="55" y="565" class="m">wasm-pack build crates/matrix-widget-sdk</text>
+  <text x="55" y="583" class="s">→ matrix_widget_sdk.js + .wasm, shipped with the widget</text>
   <text x="55" y="611" class="b" font-weight="700">Never part of the Matrix client.</text>
   <text x="55" y="630" class="s">No UniFFI. The only native build is the</text>
   <text x="55" y="647" class="s">cargo loopback test (tests/loopback.rs).</text>
@@ -93,7 +93,7 @@
 
   <!-- driver -->
   <rect x="555" y="305" width="590" height="135" rx="10" fill="#dbeafe" stroke="#2563eb" stroke-width="1.5"/>
-  <text x="575" y="331" class="h2">widget-host-driver</text>
+  <text x="575" y="331" class="h2">matrix-widget-host-driver</text>
   <rect x="1052" y="317" width="80" height="22" rx="11" fill="#2563eb"/>
   <text x="1092" y="332" class="badge" text-anchor="middle">UniFFI</text>
   <text x="575" y="354" class="b">WidgetHostDriver, one instance per rendered widget:</text>
@@ -111,12 +111,13 @@
 
   <!-- backend -->
   <rect x="555" y="490" width="330" height="100" rx="10" fill="#dbeafe" stroke="#2563eb" stroke-width="1.5"/>
-  <text x="575" y="515" class="h2">widget-matrix-backend</text>
-  <rect x="792" y="502" width="80" height="22" rx="11" fill="#2563eb"/>
-  <text x="832" y="517" class="badge" text-anchor="middle">UniFFI</text>
+  <text x="575" y="515" class="h2">matrix-widget-host-backend-interface</text>
+  <!-- The name fills the title row, so the badge sits on the short row below it. -->
+  <rect x="792" y="524" width="80" height="22" rx="11" fill="#2563eb"/>
+  <text x="832" y="539" class="badge" text-anchor="middle">UniFFI</text>
   <text x="575" y="538" class="m">trait MatrixBackend</text>
-  <text x="575" y="556" class="s">sinks + Subscription, shaped like matrix-rust-rtc</text>
-  <text x="575" y="576" class="s">ships InMemoryBackend for tests / test host</text>
+  <text x="575" y="560" class="s">sinks + Subscription, shaped like matrix-rust-rtc</text>
+  <text x="575" y="580" class="s">ships InMemoryBackend for tests / test host</text>
 
   <rect x="925" y="490" width="220" height="100" rx="10" fill="#ffedd5" stroke="#ea580c" stroke-width="1.5"/>
   <text x="943" y="515" class="b" font-weight="700">Your MatrixBackend impl</text>
@@ -128,7 +129,7 @@
 
   <!-- shared types -->
   <rect x="555" y="605" width="590" height="36" rx="8" fill="#d1fae5" stroke="#059669" stroke-width="1.5"/>
-  <text x="575" y="628" class="b"><tspan font-weight="700">widget-actions</tspan>: WireMessage, Action, Capability, MatrixEvent · UniFFI optional</text>
+  <text x="575" y="628" class="b"><tspan font-weight="700">matrix-widget-actions</tspan>: WireMessage, Action, Capability, MatrixEvent · UniFFI optional</text>
 
   <text x="555" y="665" class="b" font-weight="700">Builds as</text>
   <text x="630" y="665" class="b">native Rust · UniFFI → Kotlin / Swift / Python ·</text>
@@ -143,5 +144,5 @@
   <text x="494" y="738" class="s">implemented by the client</text>
   <rect x="680" y="725" width="16" height="16" rx="3" fill="#d1fae5" stroke="#059669"/>
   <text x="704" y="738" class="s">shared types, used on both sides</text>
-  <text x="30" y="772" class="s">The JSON on the wire is the only contract between the two sides; a widget does not have to use widget-base-sdk, and a host does not have to use the driver.</text>
+  <text x="30" y="772" class="s">The JSON on the wire is the only contract between the two sides; a widget does not have to use matrix-widget-sdk, and a host does not have to use the driver.</text>
 </svg>

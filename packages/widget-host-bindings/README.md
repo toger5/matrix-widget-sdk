@@ -1,13 +1,13 @@
 # widget-host-bindings
 
-TypeScript bindings for the **host side** of the widget API: `widget-host-driver`,
-`widget-matrix-backend` and `widget-actions`, generated from their UniFFI scaffolding with
+TypeScript bindings for the **host side** of the widget API: `matrix-widget-host-driver`,
+`matrix-widget-host-backend-interface` and `matrix-widget-actions`, generated from their UniFFI scaffolding with
 [uniffi-bindgen-react-native](https://github.com/jhugman/uniffi-bindgen-react-native) (ubrn, `web`
 flavour) and shipped as one wasm module. A JavaScript client implements `MatrixBackend` and
 `WidgetHostPlatform` and drives `WidgetHostDriver`, exactly like a Kotlin or Swift client does
 through the native UniFFI bindings.
 
-The widget side (`widget-base-sdk`) is not part of this: it only ever runs inside a widget and
+The widget side (`matrix-widget-sdk`) is not part of this: it only ever runs inside a widget and
 keeps its own wasm-bindgen build.
 
 ## From npm
@@ -47,9 +47,9 @@ npm run bindings          # from the repository root (= npm run ubrn:web in this
 
 `ubrn build web` (configured in `ubrn.config.yaml`):
 
-1. builds `crates/widget-host-driver` natively with the `uniffi` feature and reads the UniFFI
+1. builds `crates/matrix-widget-host-driver` natively with the `uniffi` feature and reads the UniFFI
    metadata of all three crates from that library,
-2. writes `src/generated/widget_actions.ts`, `widget_matrix_backend.ts`, `widget_host_driver.ts`
+2. writes `src/generated/matrix_widget_actions.ts`, `matrix_widget_host_backend_interface.ts`, `matrix_widget_host_driver.ts`
    (plus `*-ffi.ts` and `index.web.ts`),
 3. writes a small wasm-bindgen shim crate to `rust_modules/wasm/`, builds it for
    `wasm32-unknown-unknown` and runs `wasm-bindgen`, producing `src/generated/wasm-bindgen/`
@@ -128,7 +128,7 @@ subscribeTimeline(roomId: string, sink: TimelineSink): Subscription
 
 Every method is required (UniFFI traits have no defaults); an operation the client cannot offer
 throws `BackendError.Failed` with a reason. The methods are listed with their semantics in
-`docs/parity.md` and in the Rust docs of `widget-matrix-backend`.
+`docs/parity.md` and in the Rust docs of `matrix-widget-host-backend-interface`.
 
 Register listeners for `subjects.timelineEventTypes` and `subjects.stateEventTypes` on the room,
 deliver the **current set** of every requested state type right away (`sink.onStateEvents(type,

@@ -55,7 +55,7 @@
 
   <!-- backend -->
   <rect x="50" y="450" width="660" height="216" rx="10" fill="#dcfce7" stroke="#16a34a" stroke-width="1.5"/>
-  <text x="66" y="474" class="h2">InMemoryBackend<tspan dx="12" font-size="12" font-weight="400" fill="#4b5563">widget-matrix-backend · plain vectors · one room, one user</tspan></text>
+  <text x="66" y="474" class="h2">InMemoryBackend<tspan dx="12" font-size="12" font-weight="400" fill="#4b5563">matrix-widget-host-backend-interface · plain vectors · one room, one user</tspan></text>
   <rect x="66" y="488" width="200" height="164" rx="8" fill="#ffffff" stroke="#16a34a"/>
   <text x="80" y="510" class="bb">store</text>
   <text x="80" y="530" class="m">timeline: Vec&lt;Event&gt;</text>
@@ -89,7 +89,7 @@
   <text x="810" y="112" class="h2" style="fill:#6d28d9">iframe: test-widgets /new/  ·  :5175</text>
   <rect x="1060" y="122" width="96" height="22" rx="11" fill="#7c3aed"/>
   <text x="1108" y="137" class="badge" text-anchor="middle">MSC4412</text>
-  <text x="810" y="136" class="s">widget-base-sdk (wasm)</text>
+  <text x="810" y="136" class="s">matrix-widget-sdk (wasm)</text>
   <text x="810" y="162" class="b">buttons: request_capabilities, notify_ready,</text>
   <text x="810" y="180" class="b">send m.room.message, send state m.room.topic,</text>
   <text x="810" y="198" class="b">read_timeline (+ older), paginate_timeline,</text>
@@ -157,6 +157,6 @@
   <text x="816" y="862" class="m">→ reply { events, pagination }</text>
   <text x="816" y="878" class="s">   older: from = oldest id, or paginate_timeline</text>
 
-  <text x="30" y="918" class="b"><tspan font-weight="700">Automated:</tspan> packages/widget-host/test/driver.test.ts drives the bindings end to end; crates/widget-base-sdk/tests/loopback.rs wires WidgetClient ↔ driver ↔</text>
+  <text x="30" y="918" class="b"><tspan font-weight="700">Automated:</tspan> packages/widget-host/test/driver.test.ts drives the bindings end to end; crates/matrix-widget-sdk/tests/loopback.rs wires WidgetClient ↔ driver ↔</text>
   <text x="30" y="936" class="b">InMemoryBackend in Rust with in-memory queues instead of postMessage. Assertions read the store (timeline(), state(), toDeviceSent()…).</text>
 </svg>

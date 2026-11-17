@@ -1,7 +1,7 @@
 /**
  * The host's glue to the driver's widget state event parser (`src/lib/widgetEvents.ts`) and the URL
  * check in front of every widget iframe. The parser itself is tested in Rust
- * (`crates/widget-host-driver/src/widget_{event,url}.rs`); here every URL of the shared table is
+ * (`crates/matrix-widget-host-driver/src/widget_{event,url}.rs`); here every URL of the shared table is
  * also compared with the WHATWG URL parser of Node, which the Rust check follows.
  */
 import { readFileSync } from "node:fs";
@@ -44,7 +44,7 @@ const newWidget = (url: string): StateEvent => ({ type: "m.widget", state_key: "
 const legacyWidget = (url: string): StateEvent => ({ type: "im.vector.modular.widgets", state_key: "w", content: { type: "m.custom", name: "W", url } });
 
 /** The table the Rust tests use too: label → URL. */
-const TABLE = JSON.parse(readFileSync(new URL("../../../crates/widget-host-driver/tests/widget_urls.json", import.meta.url), "utf8")) as Record<"allowed" | "refused", Record<string, string>> & {
+const TABLE = JSON.parse(readFileSync(new URL("../../../crates/matrix-widget-host-driver/tests/widget_urls.json", import.meta.url), "utf8")) as Record<"allowed" | "refused", Record<string, string>> & {
   compat_wrapper: { wrapper: string } & Record<"allowed" | "refused", Record<string, string>>;
   client_origin: { client: string; own_widget_dirs: string[] } & Record<"refused" | "own_widgets" | "other_origins", Record<string, string>>;
 };

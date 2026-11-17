@@ -5,7 +5,7 @@
 - **Status:** draft
 - **Implemented here:** single use in the host driver: `WidgetHostDriver::set_single_use`
   (default: `widget:…get_openid`) and `DriverSnapshot.single_use`
-  (`crates/widget-host-driver/src/driver/mod.rs`); the check and the use under one lock, the update
+  (`crates/matrix-widget-host-driver/src/driver/mod.rs`); the check and the use under one lock, the update
   after the reply (`driver/requests.rs` `handle_request`); tests `openid_is_a_one_use_capability`,
   `a_use_is_a_request_that_passed_the_check_whatever_its_result`,
   `an_auto_approved_single_use_capability_is_granted_again_per_request`,

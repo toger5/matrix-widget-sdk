@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { legacyUrlProblem, templatedLegacyUrl } from "../src/url";
 
 /** The driver's table of widget URLs (`widget_url_problem` with `http:` allowed): the wrapper's check is the same rule. */
-const TABLE = JSON.parse(readFileSync(new URL("../../../crates/widget-host-driver/tests/widget_urls.json", import.meta.url), "utf8")) as Record<"allowed" | "refused", Record<string, string>>;
+const TABLE = JSON.parse(readFileSync(new URL("../../../crates/matrix-widget-host-driver/tests/widget_urls.json", import.meta.url), "utf8")) as Record<"allowed" | "refused", Record<string, string>>;
 const NOT_ABSOLUTE = "the URL is not an absolute http: or https: URL";
 
 describe("legacyUrlProblem", () => {

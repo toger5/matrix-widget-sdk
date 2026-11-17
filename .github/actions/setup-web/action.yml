@@ -1,5 +1,5 @@
 # Everything the web packages need before `npm run build`: the Rust and Node toolchains,
-# `npm ci`, widget-base-sdk (`npm run wasm`), the host bindings (`npm run bindings`) and the
+# `npm ci`, matrix-widget-sdk (`npm run wasm`), the host bindings (`npm run bindings`) and the
 # matrix-rust-sdk bindings (packages/matrix-sdk-uniffi-js, from the cache when possible).
 # Used by the `web` job of ci.yml and the `build` job of release.yml, so both build the same way;
 # the caches (rust-cache, the SDK bindings) carry the expensive part from `main` to tag and
@@ -8,7 +8,7 @@
 # Third-party actions are pinned by commit (the tag in the comment); `actions/*` stay on tags.
 
 name: Set up and build the web packages
-description: Toolchains, npm ci, widget-base-sdk wasm, host bindings and matrix-rust-sdk bindings
+description: Toolchains, npm ci, matrix-widget-sdk wasm, host bindings and matrix-rust-sdk bindings
 
 outputs:
   sdk-bindings-built:

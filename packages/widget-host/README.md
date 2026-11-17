@@ -1,6 +1,6 @@
 # Widget host
 
-An MSC4412 widget host in the browser, on `widget-host-driver` through the UniFFI/wasm bindings
+An MSC4412 widget host in the browser, on `matrix-widget-host-driver` through the UniFFI/wasm bindings
 in `../widget-host-bindings`. One React app (`src/`) with two modes that share every view
 (room panels with tabs, widget view, dev tools):
 
@@ -85,7 +85,7 @@ hands it to the driver of each widget of that room like any other `MatrixBackend
   Send the event as state in the Dev tools of the DevBackend and the widget appears in the room overview (the
   URL parameters below start with the two test widgets). This is the logic a real client
   needs during the transition. It is the driver's (`WidgetDefinition::parse` / `embed` in
-  `crates/widget-host-driver/src/widget_event.rs`), so native clients get the same; the logged-in
+  `crates/matrix-widget-host-driver/src/widget_event.rs`), so native clients get the same; the logged-in
   mode uses it too.
 - **Drives the protocol**: every message from the widget iframe goes into the driver, every
   message from the driver goes to the iframe. Both directions are shown in the **Messages** panel of the widget's dev tools.
@@ -208,7 +208,7 @@ URL parameters for scripted runs (e2e tests):
 | `room=<id>` / `user=<id>` | Ids of the in-memory room and its user. |
 | `wrapper=<url>` | Base URL of the compat wrapper, used for legacy events only (both modes). Default: the copy this host serves itself at `widget_compatibility_wrapper/` next to its own page (`/widget_compatibility_wrapper/` on the dev server). Set it to test a wrapper hosted elsewhere, e.g. `../widget-compat-wrapper`'s own dev server on `http://localhost:5174/`. |
 | `log=<level>` | Level of the driver's own log: `error`, `warn` (default), `info`, `debug`, `trace`. The records appear in the browser console and in the **Console** panel of the dev tools. |
-| `logFilter=<spec>` | `RUST_LOG`-style overrides per module, e.g. `widget_host_driver::driver::requests=trace`. |
+| `logFilter=<spec>` | `RUST_LOG`-style overrides per module, e.g. `matrix_widget_host_driver::driver::requests=trace`. |
 
 Example: `http://localhost:5173/?autoload=1&autoApprove=1&event=%7B%22type%22%3A%22m.widget%22...%7D`
 
@@ -217,7 +217,7 @@ Example: `http://localhost:5173/?autoload=1&autoApprove=1&event=%7B%22type%22%3A
 ```sh
 npm install              # from the repository root
 npm run bindings         # once: generates ../widget-host-bindings (ubrn, wasm-bindgen-cli 0.2.129)
-npm run wasm             # once: widget-base-sdk for ../test-widgets (needs wasm-pack)
+npm run wasm             # once: matrix-widget-sdk for ../test-widgets (needs wasm-pack)
 npm run dev              # http://localhost:5173/
 ```
 

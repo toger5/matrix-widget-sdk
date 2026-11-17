@@ -3,7 +3,7 @@
  * driver makes of them, the legacy set, and when the driver of a running widget has its iframe built
  * again (`WidgetRuntimeEvents.loadIframe`). Only what the host adds is tested here (the message
  * pump, what it remembers, its spelling of capabilities); the policy (base, never, denial) and the
- * reload are tested in Rust (`crates/widget-host-driver/src/webview.rs`, `driver/tests.rs`); the
+ * reload are tested in Rust (`crates/matrix-widget-host-driver/src/webview.rs`, `driver/tests.rs`); the
  * reload in the browser in `e2e/webview.spec.ts`.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";

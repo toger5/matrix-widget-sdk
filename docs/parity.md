@@ -2,7 +2,7 @@
 
 This document is the plan behind the `feat/widget-api-parity` work: which widget API actions
 exist in [matrix-widget-api](https://github.com/matrix-org/matrix-widget-api), which of them this
-repository implements, how `widget-matrix-backend` relates to the `MatrixBackend` of
+repository implements, how `matrix-widget-host-backend-interface` relates to the `MatrixBackend` of
 [matrix-rust-rtc](../../matrix-rust-rtc), and where the two designs conflict. Decisions taken here
 are marked **decision**; everything marked **raised** is a conflict left for a human to confirm.
 
@@ -12,7 +12,7 @@ MSC4412 demands that every action is `<namespace>.<name>`: `m` for actions in th
 unstable prefix of the defining MSC until then (`org.matrix.msc3869.read_relations`). To keep every
 action renameable later, this crate emits the **unstable name** on the wire and accepts the
 **stable name `m.<name>` as an alias** when parsing. A name without a namespace is not an action.
-The serde `rename` / `alias` attributes in `crates/widget-actions/src/actions/*/mod.rs` are the
+The serde `rename` / `alias` attributes in `crates/matrix-widget-actions/src/actions/*/mod.rs` are the
 single place a wire name lives.
 
 **Decision (2026-11-14, updated for the rewritten MSC4412 on the same day):** actions and
@@ -57,7 +57,7 @@ capabilities follow MSC4412 and
 matrix-widget-api's `WidgetParser.parseRoomWidget` treats `m.widget` and
 `im.vector.modular.widgets` alike and needs `type` and a creator; Element Web lists an
 `im.vector.modular.widgets` event whose content has a `type` and a `url`. Here
-`WidgetDefinition::parse` (`crates/widget-host-driver/src/widget_event.rs`) follows MSC4411 for
+`WidgetDefinition::parse` (`crates/matrix-widget-host-driver/src/widget_event.rs`) follows MSC4411 for
 `m.widget` / `org.matrix.msc4411.widget` (a string `name` and `url`, else a removed widget) and
 needs only a string `url` for the legacy event (`type` is optional, the name falls back to the
 state key). `parse_widget_state_event` also checks the URL (absolute `http(s)`, parsed per WHATWG,
@@ -201,7 +201,7 @@ The namespace of a capability is the one of its action: `org.matrix.msc3869` (`r
 (`get_rtc_livekit_token`, `delegate_rtc_livekit_delayed_leave`), `org.matrix.msc2931` (`navigate`),
 `com.beeper` (`read_room_account_data`) and `org.matrix.mscXXXX` for everything else, the webview
 capabilities included (their MSC is a draft). The table lives in `namespace_of`
-(`crates/widget-actions/src/capabilities.rs`) and is repeated in
+(`crates/matrix-widget-actions/src/capabilities.rs`) and is repeated in
 `packages/widget-compat-wrapper/src/capabilities.ts` and `packages/test-widgets/new/capabilities.ts`.
 
 ## 3. `MatrixBackend` next to matrix-rust-rtc
@@ -210,7 +210,7 @@ matrix-rust-rtc (`crates/matrix-rtc-core/src/host/backend.rs`, uniffi layer in
 `crates/matrix-rtc-ffi/src/backend.rs`) is the reference. Where both projects need the same thing
 the method here has the same name and parameter order, so one adapter per Matrix SDK can serve both.
 
-| matrix-rust-rtc | widget-matrix-backend | note |
+| matrix-rust-rtc | matrix-widget-host-backend-interface | note |
 |---|---|---|
 | `own_user_id()` | `own_user_id()` | renamed from `user_id` |
 | `own_device_id()` | `own_device_id()` | renamed from `device_id` |

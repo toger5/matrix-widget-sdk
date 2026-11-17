@@ -3,7 +3,7 @@
 //
 // Needs what `npm run build` needs: `npm run wasm` (widget side) and `npm run bindings` (host side).
 //
-//   @matrix-widget-sdk/widget          crates/widget-base-sdk/pkg (wasm-pack output), renamed
+//   @matrix-widget-sdk/widget          crates/matrix-widget-sdk/pkg (wasm-pack output), renamed
 //   @matrix-widget-sdk/host            packages/widget-host-bindings, bundled into one ES module + its wasm
 //   @matrix-widget-sdk/compat-wrapper  packages/widget-compat-wrapper, the built static page (dist/)
 //   @matrix-widget-sdk/matrix-sdk-uniffi-js   only with --with-matrix-sdk (needs its own long build)
@@ -79,11 +79,11 @@ function checkSourceVersion(path) {
 // @matrix-widget-sdk/widget: the wasm-pack output, renamed.
 
 function packWidget() {
-  const pkg = join(root, "crates/widget-base-sdk/pkg");
+  const pkg = join(root, "crates/matrix-widget-sdk/pkg");
   requireFile(join(pkg, "package.json"), "`npm run wasm`");
   const generated = readJson(join(pkg, "package.json"));
   // wasm-pack takes the version from Cargo.toml; an older one means an old build.
-  if (generated.version !== version) fail(`crates/widget-base-sdk/pkg is version ${generated.version}, Cargo.toml ${version}; run \`npm run wasm\``);
+  if (generated.version !== version) fail(`crates/matrix-widget-sdk/pkg is version ${generated.version}, Cargo.toml ${version}; run \`npm run wasm\``);
   const dir = stage("widget");
   for (const file of readdirSync(pkg)) {
     if (file !== "package.json" && file !== ".gitignore") cpSync(join(pkg, file), join(dir, file), { recursive: true });
@@ -92,7 +92,7 @@ function packWidget() {
   if (existsSync(join(pkg, "snippets"))) files.push("snippets");
   writeJson(
     join(dir, "package.json"),
-    manifest("crates/widget-base-sdk", {
+    manifest("crates/matrix-widget-sdk", {
       name: "widget",
       description: generated.description,
       keywords: ["matrix", "widget", "msc4412", "wasm"],
@@ -204,7 +204,7 @@ function packCompatWrapper() {
 }
 
 /**
- * The generated sources import `./widget_actions` without an extension, which bundlers resolve but
+ * The generated sources import `./matrix_widget_actions` without an extension, which bundlers resolve but
  * TypeScript's `node16` / `nodenext` resolution does not. Give every relative import in the
  * declaration files a `.js` extension (TypeScript maps it to the `.d.ts` next to it).
  */
@@ -235,7 +235,7 @@ const staged = [
     source: "widget-host-bindings",
     name: "host",
     description:
-      "Host side of the Matrix widget API (MSC4412) for JavaScript clients: widget-host-driver, widget-matrix-backend and widget-actions as TypeScript + wasm",
+      "Host side of the Matrix widget API (MSC4412) for JavaScript clients: matrix-widget-host-driver, matrix-widget-host-backend-interface and matrix-widget-actions as TypeScript + wasm",
     keywords: ["matrix", "widget", "msc4412", "wasm", "uniffi"],
   }),
   packCompatWrapper(),

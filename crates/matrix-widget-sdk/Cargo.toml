@@ -1,0 +1,39 @@
+[package]
+name = "matrix-widget-sdk"
+description = "Widget side of the Matrix widget API: tracks state, wraps actions in functions, speaks postMessage (wasm)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+# Only usable as the wasm npm package @matrix-widget-sdk/widget (scripts/pack-npm.mjs).
+publish = false
+
+[lib]
+crate-type = ["lib", "cdylib"]
+
+[dependencies]
+matrix-widget-actions.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+futures-channel.workspace = true
+uuid.workspace = true
+log.workspace = true
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+uuid = { workspace = true, features = ["js"] }
+matrix-widget-logging.workspace = true
+wasm-bindgen.workspace = true
+wasm-bindgen-futures.workspace = true
+serde-wasm-bindgen.workspace = true
+js-sys.workspace = true
+web-sys = { workspace = true, features = ["Window", "MessageEvent", "EventTarget", "Event"] }
+
+[dev-dependencies]
+futures.workspace = true
+matrix-widget-host-driver.workspace = true
+matrix-widget-host-backend-interface.workspace = true
+
+[package.metadata.wasm-pack.profile.release]
+wasm-opt = ["-Os"]

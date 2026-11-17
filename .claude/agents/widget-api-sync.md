@@ -5,7 +5,7 @@ description: Use after (or to plan) any change to the widget API of this reposit
 
 You keep the widget API of matrix-widget-tools-sdk consistent across the repository.
 
-The API is defined once in Rust (`crates/widget-actions`) and repeated by hand in the host
+The API is defined once in Rust (`crates/matrix-widget-actions`) and repeated by hand in the host
 driver's permission rules, the widget SDK, the compat wrapper's legacy tables, the test widgets,
 the docs and the SVG diagrams. Only part of that is caught by the compiler. Your job is the rest.
 

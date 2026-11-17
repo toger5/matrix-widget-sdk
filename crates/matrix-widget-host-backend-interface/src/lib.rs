@@ -1,0 +1,422 @@
+//! The interface between the widget host driver and an actual Matrix client.
+//!
+//! The driver (`matrix-widget-host-driver`) never talks to a homeserver itself. Everything that touches
+//! Matrix goes through [`MatrixBackend`], an async trait a host implements once per Matrix SDK
+//! (matrix-rust-sdk, matrix-js-sdk through the UniFFI/wasm bindings, a Kotlin/Swift SDK, ...).
+//!
+//! The trait is shaped after the `MatrixBackend` of
+//! [matrix-rust-rtc](https://github.com/element-hq/matrix-rust-rtc) (same method names and
+//! parameter order wherever both need the same thing, see `docs/parity.md`), so one adapter per
+//! SDK can serve both. It has a *send/read* half (the driver asks the backend to send or read)
+//! and a *subscribe* half: [`MatrixBackend::subscribe_room`] registers a [`RoomSink`] that the
+//! backend feeds with new timeline events and with the current room state until the returned
+//! [`Subscription`] is cancelled; [`MatrixBackend::subscribe_timeline`] does the same for the
+//! changes of the timeline cache ([`TimelineSink`]). The driver subscribes itself whenever the widget's capabilities
+//! change, so a host does not push events anywhere; it only implements the subscription.
+//!
+//! One backend instance is bound to **one room** (the room the widget lives in). Every method
+//! still takes the `room_id`, like matrix-rust-rtc's; the driver always passes
+//! [`MatrixBackend::room_id`] and an implementation may reject anything else.
+//!
+//! [`InMemoryBackend`] is a complete in-process implementation for tests and prototypes.
+
+mod error;
+mod in_memory;
+
+use std::sync::Arc;
+
+pub use error::BackendError;
+pub use in_memory::{
+    DelayedEvent, DelegatedDelayedLeave, InMemoryBackend, PendingPagination, SentToDeviceMessage, StoredMedia,
+};
+pub use matrix_widget_actions::{
+    JsonValue, MatrixEvent, MediaConfigResponse as MediaConfig, OpenIdToken, PaginationStatus, RelationDirection,
+    RoomAccountData, SearchUserDirectoryResponse as UserDirectorySearchResult, TimelineFilter, ToDeviceEvent,
+    TurnServer, UserDirectoryUser,
+};
+
+/// One to-device message to send: its recipient device and the content for that device
+/// ([`MatrixBackend::send_to_device_message`]).
+#[derive(Debug, Clone, PartialEq)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+pub struct ToDeviceMessage {
+    pub user_id: String,
+    /// A device id, or `*` for every device of the user.
+    pub device_id: String,
+    pub content: JsonValue,
+}
+
+/// What became of one recipient of a to-device send (same as matrix-rust-rtc).
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+pub struct ToDeviceDelivery {
+    pub user_id: String,
+    pub device_id: String,
+    /// `None` when the message was accepted for this recipient; otherwise why not.
+    pub error: Option<String>,
+}
+
+/// A file in the media repository, as raw bytes ([`MatrixBackend::upload_media`] /
+/// [`MatrixBackend::download_media`]). The driver does the base64 coding of the widget API.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+pub struct MediaFile {
+    pub data: Vec<u8>,
+    /// The content type, when known.
+    pub mimetype: Option<String>,
+}
+
+/// One page of a relations read ([`MatrixBackend::relations`]).
+#[derive(Debug, Clone, PartialEq, Default)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+pub struct RelationsChunk {
+    pub chunk: Vec<MatrixEvent>,
+    pub next_batch: Option<String>,
+    pub prev_batch: Option<String>,
+}
+
+/// One read of the timeline cache ([`MatrixBackend::timeline_read`]).
+#[derive(Debug, Clone, PartialEq, Default)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+pub struct TimelineChunk {
+    /// The matching events, **newest first**.
+    pub events: Vec<MatrixEvent>,
+    /// The pagination status of the cache at the time of the read.
+    pub pagination: PaginationStatus,
+}
+
+/// A change of the timeline cache that `forward_event` does not cover
+/// ([`TimelineSink::on_timeline_update`]). Every part is optional.
+#[derive(Debug, Clone, PartialEq, Default)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+pub struct TimelineUpdate {
+    /// The new pagination status, after the fetched events are in the cache.
+    pub pagination: Option<PaginationStatus>,
+    /// Why a pagination failed (then `pagination` is `Idle`).
+    pub pagination_error: Option<String>,
+    /// The cache is no longer continuous (a limited sync left a gap, the cache was dropped or
+    /// rebuilt).
+    pub reset: bool,
+    /// Cached events that could not be decrypted before and now are, decrypted. The driver passes
+    /// on the IDs of those the widget may read.
+    pub decrypted: Vec<MatrixEvent>,
+}
+
+impl TimelineUpdate {
+    /// Only a new pagination status.
+    pub fn pagination(status: PaginationStatus) -> Self {
+        Self { pagination: Some(status), ..Default::default() }
+    }
+
+    /// Only `reset`.
+    pub fn reset() -> Self {
+        Self { reset: true, ..Default::default() }
+    }
+}
+
+/// What a subscriber wants delivered for a room, by event type.
+///
+/// Timeline delivery matches on the event type alone, so a state event type listed here is
+/// delivered as it appears in the timeline as well. State delivery is per type: the complete
+/// current set of state events of that type, on subscribe and after every change.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+pub struct RoomSubjects {
+    /// State event types whose current set is delivered on subscribe and after every change.
+    pub state_event_types: Vec<String>,
+    /// Event types to forward as they arrive in the room's timeline.
+    pub timeline_event_types: Vec<String>,
+}
+
+impl RoomSubjects {
+    pub fn is_empty(&self) -> bool {
+        self.timeline_event_types.is_empty() && self.state_event_types.is_empty()
+    }
+}
+
+/// Where a backend delivers what a subscription asked for. Implemented by the driver.
+///
+/// Every method returns at once and may be called from any thread, including synchronously from
+/// inside [`MatrixBackend::subscribe_room`].
+#[cfg_attr(feature = "uniffi", uniffi::export)]
+pub trait RoomSink: Send + Sync {
+    /// New events of a subscribed timeline type, oldest first. Each event is delivered once.
+    fn on_timeline_events(&self, events: Vec<MatrixEvent>);
+
+    /// The **complete current set** of state events of `event_type` (one per state key). The
+    /// first call per type is the set at subscription time; later calls follow every change.
+    /// An empty vector means there is no such state.
+    fn on_state_events(&self, event_type: String, events: Vec<MatrixEvent>);
+}
+
+/// Where a backend delivers the changes of the timeline cache. Implemented by the driver; every
+/// call returns at once and may come from inside [`MatrixBackend::subscribe_timeline`].
+#[cfg_attr(feature = "uniffi", uniffi::export)]
+pub trait TimelineSink: Send + Sync {
+    fn on_timeline_update(&self, update: TimelineUpdate);
+}
+
+/// Where a backend delivers to-device messages of the subscribed types. Implemented by the
+/// driver; every call returns at once.
+#[cfg_attr(feature = "uniffi", uniffi::export)]
+pub trait ToDeviceSink: Send + Sync {
+    /// A decrypted (or cleartext) to-device message of a subscribed type.
+    fn on_to_device_message(&self, message: ToDeviceEvent);
+}
+
+/// Where a backend delivers TURN credentials (MSC3846). Implemented by the driver; every call
+/// returns at once.
+#[cfg_attr(feature = "uniffi", uniffi::export)]
+pub trait TurnServerSink: Send + Sync {
+    /// Current credentials: the ones known at subscription time (if any) right away, then every
+    /// refresh.
+    fn on_turn_server(&self, server: TurnServer);
+}
+
+/// A live subscription. The driver ends it with [`cancel`](Subscription::cancel); cancelling
+/// twice is a no-op and nothing is delivered afterwards.
+#[cfg_attr(feature = "uniffi", uniffi::export(with_foreign))]
+pub trait Subscription: Send + Sync {
+    fn cancel(&self);
+}
+
+/// Matrix operations the widget host driver needs, scoped to **one room**.
+///
+/// Capability checks have already happened in the driver by the time a method here is called, so
+/// implementations only perform the operation. Every method is required (UniFFI traits have no
+/// default bodies); an operation a client cannot offer returns
+/// [`BackendError::not_implemented`].
+#[cfg_attr(feature = "uniffi", uniffi::export(with_foreign))]
+#[async_trait::async_trait]
+pub trait MatrixBackend: Send + Sync {
+    // ---- Identity ----
+
+    /// The id of the room this backend is bound to.
+    fn room_id(&self) -> String;
+
+    /// The account the client is logged in as.
+    fn own_user_id(&self) -> String;
+
+    /// The device the client is logged in as.
+    fn own_device_id(&self) -> String;
+
+    /// The user's display name, or the user id when there is none.
+    fn display_name(&self) -> String;
+
+    /// The user's `mxc://` avatar, or an empty string when there is none.
+    fn avatar_url(&self) -> String;
+
+    /// The client-server API base URL of the homeserver, e.g. `https://matrix.example.org`.
+    fn base_url(&self) -> String;
+
+    // ---- Send half ----
+
+    /// Send a plain room event (message-like, not state). In an encrypted room the client
+    /// encrypts it like any other message. Returns the event id the homeserver assigned.
+    async fn send_room_event(
+        &self,
+        room_id: String,
+        event_type: String,
+        content: JsonValue,
+    ) -> Result<String, BackendError>;
+
+    /// Send a state event. Returns the event id the homeserver assigned.
+    async fn send_state_event(
+        &self,
+        room_id: String,
+        event_type: String,
+        state_key: String,
+        content: JsonValue,
+    ) -> Result<String, BackendError>;
+
+    /// Send a sticky event (MSC4354): `duration_ms` is how long the homeserver keeps it in the
+    /// room's sticky map; pass it through verbatim. Returns the event id.
+    async fn send_sticky_event(
+        &self,
+        room_id: String,
+        event_type: String,
+        content: JsonValue,
+        duration_ms: u64,
+    ) -> Result<String, BackendError>;
+
+    /// Schedule an event (MSC4140): with `state_key` a state event, otherwise message-like, sent
+    /// `delay_ms` from now. Returns the **delay id**, the handle for
+    /// [`restart_delayed_event`](Self::restart_delayed_event) & co., not an event id.
+    async fn send_delayed_event(
+        &self,
+        room_id: String,
+        event_type: String,
+        state_key: Option<String>,
+        content: JsonValue,
+        delay_ms: u64,
+    ) -> Result<String, BackendError>;
+
+    /// Schedule a sticky event: [`send_delayed_event`](Self::send_delayed_event) and
+    /// [`send_sticky_event`](Self::send_sticky_event) combined. Returns the delay id.
+    async fn send_delayed_sticky_event(
+        &self,
+        room_id: String,
+        event_type: String,
+        content: JsonValue,
+        delay_ms: u64,
+        duration_ms: u64,
+    ) -> Result<String, BackendError>;
+
+    /// MSC4140 `restart`: reset the timer of a delayed event to its original delay from now.
+    async fn restart_delayed_event(&self, room_id: String, delay_id: String) -> Result<(), BackendError>;
+
+    /// MSC4140 `cancel`: drop a delayed event.
+    async fn cancel_delayed_event(&self, room_id: String, delay_id: String) -> Result<(), BackendError>;
+
+    /// MSC4140 `send`: send a delayed event right now.
+    async fn send_delayed_event_now(&self, room_id: String, delay_id: String) -> Result<(), BackendError>;
+
+    /// Send one to-device message type to a set of devices, each with its own content
+    /// (MSC3819 `messages: { user_id: { device_id: content } }`), Olm-encrypted when `encrypted`.
+    /// Reports the outcome per recipient; an `Err` means the batch could not be attempted at all.
+    async fn send_to_device_message(
+        &self,
+        encrypted: bool,
+        event_type: String,
+        messages: Vec<ToDeviceMessage>,
+    ) -> Result<Vec<ToDeviceDelivery>, BackendError>;
+
+    // ---- Read half ----
+
+    /// Read the client's timeline cache of the room (MSCXXXX `read_timeline`), never the
+    /// homeserver: walk from the event older than `from` (exclusive; from the newest event when
+    /// `None`) towards older events, and collect the events matching any entry of `filter` until
+    /// there are `limit` of them or the cache ends. Events the client cannot decrypt are left
+    /// out. The events come back **newest first**, with the pagination status of the cache.
+    ///
+    /// The driver has already reduced `filter` to what the widget may read; it is never empty.
+    /// `from` not in the cache is [`BackendError::EventNotCached`].
+    async fn timeline_read(
+        &self,
+        room_id: String,
+        from: Option<String>,
+        limit: u32,
+        filter: Vec<TimelineFilter>,
+    ) -> Result<TimelineChunk, BackendError>;
+
+    /// Extend the timeline cache backwards (MSCXXXX `paginate_timeline`). Returns **at once**
+    /// with the status: `Paginating` when a back-pagination started or one was already running
+    /// (`limit` is a hint for its size), `StartReached` when there is nothing older. The outcome
+    /// goes to the [`TimelineSink`]s: the new status once the fetched events are in the cache,
+    /// or `Idle` with `pagination_error` when it failed.
+    async fn timeline_paginate_backwards(
+        &self,
+        room_id: String,
+        limit: Option<u32>,
+    ) -> Result<PaginationStatus, BackendError>;
+
+    /// `GET /rooms/{room_id}/relations/{event_id}[/{rel_type}[/{event_type}]]` (MSC3869), decrypted.
+    /// `limit`, `from`, `to` and `direction` are the endpoint's query parameters; absent means
+    /// the homeserver's default. Same as matrix-rust-rtc's `relations` plus the pagination.
+    #[allow(clippy::too_many_arguments)]
+    async fn relations(
+        &self,
+        room_id: String,
+        event_id: String,
+        rel_type: Option<String>,
+        event_type: Option<String>,
+        from: Option<String>,
+        to: Option<String>,
+        limit: Option<u32>,
+        direction: Option<RelationDirection>,
+    ) -> Result<RelationsChunk, BackendError>;
+
+    /// A fresh OpenID token for the account (`POST /user/{userId}/openid/request_token`), for
+    /// a widget's `get_openid` (the widget holds `widget:…get_openid`, usually for this one token).
+    async fn openid_token(&self) -> Result<OpenIdToken, BackendError>;
+
+    /// The `rtc_transports` array of `GET /_matrix/client/v1/rtc/transports` (MSC4515), raw;
+    /// `[]` when the homeserver lacks the endpoint. Same as matrix-rust-rtc's.
+    async fn rtc_transports(&self) -> Result<JsonValue, BackendError>;
+
+    /// `POST /_matrix/client/v3/user_directory/search` (MSC3973).
+    async fn search_user_directory(
+        &self,
+        search_term: String,
+        limit: Option<u32>,
+    ) -> Result<UserDirectorySearchResult, BackendError>;
+
+    /// `GET /_matrix/client/v1/media/config` (MSC4039).
+    async fn media_config(&self) -> Result<MediaConfig, BackendError>;
+
+    /// `POST /_matrix/media/v3/upload` (MSC4039 `upload_file`); returns the `mxc://` URI. The
+    /// media repository is not room bound, so there is no `room_id`.
+    async fn upload_media(&self, file: MediaFile) -> Result<String, BackendError>;
+
+    /// `GET /_matrix/client/v1/media/download/{server}/{media_id}` (MSC4039 `download_file`) for
+    /// an `mxc://` URI.
+    async fn download_media(&self, content_uri: String) -> Result<MediaFile, BackendError>;
+
+    /// The room account data of `event_type` in `room_id` (`com.beeper.read_room_account_data`);
+    /// empty when there is none.
+    async fn read_room_account_data(
+        &self,
+        room_id: String,
+        event_type: String,
+    ) -> Result<Vec<RoomAccountData>, BackendError>;
+
+    /// MSC4533: a LiveKit JWT for the given SFU, MatrixRTC session and member, obtained through
+    /// the client's own LiveKit integration (`server_name` names the homeserver hosting it).
+    async fn rtc_livekit_get_token(
+        &self,
+        server_name: String,
+        url: String,
+        room_id: String,
+        slot_id: String,
+        member_id: String,
+    ) -> Result<String, BackendError>;
+
+    /// MSC4533: hand the delayed leave event `delay_id` over to the LiveKit service at `url`, so
+    /// it keeps it alive while the user is connected.
+    async fn rtc_livekit_delegate_delayed_leave(
+        &self,
+        url: String,
+        room_id: String,
+        slot_id: String,
+        member_id: String,
+        delay_id: String,
+    ) -> Result<(), BackendError>;
+
+    /// Deliver `subjects` of `room_id` to `sink` until the returned subscription is cancelled.
+    ///
+    /// Synchronous on purpose: register the client's listeners and return the handle; deliver
+    /// from the client's own event loop. The current set of every requested state type is
+    /// delivered right away (calling the sink from inside this method is fine) or as soon as it
+    /// is known; timeline events only from now on.
+    fn subscribe_room(
+        &self,
+        room_id: String,
+        subjects: RoomSubjects,
+        sink: Arc<dyn RoomSink>,
+    ) -> Result<Arc<dyn Subscription>, BackendError>;
+
+    /// Deliver the changes of the timeline cache of `room_id` ([`TimelineUpdate`]: pagination
+    /// status, reset, late decryptions) to `sink` until the returned subscription is cancelled.
+    /// Synchronous, as [`subscribe_room`](Self::subscribe_room). Nothing is delivered on
+    /// subscribe.
+    fn subscribe_timeline(
+        &self,
+        room_id: String,
+        sink: Arc<dyn TimelineSink>,
+    ) -> Result<Arc<dyn Subscription>, BackendError>;
+
+    /// Deliver every to-device message of `event_types` to `sink` until the returned
+    /// subscription is cancelled. Synchronous, as [`subscribe_room`](Self::subscribe_room).
+    fn subscribe_to_device(
+        &self,
+        event_types: Vec<String>,
+        sink: Arc<dyn ToDeviceSink>,
+    ) -> Result<Arc<dyn Subscription>, BackendError>;
+
+    /// Deliver the client's TURN credentials (`GET /voip/turnServer`, refreshed before they
+    /// expire) to `sink` until the returned subscription is cancelled (MSC3846). Synchronous.
+    fn subscribe_turn_servers(&self, sink: Arc<dyn TurnServerSink>) -> Result<Arc<dyn Subscription>, BackendError>;
+}
+
+#[cfg(feature = "uniffi")]
+uniffi::setup_scaffolding!();
