@@ -116,7 +116,7 @@ A room view is a tabbed container, shown inside a room panel. Its first tab is t
 - Widget list, first and full width. Pressing a widget opens it. A widget that is already open is grayed out, says where it is open and offers:
   - "jump to tab"
   - "move widget here", if it is open in another room view: it closes the tab there and opens the widget in this room view.
-- "Add widget" (dev tools) opens a form at the top of the widget list: the widget or Element Call form of the Dev tools, or a pasted state event. It adds the widget, it does not open it:
+- "Add widget" (dev tools) opens a form at the top of the widget list: the test widget, widget or Element Call form of the Dev tools (the test widget form first), or a pasted state event. It adds the widget, it does not open it:
   - only in this host (the default): a local widget, kept in this browser for this account and room and never sent. The same type and ID replaces it.
   - to the room: sends the state event as you. Replacing a widget of the room asks first; a refusal (no permission) is shown in the form, the draft stays.
 - Local widgets follow the room's widgets, marked "Local", with edit (dev tools; the widget form without the target, type and ID fixed, "Save") and remove (asks first). They are listed and run also with dev tools disabled.
@@ -224,8 +224,10 @@ Each room has these sections:
 
 - State
   - shortcuts: edit name, edit description, add member (DevBackend)
-  - send state (also delayed), with a menu of predefined forms like "send event". The default is the widget form; the last option is raw JSON (type, state key, content).
-    - widget: event type (`m.widget`, `org.matrix.msc4411.widget` or legacy `im.vector.modular.widgets`), widget ID, name, URL and, unless legacy, "uses the widget API". Prefilled with the test widget of that kind
+  - send state (also delayed), with a menu of predefined forms like "send event". The default is the test widget form; the last option is raw JSON (type, state key, content).
+    - test widget: one of the three test widgets this app ships, one per event type (`m.widget` and `org.matrix.msc4411.widget`: the new test widget; `im.vector.modular.widgets`: the legacy test widget, with its templated URL), and the widget ID. The URL is shown read-only with a copy button: a test widget cannot be lost by editing its URL
+    - widget: any custom widget. Event type (`m.widget`, `org.matrix.msc4411.widget` or legacy `im.vector.modular.widgets`), widget ID, name, URL and, unless legacy, "uses the widget API". Starts empty
+    - while the event type and widget ID of a widget form (test widget, widget, Element Call) name a widget the room already has, the send button reads "Update widget" in a warning look: sending replaces that widget
     - Element Call: a legacy `m.call` widget as Element Web describes its call widget, from the Element Call URL (default call.element.io), the call intent and the widget ID
   - current state (explore by type and key), with an edit button per state event
 - Timeline
@@ -297,7 +299,7 @@ Every state of the UI. Each is one story in Storybook, a sketch story (`Sketch/â
   - Dev tools while the DevBackend is active (DevBackendView)
     - No rooms yet
     - Room dropdown open (rooms + add room)
-    - State: shortcuts, send state with the widget form / the Element Call form / as raw JSON, state explorer, edit state
+    - State: shortcuts, send state with the test widget form / the widget form / the Element Call form / as raw JSON, "Update widget" for an existing widget, state explorer, edit state
     - Timeline: send event with a predefined form, send event as raw JSON, send delayed event, event list, a widget's pagination request
     - Tools: collapsed (the "Client Backend Tool" and "Media Backend Tool" buttons) / Client Backend Tool open below the room box (resize handle, minimise button): WidgetHostBehavior, To-device messages / Media Backend Tool open (media list)
     - "Leave DevBackend" text button at the bottom (part of every DevBackendView state)
@@ -327,7 +329,7 @@ Every state of the UI. Each is one story in Storybook, a sketch story (`Sketch/â
     - RoomOverview
       - No widget open, dev tools disabled
       - A widget open in this panel ("jump to tab"), a local widget, dev tools and DevBackend enabled ("Add widget", copy to DevBackend)
-      - Add widget: the widget form, only in this host / a pasted state event / to the room, refused (the reason)
+      - Add widget: the test widget form, the widget form, only in this host / a pasted state event / to the room, refused (the reason)
     - RoomTimeline
       - Events of every kind, one showing its JSON, "Load older events"
       - Start of the room reached

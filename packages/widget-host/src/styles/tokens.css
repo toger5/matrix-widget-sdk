@@ -28,6 +28,7 @@
   --text-faint: #8d8d96;
   --primary: #f2f2f3;
   --on-primary: #111113;
+  --on-warning: #111113;
   --highlight: #6fdc8c;
   --highlight-soft: rgba(111, 220, 140, 0.14);
   --danger: #ff8078;
@@ -60,6 +61,7 @@
   --text-faint: #63636a;
   --primary: #18181b;
   --on-primary: #ffffff;
+  --on-warning: #ffffff;
   --highlight: #177249;
   --highlight-soft: rgba(24, 121, 78, 0.12);
   --danger: #bd261b;

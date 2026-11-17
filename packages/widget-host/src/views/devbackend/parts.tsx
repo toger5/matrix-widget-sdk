@@ -44,8 +44,12 @@ export function delayOf(delay: DelayDraft): { delayMs?: number; error?: string }
   return { delayMs: ms };
 }
 
-/** The last row of a send form: the "Delayed" toggle, the delay in ms while on, and the submit button. */
-export function DelayRow({ delay, onChange }: { delay: DelayDraft; onChange: (delay: DelayDraft) => void }) {
+/**
+ * The last row of a send form: the "Delayed" toggle, the delay in ms while on, and the submit
+ * button. `update`: the form replaces a widget the room has, the button reads "Update widget"
+ * ("Schedule update") in the warning look.
+ */
+export function DelayRow({ delay, onChange, update = false }: { delay: DelayDraft; onChange: (delay: DelayDraft) => void; update?: boolean }) {
   return (
     <div className="inline-row">
       <Toggle on={delay.on} label="Send delayed" onChange={(on) => onChange({ ...delay, on })} />
@@ -57,8 +61,8 @@ export function DelayRow({ delay, onChange }: { delay: DelayDraft; onChange: (de
         </>
       )}
       <span className="sp" />
-      <Button kind="primary" sm icon={delay.on ? "clock" : "send"} type="submit">
-        {delay.on ? "Schedule" : "Send"}
+      <Button kind={update ? "warning" : "primary"} sm icon={update ? "alert" : delay.on ? "clock" : "send"} type="submit">
+        {update ? (delay.on ? "Schedule update" : "Update widget") : delay.on ? "Schedule" : "Send"}
       </Button>
     </div>
   );

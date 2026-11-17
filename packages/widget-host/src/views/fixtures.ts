@@ -182,7 +182,7 @@ export const roomToolsVm = (o: Partial<RoomToolsViewModel> = {}): RoomToolsViewM
   selectedRoomIds: { [ACCOUNTS.dev.id]: ROOMS.lab.id, [ACCOUNTS.ada.id]: ROOMS.design.id },
   openSections: ["state"],
   sendForm: "message",
-  stateForm: "widget",
+  stateForm: "testWidget",
   tools: { open: null, heightShare: 0.5 },
   behavior: { autoApproveCapabilities: true, rememberCapabilities: false },
   scheduled: {},

@@ -11,6 +11,7 @@
 
 .btn { height: 32px; padding: 0 12px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; border-radius: var(--r-3); border: 1px solid var(--border-strong); background: var(--surface-2); font-weight: 500; white-space: nowrap; }
 .btn.primary { background: var(--primary); color: var(--on-primary); border-color: var(--primary); }
+.btn.warning { background: var(--warning); color: var(--on-warning); border-color: var(--warning); }
 .btn.dev { background: var(--dev-soft); border-color: var(--dev); color: var(--dev); }
 .btn.sm { height: 24px; padding: 0 8px; font-size: 12px; border-radius: var(--r-2); gap: 4px; }
 .btn.block { width: 100%; }
@@ -30,6 +31,7 @@
 .input.select .ico { margin-left: auto; color: var(--text-muted); }
 .input.sm { min-height: 24px; padding: 2px 7px; font-size: 12px; }
 .input.narrow { width: 56px; flex: none; }
+.input.grow { flex: 1; }
 .input.search { color: var(--text); }
 .input.search > .ico { color: var(--text-muted); }
 .ph { color: var(--text-faint); }

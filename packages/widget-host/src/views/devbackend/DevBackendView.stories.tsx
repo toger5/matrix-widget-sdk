@@ -48,7 +48,7 @@ export const RoomDropdown: Story = {
   play: async ({ canvasElement }) => (await findElement(canvasElement, ".room-pick")).click(),
 };
 
-/** State: the shortcuts, send state with the widget form, the state explorer (`m.room.member` expanded, the content of one member shown). */
+/** State: the shortcuts, send state with the test widget form (the URL read-only, with a copy button), the state explorer (`m.room.member` expanded, the content of one member shown). */
 export const State: Story = {
   args: { roomTools: roomTools({ openSections: ["state"] }) },
   parameters: { size: [348, 1150] },

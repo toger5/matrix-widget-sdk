@@ -102,18 +102,23 @@ test("Add widget, only in this host: listed as “Local”, nothing is sent; it 
   const overview = host.page.getByTestId("room-overview");
   await overview.getByRole("button", { name: "Add widget" }).click();
   const form = overview.getByRole("form", { name: "Add widget" });
-  // Prefilled with the test widget and the first ID no widget of the room uses.
-  await expect(form.getByRole("tab", { name: "Widget" })).toHaveAttribute("aria-selected", "true");
+  // The test widget form: the new test widget under the first ID no widget of the room uses, its URL read-only.
+  await expect(form.getByRole("tab", { name: "Test widget" })).toHaveAttribute("aria-selected", "true");
   await expect(form.getByRole("textbox", { name: "Widget ID" })).toHaveValue("widget-2");
   await expect(form.getByRole("textbox", { name: "URL" })).toHaveValue("http://localhost:5175/new/");
+  await expect(form.getByRole("textbox", { name: "URL" })).not.toBeEditable();
   await expect(form.getByRole("radio", { name: "Only in this host" })).toBeChecked();
   await expect(form.getByText("Nothing is sent to the room")).toBeVisible();
   await expect(overview.getByRole("button", { name: "Add widget" })).toHaveCount(1); // the form's own; the card's is replaced by the form
   await host.story("rooms-roomoverview--add-widget");
 
-  // The same type and ID as the room's widget: its key is still its own.
+  // The widget form: any custom widget, it starts empty. The same type and ID as the room's widget: its key is still its own.
+  await form.getByRole("tab", { name: "Widget", exact: true }).click();
+  await expect(form.getByRole("textbox", { name: "URL" })).toHaveValue("");
+  await host.story("rooms-roomoverview--add-widget-custom");
   await form.getByRole("textbox", { name: "Widget ID" }).fill("widget-1");
   await form.getByRole("textbox", { name: "Name" }).fill("Local test widget");
+  await form.getByRole("textbox", { name: "URL" }).fill("http://localhost:5175/new/");
   await form.getByRole("button", { name: "Add widget" }).click();
   await expect(form).toHaveCount(0);
   const row = overview.locator('[data-widget-key="local:m.widget/widget-1"]');
@@ -186,8 +191,10 @@ test("Add widget, to the room: the state event is sent as you; replacing a widge
   const modal = host.page.getByRole("alertdialog");
   const addToRoom = async (id: string, name: string) => {
     await overview.getByRole("button", { name: "Add widget" }).click();
+    await form.getByRole("tab", { name: "Widget", exact: true }).click();
     await form.getByRole("textbox", { name: "Widget ID" }).fill(id);
     await form.getByRole("textbox", { name: "Name" }).fill(name);
+    await form.getByRole("textbox", { name: "URL" }).fill("http://localhost:5175/new/");
     await form.getByRole("radio", { name: "The room" }).click();
     await expect(form.getByText("everyone in it sees the widget")).toBeVisible();
     await form.getByRole("button", { name: "Add widget" }).click();

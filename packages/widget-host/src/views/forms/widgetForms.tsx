@@ -3,15 +3,15 @@
  * "Add widget" of the RoomOverview. The
  * fields are controlled: the draft is the view state of the form that renders them.
  */
-import { EXAMPLE_LEGACY, EXAMPLE_NEW } from "../../exampleWidgets";
+import { useId } from "react";
+
+import { EXAMPLE_LEGACY, TEST_WIDGETS } from "../../exampleWidgets";
 import { WIDGET_EVENT_TYPES, type StateEvent, type WidgetEventParser } from "../../widgetStateEvent";
-import { Field, Toggle } from "../ui/atoms";
+import { useDispatch } from "../env";
+import { Field, IconButton, Toggle } from "../ui/atoms";
 import { parseJsonObject } from "../ui/forms";
 
 export const LEGACY_TYPE = EXAMPLE_LEGACY.type;
-
-/** The test widget a widget form of this event type starts with. */
-export const exampleOf = (type: string) => (type === LEGACY_TYPE ? EXAMPLE_LEGACY : EXAMPLE_NEW).content as { name: string; url: string };
 
 /** The first `widget-<n>` that no widget state event of `events` uses. */
 export function freeWidgetId(events: Iterable<Pick<StateEvent, "type" | "state_key">>): string {
@@ -35,8 +35,8 @@ export interface WidgetDraft {
   usesWidgetApi: boolean;
 }
 
-/** A new widget: the test widget of the new event type. */
-export const newWidgetDraft = (stateKey: string): WidgetDraft => ({ type: EXAMPLE_NEW.type, stateKey, ...exampleOf(EXAMPLE_NEW.type), usesWidgetApi: true });
+/** A new custom widget: `m.widget`, no name and no URL yet. */
+export const newWidgetDraft = (stateKey: string): WidgetDraft => ({ type: WIDGET_EVENT_TYPES[0], stateKey, name: "", url: "", usesWidgetApi: true });
 
 /** The draft of an existing widget state event (editing a local widget). */
 export const widgetDraftOf = (event: StateEvent): WidgetDraft => ({
@@ -49,8 +49,8 @@ export const widgetDraftOf = (event: StateEvent): WidgetDraft => ({
 
 /**
  * The state event of a widget draft, or what is wrong with it. `base`: the content the draft
- * changes (editing keeps the fields the form does not show); without it a legacy widget gets the
- * fields of the legacy test widget and `userId` as its `creatorUserId`.
+ * changes (editing keeps the fields the form does not show); without it a legacy widget gets
+ * `type: "m.custom"`, `waitForIframeLoad` and `userId` as its `creatorUserId`.
  */
 export function buildWidgetEvent(draft: WidgetDraft, urlProblem: UrlProblem, { userId, base }: { userId?: string; base?: Record<string, unknown> } = {}): StateEvent | string {
   const stateKey = draft.stateKey.trim();
@@ -59,30 +59,21 @@ export function buildWidgetEvent(draft: WidgetDraft, urlProblem: UrlProblem, { u
   if (urlProblem(draft.url.trim())) return "The URL must start with http:// or https://.";
   const common = { name: draft.name.trim(), url: draft.url.trim() };
   const legacy = draft.type === LEGACY_TYPE;
-  const from = base ?? (legacy ? { ...EXAMPLE_LEGACY.content, ...(userId ? { creatorUserId: userId } : {}) } : {});
+  const from = base ?? (legacy ? { type: "m.custom", waitForIframeLoad: true, ...(userId ? { creatorUserId: userId } : {}) } : {});
   const content = legacy ? { ...from, ...common } : { ...from, ...common, uses_widget_api: draft.usesWidgetApi };
   return { type: draft.type, state_key: stateKey, content };
 }
 
-/**
- * The fields of the widget form. Switching between a new and a legacy event type swaps the
- * prefilled test widget, unless it was edited. `locked`: editing a widget, its event type and ID
- * are fixed.
- */
+/** The fields of the widget form: any custom widget. `locked`: editing a widget, its event type and ID are fixed. */
 export function WidgetFields({ draft, onChange, locked = false }: { draft: WidgetDraft; onChange: (draft: WidgetDraft) => void; locked?: boolean }) {
   const legacy = draft.type === LEGACY_TYPE;
-  const changeType = (type: string) => {
-    const from = exampleOf(draft.type);
-    const to = exampleOf(type);
-    onChange({ ...draft, type, name: draft.name === from.name ? to.name : draft.name, url: draft.url === from.url ? to.url : draft.url });
-  };
   return (
     <>
       <Field label="Event type">
         {locked ? (
           <input className="input mono" value={draft.type} readOnly />
         ) : (
-          <select className="input mono" value={draft.type} onChange={(e) => changeType(e.target.value)}>
+          <select className="input mono" value={draft.type} onChange={(e) => onChange({ ...draft, type: e.target.value })}>
             {WIDGET_EVENT_TYPES.map((type) => (
               <option key={type} value={type}>
                 {type}
@@ -95,10 +86,10 @@ export function WidgetFields({ draft, onChange, locked = false }: { draft: Widge
         <input className="input mono" value={draft.stateKey} readOnly={locked} onChange={(e) => onChange({ ...draft, stateKey: e.target.value })} />
       </Field>
       <Field label="Name">
-        <input className="input" value={draft.name} onChange={(e) => onChange({ ...draft, name: e.target.value })} />
+        <input className="input" placeholder="My widget" value={draft.name} onChange={(e) => onChange({ ...draft, name: e.target.value })} />
       </Field>
       <Field label="URL">
-        <input className="input mono" value={draft.url} onChange={(e) => onChange({ ...draft, url: e.target.value })} />
+        <input className="input mono" placeholder="https://…" value={draft.url} onChange={(e) => onChange({ ...draft, url: e.target.value })} />
       </Field>
       {!legacy && (
         <div className="inline-row">
@@ -106,6 +97,71 @@ export function WidgetFields({ draft, onChange, locked = false }: { draft: Widge
           <span>Uses the widget API</span>
         </div>
       )}
+    </>
+  );
+}
+
+// ---------------------------------------------------------------------------------------------
+// The test widget form
+
+/** A test widget: which of `TEST_WIDGETS` (by its event type) under which widget ID. Name and URL are the test widget's. */
+export interface TestWidgetDraft {
+  type: string;
+  stateKey: string;
+}
+
+/** A new test widget: the new test widget as `m.widget`. */
+export const newTestWidgetDraft = (stateKey: string): TestWidgetDraft => ({ type: TEST_WIDGETS[0].type, stateKey });
+
+/** The test widget of this event type. */
+export const testWidgetOf = (type: string): StateEvent => TEST_WIDGETS.find((w) => w.type === type) ?? TEST_WIDGETS[0];
+
+const testWidgetLabel = (type: string) => `${type} · ${type === LEGACY_TYPE ? "legacy" : "new"} test widget`;
+
+/**
+ * The state event of a test widget draft, or what is wrong with it. The URL is not checked: the
+ * host ships the test widgets and embeds them. A legacy test widget gets `userId` as its
+ * `creatorUserId`.
+ */
+export function buildTestWidgetEvent(draft: TestWidgetDraft, userId?: string): StateEvent | string {
+  const stateKey = draft.stateKey.trim();
+  if (!stateKey) return "The widget ID is missing.";
+  const { type, content } = testWidgetOf(draft.type);
+  return { type, state_key: stateKey, content: { ...content, ...(type === LEGACY_TYPE && userId ? { creatorUserId: userId } : {}) } };
+}
+
+/**
+ * The fields of the test widget form: only the test widget (one per event type) and the widget
+ * ID can be chosen. The URL is shown read-only with a copy button, so a test widget cannot be lost
+ * by editing it.
+ */
+export function TestWidgetFields({ draft, onChange }: { draft: TestWidgetDraft; onChange: (draft: TestWidgetDraft) => void }) {
+  const dispatch = useDispatch();
+  const urlLabel = useId();
+  const url = String(testWidgetOf(draft.type).content.url);
+  return (
+    <>
+      <Field label="Test widget">
+        <select className="input mono" value={draft.type} onChange={(e) => onChange({ ...draft, type: e.target.value })}>
+          {TEST_WIDGETS.map(({ type }) => (
+            <option key={type} value={type}>
+              {testWidgetLabel(type)}
+            </option>
+          ))}
+        </select>
+      </Field>
+      <Field label="Widget ID">
+        <input className="input mono" value={draft.stateKey} onChange={(e) => onChange({ ...draft, stateKey: e.target.value })} />
+      </Field>
+      <div className="field">
+        <span className="field-l" id={urlLabel}>
+          URL
+        </span>
+        <div className="inline-row">
+          <input className="input mono grow" value={url} readOnly aria-readonly="true" aria-labelledby={urlLabel} />
+          <IconButton icon="copy" title="Copy the URL" onClick={() => dispatch({ type: "widget/copyUrl", url })} />
+        </div>
+      </div>
     </>
   );
 }

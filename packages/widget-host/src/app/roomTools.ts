@@ -15,7 +15,7 @@ export const defaultRoomToolsVm = (): RoomToolsViewModel => ({
   // "widgetHostBehavior" is a section of the Client Backend Tool: open once the tool is opened.
   openSections: ["state", "timeline", "widgetHostBehavior"],
   sendForm: "message",
-  stateForm: "widget",
+  stateForm: "testWidget",
   tools: { open: null, heightShare: 0.5 },
   behavior: DEFAULT_DEV_BEHAVIOR,
   scheduled: {},

@@ -77,11 +77,14 @@ export const DevTools: Story = {
 const noWidgets = mainVm({ workspaces: { ada: workspace([empty]) }, widgets: {} });
 
 /**
- * Add widget: the widget form, only in this host. The form replaces the "Add widget" button, at the
- * top of the list. Prefilled with the test widget and the first free ID. Adding does not open the
- * widget; it appears in the list, marked "Local".
+ * Add widget: the test widget form, only in this host. The form replaces the "Add widget" button, at
+ * the top of the list. The new test widget under the first free ID; its URL is read-only, with a
+ * copy button. Adding does not open the widget; it appears in the list, marked "Local".
  */
 export const AddWidget: Story = { render: () => <AddWidgetPanel main={noWidgets} initial={{}} /> };
+
+/** Add widget: the widget form, for any custom widget. It starts empty. */
+export const AddWidgetCustom: Story = { render: () => <AddWidgetPanel main={noWidgets} initial={{ form: "widget" }} /> };
 
 /** A widget state event as Element's room state explorer shows it: more fields than the form uses. */
 const PASTED_EVENT = {

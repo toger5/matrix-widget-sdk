@@ -1,9 +1,9 @@
-/** DevBackendView › State: the shortcuts, "send state" (widget, Element Call and raw JSON forms), the state explorer and "edit state"; widget state events add and remove widgets of the room overview. */
+/** DevBackendView › State: the shortcuts, "send state" (test widget, widget, Element Call and raw JSON forms; "Update widget"), the state explorer and "edit state"; widget state events add and remove widgets of the room overview. */
 import { expect, type Host, LAB, NEW_WIDGET, test, widgetId } from "./host";
 
 type StateEvent = { eventType: string; stateKey: string; content: Record<string, unknown> };
 const stateOf = async (host: Host, type: string, stateKey = "") => ((await host.store(LAB)).state as StateEvent[]).find((e) => e.eventType === type && e.stateKey === stateKey)?.content;
-const stateForm = (host: Host, name: "Widget" | "Element Call" | "Raw JSON") => host.page.getByRole("tablist", { name: "State form" }).getByRole("tab", { name }).click();
+const stateForm = (host: Host, name: "Test widget" | "Widget" | "Element Call" | "Raw JSON") => host.page.getByRole("tablist", { name: "State form" }).getByRole("tab", { name, exact: true }).click();
 
 test.beforeEach(async ({ host }) => {
   await host.populate("lab", { open: [{ room: LAB }] });
@@ -95,48 +95,113 @@ test("edit state: saving the editor sends a new state event", async ({ host }) =
   expect(await stateOf(host, "m.room.topic")).toEqual({ topic: "Edited in place" });
 });
 
-test("the widget form adds a test widget that opens, and a legacy one; a widget state event without url removes it", async ({ host }) => {
+test("the test widget form sends the three test widgets, its URL read-only; “Update widget” for a widget the room has", async ({ host }) => {
   const view = host.page.getByTestId("devbackend-view");
   const form = view.getByRole("form", { name: "Send state" });
-  const openWhiteboard = host.panels.getByRole("button", { name: "Open Whiteboard" });
+  const url = form.getByRole("textbox", { name: "URL" });
   // The two test widgets of the room.
   await expect(host.panels.getByTestId("room-overview").locator(".ov-widgets").getByRole("button")).toHaveCount(2);
 
-  // Prefilled with the new test widget under the first free widget ID.
+  // The default form: the new test widget as m.widget under the first free widget ID. The URL cannot be edited, only copied.
+  await expect(host.page.getByRole("tablist", { name: "State form" }).getByRole("tab", { name: "Test widget" })).toHaveAttribute("aria-selected", "true");
+  await expect(form.getByLabel("Test widget")).toHaveValue("m.widget");
+  await expect(form.getByLabel("Widget ID")).toHaveValue("widget-2");
+  await expect(url).toHaveValue("http://localhost:5175/new/");
+  await expect(url).not.toBeEditable();
+  await form.getByRole("button", { name: "Copy the URL" }).click();
+  await expect(host.page.getByTestId("toast")).toContainText("URL copied");
+  expect(await host.page.evaluate(() => navigator.clipboard.readText())).toBe("http://localhost:5175/new/");
+
+  // The ID of the room's new test widget: "Update widget" instead of "Send".
+  // Only the State section open and Bob's membership shown, as the stories draw it.
+  await view.getByRole("button", { name: /^Timeline \d/ }).click();
+  await view.getByRole("button", { name: "m.room.member 3" }).click();
+  await view.getByRole("button", { name: "State key @bob:dev.local of m.room.member" }).click();
+  await form.getByLabel("Widget ID").fill("widget-1");
+  await expect(form.getByRole("button", { name: "Update widget" })).toBeVisible();
+  await expect(form.getByRole("button", { name: "Send" })).toHaveCount(0);
+  await host.story("sidepanel-devbackendview-state--update-widget");
+  // The same ID under another event type is another widget.
+  await form.getByLabel("Test widget").selectOption("org.matrix.msc4411.widget");
+  await expect(url).toHaveValue("http://localhost:5175/new/");
+  await form.getByRole("button", { name: "Send" }).click();
+  await expect(host.panels.getByTitle("3 widgets")).toBeVisible();
+  expect(await stateOf(host, "org.matrix.msc4411.widget", "widget-1")).toEqual({ name: "MSC4411 test widget", url: "http://localhost:5175/new/", uses_widget_api: true });
+  // Sent: the same draft now updates it.
+  await expect(form.getByRole("button", { name: "Update widget" })).toBeVisible();
+  await host.panels.getByRole("button", { name: "Open MSC4411 test widget" }).click();
+  await host.ready(widgetId(LAB, "org.matrix.msc4411.widget/widget-1"));
+  await expect(host.tab("MSC4411 test widget")).toBeVisible();
+
+  // The legacy test widget: its templated URL and the legacy fields, the account as its creator.
+  await form.getByLabel("Test widget").selectOption("im.vector.modular.widgets");
+  await expect(url).toHaveValue(/^http:\/\/localhost:5175\/legacy\/\?title=\$title&/);
+  await form.getByLabel("Widget ID").fill("legacy-2");
+  await form.getByRole("button", { name: "Send" }).click();
+  await expect(host.panels.getByTitle("4 widgets")).toBeVisible();
+  expect(await stateOf(host, "im.vector.modular.widgets", "legacy-2")).toMatchObject({ type: "m.custom", name: "Legacy test widget", creatorUserId: "@alice:dev.local", waitForIframeLoad: true, data: { title: "Notes & more" } });
+  await expect(form.getByRole("button", { name: "Update widget" })).toBeVisible();
+
+  // A widget state event without url removes the widget: its ID sends again.
+  await stateForm(host, "Raw JSON");
+  await form.getByLabel("Type").fill("im.vector.modular.widgets");
+  await form.getByLabel("State key").fill("legacy-2");
+  await form.getByLabel("State content (JSON)").fill("{}");
+  await form.getByRole("button", { name: "Send" }).click();
+  await expect(host.panels.getByTitle("3 widgets")).toBeVisible();
+  expect(await stateOf(host, "im.vector.modular.widgets", "legacy-2")).toEqual({});
+  await stateForm(host, "Test widget");
+  await expect(form.getByLabel("Widget ID")).toHaveValue("legacy-2");
+  await expect(form.getByRole("button", { name: "Send" })).toBeVisible();
+});
+
+test("the widget form sends any custom widget: it starts empty, only http(s) URLs; a legacy one gets the legacy fields", async ({ host }) => {
+  const view = host.page.getByTestId("devbackend-view");
+  const form = view.getByRole("form", { name: "Send state" });
+  const openWhiteboard = host.panels.getByRole("button", { name: "Open Whiteboard" });
+  await stateForm(host, "Widget");
   await expect(form.getByLabel("Event type")).toHaveValue("m.widget");
-  await expect(form.getByLabel("URL")).toHaveValue("http://localhost:5175/new/");
+  await expect(form.getByLabel("Widget ID")).toHaveValue("widget-2");
+  await expect(form.getByLabel("Name")).toHaveValue("");
+  await expect(form.getByLabel("URL")).toHaveValue("");
+  // Only the State section open and Bob's membership shown, as the stories draw it.
+  await view.getByRole("button", { name: /^Timeline \d/ }).click();
+  await view.getByRole("button", { name: "m.room.member 3" }).click();
+  await view.getByRole("button", { name: "State key @bob:dev.local of m.room.member" }).click();
+  await host.story("sidepanel-devbackendview-state--widget");
+
   // Only http(s) URLs: the URL becomes the src of an iframe.
+  await form.getByLabel("Name").fill("Whiteboard");
   await form.getByLabel("URL").fill("javascript:alert(1)");
   await form.getByRole("button", { name: "Send" }).click();
   await expect(form.getByRole("alert")).toHaveText("The URL must start with http:// or https://.");
   expect(await stateOf(host, "m.widget", "widget-2")).toBeUndefined();
-  await form.getByLabel("URL").fill("http://localhost:5175/new/");
-  await form.getByLabel("Name").fill("Whiteboard");
+  await form.getByLabel("URL").fill("http://localhost:5175/new/?board=1");
   await form.getByRole("button", { name: "Send" }).click();
   await expect(openWhiteboard).toBeVisible();
   await expect(host.panels.getByTitle("3 widgets")).toBeVisible();
-  expect(await stateOf(host, "m.widget", "widget-2")).toEqual({ name: "Whiteboard", url: "http://localhost:5175/new/", uses_widget_api: true });
+  expect(await stateOf(host, "m.widget", "widget-2")).toEqual({ name: "Whiteboard", url: "http://localhost:5175/new/?board=1", uses_widget_api: true });
+  await expect(form.getByRole("button", { name: "Update widget" })).toBeVisible();
 
   await openWhiteboard.click();
   await host.ready(widgetId(LAB, "m.widget/widget-2"));
   await expect(host.tab("Whiteboard")).toBeVisible();
 
-  // The legacy event type prefills the legacy test widget (the edited name stays) and is embedded through the compat wrapper.
+  // The legacy event type keeps name and URL and is embedded through the compat wrapper.
   await form.getByLabel("Event type").selectOption("im.vector.modular.widgets");
-  await expect(form.getByLabel("URL")).toHaveValue(/^http:\/\/localhost:5175\/legacy\/\?/);
+  await expect(form.getByLabel("URL")).toHaveValue("http://localhost:5175/new/?board=1");
   await expect(form.getByRole("switch", { name: "Uses the widget API" })).toHaveCount(0);
+  await expect(form.getByRole("button", { name: "Send" })).toBeVisible();
   await form.getByLabel("Widget ID").fill("board-legacy");
   await form.getByRole("button", { name: "Send" }).click();
-  await expect.poll(() => stateOf(host, "im.vector.modular.widgets", "board-legacy")).toMatchObject({ type: "m.custom", name: "Whiteboard", creatorUserId: "@alice:dev.local", waitForIframeLoad: true });
   await expect(host.panels.getByTitle("4 widgets")).toBeVisible();
-
-  await stateForm(host, "Raw JSON");
-  await form.getByLabel("Type").fill("im.vector.modular.widgets");
-  await form.getByLabel("State key").fill("board-legacy");
-  await form.getByLabel("State content (JSON)").fill("{}");
-  await form.getByRole("button", { name: "Send" }).click();
-  await expect(host.panels.getByTitle("3 widgets")).toBeVisible();
-  expect(await stateOf(host, "im.vector.modular.widgets", "board-legacy")).toEqual({});
+  expect(await stateOf(host, "im.vector.modular.widgets", "board-legacy")).toEqual({
+    type: "m.custom",
+    name: "Whiteboard",
+    url: "http://localhost:5175/new/?board=1",
+    waitForIframeLoad: true,
+    creatorUserId: "@alice:dev.local",
+  });
 });
 
 test("the Element Call form writes the call widget as Element Web describes it, and the compat wrapper fills in its URL", async ({ host }) => {
@@ -196,7 +261,7 @@ test("the Element Call form writes the call widget as Element Web describes it, 
   await expect(chips.getByRole("tab", { name: "Raw JSON" })).toHaveAttribute("aria-selected", "true");
   await expect(form.getByLabel("State content (JSON)")).toBeVisible();
   await host.page.keyboard.press("Home");
-  await expect(chips.getByRole("tab", { name: "Widget" })).toHaveAttribute("aria-selected", "true");
+  await expect(chips.getByRole("tab", { name: "Test widget" })).toHaveAttribute("aria-selected", "true");
   await host.page.keyboard.press("ArrowLeft");
   await expect(chips.getByRole("tab", { name: "Raw JSON" })).toBeFocused();
 });

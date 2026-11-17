@@ -88,6 +88,8 @@ The Dev tools of a Matrix account (`sidepanel-roomtoolsview--*`) are **not reach
 | `sidepanel-devbackendview--timeline-delayed` | `devbackendTimeline.spec.ts` › delayed event: it is listed under “Scheduled”; “Cancel” drops it and “Send now” sends it |
 | `sidepanel-devbackendview--timeline-pagination-requested` | `devbackendTimeline.spec.ts` › a widget's pagination waits for “Resolve pagination”: the generated messages reach the widget, then the start of the room |
 | `sidepanel-devbackendview--tools-collapsed` | `devbackend.spec.ts` › media tool: open (closing the client tool), upload a file, copy its MXC URI, minimise |
+| `sidepanel-devbackendview-state--widget` | `devbackendState.spec.ts` › the widget form sends any custom widget: it starts empty, only http(s) URLs; a legacy one gets the legacy fields |
+| `sidepanel-devbackendview-state--update-widget` | `devbackendState.spec.ts` › the test widget form sends the three test widgets, its URL read-only; “Update widget” for a widget the room has |
 | `sidepanel-devbackendview-state--element-call` | `devbackendState.spec.ts` › the Element Call form writes the call widget as Element Web describes it, and the compat wrapper fills in its URL |
 | `sidepanel-devbackendview-state--raw-json` | `devbackendState.spec.ts` › send state and the state explorer: the sent event is listed by type and key |
 | `sidepanel-devbackendview-state--edit` | `devbackendState.spec.ts` › edit state: saving the editor sends a new state event |
@@ -120,6 +122,7 @@ The Dev tools of a Matrix account (`sidepanel-roomtoolsview--*`) are **not reach
 | `rooms-roomoverview--plain` | `overview.spec.ts` › a room opens on its overview: the room name is selected; topic, members and widgets |
 | `rooms-roomoverview--dev-tools` | `overview.spec.ts` › with dev tools enabled: “Add widget” and the local widgets after the room's; a DevBackend room has no “Copy to DevBackend” card (partly: the DevBackend card needs a Matrix room) |
 | `rooms-roomoverview--add-widget` | `overview.spec.ts` › Add widget, only in this host: listed as “Local”, nothing is sent; it asks for its capabilities, remembered apart from the room widget's |
+| `rooms-roomoverview--add-widget-custom` | `overview.spec.ts` › Add widget, only in this host: listed as “Local”, nothing is sent; it asks for its capabilities, remembered apart from the room widget's |
 | `rooms-roomoverview--add-widget-json` | `overview.spec.ts` › Add widget, Paste JSON: a whole state event, other fields ignored; not a widget type or not an http(s) URL is refused in the form (a pasted state event as Element's room state explorer shows it) |
 | `rooms-roomoverview--add-widget-refused` | `overview.spec.ts` › Add widget, to the room: the state event is sent as you; replacing a widget of the room asks first; a refusal stays in the form with the draft ("fail sends" of the DevBackend stands for the room's refusal; a real `M_FORBIDDEN` needs a Matrix room) |
 | `rooms-addwidgetform--edit` | `overview.spec.ts` › a local widget: editing its URL forgets its capabilities and reloads it; removing it closes its tab |

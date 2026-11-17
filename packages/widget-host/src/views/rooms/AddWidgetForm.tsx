@@ -1,7 +1,7 @@
 /**
  * "Add widget" of the RoomOverview: a form at the top of the
- * Widgets card. Where the definition comes from (the chips: the widget form, Element Call, a
- * pasted state event) is separate from where it goes ("Add to": only in this host, or the room).
+ * Widgets card. Where the definition comes from (the chips: a test widget, the widget form,
+ * Element Call, a pasted state event) is separate from where it goes ("Add to": only in this host, or the room).
  * The draft is view state. stories `rooms-roomoverview--add-widget*`, `rooms-addwidgetform--*`
  */
 import { useEffect, useState, type FormEvent, type KeyboardEvent } from "react";
@@ -12,23 +12,28 @@ import { useDispatch, useViewEnv } from "../env";
 import {
   ElementCallFields,
   NEW_ELEMENT_CALL,
+  TestWidgetFields,
   WidgetFields,
   buildElementCallEvent,
+  buildTestWidgetEvent,
   buildWidgetEvent,
   freeWidgetId,
+  newTestWidgetDraft,
   newWidgetDraft,
   parseWidgetEvent,
   widgetDraftOf,
   type ElementCallDraft,
+  type TestWidgetDraft,
   type WidgetDraft,
 } from "../forms/widgetForms";
 import { Button, Icon } from "../ui/atoms";
 import { FormChips, JsonArea } from "../ui/forms";
 
-type AddForm = "widget" | "elementCall" | "json";
+type AddForm = "testWidget" | "widget" | "elementCall" | "json";
 export type AddWidgetTarget = "local" | "room";
 
 const FORMS: { form: AddForm; label: string }[] = [
+  { form: "testWidget", label: "Test widget" },
   { form: "widget", label: "Widget" },
   { form: "elementCall", label: "Element Call" },
   { form: "json", label: "Paste JSON" },
@@ -42,6 +47,7 @@ const TARGETS: { target: AddWidgetTarget; label: string; hint: string }[] = [
 export interface AddWidgetDraft {
   form: AddForm;
   target: AddWidgetTarget;
+  testWidget: TestWidgetDraft;
   widget: WidgetDraft;
   call: ElementCallDraft;
   /** The text of "Paste JSON". */
@@ -120,8 +126,9 @@ export function AddWidgetForm({ roomId, roomEvents, localEvents, edit, write, us
   const { widgetEvents } = useViewEnv();
   const { urlProblem } = widgetEvents;
   const [draft, setDraft] = useState<AddWidgetDraft>(() => ({
-    form: "widget",
+    form: "testWidget",
     target: "local",
+    testWidget: newTestWidgetDraft(freeWidgetId([...roomEvents, ...localEvents])),
     widget: edit ? widgetDraftOf(edit) : newWidgetDraft(freeWidgetId([...roomEvents, ...localEvents])),
     call: NEW_ELEMENT_CALL,
     json: "",
@@ -140,6 +147,8 @@ export function AddWidgetForm({ roomId, roomEvents, localEvents, edit, write, us
   const build = (): StateEvent | string => {
     if (edit) return buildWidgetEvent(draft.widget, urlProblem, { base: edit.content });
     switch (draft.form) {
+      case "testWidget":
+        return buildTestWidgetEvent(draft.testWidget, userId);
       case "widget":
         return buildWidgetEvent(draft.widget, urlProblem, { userId });
       case "elementCall":
@@ -170,6 +179,7 @@ export function AddWidgetForm({ roomId, roomEvents, localEvents, edit, write, us
   return (
     <form className="form add-widget" aria-label={edit ? `Edit ${name}` : "Add widget"} onSubmit={submit}>
       {!edit && <FormChips forms={FORMS} active={draft.form} label="Widget form" onSelect={(form) => change({ form })} />}
+      {!edit && draft.form === "testWidget" && <TestWidgetFields draft={draft.testWidget} onChange={(testWidget) => change({ testWidget })} />}
       {(edit || draft.form === "widget") && <WidgetFields draft={draft.widget} onChange={(widget) => change({ widget })} locked={!!edit} />}
       {!edit && draft.form === "elementCall" && <ElementCallFields draft={draft.call} onChange={(call) => change({ call })} />}
       {!edit && draft.form === "json" && (

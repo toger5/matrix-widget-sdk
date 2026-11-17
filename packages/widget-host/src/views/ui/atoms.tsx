@@ -113,7 +113,8 @@ export function IconButton({ icon, title, size = 16, className = "", ...rest }: 
 }
 
 interface BtnProps extends ButtonProps {
-  kind?: "primary" | "danger" | "ghost" | "";
+  /** `warning`: the action replaces something that exists (e.g. "Update widget"). */
+  kind?: "primary" | "danger" | "warning" | "ghost" | "";
   sm?: boolean;
   block?: boolean;
   icon?: IconName;

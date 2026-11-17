@@ -1,7 +1,7 @@
 /**
  * Widget state events of the repository's test widgets (`packages/test-widgets`, port 5175 of
- * `npm run dev`). Plain data: the rooms the URL parameters describe, the prefill of the
- * DevBackendView's widget form and the tests use them.
+ * `npm run dev`). Plain data: the rooms the URL parameters describe, the "Test widget" forms
+ * (Send state of the Dev tools, Add widget) and the tests use them.
  */
 import type { StateEvent } from "./widgetStateEvent";
 
@@ -21,6 +21,13 @@ export const EXAMPLE_NEW: StateEvent = {
   content: { name: "New test widget", url: `${TEST_WIDGETS_URL}new/`, uses_widget_api: true },
 };
 
+/** The new test widget under the unstable event type of MSC4411. */
+export const EXAMPLE_MSC4411: StateEvent = {
+  type: "org.matrix.msc4411.widget",
+  state_key: "widget-1",
+  content: { name: "MSC4411 test widget", url: `${TEST_WIDGETS_URL}new/`, uses_widget_api: true },
+};
+
 export const EXAMPLE_LEGACY: StateEvent = {
   type: "im.vector.modular.widgets",
   state_key: "widget-1",
@@ -35,3 +42,6 @@ export const EXAMPLE_LEGACY: StateEvent = {
     data: { title: "Notes & more" },
   },
 };
+
+/** The test widgets of the "Test widget" form, one per widget event type (in the order of `WIDGET_EVENT_TYPES`). */
+export const TEST_WIDGETS: StateEvent[] = [EXAMPLE_NEW, EXAMPLE_MSC4411, EXAMPLE_LEGACY];

@@ -1537,6 +1537,8 @@ export class AppController {
         );
       case "media/copyMxcUri":
         return this.copy(intent.mxcUri, "MXC URI copied");
+      case "widget/copyUrl":
+        return this.copy(intent.url, "URL copied");
       case "picker/reloadRooms":
         return this.watchRooms();
       case "devTools/copyMessage": {

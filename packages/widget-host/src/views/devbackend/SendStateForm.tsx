@@ -1,10 +1,22 @@
-/** "Send state" of the State section: predefined forms (`../forms/widgetForms`) and raw JSON. stories `sidepanel-devbackendview--state`, `sidepanel-devbackendview-state--*`, `sidepanel-roomtoolsview--state` */
+/** "Send state" of the State section: predefined forms (`../forms/widgetForms`) and raw JSON. A widget form whose event names a widget the room has sends with "Update widget". stories `sidepanel-devbackendview--state`, `sidepanel-devbackendview-state--*`, `sidepanel-roomtoolsview--state` */
 import { useState, type FormEvent } from "react";
 
 import type { MockedStateEvent, RoomId, RoomToolsViewModel } from "../../appViewModel";
 import type { StateEvent } from "../../widgetStateEvent";
 import { useDispatch, useViewEnv } from "../env";
-import { ElementCallFields, NEW_ELEMENT_CALL, WidgetFields, buildElementCallEvent, buildWidgetEvent, freeWidgetId, newWidgetDraft } from "../forms/widgetForms";
+import {
+  ElementCallFields,
+  LEGACY_TYPE,
+  NEW_ELEMENT_CALL,
+  TestWidgetFields,
+  WidgetFields,
+  buildElementCallEvent,
+  buildTestWidgetEvent,
+  buildWidgetEvent,
+  freeWidgetId,
+  newTestWidgetDraft,
+  newWidgetDraft,
+} from "../forms/widgetForms";
 import { Field } from "../ui/atoms";
 import { FormChips, FormError, JsonArea, parseJsonObject, pretty } from "../ui/forms";
 import { DelayRow, NO_DELAY, Sub, delayOf } from "./parts";
@@ -12,6 +24,7 @@ import { DelayRow, NO_DELAY, Sub, delayOf } from "./parts";
 type StateForm = RoomToolsViewModel["stateForm"];
 
 const FORMS: { form: StateForm; label: string }[] = [
+  { form: "testWidget", label: "Test widget" },
   { form: "widget", label: "Widget" },
   { form: "elementCall", label: "Element Call" },
   { form: "raw", label: "Raw JSON" },
@@ -21,6 +34,8 @@ const FORMS: { form: StateForm; label: string }[] = [
 const asStateEvents = (state: MockedStateEvent[]): StateEvent[] => state.map((e) => ({ type: e.type, state_key: e.stateKey, content: e.content }));
 /** A built state event as `roomTools/sendState` takes it; a string (what is wrong with the draft) stays. */
 const asMocked = (event: StateEvent | string): MockedStateEvent | string => (typeof event === "string" ? event : { type: event.type, stateKey: event.state_key, content: event.content });
+/** Whether the room has a widget under this event type and state key: a state event that is not empty (`{}` removed the widget). */
+const hasWidget = (state: MockedStateEvent[], type: string, stateKey: string) => state.some((e) => e.type === type && e.stateKey === stateKey && Object.keys(e.content).length > 0);
 
 interface Props {
   roomId: RoomId;
@@ -34,6 +49,7 @@ interface Props {
 export function SendStateForm({ roomId, form, state, userId }: Props) {
   const dispatch = useDispatch();
   const { urlProblem } = useViewEnv().widgetEvents;
+  const [testWidget, setTestWidget] = useState(() => newTestWidgetDraft(freeWidgetId(asStateEvents(state))));
   const [widget, setWidget] = useState(() => newWidgetDraft(freeWidgetId(asStateEvents(state))));
   const [call, setCall] = useState(NEW_ELEMENT_CALL);
   const [raw, setRaw] = useState(() => ({ type: "m.room.topic", stateKey: "", content: pretty(state.find((e) => e.type === "m.room.topic" && e.stateKey === "")?.content ?? { topic: "" }) }));
@@ -43,6 +59,8 @@ export function SendStateForm({ roomId, form, state, userId }: Props) {
   /** The state event of the shown form, or what is wrong with the draft. The Raw JSON form does not check the URL, so a widget that the room overview lists disabled can be tried. */
   const build = (): MockedStateEvent | string => {
     switch (form) {
+      case "testWidget":
+        return asMocked(buildTestWidgetEvent(testWidget, userId));
       case "widget":
         return asMocked(buildWidgetEvent(widget, urlProblem, { userId }));
       case "elementCall":
@@ -54,6 +72,9 @@ export function SendStateForm({ roomId, form, state, userId }: Props) {
       }
     }
   };
+  /** The widget the shown widget form writes (event type and widget ID), if it is one. */
+  const target = form === "testWidget" ? testWidget : form === "widget" ? widget : form === "elementCall" ? { type: LEGACY_TYPE, stateKey: call.stateKey } : undefined;
+  const update = !!target && hasWidget(state, target.type, target.stateKey.trim());
   const submit = (e: FormEvent) => {
     e.preventDefault();
     const event = build();
@@ -73,6 +94,7 @@ export function SendStateForm({ roomId, form, state, userId }: Props) {
       <Sub title="Send state" />
       <FormChips forms={FORMS} active={form} label="State form" onSelect={selectForm} />
       <form className="form" aria-label="Send state" onSubmit={submit}>
+        {form === "testWidget" && <TestWidgetFields draft={testWidget} onChange={setTestWidget} />}
         {form === "widget" && <WidgetFields draft={widget} onChange={setWidget} />}
         {form === "elementCall" && <ElementCallFields draft={call} onChange={setCall} />}
         {form === "raw" && (
@@ -87,7 +109,7 @@ export function SendStateForm({ roomId, form, state, userId }: Props) {
           </>
         )}
         <FormError error={error} />
-        <DelayRow delay={delay} onChange={setDelay} />
+        <DelayRow delay={delay} onChange={setDelay} update={update} />
       </form>
     </>
   );

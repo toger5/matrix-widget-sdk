@@ -286,8 +286,8 @@ export interface RoomToolsViewModel {
   openSections: RoomToolsSection[];
   /** Which predefined form "send event" shows. "raw" is the JSON editor. */
   sendForm: "message" | "sticker" | "rtcMember" | "media" | "raw";
-  /** Which predefined form "send state" shows. "raw" is type, state key and a JSON editor. stories `sidepanel-devbackendview--state`, `sidepanel-devbackendview-state--element-call`, `sidepanel-devbackendview-state--raw-json` */
-  stateForm: "widget" | "elementCall" | "raw";
+  /** Which predefined form "send state" shows. "raw" is type, state key and a JSON editor. stories `sidepanel-devbackendview--state`, `sidepanel-devbackendview-state--widget`, `sidepanel-devbackendview-state--update-widget`, `sidepanel-devbackendview-state--element-call`, `sidepanel-devbackendview-state--raw-json` */
+  stateForm: "testWidget" | "widget" | "elementCall" | "raw";
   /** DevBackend: the tool boxes below the room box. stories `sidepanel-devbackendview--tools-collapsed`, `sidepanel-devbackendview-tools--*` */
   tools: {
     /** The one open tool box; the other tools are buttons. `null`: only the buttons. */
@@ -756,7 +756,8 @@ export type AppIntent =
   | { type: "mock/toggleTool"; tool: DevBackendTool } // opens the tool box (closing the open one) or minimises it
   | { type: "mock/resizeTool"; heightShare: number } // the share of the open tool box
   | { type: "media/upload"; files: File[] }
-  | { type: "media/copyMxcUri"; mxcUri: string };
+  | { type: "media/copyMxcUri"; mxcUri: string }
+  | { type: "widget/copyUrl"; url: string }; // the copy button of a test widget's URL in the widget forms
 
 /** An intent as it may be logged: the secrets (the recovery key, a password) are left out. */
 export function loggableIntent(intent: AppIntent): Partial<AppIntent> {

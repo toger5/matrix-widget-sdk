@@ -8,7 +8,7 @@ import { DevBackendView } from "./DevBackendView";
 
 const roomTools = (o: Partial<RoomToolsViewModel> = {}): RoomToolsViewModel => roomToolsVm({ openSections: ["state"], ...o });
 
-/** The State section of the DevBackendView, inside the whole view. Its widget form is the `State` story of `SidePanel/DevBackendView`. */
+/** The State section of the DevBackendView, inside the whole view. Its test widget form is the `State` story of `SidePanel/DevBackendView`. */
 const meta: Meta<typeof DevBackendView> = {
   title: "SidePanel/DevBackendView/State",
   component: DevBackendView,
@@ -24,6 +24,19 @@ const showBob = async ({ canvasElement }: { canvasElement: HTMLElement }) => {
   const canvas = within(canvasElement);
   canvas.getByRole("button", { name: /^m\.room\.member/ }).click();
   (await canvas.findByRole("button", { name: "State key @bob:dev.local of m.room.member" })).click();
+};
+
+/** State: send state with the widget form: any custom widget, of any widget event type. It starts empty. */
+export const Widget: Story = { args: { roomTools: roomTools({ stateForm: "widget" }) }, parameters: { size: [348, 1180] }, play: showBob };
+
+/** State: the test widget form under the ID of a widget the room has (`call`): "Update widget" in the warning look instead of "Send". */
+export const UpdateWidget: Story = {
+  args: { roomTools: roomTools() },
+  parameters: { size: [348, 1150] },
+  play: async (context) => {
+    fillIn(within(context.canvasElement).getByLabelText("Widget ID"), "call");
+    await showBob(context);
+  },
 };
 
 /** State: send state with the Element Call form (a legacy `m.call` widget, as Element Web describes its call). */
