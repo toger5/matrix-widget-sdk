@@ -8,7 +8,7 @@
  * What is account-scoped on a real homeserver (media, to-device messages, TURN credentials, RTC
  * transports) is kept in sync across the rooms' backends here.
  */
-import { InMemoryBackend, PaginationStatus, type InMemoryBackendLike, type MatrixEvent, type TurnServer } from "@matrix-widget-tools/widget-host-bindings";
+import { InMemoryBackend, PaginationStatus, type InMemoryBackendLike, type MatrixEvent, type TurnServer } from "@matrix-widget-sdk/host";
 
 import type { MockedPagination, MockedRoomData, MockedStateEvent, MockedTimelineEvent, ScheduledEvent, ToDeviceMessage } from "../../appViewModel";
 import { describesWidget } from "../../lib/widgetEvents";

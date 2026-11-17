@@ -5,7 +5,7 @@
  * rooms changed) into the view model. Views only see `store`, `dispatch` and the data hooks of
  * `AppRoot`.
  */
-import { BackendError } from "@matrix-widget-tools/widget-host-bindings";
+import { BackendError } from "@matrix-widget-sdk/host";
 
 import {
   activeAccount,

@@ -8,7 +8,7 @@
  * A single-use capability (`get_openid`) is only stored when the user chose to allow it always
  * (it is then granted again per use without asking); the runtime decides that, not this store.
  */
-import { capabilityIsKnown } from "@matrix-widget-tools/widget-host-bindings";
+import { capabilityIsKnown } from "@matrix-widget-sdk/host";
 
 const PREFIX = "widget_host_capabilities_v2";
 /** Version 1 (and version 2 entries from before they held the URL) did not say which URL they were approved for: dropped. */

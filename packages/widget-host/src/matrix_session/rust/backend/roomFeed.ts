@@ -1,4 +1,4 @@
-import type { RoomSink, RoomSubjects, Subscription } from "@matrix-widget-tools/widget-host-bindings";
+import type { RoomSink, RoomSubjects, Subscription } from "@matrix-widget-sdk/host";
 import { stateEventTypeFromString, type RoomLike } from "matrix-sdk-uniffi-js";
 
 import { rawToMatrixEvent, stateToMatrixEvent } from "./events";

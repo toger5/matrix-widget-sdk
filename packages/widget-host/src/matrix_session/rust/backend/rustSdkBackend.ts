@@ -21,7 +21,7 @@ import {
   type ToDeviceMessage,
   type ToDeviceSink,
   type TurnServerSink,
-} from "@matrix-widget-tools/widget-host-bindings";
+} from "@matrix-widget-sdk/host";
 import { ClientError, DelayedEventUpdateAction, MediaSource, RtcTransport, type ClientLike, type RoomLike } from "matrix-sdk-uniffi-js";
 
 import { RoomTimelines } from "../../roomTimelines";

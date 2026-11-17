@@ -82,6 +82,13 @@ Measured on an Apple M1 Pro (10 cores), 2026-11-16:
   `Cargo.lock`), builds it for wasm32 (`opt-level 3`, LTO) and runs `wasm-bindgen`. The 4
   dead-code warnings of `widget-host-wasm` (one per sink trait implemented in Rust) are expected.
 - Never edit `src/generated/`, `rust_modules/`, `crates/widget-base-sdk/pkg/` or `dist/`; rebuild.
+- Published (RELEASING.md): `crates/widget-base-sdk/pkg` as `@matrix-widget-sdk/widget` and
+  `packages/widget-host-bindings` as `@matrix-widget-sdk/host` (bundled by `scripts/pack-npm.mjs`;
+  its wasm is found with `new URL("./generated/wasm-bindgen/index_bg.wasm", import.meta.url)` in
+  `src/index.ts`, keep that literal), and the crates `widget-actions`, `widget-logging`,
+  `widget-matrix-backend`, `widget-host-driver`. A new dependency of a published crate must be on
+  crates.io (a path dependency needs a `version`); `widget-base-sdk` is `publish = false`. One
+  version for all: `node scripts/set-version.mjs <v>`.
 - Size of `index_bg.wasm` after this group: 2.15 MB (521 KB gzip); the `url` crate with ICU4X
   IDNA added 257 KB (92 KB gzip). Not optimised further: no `wasm-opt`, and the shim's
   `opt-level` can only be changed through `CARGO_PROFILE_RELEASE_OPT_LEVEL` (the patch file cannot
@@ -93,7 +100,7 @@ Measured on an Apple M1 Pro (10 cores), 2026-11-16:
 |---|---|---|
 | `uniffi = "=0.31"` | root `Cargo.toml` | must match ubrn `0.31.0-6` (`uniffi-bindgen-react-native`, dev dependency) and its runtime `@ubjs/core` `0.31.0-6` in `packages/widget-host-bindings/package.json` |
 | the SDK's uniffi 0.32 | `packages/matrix-sdk-uniffi-js` (ubrn from a commit of the neekolas fork, `package.json`) | its generated code imports the runtime as `uniffi-bindgen-react-native` (rewritten in `scripts/build.sh`), so the two bindings packages each use their own runtime copy on purpose |
-| `wasm-bindgen 0.2.129` | root `Cargo.toml`, `packages/widget-host-bindings/wasm-crate.patch.toml`, `.github/workflows/ci.yml` (`wasm-bindgen-cli@0.2.129`) | the CLI on `PATH` must be the same version (`cargo install wasm-bindgen-cli --version 0.2.129 --locked`); the SDK installs its own CLI into its `rust_modules/tools` |
+| `wasm-bindgen 0.2.129` | root `Cargo.toml`, `packages/widget-host-bindings/wasm-crate.patch.toml`, `.github/actions/setup-web/action.yml` (`wasm-bindgen-cli@0.2.129`, used by ci.yml and release.yml) | the CLI on `PATH` must be the same version (`cargo install wasm-bindgen-cli --version 0.2.129 --locked`); the SDK installs its own CLI into its `rust_modules/tools` |
 | `rust-version = "1.82"` | root `Cargo.toml` | not true any more: `uuid` 1.29 needs 1.89, ICU4X 2.4 (via `url`) 1.88; CI uses stable |
 
 A shared `CARGO_TARGET_DIR` (`build.target-dir` in `~/.cargo/config.toml`) together with a second

@@ -8,7 +8,7 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { InMemoryBackend, legacyAutoApproved, webviewAttributes } from "@matrix-widget-tools/widget-host-bindings";
+import { InMemoryBackend, legacyAutoApproved, webviewAttributes } from "@matrix-widget-sdk/host";
 
 import { LEGACY_WEBVIEW_CAPABILITIES } from "../../widget-compat-wrapper/src/capabilities";
 import { INNER_ALLOW, INNER_SANDBOX } from "../../widget-compat-wrapper/src/wrapper";

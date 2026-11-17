@@ -1,4 +1,4 @@
-import type { Subscription, TurnServerSink } from "@matrix-widget-tools/widget-host-bindings";
+import type { Subscription, TurnServerSink } from "@matrix-widget-sdk/host";
 import type { ClientLike } from "matrix-sdk-uniffi-js";
 
 /** Retry after this long when the homeserver gave no credentials or no lifetime for them. */

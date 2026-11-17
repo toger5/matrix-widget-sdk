@@ -7,7 +7,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
 
-import { InMemoryBackend, WidgetHostDriver, widgetEventTypes, type EmbedOptions, type WidgetIframe } from "@matrix-widget-tools/widget-host-bindings";
+import { InMemoryBackend, WidgetHostDriver, widgetEventTypes, type EmbedOptions, type WidgetIframe } from "@matrix-widget-sdk/host";
 
 import { embedOptions, hostWidgetEvents, ownWidgetDirs, reasonOf, widgetEventParser, wrapperUrl } from "../src/lib/widgetEvents";
 import { roomWidgets } from "../src/views/helpers";

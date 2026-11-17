@@ -43,12 +43,13 @@ More diagrams (legacy widgets, wire format, the actions crate, capabilities, tes
 
 Web packages (npm workspaces under `packages/`, see each README):
 
-| package | what it is |
-|---|---|
-| [`widget-compat-wrapper`](packages/widget-compat-wrapper) | Hosted widget that wraps a legacy matrix-widget-api widget and speaks MSC4412 to the host. Lets a client drop its legacy widget code during the transition. |
-| [`widget-host-bindings`](packages/widget-host-bindings) | The host crates as TypeScript + one wasm module, generated with uniffi-bindgen-react-native (`web` flavour). A JS client implements `MatrixBackend` / `WidgetHostPlatform` against these. |
-| [`widget-host`](packages/widget-host) | Browser host on `widget-host-bindings`: one app that logs in with matrix-rust-sdk (matrix-js-sdk in a `js` build) and opens the widgets of your rooms, or runs on mocked in-memory rooms (the DevBackend, chosen on the login screen or by URL parameters), with per-widget dev tools and the legacy/new embedding decision. For debugging widgets and for manual and e2e testing. The design is in [`appDesign.md`](packages/widget-host/appDesign.md). |
-| [`test-widgets`](packages/test-widgets) | A legacy and an MSC4412 test widget with buttons for the basic actions and a log of what arrives. |
+| package | npm | what it is |
+|---|---|---|
+| [`widget-base-sdk`](crates/widget-base-sdk) (crate, built with wasm-pack) | [`@matrix-widget-sdk/widget`](https://www.npmjs.com/package/@matrix-widget-sdk/widget) | The widget side for JavaScript widgets, see [Widget (JavaScript)](#widget-javascript). |
+| [`widget-compat-wrapper`](packages/widget-compat-wrapper) | [`@matrix-widget-sdk/compat-wrapper`](https://www.npmjs.com/package/@matrix-widget-sdk/compat-wrapper) | Hosted widget that wraps a legacy matrix-widget-api widget and speaks MSC4412 to the host. Lets a client drop its legacy widget code during the transition. |
+| [`widget-host-bindings`](packages/widget-host-bindings) | [`@matrix-widget-sdk/host`](https://www.npmjs.com/package/@matrix-widget-sdk/host) | The host crates as TypeScript + one wasm module, generated with uniffi-bindgen-react-native (`web` flavour). A JS client implements `MatrixBackend` / `WidgetHostPlatform` against these. |
+| [`widget-host`](packages/widget-host) | | Browser host on `widget-host-bindings`: one app that logs in with matrix-rust-sdk (matrix-js-sdk in a `js` build) and opens the widgets of your rooms, or runs on mocked in-memory rooms (the DevBackend, chosen on the login screen or by URL parameters), with per-widget dev tools and the legacy/new embedding decision. For debugging widgets and for manual and e2e testing. The design is in [`appDesign.md`](packages/widget-host/appDesign.md). |
+| [`test-widgets`](packages/test-widgets) | | A legacy and an MSC4412 test widget with buttons for the basic actions and a log of what arrives. |
 
 ```sh
 npm install
@@ -163,12 +164,13 @@ one capability per action, written `source:action[.modifier][:data]`.
 ### Widget (JavaScript)
 
 ```sh
-wasm-pack build crates/widget-base-sdk --target web --out-dir pkg
+npm install @matrix-widget-sdk/widget
+# or from this repository: wasm-pack build crates/widget-base-sdk --target web --out-dir pkg
 ```
 
 ```js
-import init, { WidgetApi } from "./pkg/widget_base_sdk.js";
-await init();
+import init, { WidgetApi } from "@matrix-widget-sdk/widget";   // or "./pkg/widget_base_sdk.js"
+await init();                                       // loads the wasm next to the module (bundlers emit it)
 
 const api = WidgetApi.connectToParent();            // posts to window.parent, filters by event.source
 api.onEvent((ev) => render(ev));
@@ -256,11 +258,12 @@ every requested state type right away, forward new timeline events as they arriv
 ### Host (JavaScript via UniFFI + wasm)
 
 ```sh
-npm run bindings      # packages/widget-host-bindings, see its README
+npm install @matrix-widget-sdk/host
+# or from this repository: npm run bindings (packages/widget-host-bindings, see its README)
 ```
 
 ```ts
-import { uniffiInitAsync, InMemoryBackend, WidgetHostDriver, parseWidgetStateEvent } from "@matrix-widget-tools/widget-host-bindings";
+import { uniffiInitAsync, InMemoryBackend, WidgetHostDriver, parseWidgetStateEvent } from "@matrix-widget-sdk/host";
 await uniffiInitAsync();
 const options = { wrapperUrl: "https://client.example/wrapper/", clientOrigin: location.origin, ownWidgetDirs: [], allowHttp: false };
 const widget = parseWidgetStateEvent(event.type, event.state_key, event.content, options);   // throws WidgetEventError
@@ -348,7 +351,7 @@ await init();
 initLogging("debug");                                      // or ("warn", "widget_base_sdk::client=trace")
 
 // host (web)
-import { LogConfig, LogLevel, setLogSink, setupLogging } from "@matrix-widget-tools/widget-host-bindings";
+import { LogConfig, LogLevel, setLogSink, setupLogging } from "@matrix-widget-sdk/host";
 setupLogging(LogConfig.create({ level: LogLevel.Info, filter: "widget_host_driver::driver=trace" }));
 setLogSink({ log: (record) => rageshake.append(`${record.target}: ${record.message}`) });   // optional
 ```
@@ -381,6 +384,10 @@ npm run bindings && npm run build --workspaces --if-present   # ubrn bindings + 
 receive → read → state update). It is the best place to see the whole protocol in motion.
 
 Proposed changes to MSC4411/MSC4412 and drafts of new MSCs live in [`spec/patch`](spec/patch/README.md).
+
+Releases (npm packages, crates, tags) are cut by `.github/workflows/release.yml`; the setup and
+the procedure are in [`RELEASING.md`](RELEASING.md). `npm run pack:npm` packs the npm packages
+locally (`dist/npm/`), `npm run smoke:npm` installs them into a fresh Vite app.
 
 ### Dev site (GitHub Pages)
 

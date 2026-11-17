@@ -8,7 +8,7 @@
  * and disposed when it stops; a reload (`widget/reload`: "Retry", the reload button of the dev tool
  * bar) disposes it and creates a new one.
  */
-import { capabilityIsKnown, DriverError, WidgetHostDriver, type DriverSnapshot, type MatrixBackend, type WidgetHostPlatform } from "@matrix-widget-tools/widget-host-bindings";
+import { capabilityIsKnown, DriverError, WidgetHostDriver, type DriverSnapshot, type MatrixBackend, type WidgetHostPlatform } from "@matrix-widget-sdk/host";
 
 import { MAX_STATS_BUCKETS, STATS_BUCKET_MS, type WidgetDevToolsData, type WidgetInstanceId, type WidgetMessage } from "../../appViewModel";
 import { loadCapabilities, saveCapabilities } from "../../lib/capabilityStore";

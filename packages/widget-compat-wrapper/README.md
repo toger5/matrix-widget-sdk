@@ -361,6 +361,17 @@ Always:
   that passes `null` cannot talk to any parent, wrapper or not.
 - The legacy 10 s request timeout still applies between widget and host.
 
+## From npm
+
+```sh
+npm install @matrix-widget-sdk/compat-wrapper
+```
+
+The package is the built page and nothing else: `dist/index.html` plus `dist/assets/`, with
+relative asset paths. Copy `node_modules/@matrix-widget-sdk/compat-wrapper/dist/` into the
+client's web root (for example to `/widget_compatibility_wrapper/`) and pass that URL as
+`EmbedOptions.wrapperUrl`. Pinning the package version pins the wrapper the client serves.
+
 ## Development
 
 ```sh

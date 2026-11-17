@@ -5,11 +5,11 @@
  *
  * ubrn's own entrypoint (`generated/index.web.ts`) imports the `.wasm` file as a path, which
  * bundlers like Vite turn into an ES module instead of a URL. This entry does the same work but
- * resolves the module URL the bundler way.
+ * finds the module with `new URL(…, import.meta.url)`, which Vite, webpack 5, Rollup and esbuild
+ * understand and which keeps working after `scripts/pack-npm.mjs` bundles the package for npm
+ * (the bundle keeps the `generated/wasm-bindgen/` path next to it).
  */
-/// <reference path="./vite-env.d.ts" />
 import initWasm from "./generated/wasm-bindgen/index.js";
-import wasmUrl from "./generated/wasm-bindgen/index_bg.wasm?url";
 import * as widget_actions from "./generated/widget_actions";
 import * as widget_host_driver from "./generated/widget_host_driver";
 import * as widget_matrix_backend from "./generated/widget_matrix_backend";
@@ -22,7 +22,7 @@ let ready: Promise<void> | undefined;
  */
 export function uniffiInitAsync(): Promise<void> {
   return (ready ??= (async () => {
-    await initWasm({ module_or_path: wasmUrl });
+    await initWasm({ module_or_path: new URL("./generated/wasm-bindgen/index_bg.wasm", import.meta.url) });
     widget_actions.default.initialize();
     widget_matrix_backend.default.initialize();
     widget_host_driver.default.initialize();

@@ -1,4 +1,4 @@
-import { matrixEventFromJson, type MatrixEvent } from "@matrix-widget-tools/widget-host-bindings";
+import { matrixEventFromJson, type MatrixEvent } from "@matrix-widget-sdk/host";
 import type { MatrixEvent as SdkEvent } from "matrix-js-sdk";
 
 /** A js-sdk event as the bindings' `MatrixEvent`: the decrypted event where there is one. */

@@ -6,6 +6,8 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
+# Only usable as the wasm npm package @matrix-widget-sdk/widget (scripts/pack-npm.mjs).
+publish = false
 
 [lib]
 crate-type = ["lib", "cdylib"]

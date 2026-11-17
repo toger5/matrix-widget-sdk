@@ -11,9 +11,12 @@
     "test": "npm test --workspaces --if-present",
     "dev": "concurrently -k -n host,widgets -c blue,green \"npm:dev -w packages/widget-host\" \"npm:dev -w packages/test-widgets\"",
     "bindings": "npm run ubrn:web -w packages/widget-host-bindings",
-    "build:dev-site": "node scripts/build-dev-site.mjs"
+    "build:dev-site": "node scripts/build-dev-site.mjs",
+    "pack:npm": "node scripts/pack-npm.mjs",
+    "smoke:npm": "node scripts/smoke-npm.mjs"
   },
   "devDependencies": {
-    "concurrently": "^9.0.0"
+    "concurrently": "^9.0.0",
+    "esbuild": "^0.28.2"
   }
 }

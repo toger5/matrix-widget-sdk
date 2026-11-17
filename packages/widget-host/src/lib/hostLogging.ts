@@ -1,4 +1,4 @@
-import { LogConfig, LogLevel, setLogSink, setupLogging } from "@matrix-widget-tools/widget-host-bindings";
+import { LogConfig, LogLevel, setLogSink, setupLogging } from "@matrix-widget-sdk/host";
 
 const LOG_LEVELS = { error: LogLevel.Error, warn: LogLevel.Warn, info: LogLevel.Info, debug: LogLevel.Debug, trace: LogLevel.Trace };
 

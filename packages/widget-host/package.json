@@ -20,7 +20,7 @@
     "@fontsource/ibm-plex-mono": "^5.3.0",
     "@fontsource/ibm-plex-sans-condensed": "^5.3.0",
     "@fontsource/inter": "^5.3.0",
-    "@matrix-widget-tools/widget-host-bindings": "*",
+    "@matrix-widget-sdk/host": "*",
     "matrix-js-sdk": "45.1.0",
     "matrix-sdk-uniffi-js": "*",
     "react": "^19.3.1",

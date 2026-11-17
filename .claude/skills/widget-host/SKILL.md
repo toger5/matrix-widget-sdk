@@ -45,7 +45,7 @@ Check (each prints nothing when the rules hold):
 
 ```sh
 cd packages/widget-host
-grep -rnE 'from "((\.\./)+(lib|matrix_session)/|\.\./\.\./app/|@matrix-widget-tools/widget-host-bindings|matrix-js-sdk|matrix-sdk-uniffi-js)' src/views
+grep -rnE 'from "((\.\./)+(lib|matrix_session)/|\.\./\.\./app/|@matrix-widget-sdk/host|matrix-js-sdk|matrix-sdk-uniffi-js)' src/views
 grep -nE 'from "\.\./app/' src/views/*.ts src/views/*.tsx
 grep -rnE 'from "(\.\./)+session"' src/views | grep -v ':import type '       # value imports; `import type` is fine
 grep -rlE '(from |import\()"(matrix-js-sdk|matrix-sdk-uniffi-js)' src | grep -vE '^src/matrix_session/(js|rust)/'

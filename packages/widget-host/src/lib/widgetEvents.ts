@@ -4,7 +4,7 @@
  * load them; what goes into the iframe a `WidgetHostDriver` says when the widget runs.
  * Views get `hostWidgetEvents` as `ViewEnv.widgetEvents` (they must not import the bindings).
  */
-import { embedUrlProblem, parseWidgetStateEvent, WidgetEventError, type EmbedOptions } from "@matrix-widget-tools/widget-host-bindings";
+import { embedUrlProblem, parseWidgetStateEvent, WidgetEventError, type EmbedOptions } from "@matrix-widget-sdk/host";
 
 import { TEST_WIDGETS_URL } from "../exampleWidgets";
 import type { StateEvent, WidgetEventParser } from "../widgetStateEvent";

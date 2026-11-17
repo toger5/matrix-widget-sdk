@@ -1,0 +1,169 @@
+# Cuts a release: the npm packages (@matrix-widget-sdk/widget, /host, /compat-wrapper) to
+# npmjs.com and the host crates (widget-actions, widget-logging, widget-matrix-backend,
+# widget-host-driver) to crates.io, both with trusted publishing (no stored tokens), then the tag
+# v<version> and a GitHub Release with the npm tarballs attached. See RELEASING.md for the one-time
+# setup and the procedure around it.
+#
+# Dispatched by hand, not on tag push: the tag is created here, after everything was published,
+# so a tag never exists without its packages. A dry run builds, tests and packs (the tarballs are
+# downloadable from the run's summary page) and stops before anything is published or tagged.
+# Re-running after a partial failure skips what is already on the registries.
+
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to release, e.g. 0.2.0. Must equal [workspace.package].version in Cargo.toml (scripts/set-version.mjs)."
+        required: true
+        type: string
+      dry_run:
+        description: "Build only: no publish, tag or GitHub release"
+        required: true
+        type: boolean
+        default: true
+      npm:
+        description: "Publish the npm packages"
+        type: boolean
+        default: true
+      crates:
+        description: "Publish the crates"
+        type: boolean
+        default: true
+
+permissions: {}
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+env:
+  CARGO_TERM_COLOR: always
+  VERSION: ${{ inputs.version }}
+
+jobs:
+  validate:
+    name: Validate ${{ inputs.version }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: A real release runs on main
+        if: ${{ !inputs.dry_run && github.ref != 'refs/heads/main' }}
+        run: |
+          echo "::error::Release from main only (this run: $GITHUB_REF). Dry runs work on any branch."
+          exit 1
+      - name: Every version is ${{ inputs.version }}
+        run: node scripts/set-version.mjs --check "$VERSION"
+      - name: Tag does not exist yet
+        run: |
+          if git ls-remote --exit-code --tags origin "refs/tags/v$VERSION" > /dev/null; then
+            echo "::error::Tag v$VERSION already exists."
+            exit 1
+          fi
+
+  build:
+    needs: validate
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      # The same build as ci.yml's `web` job; the caches from `main` make it quick.
+      - uses: ./.github/actions/setup-web
+      - run: npm run build --workspaces --if-present
+      - run: npm test
+      - run: npm run pack:npm
+      - run: npm run smoke:npm
+      - uses: actions/upload-artifact@v4
+        with:
+          name: npm-packages
+          path: dist/npm/*.tgz
+          if-no-files-found: error
+
+  publish-npm:
+    needs: build
+    if: ${{ !inputs.dry_run && inputs.npm }}
+    runs-on: ubuntu-latest
+    # Settings → Environments → npm: add required reviewers to approve each publish by hand.
+    environment: npm
+    permissions:
+      contents: read
+      id-token: write # npm trusted publishing (OIDC); also signs the provenance statement
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      # Trusted publishing needs npm 11.5.1 or later.
+      - run: npm install --global npm@^11.5.1
+      - uses: actions/download-artifact@v4
+        with:
+          name: npm-packages
+          path: dist/npm
+      - name: Publish
+        run: |
+          # A prerelease (0.2.0-rc.1) must not become `latest`.
+          tag=latest
+          case "$VERSION" in *-*) tag=next ;; esac
+          for tgz in dist/npm/*.tgz; do
+            name="$(tar -xzOf "$tgz" package/package.json | node -p 'JSON.parse(require("fs").readFileSync(0, "utf8")).name')"
+            if npm view "$name@$VERSION" version > /dev/null 2>&1; then
+              echo "$name@$VERSION is already on npm, skipped."
+              continue
+            fi
+            npm publish "$tgz" --access public --tag "$tag"
+          done
+
+  publish-crates:
+    needs: build
+    if: ${{ !inputs.dry_run && inputs.crates }}
+    runs-on: ubuntu-latest
+    environment: crates-io
+    permissions:
+      contents: read
+      id-token: write # crates.io trusted publishing
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@39008827e6b4319a349e9a42dfc90579dd25f1ca # stable
+        with:
+          toolchain: stable
+      - uses: rust-lang/crates-io-auth-action@3268eb413133e2960fa4ae0e963ca76380c54cd9 # v1.0.6
+        id: auth
+      - name: Publish
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
+        run: |
+          # In dependency order; cargo publishes them one after the other and waits for each.
+          packages=()
+          for crate in widget-actions widget-logging widget-matrix-backend widget-host-driver; do
+            if curl -sf -A "matrix-widget-sdk release workflow" "https://crates.io/api/v1/crates/$crate/$VERSION" > /dev/null; then
+              echo "$crate $VERSION is already on crates.io, skipped."
+            else
+              packages+=(-p "$crate")
+            fi
+          done
+          if [ ${#packages[@]} -gt 0 ]; then cargo publish "${packages[@]}"; fi
+
+  github-release:
+    needs: [build, publish-npm, publish-crates]
+    # After both publish jobs, each of which succeeded or was switched off.
+    if: ${{ !cancelled() && !inputs.dry_run && needs.build.result == 'success' && !contains(needs.*.result, 'failure') }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: npm-packages
+          path: dist/npm
+      - name: Tag and GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          prerelease=()
+          case "$VERSION" in *-*) prerelease=(--prerelease) ;; esac
+          gh release create "v$VERSION" dist/npm/*.tgz \
+            --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
+            --title "v$VERSION" --generate-notes "${prerelease[@]}"

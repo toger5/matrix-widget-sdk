@@ -21,7 +21,7 @@ import {
   type ToDeviceMessage,
   type ToDeviceSink,
   type TurnServerSink,
-} from "@matrix-widget-tools/widget-host-bindings";
+} from "@matrix-widget-sdk/host";
 import {
   ClientEvent,
   Direction,

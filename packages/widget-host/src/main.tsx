@@ -1,6 +1,6 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
-import { uniffiInitAsync } from "@matrix-widget-tools/widget-host-bindings";
+import { uniffiInitAsync } from "@matrix-widget-sdk/host";
 
 import { AppRoot } from "./app/AppRoot";
 import { AppController } from "./app/controller";

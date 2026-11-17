@@ -14,7 +14,7 @@ version = "0.1.0"
 edition = "2021"
 rust-version = "1.82"
 license = "Apache-2.0"
-repository = "https://github.com/element-hq/matrix-widget-tools-sdk"
+repository = "https://github.com/toger5/matrix-widget-sdk"
 
 [workspace.dependencies]
 widget-actions = { path = "crates/widget-actions", version = "0.1.0" }

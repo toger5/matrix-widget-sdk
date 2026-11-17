@@ -13,13 +13,17 @@ which talks to `window.parent` via `postMessage`.
 
 ## How to use it (JavaScript)
 
+Published to npm as [`@matrix-widget-sdk/widget`](https://www.npmjs.com/package/@matrix-widget-sdk/widget):
+
 ```sh
+npm install @matrix-widget-sdk/widget
+# or build it from the repository:
 wasm-pack build crates/widget-base-sdk --target web --out-dir pkg
 ```
 
 ```js
-import init, { WidgetApi } from "./pkg/widget_base_sdk.js";
-await init();
+import init, { WidgetApi } from "@matrix-widget-sdk/widget";   // or "./pkg/widget_base_sdk.js"
+await init();   // fetches widget_base_sdk_bg.wasm next to the module; bundlers (Vite, webpack 5) emit it
 
 const api = WidgetApi.connectToParent("https://client.example");   // target origin of the host
 api.onEvent((event) => render(event));                             // forward_event from the host
@@ -42,6 +46,9 @@ const { events, pagination } = await api.readTimeline({ limit: 20 });
 // the capability when needed (the user is usually asked) and rejects when it is refused.
 const { access_token, matrix_server_name } = await api.requestOpenIdToken();
 ```
+
+The type declarations use `Symbol.dispose`: add `"ESNext.Disposable"` to `lib` in the tsconfig
+(or set `skipLibCheck`).
 
 To own the transport (e.g. in tests), use `new WidgetApi((json) => …)` and feed incoming
 messages to `api.handleMessageFromHost(data)`.

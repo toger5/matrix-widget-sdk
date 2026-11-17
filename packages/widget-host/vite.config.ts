@@ -74,7 +74,7 @@ export default defineConfig({
   // Unit tests only; `e2e/` holds the Playwright tests (`npm run e2e`).
   test: { include: ["test/**/*.test.ts"] },
   // Both bindings packages load their .wasm by URL at runtime; keep them out of dependency pre-bundling.
-  optimizeDeps: { exclude: ["@matrix-widget-tools/widget-host-bindings", "matrix-sdk-uniffi-js"] },
+  optimizeDeps: { exclude: ["@matrix-widget-sdk/host", "matrix-sdk-uniffi-js"] },
   build: {
     rollupOptions: {
       // `index.html` is the app; `oidc-callback.html` the OAuth redirect target, which runs in the login popup;

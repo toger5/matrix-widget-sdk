@@ -1,5 +1,5 @@
 {
-  "name": "@matrix-widget-tools/widget-host-bindings",
+  "name": "@matrix-widget-sdk/host",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -23,7 +23,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/element-hq/matrix-widget-tools-sdk",
+    "url": "https://github.com/toger5/matrix-widget-sdk",
     "directory": "packages/widget-host-bindings"
   }
 }

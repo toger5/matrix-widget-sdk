@@ -2,7 +2,7 @@
  * `window.widgetHost`: what scripted runs (Playwright, `e2e/`) use instead of clicking through the
  * DevBackendView and instead of reading the dev tool panels' DOM, which is collapsed and capped.
  */
-import type { DriverSnapshot } from "@matrix-widget-tools/widget-host-bindings";
+import type { DriverSnapshot } from "@matrix-widget-sdk/host";
 
 import type { AppIntent, AppViewModel, RoomId, WidgetDevToolsData, WidgetInstanceId } from "../appViewModel";
 import { stringify } from "../lib/format";

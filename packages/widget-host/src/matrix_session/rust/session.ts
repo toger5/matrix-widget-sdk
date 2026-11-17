@@ -1,4 +1,4 @@
-import { uniffiInitAsync as initHostBindings } from "@matrix-widget-tools/widget-host-bindings";
+import { uniffiInitAsync as initHostBindings } from "@matrix-widget-sdk/host";
 import {
   ClientBuilder,
   ClientError,

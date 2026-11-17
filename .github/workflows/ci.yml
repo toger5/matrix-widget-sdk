@@ -11,6 +11,12 @@ on:
 permissions:
   contents: read
 
+# One run per branch at a time: a newer push to a pull request cancels the older run; on `main`
+# runs queue, so an older run can never deploy the dev site after a newer one.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 env:
   CARGO_TERM_COLOR: always
 
@@ -19,63 +25,56 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@39008827e6b4319a349e9a42dfc90579dd25f1ca # stable
         with:
+          toolchain: stable
           components: clippy, rustfmt
           targets: wasm32-unknown-unknown
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
       - run: cargo fmt --all --check
       - run: cargo clippy --workspace --all-targets --all-features -- -D warnings
       - run: cargo test --workspace
       - run: cargo build --features uniffi -p widget-host-driver
       - run: cargo build --target wasm32-unknown-unknown -p widget-base-sdk
+      # The crates release.yml publishes package and build on their own (RELEASING.md).
+      - run: cargo publish --dry-run -p widget-actions -p widget-logging -p widget-matrix-backend -p widget-host-driver
 
   web:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: wasm32-unknown-unknown
-      - uses: Swatinem/rust-cache@v2
-      # wasm-bindgen-cli must match packages/widget-host-bindings/wasm-crate.patch.toml
-      - uses: taiki-e/install-action@v2
-        with:
-          tool: wasm-pack,wasm-bindgen-cli@0.2.129
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 24
-          cache: npm
-      - run: npm ci
-      - run: npm run wasm
-      - run: npm run bindings
-      # matrix-rust-sdk for the browser (packages/matrix-sdk-uniffi-js). Building it compiles the
-      # whole SDK twice, so the generated output is cached and only rebuilt when the pin, the
-      # SDK additions or the build script change. binaryen is not installed: the build skips its
-      # optional wasm-opt pass (a module about 6% larger, see the package's README).
-      - id: sdk-bindings
-        uses: actions/cache/restore@v4
-        with:
-          path: packages/matrix-sdk-uniffi-js/src/generated
-          key: matrix-sdk-uniffi-js-${{ hashFiles('packages/matrix-sdk-uniffi-js/ubrn.config.yaml', 'packages/matrix-sdk-uniffi-js/scripts/**', 'packages/matrix-sdk-uniffi-js/sdk-additions/**', 'packages/matrix-sdk-uniffi-js/package.json') }}
-      - if: steps.sdk-bindings.outputs.cache-hit != 'true'
-        run: npm run bindings -w packages/matrix-sdk-uniffi-js
-      # Saved at once, not at the end of the job: a later failing step would otherwise throw the
-      # long build away.
-      - if: steps.sdk-bindings.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v4
-        with:
-          path: packages/matrix-sdk-uniffi-js/src/generated
-          key: ${{ steps.sdk-bindings.outputs.cache-primary-key }}
-      - if: steps.sdk-bindings.outputs.cache-hit != 'true'
+      # Toolchains, npm ci, wasm, host bindings, matrix-rust-sdk bindings (shared with release.yml).
+      - id: setup
+        uses: ./.github/actions/setup-web
+      # A freshly built matrix-rust-sdk package, to download from the run's summary page.
+      - if: steps.setup.outputs.sdk-bindings-built == 'true'
         run: npm pack -w packages/matrix-sdk-uniffi-js --pack-destination "$RUNNER_TEMP"
-      - if: steps.sdk-bindings.outputs.cache-hit != 'true'
+      - if: steps.setup.outputs.sdk-bindings-built == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: matrix-sdk-uniffi-js
           path: ${{ runner.temp }}/matrix-sdk-uniffi-js-*.tgz
       - run: npm run build --workspaces --if-present
       - run: npm test
+      # The npm packages as release.yml publishes them (scripts/pack-npm.mjs), checked like a
+      # consumer sees them: publint, types for bundler and node16 resolution, and a fresh Vite app
+      # that installs and builds them (scripts/smoke-npm.mjs).
+      - run: npm run pack:npm
+      - name: Lint the npm packages
+        run: |
+          for tgz in dist/npm/*.tgz; do
+            npx --yes publint@0.3.25 "$tgz"
+          done
+          for tgz in dist/npm/matrix-widget-sdk-widget-*.tgz dist/npm/matrix-widget-sdk-host-*.tgz; do
+            npx --yes @arethetypeswrong/cli@0.18.2 "$tgz" --profile esm-only
+          done
+      - run: npm run smoke:npm
+      - uses: actions/upload-artifact@v4
+        with:
+          name: npm-packages
+          path: dist/npm/*.tgz
+          if-no-files-found: error
+          retention-days: 14
       # Every story has a row in e2e/stories.md, every story id named in docs and tests exists,
       # sketch stories follow their rules (packages/widget-host/e2e/tools/stories.mjs; no server).
       - run: npm run stories -w @matrix-widget-tools/widget-host

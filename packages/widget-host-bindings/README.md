@@ -10,6 +10,20 @@ through the native UniFFI bindings.
 The widget side (`widget-base-sdk`) is not part of this: it only ever runs inside a widget and
 keeps its own wasm-bindgen build.
 
+## From npm
+
+```sh
+npm install @matrix-widget-sdk/host
+```
+
+The npm package is this package bundled into one ES module (`index.js`) with its wasm at
+`generated/wasm-bindgen/index_bg.wasm`. It finds the wasm with `new URL(…, import.meta.url)`, which
+Vite, webpack 5 and Rollup turn into an emitted asset. In Vite, exclude the package from
+dependency pre-bundling (`optimizeDeps: { exclude: ["@matrix-widget-sdk/host"] }`), which would
+move the module away from the file. The type declarations use `Symbol.dispose`, so add
+`"ESNext.Disposable"` to `lib` in the tsconfig (or set `skipLibCheck`). The rest of this README
+covers building it from the repository. `scripts/pack-npm.mjs` makes the npm package (RELEASING.md).
+
 ![Architecture](../../docs/diagrams/01-architecture.svg)
 
 ## Prerequisites
@@ -57,7 +71,7 @@ package entry: it loads the wasm by URL (bundler friendly) and re-exports the th
 import {
   uniffiInitAsync, InMemoryBackend, WidgetHostDriver, matrixEventFromJson, parseWidgetStateEvent,
   type EmbedOptions, type MatrixBackend, type WidgetHostPlatform, type RoomSink, type RoomSubjects, type Subscription,
-} from "@matrix-widget-tools/widget-host-bindings";
+} from "@matrix-widget-sdk/host";
 
 await uniffiInitAsync();                                   // once, before anything else
 

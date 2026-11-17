@@ -1,0 +1,63 @@
+# Everything the web packages need before `npm run build`: the Rust and Node toolchains,
+# `npm ci`, widget-base-sdk (`npm run wasm`), the host bindings (`npm run bindings`) and the
+# matrix-rust-sdk bindings (packages/matrix-sdk-uniffi-js, from the cache when possible).
+# Used by the `web` job of ci.yml and the `build` job of release.yml, so both build the same way;
+# the caches (rust-cache, the SDK bindings) carry the expensive part from `main` to tag and
+# dispatch runs. Needs the repository checked out first.
+#
+# Third-party actions are pinned by commit (the tag in the comment); `actions/*` stay on tags.
+
+name: Set up and build the web packages
+description: Toolchains, npm ci, widget-base-sdk wasm, host bindings and matrix-rust-sdk bindings
+
+outputs:
+  sdk-bindings-built:
+    description: "'true' when the matrix-rust-sdk bindings were built in this run (cache miss), not restored"
+    value: ${{ steps.sdk-bindings.outputs.cache-hit != 'true' }}
+
+runs:
+  using: composite
+  steps:
+    - uses: dtolnay/rust-toolchain@39008827e6b4319a349e9a42dfc90579dd25f1ca # stable
+      with:
+        toolchain: stable
+        targets: wasm32-unknown-unknown
+    - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+    # wasm-bindgen-cli must match packages/widget-host-bindings/wasm-crate.patch.toml
+    - uses: taiki-e/install-action@ab49d3c64680143e184118bed66a46419fc15519 # v2.90.5
+      with:
+        tool: wasm-pack,wasm-bindgen-cli@0.2.129
+    - uses: actions/setup-node@v4
+      with:
+        node-version: 24
+        cache: npm
+    - run: npm ci
+      shell: bash
+    - run: npm run wasm
+      shell: bash
+    - run: npm run bindings
+      shell: bash
+    # matrix-rust-sdk for the browser (packages/matrix-sdk-uniffi-js). Building it compiles the
+    # whole SDK twice, so the generated output is cached and only rebuilt when the pin, the
+    # SDK additions or the build script change. binaryen is not installed: the build skips its
+    # optional wasm-opt pass (a module about 6% larger, see the package's README).
+    # The package.json without its `version`: scripts/set-version.mjs bumps that on every
+    # release, which must not cost an SDK build. The ubrn pin and the scripts still count.
+    - id: sdk-manifest
+      shell: bash
+      run: echo "hash=$(node -e 'const p = require("./packages/matrix-sdk-uniffi-js/package.json"); delete p.version; process.stdout.write(JSON.stringify(p))' | sha256sum | cut -c1-16)" >> "$GITHUB_OUTPUT"
+    - id: sdk-bindings
+      uses: actions/cache/restore@v4
+      with:
+        path: packages/matrix-sdk-uniffi-js/src/generated
+        key: matrix-sdk-uniffi-js-${{ hashFiles('packages/matrix-sdk-uniffi-js/ubrn.config.yaml', 'packages/matrix-sdk-uniffi-js/scripts/**', 'packages/matrix-sdk-uniffi-js/sdk-additions/**') }}-${{ steps.sdk-manifest.outputs.hash }}
+    - if: steps.sdk-bindings.outputs.cache-hit != 'true'
+      run: npm run bindings -w packages/matrix-sdk-uniffi-js
+      shell: bash
+    # Saved at once, not at the end of the job: a later failing step would otherwise throw the
+    # long build away.
+    - if: steps.sdk-bindings.outputs.cache-hit != 'true'
+      uses: actions/cache/save@v4
+      with:
+        path: packages/matrix-sdk-uniffi-js/src/generated
+        key: ${{ steps.sdk-bindings.outputs.cache-primary-key }}

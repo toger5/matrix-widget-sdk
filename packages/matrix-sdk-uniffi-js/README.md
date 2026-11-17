@@ -128,8 +128,9 @@ await uniffiInitAsync();
 const client = await new ClientBuilder().serverNameOrHomeserverUrl("matrix.org").build();
 ```
 
-The wasm file is imported with `?url`, which Vite understands. Exclude the package from Vite's
-dependency pre-bundling (`optimizeDeps.exclude`).
+The wasm file is found with `new URL("./generated/wasm-bindgen/index_bg.wasm", import.meta.url)`,
+which Vite, webpack 5 and Rollup turn into an emitted asset. Exclude the package from Vite's
+dependency pre-bundling (`optimizeDeps.exclude`), which would move the module away from the file.
 
 ## Licence
 

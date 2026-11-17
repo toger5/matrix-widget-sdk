@@ -4,7 +4,7 @@
  * granted, and the `sandbox` and `allow` of a widget's iframe, are the driver's business
  * (`WidgetHostPlatform.loadIframe`); this module only tells them apart and spells them one way.
  */
-import { capabilityIsKnown } from "@matrix-widget-tools/widget-host-bindings";
+import { capabilityIsKnown } from "@matrix-widget-sdk/host";
 
 /** Whether `capability` is a webview capability the driver knows (not some string that starts like one). */
 export const isWebviewCapability = (capability: string): boolean => capability.startsWith("webview:") && capabilityIsKnown(capability);

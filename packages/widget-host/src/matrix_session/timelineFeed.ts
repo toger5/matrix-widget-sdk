@@ -5,7 +5,7 @@
  * about events decrypted late. The pagination itself is the session's `RoomTimelines`, so a
  * widget's pagination and the RoomTimeline's are one, and every widget of the room hears of it.
  */
-import { BackendError, PaginationStatus, type MatrixEvent, type Subscription, type TimelineFilter, type TimelineSink } from "@matrix-widget-tools/widget-host-bindings";
+import { BackendError, PaginationStatus, type MatrixEvent, type Subscription, type TimelineFilter, type TimelineSink } from "@matrix-widget-sdk/host";
 
 import type { RoomTimelines, TimelineChange } from "./roomTimelines";
 

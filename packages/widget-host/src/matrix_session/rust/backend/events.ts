@@ -1,4 +1,4 @@
-import { matrixEventFromJson, type MatrixEvent } from "@matrix-widget-tools/widget-host-bindings";
+import { matrixEventFromJson, type MatrixEvent } from "@matrix-widget-sdk/host";
 import type { RoomStateEvent } from "matrix-sdk-uniffi-js";
 
 /** A room event as the SDK hands it out raw: the JSON of the sync, decrypted. It has no `room_id`. */

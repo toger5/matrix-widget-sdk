@@ -2,10 +2,10 @@
  * Widget state events as the host's types and keys. Pure (types and constants only), so views may
  * import it. What an event means is the driver's business: see `src/lib/widgetEvents.ts`.
  */
-import type { WidgetDefinition } from "@matrix-widget-tools/widget-host-bindings";
+import type { WidgetDefinition } from "@matrix-widget-sdk/host";
 
 /** The driver's types: a widget as its state event describes it, and the iframe the driver asks for. */
-export type { WidgetDefinition, WidgetIframe } from "@matrix-widget-tools/widget-host-bindings";
+export type { WidgetDefinition, WidgetIframe } from "@matrix-widget-sdk/host";
 
 export interface StateEvent {
   type: string;

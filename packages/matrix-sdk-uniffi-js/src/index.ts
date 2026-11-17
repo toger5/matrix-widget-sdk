@@ -4,9 +4,10 @@
  *
  * ubrn's own entrypoint (`generated/index.web.ts`) imports the `.wasm` file as a path, which
  * bundlers like Vite turn into an ES module instead of a URL. This entry does the same work but
- * resolves the module URL the bundler way.
+ * finds the module with `new URL(…, import.meta.url)`, which Vite, webpack 5, Rollup and esbuild
+ * understand and which keeps working after `scripts/pack-npm.mjs` bundles the package for npm
+ * (the bundle keeps the `generated/wasm-bindgen/` path next to it).
  */
-/// <reference path="./vite-env.d.ts" />
 import * as matrix_sdk from "./generated/matrix_sdk";
 import * as matrix_sdk_base from "./generated/matrix_sdk_base";
 import * as matrix_sdk_common from "./generated/matrix_sdk_common";
@@ -16,7 +17,6 @@ import * as matrix_sdk_ffi from "./generated/matrix_sdk_ffi";
 import * as matrix_sdk_ui from "./generated/matrix_sdk_ui";
 import * as ruma_events from "./generated/ruma_events";
 import initWasm from "./generated/wasm-bindgen/index.js";
-import wasmUrl from "./generated/wasm-bindgen/index_bg.wasm?url";
 
 let ready: Promise<void> | undefined;
 
@@ -26,7 +26,7 @@ let ready: Promise<void> | undefined;
  */
 export function uniffiInitAsync(): Promise<void> {
   return (ready ??= (async () => {
-    await initWasm({ module_or_path: wasmUrl });
+    await initWasm({ module_or_path: new URL("./generated/wasm-bindgen/index_bg.wasm", import.meta.url) });
     matrix_sdk.default.initialize();
     matrix_sdk_base.default.initialize();
     matrix_sdk_common.default.initialize();

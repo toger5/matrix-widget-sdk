@@ -7,7 +7,7 @@
  * The in-memory mode (`./matrix_session/memory/devBackend`) implements `LiveSession` too, which is why it gets the
  * same views as a logged-in client.
  */
-import type { MatrixBackend } from "@matrix-widget-tools/widget-host-bindings";
+import type { MatrixBackend } from "@matrix-widget-sdk/host";
 
 import type { StateEvent } from "./widgetStateEvent";
 

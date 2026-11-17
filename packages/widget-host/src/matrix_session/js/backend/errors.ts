@@ -1,4 +1,4 @@
-import { BackendError } from "@matrix-widget-tools/widget-host-bindings";
+import { BackendError } from "@matrix-widget-sdk/host";
 import { MatrixError } from "matrix-js-sdk";
 
 /** A failure of this backend itself, as the driver's error type. */
