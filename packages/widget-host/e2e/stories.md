@@ -30,8 +30,9 @@ Every story of Storybook (`src/**/*.stories.tsx`), one row each, with what reach
 | `app-appshell--room-tools` | **not reachable**: the Dev tools of a Matrix account (see SidePanel) |
 | `app-appshell--room-tools-confirm` | **not reachable**: the Dev tools of a Matrix account (see SidePanel) |
 | `app-appshell--one-panel` | `rooms.spec.ts` › Alt+Shift+N opens the same room in a second panel, where the running widget is grayed out; Alt+W closes it again |
-| `app-appshell--several-panels` | `rooms.spec.ts` › two panels with different rooms: the separator resizes them, double click resets, a panel closes with its widgets |
-| `app-appshell--different-rooms` | `rooms.spec.ts` › two panels with different rooms: the separator resizes them, double click resets, a panel closes with its widgets |
+| `app-appshell--several-panels` | `rooms.spec.ts` › two panels with different rooms: the splitter resizes them, double click resets, a panel closes with its widgets |
+| `app-appshell--panel-rows` | `rooms.spec.ts` › a panel dragged by its header moves to a new row (its widget does not reload) and to a side column; Escape cancels |
+| `app-appshell--different-rooms` | `rooms.spec.ts` › two panels with different rooms: the splitter resizes them, double click resets, a panel closes with its widgets |
 | `app-appshell--same-room-twice` | `widgetMove.spec.ts` › move widget here: the widget changes the room panel without a reload |
 | `app-appshell--pip-enlarged-dev-tools` | `pip.spec.ts` › the dev tools of a widget stay open inside its PiP box, which can be enlarged for them |
 | `app-complete--workspace` | `sidepanel.spec.ts` › workspace: two rooms, the AccountView, dev tools with two panels and a widget in the PiP panel |

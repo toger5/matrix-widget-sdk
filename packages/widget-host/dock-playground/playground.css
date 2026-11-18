@@ -26,5 +26,5 @@
 .pg-body p { margin: 0; }
 .pg-body iframe { flex: 1; min-height: 0; border: 1px dashed var(--border); border-radius: var(--r-2); background: transparent; }
 
-/* The drag ghost. */
-.pg-ghost { padding: 6px 12px; border-radius: var(--r-3); border: 1px solid hsl(var(--hue) 70% 60%); background: var(--surface-3); color: var(--text); font-weight: 600; white-space: nowrap; }
+/* The drag ghost (`dragChip`) in the colour of its room. */
+.dock-chip[style*="--hue"] { border-color: hsl(var(--hue) 70% 60%); }

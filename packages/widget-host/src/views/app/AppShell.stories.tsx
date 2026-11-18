@@ -11,6 +11,7 @@ import {
   devMainVm,
   devToolsLayout,
   mainVm,
+  panelDock,
   panelsVm,
   pickerPanel,
   roomPanel,
@@ -187,6 +188,18 @@ export const OnePanel: Story = {
 
 /** Several room panels next to each other: two rooms and a new panel with the room picker. */
 export const SeveralPanels: Story = { args: { vm: appVm(panelsVm([designPanel, platformPanel, pickerPanel()], [call, board, poll])) } };
+
+/**
+ * Room panels in two rows with a side column (the RoomsArea is a DockArea): a room in each row, a
+ * picker on the right over the full height. Splitters between all of them; a panel moves by its
+ * header, a tab can be dragged out to a panel of its own.
+ */
+const rowsPanels = [designPanel, platformPanel, pickerPanel()];
+export const PanelRows: Story = {
+  args: {
+    vm: appVm(panelsVm(rowsPanels, [call, board, poll], {}, { dock: panelDock(rowsPanels, { rows: [1, 1], right: 1 }) })),
+  },
+};
 
 /** RoomView (2): a different room next to RoomView (1). */
 export const DifferentRooms: Story = {

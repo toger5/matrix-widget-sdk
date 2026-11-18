@@ -4,6 +4,7 @@ import type { MainViewModel, PanelId, RoomViewModel, SettingsViewModel } from ".
 import type { RenderWidget } from "../app/AppShell";
 import { roomOf } from "../helpers";
 import { RoomOverview } from "./RoomOverview";
+import { useRoomsDrag } from "./roomsDrag";
 import { RoomTimeline } from "./RoomTimeline";
 import { TabBar } from "./TabBar";
 import { roomTabDomId, tabDomId, tabPanelDomId } from "./tabInfo";
@@ -33,11 +34,13 @@ export function RoomView({ main, settings, panelId, content, fullscreen = false,
   // Without an active tab the room name is selected. Never fall back to "the first tab": `widgetTab().shown`
   // (and so the PiP panel) only looks at `activeTabId`, and a widget must be on screen at most once.
   const active = tabs.find((t) => t.id === activeTabId);
+  // In the RoomsArea the header (the room name and the free space) moves the panel.
+  const drag = useRoomsDrag();
 
   return (
     <>
       {/* TODO-FINDING fullscreen-close-button - appDesign.md ("Custom behavior") says "no close button shown" in fullscreen; the design drew "Close panel" in the fullscreen header. For now it is hidden like the tab and the + button, and comes back with them on hover / focus (else the panel could not be closed without expanding the LeftBar). */}
-      <header className={`rp-head ${fullscreen ? "fs" : ""}`}>
+      <header className={`rp-head ${fullscreen ? "fs" : ""}`} onPointerDown={drag?.panel({ panelId, roomId, label: name })}>
         <TabBar main={main} settings={settings} panelId={panelId} roomId={roomId} room={room} roomName={name} tabs={tabs} activeTabId={active?.id} fullscreen={fullscreen} />
         <span className="sp" />
         {headerEnd}

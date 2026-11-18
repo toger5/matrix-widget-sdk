@@ -1,4 +1,4 @@
-/** The RoomsArea: room panels, the room picker of an empty panel, a room opening on its overview, resizing, fullscreen and the narrow window. */
+/** The RoomsArea: room panels, the room picker of an empty panel, a room opening on its overview, resizing, dragging panels and tabs, fullscreen and the narrow window. */
 import { expect, LAB, LEGACY_WIDGET, NEW_WIDGET, test, widgetId } from "./host";
 
 const STANDUP = "!standup:dev.local";
@@ -112,7 +112,7 @@ test("Alt+N opens a panel with the recent widgets and rooms: the search scrolls 
   expect((await host.main()).data.recentWidgets.map((r) => r.widgetKey)).toEqual(["m.widget/notes"]);
 });
 
-test("two panels with different rooms: the separator resizes them, double click resets, a panel closes with its widgets", async ({ host }) => {
+test("two panels with different rooms: the splitter resizes them, double click resets, a panel closes with its widgets", async ({ host }) => {
   await host.populate("two-rooms", { sidePanel: null, behavior: { autoApproveCapabilities: true }, open: [{ room: LAB, widgets: [NEW_WIDGET, LEGACY_WIDGET], active: NEW_WIDGET }, { room: STANDUP, widgets: ["notes"] }] });
   await expect(host.panels).toHaveCount(2);
   await expect(host.panels.nth(0)).toHaveAccessibleName("Room panel: Widget lab");
@@ -125,7 +125,7 @@ test("two panels with different rooms: the separator resizes them, double click 
   const before = { left: await width(left), right: await width(right) };
   expect(Math.abs(before.left - before.right)).toBeLessThan(2);
 
-  const separator = host.page.getByRole("separator", { name: "Resize room panels" });
+  const separator = host.page.getByRole("separator", { name: "Resize items" });
   const box = (await separator.boundingBox())!;
   await host.page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
   await host.page.mouse.down();
@@ -149,6 +149,76 @@ test("two panels with different rooms: the separator resizes them, double click 
   await expect(host.panels).toHaveCount(1);
   await expect.poll(async () => Object.keys((await host.main()).widgets)).not.toContain(NOTES);
   expect(Object.keys((await host.main()).widgets)).toContain(NEW);
+});
+
+test("a panel dragged by its header moves to a new row (its widget does not reload) and to a side column; Escape cancels", async ({ host }) => {
+  await host.populate("two-rooms", { sidePanel: null, behavior: { autoApproveCapabilities: true }, open: [{ room: LAB, widgets: [NEW_WIDGET] }, { room: STANDUP, widgets: ["notes"] }] });
+  await host.ready(NEW);
+  await host.ready(NOTES);
+  const token = await host.token(NOTES);
+  const [lab, standup] = [host.panels.nth(0), host.panels.nth(1)];
+  const ids = [await lab.getAttribute("data-panel-id"), await standup.getAttribute("data-panel-id")];
+
+  // Escape cancels: nothing moves.
+  await host.drag(standup.getByRole("tab", { name: "Standup", exact: true }), await host.at(host.roomsArea, 0.5, 0.98), { target: "newRow:1", release: false });
+  await host.page.keyboard.press("Escape");
+  await host.page.mouse.up();
+  await expect(host.page.getByTestId("dock-overlay")).toHaveCount(0);
+  expect((await host.main()).workspaces[(await host.main()).activeAccountId].roomsArea.dock.center.rows).toHaveLength(1);
+
+  // Below the bottom of the dock: a new row.
+  await host.drag(standup.getByRole("tab", { name: "Standup", exact: true }), await host.at(host.roomsArea, 0.5, 0.98), { target: "newRow:1" });
+  const m = await host.main();
+  expect(m.workspaces[m.activeAccountId].roomsArea.dock.center.rows.map((r) => r.items.map((i) => i.id))).toEqual([[ids[0]], [ids[1]]]);
+  const [top, bottom] = [(await lab.boundingBox())!, (await standup.boundingBox())!];
+  expect(bottom.y).toBeGreaterThan(top.y + top.height - 1);
+  expect(await host.token(NOTES)).toBe(token);
+  // The press on the room name was a drag, not a click: the Standup notes tab is still shown.
+  await expect(standup.getByRole("tab", { name: /Standup notes/ })).toHaveAttribute("aria-selected", "true");
+  await expect(host.page.getByRole("separator", { name: "Resize rows" })).toBeVisible();
+
+  // A new panel goes right of the focused one (Standup, pressed last); by its header to the right edge: a side column.
+  await host.page.keyboard.press("Alt+KeyN");
+  await expect(host.panels).toHaveCount(3);
+  const picker = host.panels.nth(2);
+  await expect(picker).toHaveAccessibleName("Room panel: choose a room");
+  await host.drag(picker.locator(".rp-head .sp"), await host.at(host.roomsArea, 0.99, 0.75), { target: "side:right:0" });
+  const after = (await host.main()).workspaces[m.activeAccountId].roomsArea.dock;
+  expect(after.right?.map((i) => i.id)).toEqual([await picker.getAttribute("data-panel-id")]);
+  expect((await picker.boundingBox())!.height).toBeGreaterThan(top.height + bottom.height);
+  await host.story("app-appshell--panel-rows");
+});
+
+test("a tab dragged out becomes a panel of its room; dragged onto another panel of the room it joins it; widgets keep running", async ({ host }) => {
+  await host.populate("lab", { sidePanel: null, behavior: { autoApproveCapabilities: true }, open: [{ room: LAB, widgets: [NEW_WIDGET, LEGACY_WIDGET], active: NEW_WIDGET }] });
+  await host.ready(NEW);
+  const token = await host.token(NEW);
+  const first = host.panels.nth(0);
+  const firstId = (await first.getAttribute("data-panel-id"))!;
+
+  // To the right edge: a new panel at the end of the row (its own panel is no target).
+  await host.drag(host.tab(/New test widget/), await host.at(host.roomsArea, 0.99, 0.5), { target: "between:0:1" });
+  await expect(host.panels).toHaveCount(2);
+  const second = host.panels.nth(1);
+  await expect(second).toHaveAttribute("data-room-id", LAB);
+  await expect(second.getByRole("tab", { name: /New test widget/ })).toHaveAttribute("aria-selected", "true");
+  await expect(first.getByRole("tab", { name: /New test widget/ })).toHaveCount(0);
+  await expect(first.getByRole("tab", { name: /Legacy test widget/ })).toHaveAttribute("aria-selected", "true");
+  await expect(second).toHaveAttribute("data-focused", "true");
+  expect(await host.token(NEW)).toBe(token);
+
+  // Back onto the first panel: it joins its tabs; the emptied panel stays on its RoomOverview.
+  await host.drag(second.getByRole("tab", { name: /New test widget/ }), await host.at(first, 0.5, 0.5), { target: `into:${firstId}` });
+  await expect(host.panels).toHaveCount(2);
+  await expect(first.getByRole("tab", { name: /New test widget/ })).toHaveAttribute("aria-selected", "true");
+  await expect(second.getByRole("tab", { name: "Widget lab", exact: true })).toHaveAttribute("aria-selected", "true");
+  expect(await host.token(NEW)).toBe(token);
+
+  // The emptied panel dragged by its header onto the first one: merged, one panel left.
+  await host.drag(second.getByRole("tab", { name: "Widget lab", exact: true }), await host.at(first, 0.5, 0.5), { target: `into:${firstId}` });
+  await expect(host.panels).toHaveCount(1);
+  await expect(first.getByRole("tab", { name: /New test widget/ })).toHaveAttribute("aria-selected", "true");
+  expect(await host.token(NEW)).toBe(token);
 });
 
 test("Alt+Shift+N opens the same room in a second panel, where the running widget is grayed out; Alt+W closes it again", async ({ host }) => {

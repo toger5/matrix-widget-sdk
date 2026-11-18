@@ -6,6 +6,7 @@ import { useDispatch } from "../env";
 import { roomOf } from "../helpers";
 import { IconButton } from "../ui/atoms";
 import { RoomPicker } from "./RoomPicker";
+import { useRoomsDrag } from "./roomsDrag";
 import { RoomView } from "./RoomView";
 
 export interface RoomPanelProps {
@@ -20,9 +21,10 @@ export interface RoomPanelProps {
   className?: string;
 }
 
-/** One room panel of the RoomsArea, the rounded box: a RoomPicker (no room yet) or a RoomView. stories `rooms-roompicker--*`, `rooms-roomview--*` */
+/** One room panel of the RoomsArea, the rounded box: a RoomPicker (no room yet) or a RoomView. Its header moves it in the RoomsArea (`useRoomsDrag`). stories `rooms-roompicker--*`, `rooms-roomview--*` */
 export function RoomPanel({ main, settings, panel, focused, fullscreen = false, renderWidget, className = "" }: RoomPanelProps) {
   const dispatch = useDispatch();
+  const drag = useRoomsDrag();
   const { content } = panel;
   // TODO-FINDING panel-focus-from-widget - a press inside a widget iframe reaches the host neither as a pointer nor as a focus event, so it does not make its panel the focused one. The runtime would have to report it (window `blur` + `document.activeElement` is the iframe).
   // A press also moves the keyboard focus into the panel: one intent for both.
@@ -48,7 +50,6 @@ export function RoomPanel({ main, settings, panel, focused, fullscreen = false, 
   return (
     <section
       className={`roompanel ${className}`}
-      style={{ flexGrow: panel.widthShare }}
       aria-label={label}
       data-testid="room-panel"
       data-panel-id={panel.id}
@@ -67,7 +68,7 @@ export function RoomPanel({ main, settings, panel, focused, fullscreen = false, 
         <RoomView main={main} settings={settings} panelId={panel.id} content={content} fullscreen={fullscreen} renderWidget={renderWidget} headerEnd={close} />
       ) : (
         <>
-          <header className="rp-head">
+          <header className="rp-head" onPointerDown={drag?.panel({ panelId: panel.id, label: "Choose a room" })}>
             <span className="sp" />
             {close}
           </header>

@@ -41,6 +41,7 @@ All paths below are relative to `packages/widget-host/`.
 | model / runtime | `src/session.ts`, `src/app/runtime/` (`widgetRuntime.ts`, `deviceVerification.ts`), `src/matrix_session/**`, `src/lib/**` (`widgetEvents.ts`: the driver's state event parser) | bindings, `src/app/store.ts`, view model types; an SDK only inside `src/matrix_session/{js,rust}/` | views, the controller |
 | composition root | `src/main.tsx` (shadow root, bindings init, controller, test hook), `src/app/AppRoot.tsx` (`ViewEnv` on the controller, widget iframes) | all | |
 | data (any layer imports it) | `src/exampleWidgets.ts` (state events of the test widgets; their URL comes from `VITE_TEST_WIDGETS_URL` at build time) | types only | anything else |
+| data (any layer imports it) | `src/dock/` (`dockLayout.ts`, `dockTargets.ts`: the pure model of the `DockArea` of `src/views/dock/`, which the RoomsArea is; `RoomsAreaViewModel.dock` and `app/layout.ts` use it) | nothing | anything |
 
 Check (each prints nothing when the rules hold):
 

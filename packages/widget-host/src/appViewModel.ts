@@ -27,8 +27,8 @@
  *       ├─ roomTools?                  UI state of the Dev tools: picked room per account, sections, forms,
  *       │                              what an account scheduled; the DevBackend's tool boxes and behavior
  *       ├─ workspaces[accountId]       WorkspaceLayout: persisted, one per account
- *       │  ├─ roomsArea                RoomsArea → RoomPanel → RoomPicker | RoomView → room name
- *       │  │                           (RoomOverview) + Tabs (widgets, the RoomTimeline)
+ *       │  ├─ roomsArea                RoomsArea (a DockArea: rows and side columns of panels) → RoomPanel
+ *       │  │                           → RoomPicker | RoomView → room name (RoomOverview) + Tabs (widgets, the RoomTimeline)
  *       │  ├─ pip                      PictureInPicturePanel: stacking, position, box size
  *       │  └─ devTools[widgetId]       dock and panels of each widget's WidgetDevToolBar
  *       ├─ data                        what the active account knows: rooms, local widgets, recent widgets and rooms
@@ -58,6 +58,7 @@
  */
 import type { TimelineItem, TimelineViewActions, TimelineViewSnapshot } from "@element-hq/web-shared-components";
 
+import { dockItems, type DockLayout } from "./dock/dockLayout";
 import type { RawEvent, RoomSummary, RoomTimeline, TimelineBody, TimelineReaction, TimelineRow, VerificationEmoji } from "./session";
 import type { StateEvent, WidgetDefinition, WidgetIframe } from "./widgetStateEvent";
 
@@ -366,7 +367,14 @@ export interface WorkspaceLayout {
 
 /** stories `app-appshell--one-panel`, `app-appshell--several-panels`, `app-appshell--shifted-by-side-panel`, `app-appshell--dev-backend-empty` */
 export interface RoomsAreaViewModel {
-  /** Left to right. Empty right after the DevBackend was activated. */
+  /**
+   * Where the panels are and how big (`DockArea`): rows of panels and side columns, changed by
+   * dragging a panel header, a tab, or a splitter. Its item ids are the ids of `panels`, each once,
+   * and the `group` of an item is the room of its panel (none for a picker): a dragged panel or tab
+   * can be dropped into a panel of its room. story `app-appshell--panel-rows`
+   */
+  dock: DockLayout;
+  /** In the order they were opened; the order on screen is the dock's (`panelsInOrder`). Empty right after the DevBackend was activated. */
   panels: RoomPanelViewModel[];
   /** Target of the keyboard shortcuts, and the only panel shown in a narrow window. */
   focusedPanelId?: PanelId;
@@ -374,8 +382,6 @@ export interface RoomsAreaViewModel {
 
 export interface RoomPanelViewModel {
   id: PanelId;
-  /** Share of the RoomsArea width (flex-grow), changed by dragging between panels. */
-  widthShare: number;
   content: RoomPickerViewModel | RoomViewModel;
 }
 
@@ -560,10 +566,21 @@ export const canSwitchToDevBackend = (vm: AppViewModel) => vm.settings.devBacken
 /** The rooms the Dev tools of a Matrix account offer: those open in a room panel, left to right, each once. story `sidepanel-roomtoolsview--room-dropdown` */
 export function roomToolsRooms(m: MainViewModel): RoomId[] {
   const ids: RoomId[] = [];
-  for (const panel of activeWorkspace(m)?.roomsArea.panels ?? []) {
+  const roomsArea = activeWorkspace(m)?.roomsArea;
+  for (const panel of roomsArea ? panelsInOrder(roomsArea) : []) {
     if (panel.content.kind === "room" && !ids.includes(panel.content.roomId)) ids.push(panel.content.roomId);
   }
   return ids;
+}
+
+/**
+ * The panels as they are arranged: the left side columns, the rows top to bottom and left to right,
+ * the right side columns (`dockItems`). A panel the dock does not hold (never in a valid layout) at the end.
+ */
+export function panelsInOrder(roomsArea: RoomsAreaViewModel): RoomPanelViewModel[] {
+  const byId = new Map(roomsArea.panels.map((p) => [p.id, p]));
+  const ordered = dockItems(roomsArea.dock).flatMap((i) => byId.get(i.id) ?? []);
+  return ordered.length === roomsArea.panels.length ? ordered : [...ordered, ...roomsArea.panels.filter((p) => !ordered.includes(p))];
 }
 
 /**
@@ -795,7 +812,8 @@ export type AppIntent =
   | { type: "panel/new"; sameRoomAs?: PanelId } // Alt+N / Alt+Shift+N
   | { type: "panel/close"; panelId: PanelId } // its ×, and Alt+W in a panel without a tab; closes its tabs (see tab/close: always-on-screen widgets keep running in the PiP panel)
   | { type: "panel/focus"; panelId: PanelId }
-  | { type: "panel/resize"; panelId: PanelId; widthShare: number }
+  | { type: "panel/arrange"; dock: DockLayout } // a splitter of the RoomsArea moved, or a panel dragged by its header to a gap: the new arrangement of the same panels
+  | { type: "panel/merge"; panelId: PanelId; intoPanelId: PanelId } // a panel dragged by its header onto a panel of the same room: its tabs join that panel's (at the end, the active one shown), the panel goes
   | { type: "panel/openRoom"; panelId: PanelId; roomId: RoomId; widgetKey?: WidgetKey } // a pick in the RoomPicker of that panel: the panel becomes the room, on its RoomOverview or with the widget as a new tab. A widget that has a tab already: jumps to it, the panel stays the picker
   | { type: "room/open"; roomId: RoomId; widgetKey?: WidgetKey } // a pick in the Room list of the SidePanel: like panel/openRoom, in the panel that shows the room (focused; a room selects its room name), else the focused picker panel, else a new panel right of the focused one
   | { type: "picker/reloadRooms" } // "Try again" of the RoomPicker's error state (`data.rooms.status === "error"`, story `rooms-roompicker--load-error`): asks the session for the rooms again
@@ -806,6 +824,8 @@ export type AppIntent =
   | { type: "tab/openTimeline"; panelId: PanelId } // "Open timeline" / "Show timeline" of the RoomOverview: activates the panel's timeline tab, a new one at the end if it has none; the tab left behind may enter the PiP panel
   | { type: "tab/activate"; panelId: PanelId; tabId: TabId } // the tab of an always-on-screen widget: takes it out of the PiP panel; the tab left behind may enter it
   | { type: "tab/move"; panelId: PanelId; tabId: TabId; toIndex: number }
+  | { type: "tab/toPanel"; panelId: PanelId; tabId: TabId; intoPanelId: PanelId } // a tab dragged onto another panel of its room: it becomes that panel's shown tab (a timeline tab where that panel has one shows that one); the widget keeps running
+  | { type: "tab/split"; panelId: PanelId; tabId: TabId; newPanelId: PanelId; dock: DockLayout } // a tab dragged to a gap of the RoomsArea: a new panel of its room with only that tab, where `dock` (the arrangement with the new panel) puts it; the widget keeps running
   | { type: "tab/close"; panelId: PanelId; tabId: TabId } // Alt+W while a tab is shown; a widget tab stops its widget, unless it is always on screen: then it keeps running in the PiP panel (assumption, see designFeedback.md). The last tab returns the room view to its RoomOverview
   // widgets
   | { type: "widget/reload"; widgetId: WidgetInstanceId } // "Retry" of a failed widget and the reload button of its dev tool bar: stops it and starts it again (new iframe and driver, the current URL of its state event); its dev tools data starts empty

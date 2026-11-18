@@ -22,6 +22,7 @@ import {
   type WidgetInstanceViewModel,
   type WorkspaceLayout,
 } from "../appViewModel";
+import type { DockItem, DockLayout } from "../dock/dockLayout";
 import type { RawEvent, RoomDetails, RoomSummary, RoomTimeline, VerificationEmoji } from "../session";
 import type { StateEvent } from "../widgetStateEvent";
 
@@ -120,9 +121,9 @@ export const widgetTab = (room: RoomKey, widget: WidgetName): TabViewModel => ({
 export const timelineTab = (room: RoomKey): TabViewModel => ({ kind: "timeline", id: `tab-${room}-timeline` });
 /** A room panel showing the tab `activeTabId` (default: the first tab); `null`: the room name is selected, the body is the RoomOverview. */
 export function roomPanel(room: RoomKey, tabs: TabViewModel[], activeTabId: TabId | null = tabs[0]?.id ?? null, id = `panel-${room}`): RoomPanelViewModel {
-  return { id, widthShare: 1, content: { kind: "room", roomId: ROOMS[room].id, tabs, activeTabId: activeTabId ?? undefined } };
+  return { id, content: { kind: "room", roomId: ROOMS[room].id, tabs, activeTabId: activeTabId ?? undefined } };
 }
-export const pickerPanel = (id = "panel-picker"): RoomPanelViewModel => ({ id, widthShare: 1, content: { kind: "picker" } });
+export const pickerPanel = (id = "panel-picker"): RoomPanelViewModel => ({ id, content: { kind: "picker" } });
 
 export const devToolsLayout = (o: Partial<WidgetDevToolsLayout> = {}): WidgetDevToolsLayout => ({
   open: true,
@@ -132,12 +133,29 @@ export const devToolsLayout = (o: Partial<WidgetDevToolsLayout> = {}): WidgetDev
   ...o,
 });
 
-export function workspace(panels: RoomPanelViewModel[], o: Partial<WorkspaceLayout> = {}): WorkspaceLayout {
+/** The dock item of a panel: its room is its group. */
+const dockItem = (panel: RoomPanelViewModel, share?: number): DockItem => ({
+  id: panel.id,
+  ...(panel.content.kind === "room" ? { group: panel.content.roomId } : {}),
+  ...(share === undefined ? {} : { share }),
+});
+
+/** `panels` in rows: `rows` the number of panels per row (default: all in one), `shares` per panel (only with siblings), `right` the last panels as right side columns. */
+export function panelDock(panels: RoomPanelViewModel[], { rows = [panels.length], shares, right = 0 }: { rows?: number[]; shares?: number[]; right?: number } = {}): DockLayout {
+  let i = 0;
+  const take = (n: number) => panels.slice(i, (i += n)).map((p, j) => dockItem(p, shares?.[i - n + j]));
+  const center = { rows: rows.flatMap((n) => (n > 0 ? [{ items: take(n) }] : [])) };
+  const sides = take(right);
+  return sides.length ? { center: { ...center, share: 1 }, right: sides.map((s) => ({ ...s, share: s.share ?? 0.4 })) } : { center };
+}
+
+export function workspace(panels: RoomPanelViewModel[], o: Partial<WorkspaceLayout> & { dock?: DockLayout } = {}): WorkspaceLayout {
+  const { dock = panelDock(panels), ...rest } = o;
   return {
-    roomsArea: { panels, focusedPanelId: panels[0]?.id },
+    roomsArea: { dock, panels, focusedPanelId: panels[0]?.id },
     pip: { stacking: "horizontal", position: { x: 24, y: 24 }, boxSize: { width: 224, height: 140 } },
     devTools: {},
-    ...o,
+    ...rest,
   };
 }
 
@@ -148,7 +166,7 @@ export const byId = (widgets: WidgetInstanceViewModel[]): Record<string, WidgetI
  * `mainVm` with Ada's workspace showing `panels` (laid out with `layout`: dev tools, PiP) and
  * `widgets` running: the screens of the `App/AppShell` and `App/Complete` stories.
  */
-export const panelsVm = (panels: RoomPanelViewModel[], widgets: WidgetInstanceViewModel[], o: Partial<MainViewModel> = {}, layout: Partial<WorkspaceLayout> = {}): MainViewModel =>
+export const panelsVm = (panels: RoomPanelViewModel[], widgets: WidgetInstanceViewModel[], o: Partial<MainViewModel> = {}, layout: Parameters<typeof workspace>[1] = {}): MainViewModel =>
   mainVm({ workspaces: { ada: workspace(panels, layout) }, widgets: byId(widgets), ...o });
 
 /** Recent widgets (`[room, widget]`) and rooms, newest first, as in the room picker of the stories. */

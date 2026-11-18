@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 
-import { ACCOUNTS, appVm, byId, devMainVm, devToolsLayout, panelsVm, roomPanel, roomToolsVm, widgetTab, widgetVm, workspace } from "../fixtures";
+import { ACCOUNTS, appVm, byId, devMainVm, devToolsLayout, panelDock, panelsVm, roomPanel, roomToolsVm, widgetTab, widgetVm, workspace } from "../fixtures";
 import { AppShell } from "./AppShell";
 import { Screen } from "./storyScreen";
 
@@ -18,6 +18,9 @@ const call = widgetVm("design", "call");
 /** Always on screen, its tab not the active one: in the PiP panel. */
 const board = widgetVm("design", "board", { alwaysOnScreen: true });
 
+const workspacePanels = [roomPanel("design", [widgetTab("design", "call"), widgetTab("design", "board")]), roomPanel("platform", [widgetTab("platform", "poll")])];
+const lightPanels = [roomPanel("design", [widgetTab("design", "call"), widgetTab("design", "board")]), roomPanel("rtc", [widgetTab("rtc", "notes")], null)];
+
 /**
  * Workspace: two rooms, dev tools, AccountView, PiP. The SidePanel is open (the RoomsArea shifted),
  * the dev tools are docked on top with two panels, the whiteboard is always on screen and its tab is
@@ -27,10 +30,11 @@ export const Workspace: Story = {
   args: {
     vm: appVm(
       panelsVm(
-        [{ ...roomPanel("design", [widgetTab("design", "call"), widgetTab("design", "board")]), widthShare: 1.7 }, roomPanel("platform", [widgetTab("platform", "poll")])],
+        workspacePanels,
         [call, board, widgetVm("platform", "poll"), widgetVm("rtc", "timer", { alwaysOnScreen: true })],
         { accounts: [ACCOUNTS.ada, ACCOUNTS.work, ACCOUNTS.bot], sidePanel: { view: "account", width: 324 } },
         {
+          dock: panelDock(workspacePanels, { shares: [1.7, 1] }),
           devTools: {
             [call.id]: devToolsLayout({
               panels: [
@@ -88,10 +92,11 @@ export const Light: Story = {
   args: {
     vm: appVm(
       panelsVm(
-        [{ ...roomPanel("design", [widgetTab("design", "call"), widgetTab("design", "board")]), widthShare: 1.5 }, roomPanel("rtc", [widgetTab("rtc", "notes")], null)],
+        lightPanels,
         [call, board, widgetVm("rtc", "notes")],
         { sidePanel: { view: "settings", width: 324 } },
         {
+          dock: panelDock(lightPanels, { shares: [1.5, 1] }),
           devTools: {
             [call.id]: devToolsLayout({
               panels: [

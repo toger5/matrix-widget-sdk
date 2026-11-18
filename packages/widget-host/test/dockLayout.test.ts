@@ -18,7 +18,7 @@ import {
   withinLimits,
   type DockItem,
   type DockLayout,
-} from "../src/views/dock/dockLayout";
+} from "../src/dock/dockLayout";
 
 const item = (id: string, group?: string): DockItem => ({ id, ...(group ? { group } : {}) });
 /** A layout from item ids, without shares: `dock([["a", "b"], ["c"]], { right: ["r"] })`. */

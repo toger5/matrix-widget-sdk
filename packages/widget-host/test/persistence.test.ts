@@ -53,6 +53,8 @@ describe("loadPersisted", () => {
       tabs: [{ kind: "widget", id: "t1", widgetId: "!a:example.org|m.widget/call" }],
       activeTabId: undefined,
     });
+    // the panels of a layout from before the dock: one row
+    expect(ui?.workspaces.ada.roomsArea.dock).toEqual({ center: { rows: [{ items: [{ id: "p1", group: "!a:example.org" }] }] } });
     expect(ui?.workspaces.broken.roomsArea.panels).toEqual([]);
   });
 

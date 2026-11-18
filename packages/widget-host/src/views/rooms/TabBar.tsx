@@ -5,6 +5,7 @@ import type { RoomSummary } from "../../session";
 import { useDispatch, useViewEnv } from "../env";
 import { localWidgetsOf, roomWidgets } from "../helpers";
 import { Avatar, Icon, initials } from "../ui/atoms";
+import { useRoomsDrag } from "./roomsDrag";
 import { roomTabDomId, tabDomId, tabInfo, tabPanelDomId, type TabInfo } from "./tabInfo";
 
 export interface TabBarProps {
@@ -37,6 +38,8 @@ const FADE = 36;
 export function TabBar({ main, settings, panelId, roomId, room, roomName, tabs, activeTabId, fullscreen = false }: TabBarProps) {
   const dispatch = useDispatch();
   const { widgetEvents } = useViewEnv();
+  // In the RoomsArea a tab can be dragged out to a new panel, or onto another panel of the room.
+  const drag = useRoomsDrag();
   const devTools = activeWorkspace(main)?.devTools ?? {};
   const tablistRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
@@ -232,6 +235,7 @@ export function TabBar({ main, settings, panelId, roomId, room, roomName, tabs, 
                   data-tab-id={tab.id}
                   data-widget-id={widgetId}
                   onClick={() => dispatch({ type: "tab/activate", panelId, tabId: tab.id })}
+                  onPointerDown={drag?.tab({ panelId, roomId, tabId: tab.id, label: info.name })}
                   onKeyDown={(e) => onTabKeyDown(e, tab)}
                 >
                   <TabIcon info={info} size={16} iconSize={15} />
@@ -259,7 +263,7 @@ export function TabBar({ main, settings, panelId, roomId, room, roomName, tabs, 
                 </button>
                 {/* ⋯ and × are shown on the active tab; on the others they appear on hover and keyboard focus (CSS). */}
                 {/* TODO-FINDING inactive-tab-buttons-overlay - on an inactive tab the buttons lie over the end of the label (no layout shift on hover). An inactive tab with open dev tools keeps its ⋯ visible and reserves 22px for the ×, so it is wider than in story `rooms-tabbar--overview-active`. */}
-                {/* TODO-FINDING tab-reorder-not-implemented - `tab/move` exists, but dragging a tab is not drawn and not built. */}
+                {/* TODO-FINDING tab-reorder-not-implemented - a tab can be dragged out of the bar (a new panel, or another panel of the room: the RoomsArea's DockArea), but not to another place in its bar: `tab/move` exists, reordering by drag is not drawn and not built. */}
                 {/* TODO-FINDING widget-avatar-initials - the design labels widget avatars with two letters ("WB"); `initials("Whiteboard")` gives "W", and the hue comes from the widget key, not from the design. Widgets have no avatar URL in the view model. */}
                 {settings.devTools && widgetId !== undefined && (
                   <button

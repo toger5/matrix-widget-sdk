@@ -15,8 +15,8 @@ import {
   type DockLayout,
   type DockSplit,
   type DropTarget,
-} from "./dockLayout";
-import { allowedTargets, GAP, isSaturated, measureTargets, nearestTargets, targetKey, type Rect } from "./dockTargets";
+} from "../../dock/dockLayout";
+import { allowedTargets, GAP, isSaturated, measureTargets, nearestTargets, targetKey, type Rect } from "../../dock/dockTargets";
 import { Splitter } from "./Splitter";
 
 /** Something dragged onto a `DockArea`: a tab, or a whole window (`sourceId`). */
@@ -27,6 +27,8 @@ export interface DragItem {
   group?: string;
   /** Set when an item of this dock is dragged (a whole window): it moves to the target. Unset (a tab): the target gets a new item. */
   sourceId?: DockItemId;
+  /** The item a dragged part comes from (a tab of a window): it is no `into` target. */
+  originId?: DockItemId;
   /** Released without a target, Escape, or the window lost the focus: nothing changes, the provider keeps its item. */
   cancel(): void;
   /**

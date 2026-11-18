@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { emptyDock, insertAt, MAX_HORIZONTAL, moveItem, withinLimits, type DockItem, type DockLayout } from "../src/views/dock/dockLayout";
+import { emptyDock, insertAt, MAX_HORIZONTAL, moveItem, withinLimits, type DockItem, type DockLayout } from "../src/dock/dockLayout";
 import {
   allowedTargets,
   distanceToRect,
@@ -15,7 +15,7 @@ import {
   targetKey,
   type MeasuredTarget,
   type Rect,
-} from "../src/views/dock/dockTargets";
+} from "../src/dock/dockTargets";
 
 const item = (id: string, group?: string): DockItem => ({ id, ...(group ? { group } : {}) });
 const keys = (layout: DockLayout, drag = {}) => allowedTargets(layout, drag).map(targetKey);
@@ -70,6 +70,11 @@ describe("allowedTargets", () => {
     expect(keys(l, { group: "r1" }).filter((k) => k.startsWith("into"))).toEqual(["into:a", "into:c"]);
     expect(keys(l, { group: "r1", sourceId: "a" }).filter((k) => k.startsWith("into"))).toEqual(["into:c"]);
     expect(keys(l).filter((k) => k.startsWith("into"))).toEqual([]);
+  });
+
+  it("a part of an item (a tab of a window) is not offered `into` the item it comes from; the gaps stay", () => {
+    const l: DockLayout = { center: { rows: [{ items: [item("a", "r1"), item("c", "r1")] }] } };
+    expect(keys(l, { group: "r1", originId: "a" })).toEqual(["into:c", "between:0:0", "between:0:1", "between:0:2", "newRow:0", "newRow:1"]);
   });
 
   it("a window moved to a side must stay a side column: not when it would fold into the one row left", () => {

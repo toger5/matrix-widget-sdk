@@ -29,6 +29,7 @@ import {
   type MockedTimelineEvent,
   type ModalViewModel,
   type PanelId,
+  type RoomPanelViewModel,
   type RecentRoom,
   type RecentWidget,
   type RoomId,
@@ -53,10 +54,13 @@ import { WIDGET_EVENT_TYPES, localWidgetKey, widgetKey, type StateEvent, type Wi
 import {
   activateTab,
   addPanel,
+  arrangeDock,
   emptyWorkspace,
   findWidgetTab,
   focusPanel,
+  mergePanel,
   moveTab,
+  moveTabToPanel,
   newId,
   openTimelineTab,
   panelOf,
@@ -64,9 +68,9 @@ import {
   removePanel,
   removeTab,
   resizeDevTools,
-  resizePanel,
   roomOfPanel,
   roomTarget,
+  splitTab,
   toggleDevToolPanel,
   updateDevTools,
   updatePanel,
@@ -84,6 +88,8 @@ export const DEV_ACCOUNT_ID: AccountId = "devBackend";
 const MAX_RECENTS = 12;
 const TOAST_MS = 4000;
 /** Why a running device verification ended when the DevBackend became active. */
+/** A new room panel finds no place in the RoomsArea (`addPanel`). */
+const DOCK_FULL = "No room for another panel: close one first";
 const VERIFICATION_STOPPED = "The DevBackend was activated, which stops the verification.";
 
 const errorText = (e: unknown) => (e instanceof Error ? e.message : String(e));
@@ -238,6 +244,21 @@ export class AppController {
   }
   private setWorkspace(change: (ws: WorkspaceLayout) => WorkspaceLayout): void {
     this.setMain((m) => ({ ...m, workspaces: { ...m.workspaces, [m.activeAccountId]: change(m.workspaces[m.activeAccountId] ?? emptyWorkspace()) } }));
+  }
+  /** A new focused panel right of `after` (`addPanel`). `undefined`: the RoomsArea is full, and a toast says so. */
+  private addPanel(content: RoomPanelViewModel["content"], after?: PanelId): PanelId | undefined {
+    const added = this.workspace && addPanel(this.workspace, content, after);
+    if (this.workspace && !added) {
+      this.toast(DOCK_FULL);
+      return undefined;
+    }
+    let panelId: PanelId | undefined;
+    this.setWorkspace((ws) => {
+      const next = addPanel(ws, content, after);
+      panelId = next?.panelId;
+      return next?.ws ?? ws;
+    });
+    return panelId;
   }
   private setWidget(id: WidgetInstanceId, change: (widget: WidgetInstanceViewModel) => WidgetInstanceViewModel): void {
     this.setMain((m) => (m.widgets[id] ? { ...m, widgets: { ...m.widgets, [id]: change(m.widgets[id]) } } : m));
@@ -728,11 +749,9 @@ export class AppController {
     if (target.in === "picker") return this.openRoomIn(target.panelId, roomId, widgetKey);
     let panelId = target.in === "room" ? target.panelId : "";
     if (target.in === "new") {
-      this.setWorkspace((w) => {
-        const added = addPanel(w, { kind: "room", roomId, tabs: [] }, target.after);
-        panelId = added.panelId;
-        return added.ws;
-      });
+      const added = this.addPanel({ kind: "room", roomId, tabs: [] }, target.after);
+      if (added === undefined) return;
+      panelId = added;
     } else if (widgetKey === undefined) {
       this.setWorkspace((w) => activateTab(w, panelId, undefined));
     }
@@ -749,7 +768,7 @@ export class AppController {
     if (tab) return this.setWorkspace((w) => activateTab(w, tab.panelId, tab.tabId));
     // Its room panel was closed: open the room again, on the right.
     const tabId = newId("tab");
-    this.setWorkspace((w) => addPanel(w, { kind: "room", roomId: widget.roomId, tabs: [{ kind: "widget", id: tabId, widgetId: id }], activeTabId: tabId }).ws);
+    this.addPanel({ kind: "room", roomId: widget.roomId, tabs: [{ kind: "widget", id: tabId, widgetId: id }], activeTabId: tabId });
   }
 
   /**
@@ -1238,12 +1257,8 @@ export class AppController {
         if (!found) throw new Error(`seed.open: room ${open.room} has no widget ${name}`);
         return found.key;
       };
-      let panelId = "";
-      this.setWorkspace((ws) => {
-        const added = addPanel(ws, { kind: "room", roomId: room.id, tabs: [] });
-        panelId = added.panelId;
-        return added.ws;
-      });
+      const panelId = this.addPanel({ kind: "room", roomId: room.id, tabs: [] });
+      if (panelId === undefined) throw new Error(`seed.open: no room left in the RoomsArea for ${open.room}`);
       this.addRecent(room.id);
       for (const name of open.widgets ?? []) this.openWidget(panelId, keyOf(name));
       if (open.timeline) this.dispatch({ type: "tab/openTimeline", panelId });
@@ -1379,14 +1394,16 @@ export class AppController {
       case "panel/new": {
         const ws = this.workspace;
         const same = intent.sameRoomAs && ws ? roomOfPanel(ws, intent.sameRoomAs) : undefined;
-        return this.setWorkspace((w) => addPanel(w, same ? { kind: "room", roomId: same.roomId, tabs: [] } : { kind: "picker" }, intent.sameRoomAs ?? w.roomsArea.focusedPanelId).ws);
+        return void this.addPanel(same ? { kind: "room", roomId: same.roomId, tabs: [] } : { kind: "picker" }, intent.sameRoomAs ?? ws?.roomsArea.focusedPanelId);
       }
       case "panel/close":
         return this.closePanel(intent.panelId);
       case "panel/focus":
         return this.setWorkspace((ws) => focusPanel(ws, intent.panelId));
-      case "panel/resize":
-        return this.setWorkspace((ws) => resizePanel(ws, intent.panelId, intent.widthShare));
+      case "panel/arrange":
+        return this.setWorkspace((ws) => arrangeDock(ws, intent.dock));
+      case "panel/merge":
+        return this.setWorkspace((ws) => mergePanel(ws, intent.panelId, intent.intoPanelId));
       case "panel/openRoom":
         return this.openRoomIn(intent.panelId, intent.roomId, intent.widgetKey);
       case "room/open":
@@ -1410,6 +1427,10 @@ export class AppController {
         return this.setWorkspace((ws) => activateTab(ws, intent.panelId, intent.tabId));
       case "tab/move":
         return this.setWorkspace((ws) => moveTab(ws, intent.panelId, intent.tabId, intent.toIndex));
+      case "tab/toPanel":
+        return this.setWorkspace((ws) => moveTabToPanel(ws, intent.panelId, intent.tabId, intent.intoPanelId));
+      case "tab/split":
+        return this.setWorkspace((ws) => splitTab(ws, intent.panelId, intent.tabId, intent.newPanelId, intent.dock));
       case "tab/close":
         return this.closeTab(intent.panelId, intent.tabId);
 

@@ -1,42 +1,151 @@
 /** The pure layout transitions behind the panel, tab and dev tool intents. */
 import { describe, expect, it } from "vitest";
 
-import { MAX_DEV_TOOL_PANELS } from "../src/appViewModel";
+import { MAX_DEV_TOOL_PANELS, panelsInOrder, type WorkspaceLayout } from "../src/appViewModel";
+import { dockItems, MAX_HORIZONTAL, type DockLayout } from "../src/dock/dockLayout";
 import {
   activateTab,
   addPanel,
+  arrangeDock,
   DEFAULT_DEV_TOOLS,
   emptyWorkspace,
   findWidgetTab,
   focusPanel,
+  mergePanel,
+  moveTabToPanel,
   openTimelineTab,
   putTab,
   removePanel,
   removeTab,
   resizeDevTools,
-  resizePanel,
   roomOfPanel,
   roomTarget,
+  splitTab,
   toggleDevToolPanel,
+  updatePanel,
   upgradeWorkspace,
   workspaceWidgetIds,
 } from "../src/app/layout";
 
 const room = (roomId: string) => ({ kind: "room" as const, roomId, tabs: [] });
 const picker = { kind: "picker" as const };
+/** `addPanel` where there is room for the panel. */
+const add = (ws: WorkspaceLayout, content: Parameters<typeof addPanel>[1], after?: string) => {
+  const added = addPanel(ws, content, after);
+  if (!added) throw new Error("the dock is full");
+  return added;
+};
+const roomsOf = (ws: WorkspaceLayout) => panelsInOrder(ws.roomsArea).map((p) => (p.content.kind === "room" ? p.content.roomId : "picker"));
+/** The ids of the dock: [left, rows, right]. */
+const shape = (dock: DockLayout) => [dock.left?.map((i) => i.id) ?? [], dock.center.rows.map((r) => r.items.map((i) => i.id)), dock.right?.map((i) => i.id) ?? []];
 
 describe("layout", () => {
-  it("adds panels on the right of a panel and focuses them", () => {
-    const a = addPanel(emptyWorkspace(), room("!a"));
-    const b = addPanel(a.ws, room("!b"));
-    const c = addPanel(b.ws, room("!c"), a.panelId);
-    expect(c.ws.roomsArea.panels.map((p) => (p.content.kind === "room" ? p.content.roomId : ""))).toEqual(["!a", "!c", "!b"]);
+  it("adds panels on the right of a panel and focuses them; the dock holds each panel once, its room as the group", () => {
+    const a = add(emptyWorkspace(), room("!a"));
+    const b = add(a.ws, room("!b"));
+    const c = add(b.ws, room("!c"), a.panelId);
+    expect(roomsOf(c.ws)).toEqual(["!a", "!c", "!b"]);
+    expect(shape(c.ws.roomsArea.dock)).toEqual([[], [[a.panelId, c.panelId, b.panelId]], []]);
+    expect(dockItems(c.ws.roomsArea.dock).map((i) => i.group)).toEqual(["!a", "!c", "!b"]);
     expect(c.ws.roomsArea.focusedPanelId).toBe(c.panelId);
+    // the focus goes to the panel after the closed one on screen
     expect(removePanel(c.ws, c.panelId).roomsArea.focusedPanelId).toBe(b.panelId);
+    expect(shape(removePanel(c.ws, c.panelId).roomsArea.dock)).toEqual([[], [[a.panelId, b.panelId]], []]);
+  });
+
+  it(`a full row: a new panel goes into a new row at the bottom; a full dock takes none`, () => {
+    let ws = emptyWorkspace();
+    for (let i = 0; i < MAX_HORIZONTAL; i++) ws = add(ws, room(`!${i}`)).ws;
+    const below = add(ws, picker, ws.roomsArea.panels[0].id);
+    expect(shape(below.ws.roomsArea.dock)[1].map((r) => r.length)).toEqual([MAX_HORIZONTAL, 1]);
+    // three full rows
+    ws = below.ws;
+    while (ws.roomsArea.dock.center.rows.length < 3 || ws.roomsArea.dock.center.rows.some((r) => r.items.length < MAX_HORIZONTAL)) {
+      const next = addPanel(ws, picker);
+      if (!next) break;
+      ws = next.ws;
+    }
+    expect(addPanel(ws, picker)).toBeUndefined();
+  });
+
+  it("a picker that becomes a room gets the room as its group", () => {
+    const p = add(emptyWorkspace(), picker);
+    expect(dockItems(p.ws.roomsArea.dock)[0].group).toBeUndefined();
+    const ws = updatePanel(p.ws, p.panelId, (panel) => ({ ...panel, content: room("!a") }));
+    expect(dockItems(ws.roomsArea.dock)[0].group).toBe("!a");
+  });
+
+  it("arranges the same panels anew; other ids or a layout past the limits change nothing", () => {
+    const a = add(emptyWorkspace(), room("!a"));
+    const b = add(a.ws, room("!b"));
+    const rows: DockLayout = { center: { rows: [{ share: 2, items: [{ id: b.panelId }] }, { share: 1, items: [{ id: a.panelId }] }] } };
+    const ws = arrangeDock(b.ws, rows);
+    expect(shape(ws.roomsArea.dock)).toEqual([[], [[b.panelId], [a.panelId]], []]);
+    expect(ws.roomsArea.dock.center.rows[0].share).toBe(2);
+    expect(roomsOf(ws)).toEqual(["!b", "!a"]);
+    expect(arrangeDock(b.ws, { center: { rows: [{ items: [{ id: a.panelId }] }] } })).toBe(b.ws);
+    expect(arrangeDock(b.ws, { center: { rows: [{ items: [{ id: a.panelId }, { id: "x" }] }] } })).toBe(b.ws);
+    expect(arrangeDock(b.ws, { center: { rows: [{ items: [{ id: a.panelId }] }, { items: [{ id: b.panelId }] }, { items: [] }, { items: [] }] } })).toBe(b.ws);
+  });
+
+  it("merges a panel into a panel of its room: its tabs at the end (no second timeline), its shown tab shown, focused", () => {
+    const a = add(emptyWorkspace(), room("!a"));
+    let ws = openTimelineTab(putTab(a.ws, a.panelId, { kind: "widget", id: "t1", widgetId: "!a|w1" }), a.panelId);
+    const b = add(ws, room("!a"));
+    ws = putTab(openTimelineTab(b.ws, b.panelId), b.panelId, { kind: "widget", id: "t2", widgetId: "!a|w2" });
+    const c = add(ws, room("!c"));
+    expect(mergePanel(c.ws, b.panelId, c.panelId)).toBe(c.ws); // another room
+    const merged = mergePanel(c.ws, b.panelId, a.panelId);
+    expect(merged.roomsArea.panels.map((p) => p.id)).toEqual([a.panelId, c.panelId]);
+    expect(roomOfPanel(merged, a.panelId)?.tabs.map((t) => t.id)).toEqual(["t1", roomOfPanel(c.ws, a.panelId)!.tabs[1].id, "t2"]);
+    expect(roomOfPanel(merged, a.panelId)?.activeTabId).toBe("t2");
+    expect(merged.roomsArea.focusedPanelId).toBe(a.panelId);
+    expect(shape(merged.roomsArea.dock)).toEqual([[], [[a.panelId, c.panelId]], []]);
+    // a shown timeline joins a panel that has one: that one is shown
+    const timeline = activateTab(c.ws, b.panelId, roomOfPanel(c.ws, b.panelId)!.tabs[0].id);
+    expect(roomOfPanel(mergePanel(timeline, b.panelId, a.panelId), a.panelId)?.activeTabId).toBe(roomOfPanel(c.ws, a.panelId)!.tabs[1].id);
+  });
+
+  it("moves a tab onto another panel of its room: shown and focused there; a timeline where one is shows that one", () => {
+    const a = add(emptyWorkspace(), room("!a"));
+    let ws = openTimelineTab(putTab(a.ws, a.panelId, { kind: "widget", id: "t1", widgetId: "!a|w1" }), a.panelId);
+    const b = add(ws, room("!a"));
+    ws = openTimelineTab(b.ws, b.panelId);
+    const moved = moveTabToPanel(ws, a.panelId, "t1", b.panelId);
+    expect(roomOfPanel(moved, a.panelId)?.tabs.map((t) => t.kind)).toEqual(["timeline"]);
+    expect(roomOfPanel(moved, b.panelId)?.tabs.map((t) => t.id)).toEqual([roomOfPanel(ws, b.panelId)!.tabs[0].id, "t1"]);
+    expect(roomOfPanel(moved, b.panelId)?.activeTabId).toBe("t1");
+    expect(moved.roomsArea.focusedPanelId).toBe(b.panelId);
+    expect(findWidgetTab(moved, "!a|w1")).toEqual({ panelId: b.panelId, tabId: "t1" });
+
+    const timelineA = roomOfPanel(ws, a.panelId)!.tabs[1].id;
+    const timelineB = roomOfPanel(ws, b.panelId)!.tabs[0].id;
+    const timeline = moveTabToPanel(ws, a.panelId, timelineA, b.panelId);
+    expect(roomOfPanel(timeline, a.panelId)?.tabs.map((t) => t.id)).toEqual(["t1"]);
+    expect(roomOfPanel(timeline, b.panelId)?.tabs.map((t) => t.id)).toEqual([timelineB]);
+    expect(roomOfPanel(timeline, b.panelId)?.activeTabId).toBe(timelineB);
+    // into itself, or a panel of another room: nothing
+    expect(moveTabToPanel(ws, a.panelId, "t1", a.panelId)).toBe(ws);
+    const c = add(ws, room("!c"));
+    expect(moveTabToPanel(c.ws, a.panelId, "t1", c.panelId)).toBe(c.ws);
+  });
+
+  it("splits a tab off into a new panel of its room, where the dock puts it; a dock without it changes nothing", () => {
+    const a = add(emptyWorkspace(), room("!a"));
+    const ws = putTab(putTab(a.ws, a.panelId, { kind: "widget", id: "t1", widgetId: "!a|w1" }), a.panelId, { kind: "widget", id: "t2", widgetId: "!a|w2" });
+    const dock: DockLayout = { center: { rows: [{ items: [{ id: a.panelId }] }, { items: [{ id: "new" }] }] } };
+    const split = splitTab(ws, a.panelId, "t2", "new", dock);
+    expect(roomOfPanel(split, a.panelId)).toMatchObject({ tabs: [{ id: "t1" }], activeTabId: "t1" });
+    expect(roomOfPanel(split, "new")).toEqual({ kind: "room", roomId: "!a", tabs: [{ kind: "widget", id: "t2", widgetId: "!a|w2" }], activeTabId: "t2" });
+    expect(shape(split.roomsArea.dock)).toEqual([[], [[a.panelId], ["new"]], []]);
+    expect(dockItems(split.roomsArea.dock).map((i) => i.group)).toEqual(["!a", "!a"]);
+    expect(split.roomsArea.focusedPanelId).toBe("new");
+    expect(splitTab(ws, a.panelId, "t2", "new", ws.roomsArea.dock)).toBe(ws);
+    expect(splitTab(ws, a.panelId, "nope", "new", dock)).toBe(ws);
   });
 
   it("puts tabs at the end and shows them; closing the shown tab shows its neighbour, the last one the room name", () => {
-    const { ws, panelId } = addPanel(emptyWorkspace(), room("!a"));
+    const { ws, panelId } = add(emptyWorkspace(), room("!a"));
     expect(roomOfPanel(ws, panelId)?.activeTabId).toBeUndefined();
     let next = putTab(ws, panelId, { kind: "widget", id: "t1", widgetId: "!a|w1" });
     next = putTab(next, panelId, { kind: "widget", id: "t2", widgetId: "!a|w2" });
@@ -57,8 +166,8 @@ describe("layout", () => {
   });
 
   it("activates a tab or the room name and focuses the panel; an unknown tab only focuses", () => {
-    const a = addPanel(emptyWorkspace(), room("!a"));
-    const b = addPanel(putTab(a.ws, a.panelId, { kind: "widget", id: "t1", widgetId: "!a|w" }), room("!b"));
+    const a = add(emptyWorkspace(), room("!a"));
+    const b = add(putTab(a.ws, a.panelId, { kind: "widget", id: "t1", widgetId: "!a|w" }), room("!b"));
     expect(b.ws.roomsArea.focusedPanelId).toBe(b.panelId);
 
     const overview = activateTab(b.ws, a.panelId, undefined);
@@ -72,8 +181,8 @@ describe("layout", () => {
   });
 
   it("opens the Timeline tab at the end of a panel, at most one per panel: a second open shows it; it is no widget tab", () => {
-    const a = addPanel(emptyWorkspace(), room("!a"));
-    const b = addPanel(putTab(a.ws, a.panelId, { kind: "widget", id: "t1", widgetId: "!a|w" }), room("!a"));
+    const a = add(emptyWorkspace(), room("!a"));
+    const b = add(putTab(a.ws, a.panelId, { kind: "widget", id: "t1", widgetId: "!a|w" }), room("!a"));
     let ws = openTimelineTab(b.ws, a.panelId);
     const tabs = roomOfPanel(ws, a.panelId)!.tabs;
     expect(tabs.map((t) => t.kind)).toEqual(["widget", "timeline"]);
@@ -89,7 +198,7 @@ describe("layout", () => {
     expect(roomOfPanel(ws, b.panelId)?.tabs.map((t) => t.kind)).toEqual(["timeline"]);
     expect(roomOfPanel(ws, b.panelId)?.tabs[0].id).not.toBe(tabs[1].id);
     // A picker panel has no room: nothing happens.
-    const p = addPanel(ws, picker);
+    const p = add(ws, picker);
     expect(openTimelineTab(p.ws, p.panelId)).toBe(p.ws);
     // Closing it shows its neighbour, like any tab.
     expect(roomOfPanel(removeTab(ws, a.panelId, tabs[1].id), a.panelId)?.activeTabId).toBe("t1");
@@ -128,7 +237,8 @@ describe("layout", () => {
       { kind: "room", roomId: "!b", tabs: [{ kind: "widget", id: "t4", widgetId: "!b|w" }], activeTabId: "t4" },
       { kind: "picker" },
     ]);
-    expect(ws.roomsArea.panels[0].widthShare).toBe(1.5);
+    // the panels of an older layout in one row, with their widths
+    expect(ws.roomsArea.dock).toEqual({ center: { rows: [{ items: [{ id: "p1", share: 1.5, group: "!a" }, { id: "p2", share: 1, group: "!b" }, { id: "p3", share: 1 }] }] } });
     expect(ws.roomsArea.focusedPanelId).toBe("p2");
     expect(ws.pip).toEqual(stored.pip);
     expect(ws.devTools).toEqual(stored.devTools);
@@ -169,7 +279,7 @@ describe("layout", () => {
       pip: { stacking: "diagonal", position: "x", boxSize: { width: "wide", height: 90 } },
       devTools: { "!a|w": { dock: "nowhere", panels: [{ panel: "bogus" }, { panel: "console", share: 0 }], size: null }, "!b|w": 3 },
     });
-    expect(ws.roomsArea).toEqual({ panels: [{ id: "p1", widthShare: 1, content: { kind: "room", roomId: "!a", tabs: [{ kind: "widget", id: "t2", widgetId: "!a|w" }], activeTabId: undefined } }], focusedPanelId: "p1" });
+    expect(ws.roomsArea).toEqual({ dock: { center: { rows: [{ items: [{ id: "p1", group: "!a" }] }] } }, panels: [{ id: "p1", content: { kind: "room", roomId: "!a", tabs: [{ kind: "widget", id: "t2", widgetId: "!a|w" }], activeTabId: undefined } }], focusedPanelId: "p1" });
     expect(ws.pip).toEqual({ ...emptyWorkspace().pip, boxSize: { width: emptyWorkspace().pip.boxSize.width, height: 90 } });
     expect(ws.devTools).toEqual({ "!a|w": { ...DEFAULT_DEV_TOOLS, panels: [{ panel: "console", share: 1 }] } });
   });
@@ -187,17 +297,17 @@ describe("layout", () => {
       },
     });
     expect(ws.roomsArea.panels).toEqual([
-      { id: "p1", widthShare: 1, content: { kind: "room", roomId: "!a", tabs: [tab("t1", "!a|w")], activeTabId: undefined } },
-      { id: "p2", widthShare: 1, content: { kind: "room", roomId: "!a", tabs: [tab("t4", "!a|v")], activeTabId: "t4" } },
+      { id: "p1", content: { kind: "room", roomId: "!a", tabs: [tab("t1", "!a|w")], activeTabId: undefined } },
+      { id: "p2", content: { kind: "room", roomId: "!a", tabs: [tab("t4", "!a|v")], activeTabId: "t4" } },
     ]);
     expect(workspaceWidgetIds(ws)).toEqual(["!a|w", "!a|v"]);
   });
 
   it("a pick of the Room list opens in the panel showing the room (focused first), else in the focused picker, else in a new panel right of the focused one", () => {
-    const a = addPanel(emptyWorkspace(), room("!a"));
-    const p = addPanel(a.ws, picker);
-    const b = addPanel(p.ws, room("!b"));
-    const a2 = addPanel(b.ws, room("!a"));
+    const a = add(emptyWorkspace(), room("!a"));
+    const p = add(a.ws, picker);
+    const b = add(p.ws, room("!b"));
+    const a2 = add(b.ws, room("!a"));
     // !a is shown twice: the focused one wins, else the first from the left
     expect(roomTarget(a2.ws, "!a")).toEqual({ in: "room", panelId: a2.panelId });
     expect(roomTarget(focusPanel(a2.ws, b.panelId), "!a")).toEqual({ in: "room", panelId: a.panelId });
@@ -207,11 +317,26 @@ describe("layout", () => {
     expect(roomTarget(emptyWorkspace(), "!c")).toEqual({ in: "new", after: undefined });
   });
 
-  it("resizes a panel against its right neighbour", () => {
-    const a = addPanel(emptyWorkspace(), room("!a"));
-    const b = addPanel(a.ws, room("!b"));
-    const shares = resizePanel(b.ws, a.panelId, 1.5).roomsArea.panels.map((p) => p.widthShare);
-    expect(shares).toEqual([1.5, 0.5]);
+  it("upgrades a stored dock: unknown and repeated ids are dropped, panels it misses get a place; one past the limits is rebuilt as rows", () => {
+    const panel = (id: string, roomId: string) => ({ id, content: { kind: "room", roomId, tabs: [] } });
+    const panels = [panel("p1", "!a"), panel("p2", "!b"), panel("p3", "!c"), panel("p4", "!d")];
+    const ws = upgradeWorkspace({
+      roomsArea: {
+        dock: {
+          center: { share: 2, rows: [{ share: 3, items: [{ id: "p1", share: 2 }, { id: "gone" }, { id: "p1" }] }, { items: [{ id: "p2" }] }, null] },
+          right: [{ id: "p3", share: 0.5, group: "!wrong" }],
+        },
+        panels,
+      },
+    });
+    expect(shape(ws.roomsArea.dock)).toEqual([[], [["p1"], ["p2", "p4"]], ["p3"]]);
+    expect(ws.roomsArea.dock.right).toEqual([{ id: "p3", share: 0.5, group: "!c" }]);
+    expect(upgradeWorkspace(JSON.parse(JSON.stringify(ws)))).toEqual(ws);
+
+    const many = Array.from({ length: 20 }, (_, i) => ({ ...panel(`p${i}`, `!${i}`), widthShare: 1 }));
+    const tooMany = upgradeWorkspace({ roomsArea: { dock: { center: { rows: [{ items: many.map((p) => ({ id: p.id })) }] } }, panels: many } });
+    expect(tooMany.roomsArea.dock.center.rows.map((r) => r.items.length)).toEqual([MAX_HORIZONTAL, MAX_HORIZONTAL, MAX_HORIZONTAL]);
+    expect(tooMany.roomsArea.panels).toHaveLength(3 * MAX_HORIZONTAL);
   });
 
   it("closes the oldest dev tool panel when one more than the maximum opens", () => {

@@ -4,15 +4,16 @@
  * - Drag a tab: it becomes a new window, or joins a window of its room. A window without tabs closes.
  * Rendered in a shadow root with the app's stylesheet, as the widget host is (src/main.tsx).
  */
-import { StrictMode, useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent, type RefObject } from "react";
+import { StrictMode, useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
 import { createPortal } from "react-dom";
 import { createRoot } from "react-dom/client";
 
 import "../src/styles/fonts";
 import css from "../src/styles/app.css?inline";
 import { DockArea, type DockAreaHandle, type DragItem } from "../src/views/dock/DockArea";
-import { dockItems, insertAt, removeItem, type DockItemId, type DockLayout } from "../src/views/dock/dockLayout";
-import { allowedTargets } from "../src/views/dock/dockTargets";
+import { dockItems, insertAt, removeItem, type DockItemId, type DockLayout } from "../src/dock/dockLayout";
+import { allowedTargets } from "../src/dock/dockTargets";
+import { dragChip, dragStarter } from "../src/views/dock/dragStart";
 import playgroundCss from "./playground.css?inline";
 
 type RoomKey = "design" | "ops" | "random";
@@ -53,24 +54,8 @@ const initial = (): { layout: DockLayout; wins: Record<DockItemId, Win> } => ({
 let counter = 0;
 const newId = () => `w-${(counter++).toString(36)}`;
 
-/** The drag ghost: a small chip with the room colour. */
-function ghost(room: RoomKey, label: string): HTMLElement {
-  const el = document.createElement("div");
-  el.className = "pg-ghost";
-  el.style.setProperty("--hue", String(ROOMS[room].hue));
-  el.textContent = label;
-  return el;
-}
-
-/** The click that follows the release of a drag is not a click on the tab or the header it started on. */
-function swallowNextClick() {
-  const swallow = (e: Event) => {
-    e.stopPropagation();
-    e.preventDefault();
-  };
-  window.addEventListener("click", swallow, true);
-  window.addEventListener("pointerup", () => setTimeout(() => window.removeEventListener("click", swallow, true)), { once: true });
-}
+/** The drag ghost: a chip with the room colour. */
+const ghost = (room: RoomKey, label: string) => dragChip(label, ROOMS[room].hue);
 
 /** A tab name no window has yet. */
 function uniqueTab(name: string, wins: Record<DockItemId, Win>): string {
@@ -79,30 +64,6 @@ function uniqueTab(name: string, wins: Record<DockItemId, Win>): string {
   let out = name;
   while (taken.has(out)) out = `${name} ${++n}`;
   return out;
-}
-
-/** Starts the dock's drag mode after 4px of movement with the button down; a shorter press is a click. */
-function dragStarter(dock: RefObject<DockAreaHandle | null>, makeItem: () => DragItem) {
-  return (e: ReactPointerEvent<HTMLElement>) => {
-    if (e.button !== 0 || (e.target as HTMLElement).closest("button.pg-x")) return;
-    const start = { x: e.clientX, y: e.clientY };
-    const el = e.currentTarget;
-    const move = (ev: PointerEvent) => {
-      if (Math.hypot(ev.clientX - start.x, ev.clientY - start.y) < 4) return;
-      stop();
-      swallowNextClick();
-      dock.current?.startDrag(makeItem(), ev);
-    };
-    const stop = () => {
-      el.removeEventListener("pointermove", move);
-      el.removeEventListener("pointerup", stop);
-      el.removeEventListener("pointercancel", stop);
-    };
-    el.setPointerCapture(e.pointerId);
-    el.addEventListener("pointermove", move);
-    el.addEventListener("pointerup", stop);
-    el.addEventListener("pointercancel", stop);
-  };
 }
 
 function Playground() {
@@ -229,8 +190,8 @@ function Playground() {
         createPortal(
           <Window
             win={w}
-            onRoomDrag={dragStarter(dock, () => roomDrag(w))}
-            onTabDrag={(tab) => dragStarter(dock, () => tabDrag(w, tab))}
+            onRoomDrag={dragStarter(dock, () => roomDrag(w), "button.pg-x")}
+            onTabDrag={(tab) => dragStarter(dock, () => ({ ...tabDrag(w, tab), originId: w.id }))}
             onActivate={(i) => setState((s) => (s.wins[w.id] ? { ...s, wins: { ...s.wins, [w.id]: { ...s.wins[w.id], active: i } } } : s))}
             onClose={() => closeWin(w.id)}
           />,

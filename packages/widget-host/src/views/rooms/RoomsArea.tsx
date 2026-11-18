@@ -1,10 +1,15 @@
-import { Fragment, useRef, type KeyboardEvent, type PointerEvent } from "react";
+import { useEffect, useMemo, useRef } from "react";
+import { createPortal } from "react-dom";
 
-import { activeAccount, activeWorkspace, type MainViewModel, type RoomPanelViewModel, type SettingsViewModel } from "../../appViewModel";
+import { activeAccount, activeWorkspace, type AppIntent, type MainViewModel, type PanelId, type RoomsAreaViewModel, type SettingsViewModel } from "../../appViewModel";
+import type { DockLayout } from "../../dock/dockLayout";
 import type { RenderWidget } from "../app/AppShell";
+import { DockArea, type DockAreaHandle, type DragItem } from "../dock/DockArea";
+import { dragChip, dragStarter } from "../dock/dragStart";
 import { useDispatch, useViewEnv } from "../env";
 import { Button, Icon } from "../ui/atoms";
 import { RoomPanel } from "./RoomPanel";
+import { RoomsDragContext, type RoomsDrag } from "./roomsDrag";
 
 export interface RoomsAreaProps {
   main: MainViewModel;
@@ -16,16 +21,16 @@ export interface RoomsAreaProps {
 
 /** "Every resizable panel has a minimum size." */
 export const MIN_PANEL_WIDTH = 280;
-const KEY_STEP = 24;
+export const MIN_PANEL_HEIGHT = 200;
 
-/** stories `app-appshell--one-panel`, `app-appshell--several-panels`, `app-appshell--different-rooms`, `app-appshell--same-room-twice`; its parts: `rooms-*--*`. The `<main class="roomsarea">` with its room panels. */
+/** stories `app-appshell--one-panel`, `app-appshell--several-panels`, `app-appshell--panel-rows`, `app-appshell--different-rooms`, `app-appshell--same-room-twice`; its parts: `rooms-*--*`. The `<main class="roomsarea">` with its room panels. */
 export function RoomsArea({ main, settings, fullscreen, renderWidget }: RoomsAreaProps) {
   const dispatch = useDispatch();
   const { narrow } = useViewEnv();
   const roomsArea = activeWorkspace(main)?.roomsArea;
   const panels = roomsArea?.panels ?? [];
 
-  if (panels.length === 0) {
+  if (!roomsArea || panels.length === 0) {
     const devBackend = activeAccount(main)?.kind === "devBackend";
     return (
       <main className="roomsarea" data-testid="roomsarea">
@@ -44,95 +49,103 @@ export function RoomsArea({ main, settings, fullscreen, renderWidget }: RoomsAre
     );
   }
 
-  // In a narrow window only the focused panel is visible (the first one if none is marked).
-  const shownId = panels.some((p) => p.id === roomsArea?.focusedPanelId) ? roomsArea?.focusedPanelId : panels[0].id;
-  const visible = narrow ? panels.filter((p) => p.id === shownId) : panels;
+  // In a narrow window only the focused panel is visible (the first one if none is marked), without the dock.
+  if (narrow) {
+    const shown = panels.find((p) => p.id === roomsArea.focusedPanelId) ?? panels[0];
+    return (
+      <main className="roomsarea" data-testid="roomsarea">
+        <RoomPanel main={main} settings={settings} panel={shown} focused={shown.id === roomsArea.focusedPanelId} fullscreen={fullscreen} renderWidget={renderWidget} />
+      </main>
+    );
+  }
 
-  return (
-    <main className="roomsarea" data-testid="roomsarea">
-      {visible.map((panel, i) => (
-        <Fragment key={panel.id}>
-          {i > 0 && <PanelSeparator left={visible[i - 1]} right={panel} />}
-          <RoomPanel main={main} settings={settings} panel={panel} focused={panel.id === roomsArea?.focusedPanelId} fullscreen={fullscreen} renderWidget={renderWidget} />
-        </Fragment>
-      ))}
-    </main>
-  );
+  return <DockedPanels main={main} settings={settings} roomsArea={roomsArea} fullscreen={fullscreen} renderWidget={renderWidget} />;
 }
 
+let counter = 0;
+/** Ids of panels made by a tab dropped on a gap; unique within the stored layout, like the controller's. */
+const newPanelId = () => `panel-${Date.now().toString(36)}-d${(counter++).toString(36)}`;
+
 /**
- * The drag handle between two room panels. It lies over the gap (8px) and changes the share of
- * the panel on its left; the two neighbours keep their common width.
+ * The panels in a `DockArea`. Each panel is rendered (a portal) into a container element of its
+ * own, made once, which the dock moves into its cell: React keeps the panel, and its widgets are
+ * `<slot>`s, so moving a panel reloads no iframe.
  */
-function PanelSeparator({ left, right }: { left: RoomPanelViewModel; right: RoomPanelViewModel }) {
+function DockedPanels({ main, settings, roomsArea, fullscreen, renderWidget }: Omit<RoomsAreaProps, "main"> & { main: MainViewModel; roomsArea: RoomsAreaViewModel }) {
   const dispatch = useDispatch();
-  const drag = useRef<{ startX: number; leftWidth: number; total: number } | undefined>(undefined);
-  const sum = left.widthShare + right.widthShare;
-
-  /** The current widths of the two neighbours, in px. */
-  const widths = (separator: Element) => {
-    const leftWidth = separator.previousElementSibling?.getBoundingClientRect().width ?? 0;
-    const rightWidth = separator.nextElementSibling?.getBoundingClientRect().width ?? 0;
-    return { leftWidth, total: leftWidth + rightWidth };
-  };
-
-  // TODO-FINDING panel-resize-intent-semantics - `panel/resize` carries one panel and its share. The separator sends it for the LEFT panel only and expects the controller to give the rest of the pair's sum to the right neighbour (else dragging would not move the border but squeeze all panels). The reset sends two intents (both panels to 1). An intent `{ leftPanelId, leftShare, rightShare }` would say it without the assumption.
-  const resizeTo = (leftWidth: number, total: number) => {
-    if (total <= 0) return;
-    const min = Math.min(MIN_PANEL_WIDTH, total / 2);
-    const width = Math.min(Math.max(leftWidth, min), total - min);
-    const widthShare = Math.round(((sum * width) / total) * 1000) / 1000;
-    if (widthShare !== left.widthShare) dispatch({ type: "panel/resize", panelId: left.id, widthShare });
-  };
-  const reset = () => {
-    dispatch({ type: "panel/resize", panelId: left.id, widthShare: 1 });
-    dispatch({ type: "panel/resize", panelId: right.id, widthShare: 1 });
-  };
-
-  const onPointerDown = (e: PointerEvent<HTMLDivElement>) => {
-    if (e.button !== 0) return;
-    e.preventDefault();
-    e.currentTarget.setPointerCapture(e.pointerId);
-    drag.current = { startX: e.clientX, ...widths(e.currentTarget) };
-  };
-  const onPointerMove = (e: PointerEvent<HTMLDivElement>) => {
-    if (drag.current) resizeTo(drag.current.leftWidth + e.clientX - drag.current.startX, drag.current.total);
-  };
-  const endDrag = () => {
-    drag.current = undefined;
-  };
-  const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
-    const { leftWidth, total } = widths(e.currentTarget);
-    const to = { ArrowLeft: leftWidth - KEY_STEP, ArrowRight: leftWidth + KEY_STEP, Home: 0, End: total }[e.key];
-    if (to !== undefined) {
-      e.preventDefault();
-      resizeTo(to, total);
-    } else if (e.key === "Enter") {
-      e.preventDefault();
-      reset();
+  const dock = useRef<DockAreaHandle>(null);
+  const containers = useRef(new Map<PanelId, HTMLElement>());
+  const containerFor = (id: PanelId) => {
+    let el = containers.current.get(id);
+    if (!el) {
+      el = document.createElement("div");
+      el.className = "roompanel-host";
+      containers.current.set(id, el);
     }
+    return el;
   };
+  for (const panel of roomsArea.panels) containerFor(panel.id);
+  useEffect(() => {
+    const ids = new Set(roomsArea.panels.map((p) => p.id));
+    for (const id of containers.current.keys()) if (!ids.has(id)) containers.current.delete(id);
+  });
+
+  // What the drop of the current drag means; the dock's `onLayoutChange` follows the drop at once.
+  const pending = useRef<((next: DockLayout) => AppIntent) | undefined>(undefined);
+  const onLayoutChange = (next: DockLayout) => {
+    const intent = pending.current;
+    pending.current = undefined;
+    dispatch(intent ? intent(next) : { type: "panel/arrange", dock: next });
+  };
+
+  const drag = useMemo<RoomsDrag>(() => {
+    const item = (label: string, roomId: string | undefined, drop: DragItem["drop"]): Omit<DragItem, "sourceId" | "originId"> => ({
+      element: dragChip(label),
+      ...(roomId === undefined ? {} : { group: roomId }),
+      cancel() {
+        pending.current = undefined;
+      },
+      drop,
+    });
+    return {
+      panel: ({ panelId, roomId, label }) =>
+        dragStarter(
+          dock,
+          () => ({
+            ...item(label, roomId, (target, itemId) => {
+              pending.current = target.kind === "into" ? () => ({ type: "panel/merge", panelId, intoPanelId: itemId }) : undefined;
+              return containerFor(itemId);
+            }),
+            sourceId: panelId,
+          }),
+          // the buttons of the header (tabs, +, ×) are no handle; the room name tab is
+          "button:not(.room-chip), .tab",
+        ),
+      tab: ({ panelId, roomId, tabId, label }) =>
+        dragStarter(dock, () => ({
+          ...item(label, roomId, (target, itemId) => {
+            pending.current =
+              target.kind === "into" ? () => ({ type: "tab/toPanel", panelId, tabId, intoPanelId: itemId }) : (next) => ({ type: "tab/split", panelId, tabId, newPanelId: itemId, dock: next });
+            return containerFor(itemId);
+          }),
+          originId: panelId,
+        })),
+    };
+    // made once: it only reads refs
+  }, []);
 
   return (
-    <div
-      className="rp-sep"
-      role="separator"
-      aria-orientation="vertical"
-      aria-label="Resize room panels"
-      aria-valuenow={Math.round((100 * left.widthShare) / sum)}
-      aria-valuemin={0}
-      aria-valuemax={100}
-      tabIndex={0}
-      title="Drag or use the arrow keys to resize · double click or Enter to reset"
-      data-testid="room-panel-separator"
-      onPointerDown={onPointerDown}
-      onPointerMove={onPointerMove}
-      onPointerUp={endDrag}
-      onPointerCancel={endDrag}
-      onDoubleClick={reset}
-      onKeyDown={onKeyDown}
-    >
-      <i />
-    </div>
+    <RoomsDragContext.Provider value={drag}>
+      <main className="roomsarea" data-testid="roomsarea">
+        <DockArea ref={dock} layout={roomsArea.dock} elements={containers.current} onLayoutChange={onLayoutChange} newId={newPanelId} minItemWidth={MIN_PANEL_WIDTH} minItemHeight={MIN_PANEL_HEIGHT} />
+      </main>
+      {roomsArea.panels.map((panel) =>
+        createPortal(
+          <RoomPanel main={main} settings={settings} panel={panel} focused={panel.id === roomsArea.focusedPanelId} fullscreen={fullscreen} renderWidget={renderWidget} />,
+          containerFor(panel.id),
+          panel.id,
+        ),
+      )}
+    </RoomsDragContext.Provider>
   );
 }

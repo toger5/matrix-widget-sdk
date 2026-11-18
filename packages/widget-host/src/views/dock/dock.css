@@ -28,6 +28,8 @@
 /* Drag mode: the overlay keeps the pointer away from the widget iframes; the ghost follows the pointer. */
 .dock-overlay { position: fixed; inset: 0; z-index: 1000; cursor: grabbing; user-select: none; }
 .dock-ghost { position: fixed; left: 0; top: 0; pointer-events: none; filter: drop-shadow(0 6px 16px var(--scrim)); }
+/* A ghost of `dragChip` (dragStart.ts): the name of what is dragged. */
+.dock-chip { max-width: 280px; padding: 6px 12px; border-radius: var(--r-3); border: 1px solid var(--border-strong); background: var(--surface-3); color: var(--text); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 /* Drop targets. A shown target's gap opens to 48px (DROP_SPACE in dockTargets.ts) and holds a dashed gray box;
    the one a release drops on is blue with a light blue shade. `into` targets are a box inside their item. */

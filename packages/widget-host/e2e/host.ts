@@ -109,6 +109,34 @@ export class Host {
     await this.page.screenshot({ path: join(STORIES_DIR, `${id}.png`), animations: "disabled" });
   }
 
+  /**
+   * Drag `handle` (a panel header, a tab) in the RoomsArea's dock to `to` (viewport px): press, move
+   * past the drag threshold, then to `to`. With `target` (a `data-dock-target`, e.g. `newRow:1`,
+   * `into:<panel id>`) it waits until that target is the active one. `release: false` keeps the
+   * button down (to press Escape).
+   */
+  async drag(handle: Locator, to: { x: number; y: number }, { target, release = true }: { target?: string; release?: boolean } = {}): Promise<void> {
+    const box = (await handle.boundingBox())!;
+    const from = { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+    const mouse = this.page.mouse;
+    await mouse.move(from.x, from.y);
+    await mouse.down();
+    await mouse.move(from.x + 8, from.y + 8, { steps: 2 });
+    await expect(this.page.getByTestId("dock-overlay")).toBeVisible();
+    await mouse.move(to.x, to.y, { steps: 8 });
+    if (target !== undefined) await expect(this.page.locator('[data-dock-drop="active"]')).toHaveAttribute("data-dock-target", target);
+    if (release) {
+      await mouse.up();
+      await expect(this.page.getByTestId("dock-overlay")).toHaveCount(0);
+    }
+  }
+
+  /** A point in an element: `fx`, `fy` are fractions of its width and height (0.5, 0.5: the middle). */
+  async at(el: Locator, fx: number, fy: number): Promise<{ x: number; y: number }> {
+    const box = (await el.boundingBox())!;
+    return { x: box.x + box.width * fx, y: box.y + box.height * fy };
+  }
+
   // Frequently used elements, by the names of the stories.
   get leftBar(): Locator {
     return this.page.getByTestId("leftbar");

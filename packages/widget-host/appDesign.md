@@ -81,11 +81,14 @@ The [room picker](#room-picker), titled "Rooms". A pick opens in the room panel 
 
 ## RoomsArea
 
-The RoomsArea is the main area of the logged-in view. It allows opening multiple room panels next to each other.
+The RoomsArea is the main area of the logged-in view. It arranges room panels in up to three rows, with up to two full-height columns on each side next to two or more rows (at most six panels side by side). Splitters between all of them.
 
 - By default there is one panel per room.
-- Ctrl+N opens a new panel on the right with the [room picker](#room-picker) (a pick turns it into that room), Ctrl+Shift+N one showing the same room.
+- Ctrl+N opens a new panel on the right of the focused one with the [room picker](#room-picker) (a pick turns it into that room), Ctrl+Shift+N one showing the same room. Without room on the right: at the end of the last row, else in a new row. With no place left a message asks to close a panel first.
 - Ctrl+W closes the shown tab of the focused panel, and a panel whose only tab is the room name.
+- Dragging a panel by its header (room name or free space) moves it; dropped onto a panel of the same room, its tabs join that panel.
+- Dragging a tab out of the tab bar makes it a new panel of its room; dropped onto another panel of the same room, it joins that panel. A widget keeps running.
+- While dragging, the places near the pointer open up, the nearest one is highlighted. Escape cancels.
 
 ### Room picker
 
@@ -318,6 +321,7 @@ Every state of the UI. Each is one story in Storybook, a sketch story (`Sketch/â
   - Layout
     - One room panel
     - Several room panels next to each other
+    - Panels in two rows with a side column
     - Shifted by an open SidePanel
   - Room panel (empty): the room picker
     - Recent widgets (one of them open in a tab), recent rooms, all rooms
@@ -398,7 +402,7 @@ Notes for the implementation. They add to the design above, they do not change i
 **Panels and resizing**
 
 - Every resizable panel has a minimum size. Drag handles have a hit area of at least 8px, are keyboard operable and reset on double click.
-- Persist panel sizes, open tabs and the dev tool dock position per account.
+- Persist the arrangement and sizes of the panels, open tabs and the dev tool dock position per account.
 - Widget tabs that do not fit scroll horizontally behind the room name, with an overflow menu listing them.
 - In narrow windows (below ~900px) the SidePanel overlays the RoomsArea instead of shifting it, and only one room panel is visible at a time.
 
