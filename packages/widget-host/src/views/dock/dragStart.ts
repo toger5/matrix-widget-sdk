@@ -5,6 +5,7 @@
 import type { PointerEvent as ReactPointerEvent, RefObject } from "react";
 
 import type { DockAreaHandle, DragItem } from "./DockArea";
+import { clearSelection, preventSelection } from "./noSelection";
 
 /** Movement (px) with the button down that starts a drag. */
 export const DRAG_THRESHOLD = 4;
@@ -32,22 +33,34 @@ export function dragStarter(dock: RefObject<DockAreaHandle | null>, makeItem: ()
     }
     const start = { x: e.clientX, y: e.clientY };
     const { pointerId } = e;
+    // The press would start a text selection (the `mousedown` after this `pointerdown`), which the
+    // movement of a drag stretches over the page: none until the button is released.
+    const el = e.currentTarget;
+    const allowSelection = preventSelection(el);
     // Window listeners and no pointer capture: a capture would retarget the click of a short press
     // to `el` (a button inside it would not get it).
     const move = (ev: PointerEvent) => {
       if (ev.pointerId !== pointerId || Math.hypot(ev.clientX - start.x, ev.clientY - start.y) < DRAG_THRESHOLD) return;
-      stop();
+      stopWatching();
       swallowNextClick();
+      clearSelection(el);
       dock.current?.startDrag(makeItem(), ev);
     };
-    const stop = () => {
+    const stopWatching = () => {
       window.removeEventListener("pointermove", move, true);
-      window.removeEventListener("pointerup", stop, true);
-      window.removeEventListener("pointercancel", stop, true);
+    };
+    const release = () => {
+      stopWatching();
+      allowSelection();
+      window.removeEventListener("pointerup", release, true);
+      window.removeEventListener("pointercancel", release, true);
+      window.removeEventListener("blur", release);
     };
     window.addEventListener("pointermove", move, true);
-    window.addEventListener("pointerup", stop, true);
-    window.addEventListener("pointercancel", stop, true);
+    window.addEventListener("pointerup", release, true);
+    window.addEventListener("pointercancel", release, true);
+    // the release may happen outside the window: it never comes
+    window.addEventListener("blur", release);
   };
 }
 

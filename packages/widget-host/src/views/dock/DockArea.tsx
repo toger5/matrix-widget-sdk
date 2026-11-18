@@ -17,6 +17,7 @@ import {
   type DropTarget,
 } from "../../dock/dockLayout";
 import { allowedTargets, GAP, isSaturated, measureTargets, nearestTargets, targetKey, type Rect } from "../../dock/dockTargets";
+import { clearSelection, preventSelection } from "./noSelection";
 import { Splitter } from "./Splitter";
 
 /** Something dragged onto a `DockArea`: a tab, or a whole window (`sourceId`). */
@@ -168,6 +169,8 @@ export function DockArea({ layout, elements, onLayoutChange, newId = defaultNewI
     };
     const onUp = () => finish(true);
     const onCancel = () => finish(false);
+    // no text selection while dragging (the press that started the drag may have begun one)
+    let allowSelection: (() => void) | undefined;
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return;
       e.preventDefault();
@@ -181,6 +184,10 @@ export function DockArea({ layout, elements, onLayoutChange, newId = defaultNewI
         window.addEventListener("pointercancel", onCancel, true);
         window.addEventListener("keydown", onKey, true);
         window.addEventListener("blur", onCancel);
+        if (areaRef.current) {
+          allowSelection = preventSelection(areaRef.current);
+          clearSelection(areaRef.current);
+        }
       },
       remove() {
         window.removeEventListener("pointermove", onMove, true);
@@ -188,6 +195,8 @@ export function DockArea({ layout, elements, onLayoutChange, newId = defaultNewI
         window.removeEventListener("pointercancel", onCancel, true);
         window.removeEventListener("keydown", onKey, true);
         window.removeEventListener("blur", onCancel);
+        allowSelection?.();
+        allowSelection = undefined;
       },
     };
   }

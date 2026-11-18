@@ -173,6 +173,8 @@ test("a panel dragged by its header moves to a new row (its widget does not relo
   const [top, bottom] = [(await lab.boundingBox())!, (await standup.boundingBox())!];
   expect(bottom.y).toBeGreaterThan(top.y + top.height - 1);
   expect(await host.token(NOTES)).toBe(token);
+  // Dragging selected no text.
+  expect(await host.selectedText()).toBe("");
   // The press on the room name was a drag, not a click: the Standup notes tab is still shown.
   await expect(standup.getByRole("tab", { name: /Standup notes/ })).toHaveAttribute("aria-selected", "true");
   await expect(host.page.getByRole("separator", { name: "Resize rows" })).toBeVisible();
@@ -186,6 +188,9 @@ test("a panel dragged by its header moves to a new row (its widget does not relo
   const after = (await host.main()).workspaces[m.activeAccountId].roomsArea.dock;
   expect(after.right?.map((i) => i.id)).toEqual([await picker.getAttribute("data-panel-id")]);
   expect((await picker.boundingBox())!.height).toBeGreaterThan(top.height + bottom.height);
+  // No text selected by the press on the free space of the header, and text can be selected again after the release.
+  expect(await host.selectedText()).toBe("");
+  expect(await host.page.evaluate(() => document.documentElement.style.userSelect)).toBe("");
   await host.story("app-appshell--panel-rows");
 });
 
@@ -206,6 +211,7 @@ test("a tab dragged out becomes a panel of its room; dragged onto another panel 
   await expect(first.getByRole("tab", { name: /Legacy test widget/ })).toHaveAttribute("aria-selected", "true");
   await expect(second).toHaveAttribute("data-focused", "true");
   expect(await host.token(NEW)).toBe(token);
+  expect(await host.selectedText()).toBe("");
 
   // Back onto the first panel: it joins its tabs; the emptied panel stays on its RoomOverview.
   await host.drag(second.getByRole("tab", { name: /New test widget/ }), await host.at(first, 0.5, 0.5), { target: `into:${firstId}` });

@@ -131,6 +131,15 @@ export class Host {
     }
   }
 
+  /** The selected text, also inside the app's shadow root (where `document.getSelection()` sees none; Chromium's `ShadowRoot.getSelection`). */
+  selectedText(): Promise<string> {
+    return this.page.evaluate(() => {
+      const roots = [...document.querySelectorAll("*")].flatMap((el) => (el.shadowRoot ? [el.shadowRoot] : []));
+      const texts = [document.getSelection()?.toString() ?? "", ...roots.map((r) => (r as ShadowRoot & { getSelection?(): Selection | null }).getSelection?.()?.toString() ?? "")];
+      return texts.join("");
+    });
+  }
+
   /** A point in an element: `fx`, `fy` are fractions of its width and height (0.5, 0.5: the middle). */
   async at(el: Locator, fx: number, fy: number): Promise<{ x: number; y: number }> {
     const box = (await el.boundingBox())!;
