@@ -25,6 +25,7 @@ import { accountInfo, exportRoom, loadOlderEvents, onTimelineChanged, roomDetail
 import { needsVerification, onVerificationChanged, startEmojiVerification, verifyWithRecoveryKey } from "./verification";
 import { AccountStore } from "../js/accountStore";
 import { RoomTimelines } from "../roomTimelines";
+import { rustTimelineViewModel, SharedTimelines, timelineConfiguration } from "./timelineViewModel";
 import { AVATAR_SIZE, AvatarCache } from "../../lib/avatarCache";
 import { describesWidget } from "../../lib/widgetEvents";
 import { WIDGET_EVENT_TYPES, type StateEvent } from "../../widgetStateEvent";
@@ -283,6 +284,13 @@ class RustSdkSession implements LiveSession {
     if (this.suspended) throw new Error("the session is suspended");
     return this.client.getMediaThumbnail(MediaSource.fromUrl(mxcUrl), BigInt(AVATAR_SIZE), BigInt(AVATAR_SIZE));
   });
+  /** One SDK timeline per room, shared by its Timeline tabs (opening one is not cheap). */
+  private readonly sharedTimelines = new SharedTimelines((roomId) => Promise.resolve().then(() => this.knownRoom(roomId).timelineWithConfiguration(timelineConfiguration())));
+  /** The images of the Timeline tab, whole, by `MediaSource.toJson()` (an encrypted image's source carries its key). */
+  private readonly images = new AvatarCache(async (source) => {
+    if (this.suspended) throw new Error("the session is suspended");
+    return this.client.getMediaContent(MediaSource.fromJson(source));
+  });
   /** The RoomTimelines: the start of the room, a running pagination, the listeners (`./roomData`). */
   private readonly timelines = new RoomTimelines((roomId, changed) => {
     const room = this.client.getRoom(roomId);
@@ -393,6 +401,12 @@ class RustSdkSession implements LiveSession {
 
   onTimelineChanged(roomId: string, listener: () => void): () => void {
     return this.timelines.listen(roomId, listener);
+  }
+
+  /** On the room's shared SDK timeline, at once; the subscription to the room (`open`, like the first `timeline(roomId)`) runs alongside. */
+  timelineViewModel(roomId: string) {
+    this.open(roomId).catch((e: unknown) => console.warn(`subscribing to ${roomId} failed`, e));
+    return rustTimelineViewModel(this.sharedTimelines.take(roomId), this.userId, (source) => this.images.get(source.toJson()));
   }
 
   private knownRoom(roomId: string): RoomLike {
@@ -556,6 +570,8 @@ class RustSdkSession implements LiveSession {
     active.delete(this.accountId);
     this.stopped = true;
     this.avatars.clear();
+    this.images.clear();
+    this.sharedTimelines.clear();
     await this.sync.stop().catch(() => undefined);
     await this.client.logout().catch((e: unknown) => console.warn("logout request failed", e));
     store.remove(this.accountId);

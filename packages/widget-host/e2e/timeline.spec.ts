@@ -1,15 +1,18 @@
-/** The RoomTimeline: the Timeline tab of a room panel, its events (the DevBackend's), live updates, the newest 200 and the older ones. stories `rooms-roomtimeline--*`, `rooms-tabbar--timeline-active` */
+/** The RoomTimeline: the Timeline tab of a room panel (Element Web's TimelineView), its events (the DevBackend's), live updates, a long timeline. stories `rooms-roomtimeline--*`, `rooms-tabbar--timeline-active` */
 import type { HostSeed } from "../src/app/controller";
 import { expect, type Host, LAB, NEW_WIDGET, test, widgetId } from "./host";
 
 const NEW = widgetId(LAB, NEW_WIDGET);
 const timeline = (host: Host) => host.page.getByTestId("room-timeline");
-const rows = (host: Host) => timeline(host).getByRole("listitem");
+/** The event tiles the TimelineView renders (it is virtualised: those in and near the view). */
+const rows = (host: Host) => timeline(host).getByTestId("event-tile");
+const scroller = (host: Host) => timeline(host).getByTestId("timeline-scroller");
 /** The ids of the events the DevBackend holds for the room, oldest first. */
 const storeIds = async (host: Host) => (await host.store(LAB)).timeline.map((event) => event.eventId as string);
 const shownIds = (host: Host) => rows(host).evaluateAll((items) => items.map((item) => (item as HTMLElement).dataset.eventId));
+const toTop = (host: Host) => scroller(host).evaluate((el) => el.scrollTo({ top: 0 }));
 
-test("“Open timeline” adds the Timeline tab at the end; its lines are the room's events, oldest first; pressing one shows its JSON", async ({ host }) => {
+test("“Open timeline” adds the Timeline tab at the end; its tiles are the room's events, oldest first; pressing one shows its JSON", async ({ host }) => {
   await host.populate("lab", { sidePanel: null, behavior: { autoApproveCapabilities: true }, open: [{ room: LAB, widgets: [NEW_WIDGET], overview: true }] });
   const overview = host.page.getByTestId("room-overview");
   await overview.getByRole("button", { name: "Open timeline" }).click();
@@ -24,28 +27,31 @@ test("“Open timeline” adds the Timeline tab at the end; its lines are the ro
   await expect(host.button(/^Dev tools of/)).toHaveCount(1);
   expect(Object.keys((await host.main()).widgets)).toEqual([NEW]);
 
-  // Every event of the room, in the order of the store; the mocked room starts with its creation.
-  await expect.poll(() => shownIds(host)).toEqual(await storeIds(host));
-  await expect(timeline(host).getByText("Start of the room")).toBeVisible();
-  await expect(timeline(host).getByRole("button", { name: "Load older events" })).toHaveCount(0);
-  await expect(timeline(host).getByRole("heading", { name: "Today" })).toBeVisible();
-  await expect(rows(host).first()).toContainText("created the room");
-  await expect(rows(host).first()).toHaveClass(/state/);
+  // The events of the room in the order of the store, at the bottom the newest; the mocked room starts with its creation.
+  const ids = await storeIds(host);
+  await expect(rows(host).last()).toContainText(/@carol:dev\.local.*The landscape picture is in the media repository\..*m\.room\.message/);
+  await expect(rows(host).last()).toBeInViewport();
+  const shown = await shownIds(host);
+  expect(ids.slice(-shown.length)).toEqual(shown);
+  await expect(rows(host).last()).not.toHaveClass(/state/);
   const widgetAdded = rows(host).filter({ hasText: "added the widget New test widget" });
   await expect(widgetAdded).toContainText("m.widget");
-  await expect(rows(host).last()).toContainText(/@carol:dev\.local\s*The landscape picture is in the media repository\.\s*m\.room\.message/);
-  await expect(rows(host).last()).not.toHaveClass(/state/);
   await host.story("rooms-tabbar--timeline-active");
   await host.story("rooms-roomtimeline--start");
 
   const last = rows(host).last();
-  const [lastId] = (await storeIds(host)).slice(-1);
   await last.getByRole("button", { expanded: false }).click();
   await expect(last.getByRole("button", { expanded: true })).toBeVisible();
-  await expect(last.locator("pre.code")).toContainText(`"event_id": "${lastId}"`);
+  await expect(last.locator("pre.code")).toContainText(`"event_id": "${ids.at(-1)}"`);
   await expect(last.locator("pre.code")).toContainText(`"body": "The landscape picture is in the media repository."`);
   await last.getByRole("button", { expanded: true }).click();
   await expect(last.locator("pre.code")).toHaveCount(0);
+
+  // At the top: the room's creation, a muted state event, under a date separator.
+  await toTop(host);
+  await expect(rows(host).first()).toContainText("created the room");
+  await expect(rows(host).first()).toHaveClass(/state/);
+  await expect(timeline(host).getByRole("separator", { name: "Today" })).toBeVisible();
 
   // The overview offers the tab it has instead of a second one.
   await host.tab("Widget lab").click();
@@ -58,20 +64,17 @@ test("new events appear live: sent by a widget, and from the send form of the De
   // The widget in one panel, the timeline of the same room in the other.
   await host.populate("lab", { behavior: { autoApproveCapabilities: true }, open: [{ room: LAB, widgets: [NEW_WIDGET] }, { room: LAB, timeline: true }] });
   await host.ready(NEW);
-  const count = (await storeIds(host)).length;
-  await expect(rows(host)).toHaveCount(count);
+  await expect(rows(host).last()).toContainText("The landscape picture is in the media repository.");
 
   await host.frame(NEW).getByRole("button", { name: "send m.room.message" }).click();
-  await expect(rows(host)).toHaveCount(count + 1);
-  await expect(rows(host).last()).toContainText(/@alice:dev\.local\s*hello from the new widget\s*m\.room\.message/);
-  expect(await shownIds(host)).toEqual(await storeIds(host));
+  await expect(rows(host).last()).toContainText(/@alice:dev\.local.*hello from the new widget.*m\.room\.message/);
+  await expect(rows(host).last()).toHaveAttribute("data-event-id", (await storeIds(host)).at(-1)!);
 
   const form = host.page.getByTestId("devbackend-view").getByRole("form", { name: "Send event" });
   await form.getByLabel("Sender").fill("@bob:dev.local");
   await form.getByLabel("Body").fill("Hello from the DevBackendView");
   await form.getByRole("button", { name: "Send" }).click();
-  await expect(rows(host)).toHaveCount(count + 2);
-  await expect(rows(host).last()).toContainText(/@bob:dev\.local\s*Hello from the DevBackendView/);
+  await expect(rows(host).last()).toContainText(/@bob:dev\.local.*Hello from the DevBackendView/);
   await expect(rows(host).last()).toBeInViewport();
 });
 
@@ -90,72 +93,72 @@ const manyMessages = (n: number): HostSeed => ({
 });
 const send = (host: Host, body: string) => host.dispatch({ type: "roomTools/sendEvent", roomId: LAB, event: { type: "m.room.message", sender: "@carol:dev.local", content: { msgtype: "m.text", body } } });
 
-test("250 events: the newest 200 are shown, at the bottom; “Load older events” shows the rest and the start of the room. At the bottom it stays there, scrolled up the events in view stay put", async ({ host }) => {
+test("250 events: virtualised, it starts at the bottom and stays there while events arrive; the top is the start of the room", async ({ host }) => {
   await host.populate(manyMessages(250));
-  const ids = await storeIds(host);
-  expect(ids.length).toBeGreaterThan(250);
-  await expect(rows(host)).toHaveCount(200);
-  expect(await shownIds(host)).toEqual(ids.slice(-200));
   await expect(rows(host).last()).toContainText("message 250");
   await expect(rows(host).last()).toBeInViewport();
-  const older = timeline(host).getByRole("button", { name: "Load older events" });
-  await expect(older).toBeAttached();
-  await expect(timeline(host).getByText("Start of the room")).toHaveCount(0);
+  expect(await rows(host).count()).toBeLessThan(100);
 
-  // At the bottom: a new event is scrolled into view; the oldest rendered one makes room for it. The
-  // other rows of its day stay as they are: a focused line keeps the focus.
-  const focused = rows(host).filter({ has: host.page.getByText("message 250", { exact: true }) }).getByRole("button");
-  await focused.focus();
   await send(host, "live 1");
   await expect(rows(host).last()).toContainText("live 1");
   await expect(rows(host).last()).toBeInViewport();
-  await expect(rows(host)).toHaveCount(200);
-  await expect(focused).toBeFocused();
+  // Same sender as the one before: the tile leaves the avatar and the sender out.
+  await expect(rows(host).last().locator(".tl-c1, .tl-c2, .tl-c3, .tl-c4, .tl-c5, .tl-c6")).toHaveCount(1);
+  await send(host, "live 2");
+  await expect(rows(host).last()).toContainText("live 2");
+  await expect(rows(host).last().locator(".tl-c1, .tl-c2, .tl-c3, .tl-c4, .tl-c5, .tl-c6")).toHaveCount(0);
 
-  // Scrolled up: the events in view stay where they are, also when the oldest rendered one is dropped. The
-  // browser reports a scroll with the next frame. An event may arrive before that (in the same task here, as
-  // on a busy page): it neither pulls the timeline back to the bottom nor to where it was scrolled before.
-  const anchor = rows(host).filter({ has: host.page.getByText("message 120", { exact: true }) });
-  const steps = [
-    ["start", "live 2", false], // away from the bottom, not reported yet
-    ["center", "live 3", true], // reported
-    ["start", "live 4", false], // scrolled up further, not reported yet
-  ] as const;
-  for (const [block, body, reported] of steps) {
-    const before = await anchor.evaluate(
-      async (row, { block, body, reported, roomId }) => {
-        const scrolled = new Promise((resolve) => row.closest(".tl")!.addEventListener("scroll", resolve, { once: true }));
-        row.scrollIntoView({ block });
-        if (reported) await scrolled;
-        const y = row.getBoundingClientRect().y;
-        window.widgetHost!.dispatch({ type: "roomTools/sendEvent", roomId, event: { type: "m.room.message", sender: "@carol:dev.local", content: { msgtype: "m.text", body } } });
-        return y;
-      },
-      { block, body, reported, roomId: LAB },
-    );
-    await expect(rows(host).last()).toContainText(body);
-    await expect(rows(host).last()).not.toBeInViewport();
-    expect(Math.abs((await anchor.boundingBox())!.y - before)).toBeLessThan(2);
-  }
-
+  const anchor = rows(host).filter({ hasText: "message 248" });
   await anchor.getByRole("button").click();
-  await expect(anchor.locator("pre.code")).toContainText('"body": "message 120"');
-  await anchor.evaluate((row) => row.scrollIntoView({ block: "center" }));
+  await expect(anchor.locator("pre.code")).toContainText('"body": "message 248"');
   await host.story("rooms-roomtimeline--events");
 
-  // The loaded events that are not rendered first: here every event, so the start of the room is
-  // reached. "Start of the room" replaces the button, and the focus moves on to the oldest event.
-  await older.scrollIntoViewIfNeeded();
-  const top = (await anchor.boundingBox())!.y;
-  await older.focus();
-  await host.page.keyboard.press("Enter");
-  await expect(rows(host)).toHaveCount(ids.length + 4);
-  await expect(timeline(host).getByText("Start of the room")).toBeAttached();
-  await expect(older).toHaveCount(0);
-  await expect(rows(host).first()).toContainText("created the room");
-  await expect(rows(host).first().getByRole("button")).toBeFocused();
-  // The older events appear above what was in view.
-  expect(Math.abs((await anchor.boundingBox())!.y - top)).toBeLessThan(2);
-  await timeline(host).evaluate((el) => (el.scrollTop = 0));
-  await expect(timeline(host).getByText("Start of the room")).toBeInViewport();
+  await expect
+    .poll(async () => {
+      await toTop(host);
+      return rows(host).first().textContent();
+    })
+    .toContain("created the room");
+});
+
+test("the composer sends a text message as the account; a message's HTML is shown, sanitised", async ({ host }) => {
+  await host.populate("lab", { sidePanel: null, open: [{ room: LAB, timeline: true }] });
+  const input = host.page.getByRole("textbox", { name: "Message" });
+  await expect(host.button("Send")).toBeDisabled();
+  await input.fill("Hello from the composer");
+  await input.press("Enter");
+  await expect(rows(host).last()).toContainText("Hello from the composer");
+  await expect(input).toHaveValue("");
+  const sent = (await host.store(LAB)).timeline.at(-1)!;
+  expect([sent.sender, sent.content]).toEqual(["@alice:dev.local", { msgtype: "m.text", body: "Hello from the composer" }]);
+
+  const formatted = `<h2>Title</h2><b onclick="window.hacked = 1">bold</b><script>window.hacked = 1</script><a href="javascript:window.hacked = 1">bad</a> <a href="https://example.org/">good</a><img src="https://example.org/x.png"><mx-reply>quoted</mx-reply>`;
+  await host.dispatch({ type: "roomTools/sendEvent", roomId: LAB, event: { type: "m.room.message", sender: "@bob:dev.local", content: { msgtype: "m.text", body: "Title bold", format: "org.matrix.custom.html", formatted_body: formatted } } });
+  const tile = rows(host).last();
+  await expect(tile.getByRole("heading", { name: "Title" })).toBeVisible();
+  await expect(tile.locator("b")).toHaveText("bold");
+  await expect(tile.locator("b")).not.toHaveAttribute("onclick");
+  await expect(tile.locator("script, img, mx-reply")).toHaveCount(0);
+  await expect(tile).not.toContainText("quoted");
+  await expect(tile.getByText("bad")).not.toHaveAttribute("href");
+  await expect(tile.getByRole("link", { name: "good" })).toHaveAttribute("href", "https://example.org/");
+  await tile.getByRole("link", { name: "good" }).hover();
+  expect(await host.page.evaluate(() => (window as unknown as { hacked?: number }).hacked)).toBeUndefined();
+});
+
+test("the Timeline tab opens at the newest event every time, also after it was scrolled up", async ({ host }) => {
+  await host.populate(manyMessages(250));
+  await expect(rows(host).last()).toContainText("message 250");
+  const fromBottom = () => scroller(host).evaluate((el) => el.scrollHeight - el.scrollTop - el.clientHeight);
+  const panelId = (await host.main()).workspaces[(await host.main()).activeAccountId].roomsArea.panels[0].id;
+  for (const distance of [3000, 800]) {
+    // With the wheel, as a user scrolls (it also ends the opening's hold on the bottom).
+    await scroller(host).hover();
+    await host.page.mouse.wheel(0, -distance);
+    await expect.poll(fromBottom).toBeGreaterThan(500);
+    await host.dispatch({ type: "tab/showOverview", panelId });
+    await host.dispatch({ type: "tab/openTimeline", panelId });
+    await expect(rows(host).last()).toContainText("message 250");
+    await expect.poll(fromBottom).toBeLessThan(2);
+  }
 });

@@ -2,7 +2,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { RawEvent } from "../src/session";
-import { dayKey, describeEvent, eventDay, eventTime } from "../src/views/rooms/eventText";
+import { dayLabel, describeEvent, timeLabel } from "../src/views/rooms/eventText";
 import { ROOM_TIMELINE } from "../src/views/fixtures";
 
 const ev = (type: string, content: Record<string, unknown>, more: Partial<RawEvent> = {}): RawEvent => ({ type, sender: "@ada:example.org", content, ...more });
@@ -16,12 +16,16 @@ describe("describeEvent", () => {
       { text: "added the widget Element Call", icon: "grid", state: true },
       { text: "Morning! The screenshots are on the whiteboard.", state: false },
       { text: "reacted 👍", state: false },
+      { text: "reacted 👍", state: false },
+      { text: "reacted 🎉", state: false },
+      { text: "image: whiteboard-page-2.png", icon: "image", state: false },
       { text: "Starting the call now", state: false },
       { text: "joined the call · device KJQWPLXBTA", icon: "phone", state: true },
       { text: "Unable to decrypt", icon: "lock", state: false },
       { text: "edited: The screenshots are on the whiteboard, page 2.", icon: "edit", state: false },
       { text: "Deleted message", icon: "trash", state: false },
       { text: "sticker: party parrot", icon: "image", state: false },
+      { text: "Agenda: 1. Tab bar (new) 2. Icons", state: false },
       { text: expect.stringMatching(/^\{"org\.matrix\.msc3381\.poll\.start":\{"question":\{"body":"Ship the new tab bar\?"\},.*…$/), mono: true, state: false },
     ]);
   });
@@ -115,25 +119,18 @@ describe("describeEvent", () => {
   });
 });
 
-describe("eventTime and eventDay", () => {
+describe("timeLabel and dayLabel", () => {
   const at = (y: number, m: number, d: number, h = 12) => new Date(y, m, d, h, 4, 5).getTime();
   const now = at(2026, 10, 16, 15);
 
-  it("the local time, and the day heading: Today, Yesterday, the date (with the year if it is not this one)", () => {
-    expect(eventTime(ev("x", {}, { origin_server_ts: at(2026, 10, 16) }))).toBe("12:04:05");
-    expect(eventTime(ev("x", {}, { origin_server_ts: at(2026, 10, 16, 9) }))).toBe("09:04:05");
-    expect(eventTime(ev("x", {}))).toBe("");
-    expect(eventDay(ev("x", {}, { origin_server_ts: at(2026, 10, 16, 0) }), now).label).toBe("Today");
-    expect(eventDay(ev("x", {}, { origin_server_ts: at(2026, 10, 15, 23) }), now).label).toBe("Yesterday");
-    expect(eventDay(ev("x", {}, { origin_server_ts: at(2026, 10, 14) }), now).label).toMatch(/^Saturday,? 14 November$/);
-    expect(eventDay(ev("x", {}, { origin_server_ts: at(2025, 11, 31) }), now).label).toMatch(/^Wednesday,? 31 December 2025$/);
-    expect(eventDay(ev("x", {}), now)).toEqual({ key: "", label: "Unknown date" });
-    // Same day, same key: one heading.
-    expect(eventDay(ev("x", {}, { origin_server_ts: at(2026, 10, 14, 1) }), now).key).toBe(eventDay(ev("x", {}, { origin_server_ts: at(2026, 10, 14, 23) }), now).key);
-    expect(dayKey(ev("x", {}, { origin_server_ts: at(2026, 10, 14, 1) }))).toBe(eventDay(ev("x", {}, { origin_server_ts: at(2026, 10, 14, 23) }), now).key);
-    expect(dayKey(ev("x", {}))).toBe("");
+  it("the local time, and the date separator: Today, Yesterday, the date (with the year if it is not this one)", () => {
+    expect(timeLabel(at(2026, 10, 16))).toBe("12:04:05");
+    expect(timeLabel(at(2026, 10, 16, 9))).toBe("09:04:05");
+    expect(dayLabel(at(2026, 10, 16, 0), now)).toBe("Today");
+    expect(dayLabel(at(2026, 10, 15, 23), now)).toBe("Yesterday");
+    expect(dayLabel(at(2026, 10, 14), now)).toMatch(/^Saturday,? 14 November$/);
+    expect(dayLabel(at(2025, 11, 31), now)).toMatch(/^Wednesday,? 31 December 2025$/);
     // A time a Date cannot hold (the sending server picks it) is no time.
-    const far = ev("x", {}, { origin_server_ts: 1e300 });
-    expect([eventTime(far), dayKey(far), eventDay(far, now).label]).toEqual(["", "", "Unknown date"]);
+    expect([timeLabel(1e300), dayLabel(1e300, now), timeLabel(NaN)]).toEqual(["", "Unknown date", ""]);
   });
 });

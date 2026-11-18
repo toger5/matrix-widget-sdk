@@ -7,6 +7,7 @@
  * The in-memory mode (`./matrix_session/memory/devBackend`) implements `LiveSession` too, which is why it gets the
  * same views as a logged-in client.
  */
+import type { EventSendState, TimelineViewModel } from "@element-hq/web-shared-components";
 import type { MatrixBackend } from "@matrix-widget-sdk/host";
 
 import type { StateEvent } from "./widgetStateEvent";
@@ -70,6 +71,53 @@ export interface RoomTimeline {
   /** `loadOlderEvents` runs for this room. */
   loadingOlder: boolean;
 }
+
+/** What a tile of the Timeline tab shows as its body. */
+export type TimelineBody =
+  /** A message: its text (the rust timeline: the latest edit), and its HTML (`formatted_body`, not sanitised) if it has one. */
+  | { kind: "text"; text: string; html?: string; edited?: boolean }
+  /** An image (a sticker too). `load` resolves to a URL an `<img>` can show, or `undefined`. */
+  | { kind: "image"; caption: string; width?: number; height?: number; load(): Promise<string | undefined> }
+  /** It could not be decrypted; `reason` is a `DecryptionFailureReason` of the shared components. */
+  | { kind: "utd"; reason?: string }
+  /** It was deleted. */
+  | { kind: "redacted"; reason?: string }
+  /** Anything else: the view puts `json()` into words. */
+  | { kind: "event" };
+
+/** A reaction to an event, as the tile's reaction buttons show it. */
+export interface TimelineReaction {
+  key: string;
+  /** The user IDs that reacted with it. */
+  senders: string[];
+  /** The account is one of `senders`. */
+  mine: boolean;
+}
+
+/** One event of the Timeline tab: the `event` of an event item of its `TimelineView`. */
+export interface TimelineRow {
+  sender: string;
+  /** The sender's display name and avatar (an `mxc://` URI, `LiveSession.avatar`), where the session knows them. */
+  name?: string;
+  avatar?: string;
+  /** When it was sent (ms since the epoch). */
+  ts: number;
+  body: TimelineBody;
+  reactions: TimelineReaction[];
+  /** React with `key`, or take the account's reaction back; missing where the timeline cannot send. */
+  toggleReaction?(key: string): void;
+  /** The event as JSON; undefined for a local echo that has not been sent yet. */
+  json(): RawEvent | undefined;
+  /** A local echo (the rust timeline): its send state. */
+  sendState?: EventSendState;
+}
+
+/**
+ * The view model of the Timeline tab (Element Web's `TimelineView`). `dispose` stops it. `send`: a
+ * text message (Markdown) through the timeline, shown at once as a local echo (the rust session);
+ * without it the composer sends with `room/sendMessage`.
+ */
+export type RoomTimelineViewModel = TimelineViewModel & { dispose(): void; send?(body: string): void };
 
 /** A room as "Copy to DevBackend" takes it over: the whole current state and the last timeline events (oldest first). */
 export interface RoomExport {
@@ -148,6 +196,11 @@ export interface LiveSession {
    * more). Resolves once they are in `timeline(roomId)`; a second call while one runs joins it.
    */
   loadOlderEvents(roomId: string, count: number): Promise<void>;
+  /**
+   * The Timeline tab of a room: the matrix-rust-sdk timeline (edits and reactions folded in, local
+   * echoes) in the rust session, `timeline(roomId)` (one row per event) in the others. The caller disposes it.
+   */
+  timelineViewModel(roomId: string): RoomTimelineViewModel;
   /** Call `listener` whenever `timeline(roomId)` may have changed: new, older, deleted or decrypted events, `loadingOlder`. Returns the unsubscribe function. */
   onTimelineChanged(roomId: string, listener: () => void): () => void;
   /**

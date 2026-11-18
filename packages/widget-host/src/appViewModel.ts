@@ -56,7 +56,9 @@
  * ids in the comments refer to them (`e2e/stories.md` lists them all). `designFeedback.md` lists
  * what the current `LiveSession`, `SessionProvider` and `InMemoryBackend` cannot provide yet.
  */
-import type { RoomSummary, RoomTimeline, VerificationEmoji } from "./session";
+import type { TimelineItem, TimelineViewActions, TimelineViewSnapshot } from "@element-hq/web-shared-components";
+
+import type { RawEvent, RoomSummary, RoomTimeline, TimelineBody, TimelineReaction, TimelineRow, VerificationEmoji } from "./session";
 import type { StateEvent, WidgetDefinition, WidgetIframe } from "./widgetStateEvent";
 
 export type AccountId = string;
@@ -408,7 +410,7 @@ export interface RoomViewModel {
  *
  * - `widget` shows a widget. Label, icon, load state and pin marker come from the widget (`widgets`).
  * - `timeline` shows the RoomTimeline of the panel's room, at most one per room panel. Its events
- *   are not in the view model: `useViewEnv().useRoomTimeline(roomId)`. stories `rooms-tabbar--timeline-active`, `rooms-roomtimeline--*`
+ *   are not in the view model: `useViewEnv().useTimelineViewModel(roomId)`. stories `rooms-tabbar--timeline-active`, `rooms-roomtimeline--*`
  *
  * Stored layouts can hold the removed kinds "native" (the overview) and "new": they are dropped on load.
  */
@@ -595,6 +597,98 @@ export function roomStateVersion(timeline: Loadable<RoomTimeline>): string | und
   return "";
 }
 
+/** A `TimelineView` snapshot of `items` (the Timeline tab): the host's timelines have no read marker, jumps or highlights. */
+export const timelineSnapshot = (items: TimelineItem[]): TimelineViewSnapshot => ({
+  items,
+  atLiveEnd: true,
+  pendingAnchor: null,
+  highlightedEventId: null,
+  isAtBottom: true,
+  canJumpToReadMarker: false,
+  numUnreadMessages: 0,
+  hasHighlights: false,
+});
+
+/** The `TimelineView` actions, all ignored; a timeline that can load older events overrides `onStartReached`. */
+export const TIMELINE_ACTIONS: TimelineViewActions = {
+  onStartReached() {},
+  onEndReached() {},
+  onAnchorReached() {},
+  onVisibleRangeChanged() {},
+  onAtBottomStateChange() {},
+  onJumpToReadMarker() {},
+  onMarkAllAsRead() {},
+  onJumpToLive() {},
+};
+
+/** The row at the top of the Timeline tab while older events load (`BACKWARD_LOADING_KEY`). */
+export const LOADING_OLDER: TimelineItem = { kind: "loading", key: "backward-loading" };
+
+const objectOf = (value: unknown): Record<string, unknown> => (typeof value === "object" && value !== null ? (value as Record<string, unknown>) : {});
+
+/** What a raw event's tile shows as its body; `media` resolves the `mxc://` URI of an image. */
+export function rawBody(event: RawEvent, media: (mxcUrl: string) => Promise<string | undefined>): TimelineBody {
+  const { content } = event;
+  if (objectOf(event.unsigned).redacted_because) return { kind: "redacted" };
+  if (event.type === "m.room.encrypted") return { kind: "utd" };
+  const url = content.url;
+  const info = objectOf(content.info);
+  const size = (n: unknown) => (typeof n === "number" ? n : undefined);
+  if ((event.type === "m.sticker" || content.msgtype === "m.image") && typeof url === "string")
+    return { kind: "image", caption: String(content.body ?? ""), width: size(info.w), height: size(info.h), load: () => media(url) };
+  if (event.type === "m.room.message" && typeof content.body === "string" && objectOf(content["m.relates_to"]).rel_type !== "m.replace") {
+    const html = content.format === "org.matrix.custom.html" && typeof content.formatted_body === "string" ? content.formatted_body : undefined;
+    return { kind: "text", text: content.body, ...(html === undefined ? {} : { html }) };
+  }
+  return { kind: "event" };
+}
+
+/** The `m.annotation` of an `m.reaction` event: the event it reacts to and its key. */
+function annotation(event: RawEvent): { target: string; key: string } | undefined {
+  const relation = objectOf(event.content["m.relates_to"]);
+  if (event.type !== "m.reaction" || relation.rel_type !== "m.annotation" || typeof relation.event_id !== "string" || typeof relation.key !== "string") return undefined;
+  return { target: relation.event_id, key: relation.key };
+}
+
+/**
+ * The `TimelineView` items of a raw timeline (`LiveSession.timeline`: the js session, the
+ * DevBackend, the stories): a date separator per local day, one tile per event, except reactions:
+ * they are buttons on the event they react to, if it is loaded. `userId`: the account (its own
+ * reactions are selected); `media` resolves images.
+ */
+export function rawTimelineItems({ events, loadingOlder }: RoomTimeline, userId = "", media: (mxcUrl: string) => Promise<string | undefined> = async () => undefined): TimelineItem[] {
+  const ids = new Set(events.map((e) => e.event_id));
+  const reactions = new Map<unknown, TimelineReaction[]>();
+  const shown = events.filter((event) => {
+    const a = annotation(event);
+    if (!a || !ids.has(a.target)) return true;
+    const list = reactions.get(a.target) ?? [];
+    reactions.set(a.target, list);
+    let reaction = list.find((r) => r.key === a.key);
+    if (!reaction) list.push((reaction = { key: a.key, senders: [], mine: false }));
+    reaction.senders.push(String(event.sender));
+    reaction.mine ||= event.sender === userId;
+    return false;
+  });
+  const items: TimelineItem[] = loadingOlder ? [LOADING_OLDER] : [];
+  let day = "";
+  shown.forEach((event, i) => {
+    const key = typeof event.event_id === "string" ? event.event_id : `#${i}`;
+    const ts = typeof event.origin_server_ts === "number" ? event.origin_server_ts : 0;
+    const sameDay = new Date(ts).toDateString() === day;
+    if (!sameDay) {
+      day = new Date(ts).toDateString();
+      items.push({ kind: "date-separator", key: `day-${key}`, ts });
+    }
+    const row: TimelineRow = { sender: String(event.sender ?? ""), ts, body: rawBody(event, media), reactions: reactions.get(event.event_id) ?? [], json: () => event };
+    // As Element Web groups: messages of one sender, not a state or other event in between.
+    const before = items.at(-1);
+    const continuation = row.body.kind !== "event" && before?.kind === "event" && (before.event as TimelineRow).sender === row.sender && (before.event as TimelineRow).body.kind !== "event";
+    items.push({ kind: "event", key, event: row, continuation, lastInSection: shown[i + 1]?.sender !== event.sender });
+  });
+  return items;
+}
+
 /**
  * The tab of a running widget, if a panel has one. `shown`: it is the active tab of a visible
  * panel (in a narrow window only the focused panel is visible).
@@ -738,6 +832,7 @@ export type AppIntent =
   | { type: "room/removeLocalWidget"; roomId: RoomId; widgetKey: WidgetKey; confirmed?: boolean } // confirmed; stops the widget, closes its tab and forgets its remembered capabilities
   | { type: "room/dismissWidgetWrite" } // the "Add widget" form was closed: forgets a refusal (`widgetWrite`)
   | { type: "room/copyToDevBackend"; roomId: RoomId; lastEvents: number } // only while the DevBackend is enabled; local widgets are not copied
+  | { type: "room/sendMessage"; roomId: RoomId; body: string } // the composer of the RoomTimeline: an m.text message as the active account (the DevBackend's user in the DevBackend); a failure is a toast
   | { type: "room/loadOlderEvents"; roomId: RoomId } // "Load older events" of the RoomTimeline, once it shows every loaded event: the session loads up to OLDER_EVENTS_PER_LOAD older ones (from its store or the homeserver); a failure is a toast
   // Dev tools: the DevBackend while it is active, else the room as the active Matrix account (through the room's backend)
   | { type: "roomTools/selectRoom"; roomId: RoomId } // the dropdown, for the active account

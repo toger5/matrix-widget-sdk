@@ -4,15 +4,21 @@ import type { CSSProperties, ReactNode } from "react";
 import { waitFor } from "storybook/test";
 
 import { WIDGET_EVENT_TYPES, type WidgetEventParser } from "../widgetStateEvent";
-import { DEFAULT_VIEW_ENV, ViewEnvContext, type RoomStateData, type RoomTimelineData, type ViewEnv } from "./env";
+import { rawTimelineItems } from "../appViewModel";
+import { DEFAULT_VIEW_ENV, staticTimeline, ViewEnvContext, type RoomStateData, type RoomTimelineData, type ViewEnv } from "./env";
 import { Icon } from "./ui/atoms";
-import { DEV_TOOLS_DATA, MOCKED_ROOM_DATA, MOCKED_ROOM_STATE, MOCKED_ROOM_TIMELINE, ROOM_DETAILS, ROOM_STATE, ROOM_TIMELINE, ROOMS } from "./fixtures";
+import { DEV_TOOLS_DATA, FIXTURE_MEDIA, MOCKED_ROOM_DATA, MOCKED_ROOM_STATE, MOCKED_ROOM_TIMELINE, ROOM_DETAILS, ROOM_STATE, ROOM_TIMELINE, ROOMS } from "./fixtures";
 
 const retry = (what: string) => () => console.info(`retry the ${what}`);
 const TIMELINE: RoomTimelineData = { timeline: { status: "ready", value: ROOM_TIMELINE }, retry: retry("timeline") };
 const STATE: RoomStateData = { state: { status: "ready", value: ROOM_STATE }, retry: retry("state") };
 /** "Widget lab", the mocked room of the DevBackendView stories. */
 const LAB_TIMELINE: RoomTimelineData = { timeline: { status: "ready", value: MOCKED_ROOM_TIMELINE }, retry: retry("timeline") };
+/** Media of the fixtures, as `ViewEnv.avatar` resolves it. */
+const media = async (mxcUrl: string) => FIXTURE_MEDIA[mxcUrl];
+/** The timeline of "Design crit" as Ada sees it (her reactions are selected). */
+const TIMELINE_VM = staticTimeline(rawTimelineItems(ROOM_TIMELINE, "@ada:example.org", media));
+const LAB_TIMELINE_VM = staticTimeline(rawTimelineItems(MOCKED_ROOM_TIMELINE));
 const LAB_STATE: RoomStateData = { state: { status: "ready", value: MOCKED_ROOM_STATE }, retry: retry("state") };
 
 /**
@@ -49,6 +55,8 @@ export const STORY_ENV: ViewEnv = {
   useMockedRoomData: () => MOCKED_ROOM_DATA,
   useRoomDetails: () => ({ status: "ready", value: ROOM_DETAILS }),
   useRoomTimeline: (roomId) => (roomId === ROOMS.lab.id ? LAB_TIMELINE : TIMELINE),
+  avatar: media,
+  useTimelineViewModel: (roomId) => (roomId === ROOMS.lab.id ? LAB_TIMELINE_VM : TIMELINE_VM),
   useRoomState: (roomId) => (roomId === ROOMS.lab.id ? LAB_STATE : STATE),
   widgetEvents: STORY_WIDGET_EVENTS,
   widgetStandIn: (widget, compact) => <FakeWidget kind={fakeWidgetKind(widget.widgetKey)} name={widget.widget.name} compact={compact} />,

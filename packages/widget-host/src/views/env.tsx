@@ -12,8 +12,9 @@
  */
 import { createContext, useContext, type ReactNode } from "react";
 
-import { loggableIntent, type AppIntent, type Loadable, type MockedRoomData, type RoomId, type WidgetDevToolsData, type WidgetInstanceId, type WidgetInstanceViewModel } from "../appViewModel";
-import type { RawEvent, RoomDetails, RoomTimeline } from "../session";
+import type { TimelineItem } from "@element-hq/web-shared-components";
+import { loggableIntent, TIMELINE_ACTIONS, timelineSnapshot, type AppIntent, type Loadable, type MockedRoomData, type RoomId, type WidgetDevToolsData, type WidgetInstanceId, type WidgetInstanceViewModel } from "../appViewModel";
+import type { RawEvent, RoomDetails, RoomTimeline, RoomTimelineViewModel } from "../session";
 import type { WidgetEventParser } from "../widgetStateEvent";
 
 export interface ViewEnv {
@@ -29,6 +30,8 @@ export interface ViewEnv {
   useRoomDetails: (roomId: RoomId) => Loadable<RoomDetails>;
   /** Hook: the RoomTimeline of a room (`LiveSession.timeline`), kept up to date; `retry` loads it again after an error. */
   useRoomTimeline: (roomId: RoomId) => RoomTimelineData;
+  /** Hook: the view model of the Timeline tab of a room (`LiveSession.timelineViewModel`), disposed when the tab goes. */
+  useTimelineViewModel: (roomId: RoomId) => RoomTimelineViewModel;
   /**
    * Hook: the whole current state of a room (`LiveSession.roomState`), for the Dev tools. Read once
    * `version` is known and again whenever it changes (`roomStateVersion` of the room's timeline);
@@ -75,6 +78,16 @@ export const EMPTY_MOCKED_ROOM_DATA: MockedRoomData = { rooms: [], scheduled: []
 
 const LOADING: Loadable<RoomDetails> = { status: "loading" };
 const LOADING_TIMELINE: RoomTimelineData = { timeline: { status: "loading" }, retry: () => {} };
+/**
+ * A timeline of fixed `items`; without them it is loading (the TimelineView's spinner). A
+ * TimelineView must mount without items: it scrolls to the bottom once the first ones arrive, in an
+ * effect that React's StrictMode would cancel on mount.
+ */
+export const staticTimeline = (items: TimelineItem[] = []): RoomTimelineViewModel => {
+  const snapshot = timelineSnapshot(items);
+  return { ...TIMELINE_ACTIONS, getSnapshot: () => snapshot, subscribe: () => () => {}, dispose: () => {} };
+};
+const LOADING_TIMELINE_VM = staticTimeline();
 const LOADING_STATE: RoomStateData = { state: { status: "loading" }, retry: () => {} };
 
 export const DEFAULT_VIEW_ENV: ViewEnv = {
@@ -84,6 +97,7 @@ export const DEFAULT_VIEW_ENV: ViewEnv = {
   useMockedRoomData: () => EMPTY_MOCKED_ROOM_DATA,
   useRoomDetails: () => LOADING,
   useRoomTimeline: () => LOADING_TIMELINE,
+  useTimelineViewModel: () => LOADING_TIMELINE_VM,
   useRoomState: () => LOADING_STATE,
   avatar: async () => undefined,
   // Without the app (no provider) nothing is a widget and no URL passes.

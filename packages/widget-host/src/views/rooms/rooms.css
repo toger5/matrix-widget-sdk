@@ -8,8 +8,6 @@
 
 /* Bodies scroll when the real content does not fit (the design rules only clip). */
 .rp-body > .ov, .rp-body > .picker, .side-body > .picker { overflow-y: auto; }
-/* The RoomTimeline scrolls; it keeps the events in view in place itself (RoomTimeline.tsx), so the browser must not. */
-.rp-body > .tl { overflow-y: auto; overflow-anchor: none; }
 
 /* Tabs: ⋯ and × of an inactive tab lie over the end of its label and appear on hover and keyboard focus. */
 .tab:not(.active) .tab-btn:not(.on) { position: absolute; top: 2px; right: 3px; background: var(--surface-2); opacity: 0; pointer-events: none; box-shadow: -6px 0 5px var(--surface-2); }

@@ -199,35 +199,23 @@ const TIME = new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digi
 const DAY = new Intl.DateTimeFormat("en-GB", { weekday: "long", day: "numeric", month: "long" });
 const DAY_AND_YEAR = new Intl.DateTimeFormat("en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
 
-/** The event's `origin_server_ts`, if it is a time a `Date` can hold (a formatter throws on any other; the sending server picks it). */
-function timeOf(event: RawEvent): number | undefined {
-  const ts = event.origin_server_ts;
-  return typeof ts === "number" && Math.abs(ts) <= 8.64e15 ? ts : undefined;
-}
+/** `ts` if it is a time a `Date` can hold (a formatter throws on any other; the sending server picks `origin_server_ts`). */
+const valid = (ts: number): number | undefined => (Number.isFinite(ts) && Math.abs(ts) <= 8.64e15 ? ts : undefined);
 
-/** "17:40:02": the local time of an event (`origin_server_ts`). Empty if it has none. */
-export function eventTime(event: RawEvent): string {
-  const ts = timeOf(event);
-  return ts === undefined ? "" : TIME.format(ts);
+/** "17:40:02": the local time of `ts` (ms since the epoch). Empty if it is not a valid time. */
+export function timeLabel(ts: number): string {
+  return valid(ts) === undefined ? "" : TIME.format(ts);
 }
 
 const keyOf = (d: Date) => `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
 
-/** The key of an event's local day ("" if it has no time): events with the same key go under one heading. */
-export function dayKey(event: RawEvent): string {
-  const ts = timeOf(event);
-  return ts === undefined ? "" : keyOf(new Date(ts));
-}
-
-/** The local day of an event, for the day headings: its `dayKey` and the label ("Today", "Yesterday", "Saturday 14 November"; with the year if it is not this one). */
-export function eventDay(event: RawEvent, now = Date.now()): { key: string; label: string } {
-  const ts = timeOf(event);
-  if (ts === undefined) return { key: "", label: "Unknown date" };
+/** The local day of `ts`, for the date separators: "Today", "Yesterday", "Saturday 14 November" (with the year if it is not this one). */
+export function dayLabel(ts: number, now = Date.now()): string {
+  if (valid(ts) === undefined) return "Unknown date";
   const day = new Date(ts);
-  const key = keyOf(day);
   const today = new Date(now);
   const yesterday = new Date(today.getFullYear(), today.getMonth(), today.getDate() - 1);
-  if (key === keyOf(today)) return { key, label: "Today" };
-  if (key === keyOf(yesterday)) return { key, label: "Yesterday" };
-  return { key, label: (day.getFullYear() === today.getFullYear() ? DAY : DAY_AND_YEAR).format(day) };
+  if (keyOf(day) === keyOf(today)) return "Today";
+  if (keyOf(day) === keyOf(yesterday)) return "Yesterday";
+  return (day.getFullYear() === today.getFullYear() ? DAY : DAY_AND_YEAR).format(day);
 }

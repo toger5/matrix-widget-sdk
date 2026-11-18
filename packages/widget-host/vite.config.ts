@@ -1,6 +1,7 @@
 /// <reference types="node" />
 import { readFileSync } from "node:fs";
-import { join } from "node:path";
+import { createRequire } from "node:module";
+import { dirname, join } from "node:path";
 import { brotliCompressSync, constants, gzipSync } from "node:zlib";
 
 import react from "@vitejs/plugin-react";
@@ -69,6 +70,14 @@ function compressWasm(): Plugin {
 
 export default defineConfig({
   plugins: [react(), compressWasm()],
+  // @matrix-org/emojibase-bindings (in Element Web's shared components) reads this at load time; there is no `process` in a browser.
+  define: { "process.env.MAX_EMOJI_VERSION": "undefined" },
+  // The English strings of Element Web's shared components: the package ships them in `src/`, which its `exports` do not list.
+  resolve: {
+    alias: {
+      "@element-hq/web-shared-components/en_EN.json": join(dirname(createRequire(import.meta.url).resolve("@element-hq/web-shared-components")), "../src/i18n/strings/en_EN.json"),
+    },
+  },
   server: { port: 5173, strictPort: true },
   preview: { port: 5173, strictPort: true },
   // Unit tests only; `e2e/` holds the Playwright tests (`npm run e2e`).

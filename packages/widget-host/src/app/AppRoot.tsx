@@ -9,9 +9,9 @@ import { createPortal } from "react-dom";
 
 import { widgetTab, type Loadable, type MockedRoomData, type WidgetDevToolsData, type WidgetInstanceViewModel } from "../appViewModel";
 import { hostWidgetEvents } from "../lib/widgetEvents";
-import type { RawEvent, RoomDetails, RoomTimeline } from "../session";
+import type { RawEvent, RoomDetails, RoomTimeline, RoomTimelineViewModel } from "../session";
 import { AppShell } from "../views/app/AppShell";
-import { EMPTY_DEV_TOOLS_DATA, EMPTY_MOCKED_ROOM_DATA, ViewEnvContext, type RoomStateData, type RoomTimelineData, type ViewEnv } from "../views/env";
+import { EMPTY_DEV_TOOLS_DATA, EMPTY_MOCKED_ROOM_DATA, staticTimeline, ViewEnvContext, type RoomStateData, type RoomTimelineData, type ViewEnv } from "../views/env";
 import { widgetSlotName } from "../views/ui/WidgetSlot";
 import { DEV_ACCOUNT_ID, type AppController } from "./controller";
 
@@ -64,6 +64,21 @@ function viewEnv(controller: AppController, narrow: boolean): ViewEnv {
         };
       }, [session, roomId]);
       return details;
+    },
+    useTimelineViewModel: (roomId) => {
+      const session = controller.activeSession();
+      const [vm, setVm] = useState<RoomTimelineViewModel>(staticTimeline);
+      useEffect(() => {
+        if (!session) return;
+        let created: RoomTimelineViewModel | undefined;
+        // On the next task: StrictMode (dev) mounts twice, and its first cleanup comes before a timeline is opened (opening one is not cheap).
+        const start = setTimeout(() => setVm((created = session.timelineViewModel(roomId))));
+        return () => {
+          clearTimeout(start);
+          created?.dispose();
+        };
+      }, [session, roomId]);
+      return vm;
     },
     useRoomTimeline: (roomId): RoomTimelineData => {
       const session = controller.activeSession();

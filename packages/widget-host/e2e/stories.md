@@ -127,10 +127,9 @@ The Dev tools of a Matrix account (`sidepanel-roomtoolsview--*`) are **not reach
 | `rooms-roomoverview--add-widget-refused` | `overview.spec.ts` › Add widget, to the room: the state event is sent as you; replacing a widget of the room asks first; a refusal stays in the form with the draft ("fail sends" of the DevBackend stands for the room's refusal; a real `M_FORBIDDEN` needs a Matrix room) |
 | `rooms-addwidgetform--edit` | `overview.spec.ts` › a local widget: editing its URL forgets its capabilities and reloads it; removing it closes its tab |
 | `rooms-addwidgetform--sending` | **catalogue**: "Add to the room" while the state event is being sent |
-| `rooms-roomtimeline--events` | `timeline.spec.ts` › 250 events: the newest 200 are shown, at the bottom; “Load older events” shows the rest and the start of the room. At the bottom it stays there, scrolled up the events in view stay put (the mocked room's events are messages, not one of every kind: `test/eventText.test.ts` checks the words for those of the story) |
-| `rooms-roomtimeline--start` | `timeline.spec.ts` › “Open timeline” adds the Timeline tab at the end; its lines are the room's events, oldest first; pressing one shows its JSON |
+| `rooms-roomtimeline--events` | `timeline.spec.ts` › 250 events: virtualised, it starts at the bottom and stays there while events arrive; the top is the start of the room (the mocked room's events are messages, not one of every kind: `test/eventText.test.ts` checks the words for those of the story) |
+| `rooms-roomtimeline--start` | `timeline.spec.ts` › “Open timeline” adds the Timeline tab at the end; its tiles are the room's events, oldest first; pressing one shows its JSON |
 | `rooms-roomtimeline--loading` | **not reachable**: the DevBackend's timeline is there at once |
-| `rooms-roomtimeline--load-error` | **not reachable**: the DevBackend's timeline never fails |
 
 ## Widget
 

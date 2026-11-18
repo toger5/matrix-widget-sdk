@@ -21,6 +21,7 @@ import { needsVerification, onVerificationChanged, RecoveryKeySlot, startEmojiVe
 import { AVATAR_SIZE, AvatarCache } from "../../lib/avatarCache";
 import { describesWidget } from "../../lib/widgetEvents";
 import { RoomTimelines } from "../roomTimelines";
+import { rawTimelineViewModel } from "../timelineViewModel";
 import { WIDGET_EVENT_TYPES, type StateEvent } from "../../widgetStateEvent";
 import {
   StoredLoginInvalidError,
@@ -322,6 +323,10 @@ class JsSdkSession implements LiveSession {
 
   onTimelineChanged(roomId: string, listener: () => void): () => void {
     return this.timelines.listen(roomId, listener);
+  }
+
+  timelineViewModel(roomId: string) {
+    return rawTimelineViewModel(this, roomId);
   }
 
   /**

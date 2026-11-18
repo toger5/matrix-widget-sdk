@@ -15,6 +15,7 @@ import { describesWidget } from "../../lib/widgetEvents";
 import type { AccountInfo, LiveSession, RawEvent, RoomBackend, RoomDetails, RoomExport, RoomMember, RoomSummary, RoomTimeline } from "../../session";
 import { WIDGET_EVENT_TYPES, type StateEvent } from "../../widgetStateEvent";
 import { base64ToBytes, bytesToBase64, validateSeed, type DevBackendSeed, type SeedMedia, type SeedRoom } from "./seed";
+import { rawTimelineViewModel } from "../timelineViewModel";
 
 export type { DevBackendSeed } from "./seed";
 export { validateSeed } from "./seed";
@@ -249,6 +250,10 @@ export class DevBackend implements LiveSession {
   /** Told by `refresh()` when the room's backend changed. */
   onTimelineChanged(roomId: string, listener: () => void): () => void {
     return listen(this.timelineListeners, roomId, listener);
+  }
+
+  timelineViewModel(roomId: string) {
+    return rawTimelineViewModel(this, roomId);
   }
 
   /** Every widget of the room shares the room's backend. It lives as long as the room, so `dispose` does nothing. */

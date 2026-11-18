@@ -27,6 +27,7 @@ All paths below are relative to `packages/widget-host/`.
 | the stories (`src/views/**/*.stories.tsx`, `npm run storybook`) | every state of the UI, one story each; `Sketch/…` stories are designed but not built (`.claude/skills/sketch-stories/SKILL.md`) | current, the visual specification |
 | header comment of `src/appViewModel.ts` | the view model tree and the rules it encodes | current |
 | `implementation_findings.md` | open decisions, each marked in the code with `// TODO-FINDING <name>` | current, kept up to date |
+| `performance_findings.md` | why the Timeline tab was slow in the rust build: measurements, the workarounds in the host, fixes proposed for matrix-rust-sdk | current |
 | `implementationPlan.md` | plan of the first implementation; section 2 (iframe slots, measured per browser) still holds; section 1 names files that do not exist | historical |
 | `designFeedback.md` | review rounds of the first design; its accessibility list "Later, for the implementation" is still a requirement | historical |
 

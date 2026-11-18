@@ -125,12 +125,13 @@ A room view is a tabbed container, shown inside a room panel. Its first tab is t
 
 ## RoomTimeline
 
-The events of the room, for debugging. No composer.
+The events of the room, for debugging. Element Web's `TimelineView` and `EventTileView` (shared components). Below it a composer (Element Web's shared components have none): a text field and "Send", which sends an `m.text` message as the account (Enter sends; "Send" is disabled while the field is empty).
 
-- Oldest at the top, newest at the bottom. New events (also the ones widgets send) appear live; while scrolled to the bottom, it stays there.
-- One line per event, under a heading per day: time, sender (user ID), what happened in words, event type. State events are muted. Nothing is hidden: undecryptable and deleted events, reactions and edits get a line too.
-- Pressing a line shows the event's JSON.
-- At the top: "Load older events", or "Start of the room" once it is reached. It first shows loaded events that are not rendered yet, then asks the session for more; it is disabled while loading.
+- Oldest at the top, newest at the bottom, virtualised. New events (also the ones widgets send) appear live; while scrolled to the bottom, it stays there. Scrolled to the top, it loads older events (a "Loading older events…" row while it does).
+- A date separator per day. A message tile as in Element Web: the sender's avatar and name (in one of Compound's decorative colours per user; both left out after a message of the same sender), the time (only while the pointer or the focus is on the tile, or its JSON is open), the body, the reactions as buttons below it (the account's own selected; pressing one adds or takes back the account's reaction, in the rust build), and the event type at the end of the line.
+- Bodies: the text, or its HTML (`formatted_body`: headings, bold, lists, code, links…, cut down to what the Matrix spec allows) ("(edited)" after an edited one), an image (a sticker too; an error line if it cannot be loaded), "Unable to decrypt message" with the reason where known, "Message deleted" (the reason on hover). Any other event is one muted line: sender and what happened in words, event type.
+- Logged in with matrix-rust-sdk the tiles come from the SDK's timeline: edits, reactions and redactions are folded into their event, the sender has their display name and avatar, a message being sent shows "sending" or "failed". With matrix-js-sdk and in the DevBackend the raw events: reactions are folded into the event they react to (if it is loaded), everything else gets a tile (an edit too); senders are user IDs.
+- Pressing the event type (or the line of a state event) shows the event's JSON.
 
 ## Capability prompt
 

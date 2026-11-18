@@ -14,8 +14,9 @@ in-memory mode (and enables the dev tools and the DevBackend), and so do the URL
 Logged in, it is activated from the account list or with **Switch to the DevBackend** at the
 bottom of the Dev tools (both shown while **Enable the DevBackend** is on in the settings).
 **Enable dev tools** is a switch of its own: the Dev tools, the widget dev tools and
-**Add widget** work with a Matrix account as well. The app has no Element Web or Compound
-components yet.
+**Add widget** work with a Matrix account as well. The Timeline tab is Element Web's shared
+`TimelineView` (`@element-hq/web-shared-components`, with Compound); the rest of the app has no
+Element Web or Compound components.
 
 ## Structure
 

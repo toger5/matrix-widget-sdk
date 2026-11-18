@@ -34,14 +34,20 @@ const cssFiles = (dir: string) => files(dir);
 
 const withoutComments = (css: string) => css.replace(/\/\*[\s\S]*?\*\//g, "");
 const MANIFEST = "src/styles/app.css";
-const app = imports(MANIFEST);
+/** Element Web's shared components and Compound, from their packages (layer `element`). */
+const PACKAGES = ["@vector-im/compound-design-tokens/", "@vector-im/compound-web/", "@element-hq/web-shared-components/"];
+const fromPackage = (i: Import) => PACKAGES.some((p) => i.file.includes(p));
+const all = imports(MANIFEST);
+const app = all.filter((i) => !fromPackage(i));
 /** The design rules: every stylesheet of src/styles apart from the manifest. */
 const designFiles = cssFiles("src/styles").filter((f) => f !== MANIFEST);
 const isDesign = (file: string) => file.startsWith("src/styles/");
 
 describe("stylesheets", () => {
   it("the manifest declares the layers", () => {
-    expect(read(MANIFEST).match(/^@layer [^;{]+;/m)?.[0]).toBe("@layer tokens, base, atoms, views;");
+    expect(read(MANIFEST).match(/^@layer [^;{]+;/m)?.[0]).toBe("@layer element, tokens, base, atoms, views;");
+    // the packages in the layer element, below the host's layers
+    expect(all.filter(fromPackage).map((i) => i.layer)).toEqual(["element", "element", "element"]);
   });
 
   it("every file is imported once, with a layer; the app-only files after the design files of their layer", () => {

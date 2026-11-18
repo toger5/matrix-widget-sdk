@@ -315,6 +315,9 @@ export const ROOM_TIMELINE: RoomTimeline = {
     rawEvent("17:43:50", 1, "@ada:example.org", "im.vector.modular.widgets", { type: "m.custom", name: "Element Call", url: "https://call.example.org/room" }, { state_key: "call" }),
     rawEvent("12:01:08", 0, "@jonas:example.org", "m.room.message", { msgtype: "m.text", body: "Morning! The screenshots are on the whiteboard." }, { event_id: "$Mk2pXr8sLw0bQe4tNa1cVu" }),
     rawEvent("12:01:31", 0, "@mira:example.org", "m.reaction", { "m.relates_to": { rel_type: "m.annotation", event_id: "$Mk2pXr8sLw0bQe4tNa1cVu", key: "👍" } }),
+    rawEvent("12:01:40", 0, "@ada:example.org", "m.reaction", { "m.relates_to": { rel_type: "m.annotation", event_id: "$Mk2pXr8sLw0bQe4tNa1cVu", key: "👍" } }),
+    rawEvent("12:01:52", 0, "@priya:example.org", "m.reaction", { "m.relates_to": { rel_type: "m.annotation", event_id: "$Mk2pXr8sLw0bQe4tNa1cVu", key: "🎉" } }),
+    rawEvent("12:02:10", 0, "@jonas:example.org", "m.room.message", { msgtype: "m.image", body: "whiteboard-page-2.png", url: "mxc://example.org/whiteboard", info: { mimetype: "image/png", w: 640, h: 400 } }),
     rawEvent("12:02:47", 0, "@ada:example.org", "m.room.message", { msgtype: "m.text", body: "Starting the call now" }, { event_id: "$Wq3bH0kTzNcEw7aLrY2mPq" }),
     rawEvent(
       "12:02:49",
@@ -333,10 +336,23 @@ export const ROOM_TIMELINE: RoomTimeline = {
     }),
     rawEvent("12:04:05", 0, "@priya:example.org", "m.room.message", {}, { unsigned: { redacted_because: { type: "m.room.redaction", sender: "@priya:example.org", content: {} } } }),
     rawEvent("12:04:12", 0, "@tomas:corp.example", "m.sticker", { body: "party parrot", url: "mxc://corp.example/parrot", info: { mimetype: "image/gif", w: 128, h: 128 } }),
+    rawEvent("12:04:20", 0, "@mira:example.org", "m.room.message", {
+      msgtype: "m.text",
+      body: "Agenda: 1. Tab bar (new) 2. Icons",
+      format: "org.matrix.custom.html",
+      formatted_body: "<h3>Agenda</h3><ol><li><b>Tab bar</b> – <i>new</i></li><li><code>Icons</code>, see <a href=\"https://example.org/icons\">the board</a></li></ol>",
+    }),
     rawEvent("12:04:33", 0, "@ada:example.org", "org.matrix.msc3381.poll.start", {
       "org.matrix.msc3381.poll.start": { question: { body: "Ship the new tab bar?" }, kind: "org.matrix.msc3381.poll.disclosed", max_selections: 1, answers: [{ id: "yes", "org.matrix.msc1767.text": "Yes" }] },
     }),
   ],
+};
+
+/** The media of the fixtures (`ViewEnv.avatar` in the stories): the whiteboard image of `ROOM_TIMELINE`, an avatar. */
+export const FIXTURE_MEDIA: Record<string, string> = {
+  "mxc://example.org/whiteboard": `data:image/svg+xml,${encodeURIComponent(
+    '<svg xmlns="http://www.w3.org/2000/svg" width="640" height="400"><rect width="640" height="400" fill="#fbfaf6"/><rect x="60" y="60" width="200" height="140" rx="8" fill="#ffe07a"/><rect x="300" y="40" width="200" height="140" rx="8" fill="#ffb3c7"/><rect x="380" y="220" width="200" height="140" rx="8" fill="#a9d8ff"/><path d="M120 300c60-40 120 30 200-10" fill="none" stroke="#333" stroke-width="5" stroke-linecap="round"/></svg>',
+  )}`,
 };
 
 const state = (type: string, stateKey: string, content: Record<string, unknown>, sender = "@alice:dev.local"): RawEvent => ({ type, state_key: stateKey, sender, content });

@@ -5,14 +5,19 @@
    - Then the app-only rules of each area (src/views/<area>/<file>.css): real inputs, scrolling, resizing, hover
      states. They are in the layer of their area, after all design files, so they win over a design rule of the
      same specificity.
-   Layers: tokens < base < atoms < views; a rule of a later layer wins whatever the specificity.
+   - Element Web's shared components (the Timeline tab) and Compound, from their packages, in the layer element,
+     below all of the host's (as Element Web layers them below its app): Compound also styles html, body and input.
+   Layers: element < tokens < base < atoms < views; a rule of a later layer wins whatever the specificity.
    In the views layer the order matters between areas (`.caps` of the dev tools before `.prompt-card`).
    test/styles.test.ts checks the list. Storybook adds .storybook/mockup.css (.storybook/preview.css). */
-@layer tokens, base, atoms, views;
+@layer element, tokens, base, atoms, views;
 @import "./tokens.css" layer(tokens);
 @import "./base.css" layer(base);
 @import "./atoms.css" layer(atoms);
 @import "../views/ui/atoms.css" layer(atoms);
+@import "@vector-im/compound-design-tokens/assets/web/css/compound-design-tokens.css" layer(element);
+@import "@vector-im/compound-web/dist/style.css" layer(element);
+@import "@element-hq/web-shared-components/dist/element-web-shared-components.css" layer(element);
 @import "./shell.css" layer(views);
 @import "./sidepanel.css" layer(views);
 @import "./devbackend.css" layer(views);

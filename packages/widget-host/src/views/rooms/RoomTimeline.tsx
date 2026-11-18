@@ -1,133 +1,34 @@
-import { memo, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { I18nApi, I18nContext, registerTranslations, TimelineSeparator, TimelineView, type TimelineItem } from "@element-hq/web-shared-components";
+import EN_STRINGS from "@element-hq/web-shared-components/en_EN.json";
+import { TooltipProvider } from "@vector-im/compound-web";
+import { useCallback, useEffect, useRef, useState, type FormEvent, type RefObject } from "react";
 
-import { OLDER_EVENTS_PER_LOAD, type RoomId } from "../../appViewModel";
-import type { RawEvent, RoomTimeline as RoomTimelineData } from "../../session";
+import type { RoomId } from "../../appViewModel";
+import type { TimelineRow } from "../../session";
 import { useDispatch, useViewEnv } from "../env";
-import { Button, Icon, Json } from "../ui/atoms";
-import { dayKey, describeEvent, eventDay, eventTime } from "./eventText";
+import { Button } from "../ui/atoms";
+import { dayLabel } from "./eventText";
+import { TimelineTile } from "./TimelineTile";
+
+/** The shared components need one, with their English strings; the host has no translations. */
+registerTranslations("en", EN_STRINGS);
+const I18N = new I18nApi();
 
 export interface RoomTimelineProps {
   roomId: RoomId;
 }
 
-/** How many of the newest events are rendered, and how many more each "Load older events" shows of those already loaded. */
-// TODO-FINDING room-timeline-not-virtualized - the RoomTimeline renders the newest 200 events, not a virtualised list; "Load older events" shows more of the loaded ones before it asks the session.
-const RENDERED = 200;
-/** Closer to the bottom than this (px), the timeline counts as scrolled to the bottom and stays there. */
-const PINNED_SLACK = 8;
-/** How many of the rows in view keep their place while events are added or dropped above them (the first one that is still there). */
-const ANCHORS = 8;
-
 /**
- * What the Timeline tab shows: the events of the room, oldest at the top, newest at the bottom
- * (stories `rooms-roomtimeline--*`). It starts scrolled to the bottom and stays
- * there while new events arrive; scrolled up, the events in view stay where they are. A heading
- * per day; pressing a line shows the event's JSON. The events come from
- * `useViewEnv().useRoomTimeline(roomId)`; nothing of them is in the view model.
+ * What the Timeline tab shows (stories `rooms-roomtimeline--*`): Element Web's `TimelineView` on
+ * `useViewEnv().useTimelineViewModel(roomId)`. Virtualised, it starts at the bottom and stays there
+ * while new events arrive; scrolling to the top loads older events. A date separator per day;
+ * pressing an event's type shows its JSON. Below it a composer for text messages.
  */
 export function RoomTimeline({ roomId }: RoomTimelineProps) {
-  const { timeline, retry } = useViewEnv().useRoomTimeline(roomId);
-  if (timeline.status === "loading") {
-    return (
-      <div className="tl" data-testid="room-timeline" data-room-id={roomId}>
-        <div className="empty tl-state" role="status">
-          <span className="spinner" aria-hidden="true" />
-          <b>Loading the timeline…</b>
-        </div>
-      </div>
-    );
-  }
-  if (timeline.status === "error") {
-    return (
-      <div className="tl" data-testid="room-timeline" data-room-id={roomId}>
-        <div className="empty tl-state" role="alert">
-          <Icon name="alert" size={28} className="danger" />
-          <b>The timeline could not be loaded</b>
-          <p>{timeline.error}</p>
-          <Button kind="primary" icon="refresh" onClick={retry}>
-            Try again
-          </Button>
-        </div>
-      </div>
-    );
-  }
-  return <TimelineEvents roomId={roomId} timeline={timeline.value} />;
-}
-
-/** The key of an event in the list: its id (an event without one, which a session should not hand out, gets its position). */
-const keyOf = (event: RawEvent, index: number) => (typeof event.event_id === "string" ? event.event_id : `#${index}`);
-
-interface Day {
-  key: string;
-  label: string;
-  events: { key: string; event: RawEvent }[];
-}
-
-/**
- * The rendered events by day. A day's key is its date, so it stays the same when its oldest
- * rendered event is dropped (its rows are not mounted again, the focus stays); a date that comes
- * back after another one (clocks of servers differ) gets a number.
- */
-function byDay(events: RawEvent[], offset: number): Day[] {
-  const days: Day[] = [];
-  const seen = new Map<string, number>();
-  let last: string | undefined;
-  events.forEach((event, i) => {
-    const key = dayKey(event);
-    let day = days.at(-1);
-    if (!day || key !== last) {
-      last = key;
-      const n = seen.get(key) ?? 0;
-      seen.set(key, n + 1);
-      days.push((day = { key: n > 0 ? `${key}#${n}` : key, label: eventDay(event).label, events: [] }));
-    }
-    day.events.push({ key: keyOf(event, offset + i), event });
-  });
-  return days;
-}
-
-/** One line of the RoomTimeline and, open, the event's JSON. Rendered again only when its event or `open` changes. */
-const TimelineRow = memo(function TimelineRow({ rowKey, event, open, onToggle }: { rowKey: string; event: RawEvent; open: boolean; onToggle: (key: string) => void }) {
-  const said = describeEvent(event);
-  return (
-    <li className={`tl-ev ${said.state ? "state" : ""} ${open ? "open" : ""}`} data-key={rowKey} data-event-id={typeof event.event_id === "string" ? event.event_id : undefined}>
-      <button type="button" className="tl-h" aria-expanded={open} onClick={() => onToggle(rowKey)}>
-        <span className="tl-time">{eventTime(event)}</span>
-        <span className="tl-s">{typeof event.sender === "string" ? event.sender : ""}</span>
-        <span className="tl-p">
-          {said.icon && <Icon name={said.icon} size={13} />}
-          <span className={said.mono ? "mono" : ""}>{said.text}</span>
-        </span>
-        {/* String(): the event comes from the homeserver, which may send anything as its type. */}
-        <span className="mono tl-t">{String(event.type)}</span>
-      </button>
-      {open && (
-        <pre className="code">
-          <Json value={event} />
-        </pre>
-      )}
-    </li>
-  );
-});
-
-function TimelineEvents({ roomId, timeline }: { roomId: RoomId; timeline: RoomTimelineData }) {
-  const dispatch = useDispatch();
-  const ids = useId();
-  const { events, atStart, loadingOlder } = timeline;
-  /** How many of the newest events are rendered. */
-  const [limit, setLimit] = useState(RENDERED);
+  const vm = useViewEnv().useTimelineViewModel(roomId);
+  const timelineRef = useRef<HTMLDivElement>(null);
+  useStartAtBottom(timelineRef, roomId);
   const [open, setOpen] = useState<ReadonlySet<string>>(() => new Set());
-  const offset = Math.max(0, events.length - limit);
-  const days = useMemo(() => byDay(offset > 0 ? events.slice(offset) : events, offset), [events, offset]);
-
-  const busy = loadingOlder && offset === 0;
-  const loadOlder = () => {
-    if (busy) return;
-    // First what is loaded but not rendered, then older events from the session (rendered once they arrive).
-    if (offset > 0) return setLimit(limit + RENDERED);
-    setLimit(events.length + OLDER_EVENTS_PER_LOAD);
-    dispatch({ type: "room/loadOlderEvents", roomId });
-  };
   const toggle = useCallback(
     (key: string) =>
       setOpen((keys) => {
@@ -137,106 +38,93 @@ function TimelineEvents({ roomId, timeline }: { roomId: RoomId; timeline: RoomTi
       }),
     [],
   );
-  // "Load older events" keeps the focus while it loads (`aria-disabled`, not `disabled`); when
-  // "Start of the room" replaces it, the focus moves to the oldest event instead of being lost.
-  const topRef = useRef<HTMLDivElement>(null);
-  /** "Load older events" had the focus at the last render, or got it since. */
-  const olderFocused = useRef(false);
-
-  // Scrolling: at the bottom it stays at the bottom; scrolled up, the events in view keep their place
-  // when events are added or dropped above them (older ones shown, the oldest rendered one dropped).
-  const scrollerRef = useRef<HTMLDivElement>(null);
-  const pinned = useRef(true);
-  /** Where the scroller was scrolled to and how high its content was, as of the last scroll or render. */
-  const seen = useRef<{ scrollTop: number; scrollHeight: number; clientHeight: number }>(undefined);
-  /** The first rows in view and their distance from the top edge, as of the last scroll or render. */
-  const anchors = useRef<{ key: string; top: number }[]>([]);
-  const remember = () => {
-    const el = scrollerRef.current;
-    if (!el) return;
-    pinned.current = el.scrollHeight - el.scrollTop - el.clientHeight <= PINNED_SLACK;
-    seen.current = { scrollTop: el.scrollTop, scrollHeight: el.scrollHeight, clientHeight: el.clientHeight };
-    const top = el.getBoundingClientRect().top;
-    const rows = Array.from(el.querySelectorAll<HTMLElement>(".tl-ev"));
-    // The first row whose bottom is below the top edge (the rows are in order: binary search).
-    let lo = 0;
-    let hi = rows.length;
-    while (lo < hi) {
-      const mid = (lo + hi) >> 1;
-      if (rows[mid].getBoundingClientRect().bottom > top) hi = mid;
-      else lo = mid + 1;
+  const renderItem = (item: TimelineItem) => {
+    switch (item.kind) {
+      case "date-separator":
+        return <TimelineSeparator label={dayLabel(item.ts)} />;
+      case "loading":
+        return (
+          <p className="tl-loading" role="status">
+            <span className="spinner" aria-hidden="true" /> Loading older events…
+          </p>
+        );
+      case "event":
+        return <TimelineTile rowKey={item.key} row={item.event as TimelineRow} continuation={item.continuation} open={open.has(item.key)} onToggle={toggle} />;
+      default:
+        return null;
     }
-    // A few of them: the first one may be the oldest rendered row, which a new event drops.
-    anchors.current = rows.slice(lo, lo + ANCHORS).map((row) => ({ key: row.dataset.key ?? "", top: row.getBoundingClientRect().top - top }));
   };
-  useLayoutEffect(() => {
-    const el = scrollerRef.current;
-    if (!el) return;
-    const doc = el.ownerDocument;
-    if (olderFocused.current && !topRef.current && (doc.activeElement === null || doc.activeElement === doc.body)) {
-      el.querySelector<HTMLElement>(".tl-h")?.focus({ preventScroll: true });
-    }
-    // The UI lives in a shadow root: its own `activeElement`.
-    olderFocused.current = !!topRef.current?.contains((el.getRootNode() as Document | ShadowRoot).activeElement);
-    // The browser reports a scroll (`remember()`) only with the next frame, so the user may have scrolled since: an
-    // event that arrives right after a scroll away from the bottom must not pull the timeline back. That scroll is
-    // measured against the content as it was then. A position that moved up to the new bottom was not scrolled: the
-    // content got shorter.
-    const last = seen.current;
-    const moved = last ? el.scrollTop - last.scrollTop : 0;
-    const scrolled = Math.abs(moved) < 1 || (moved < 0 && el.scrollTop >= el.scrollHeight - el.clientHeight - 1) ? 0 : moved;
-    if (last && scrolled) pinned.current = last.scrollHeight - el.scrollTop - last.clientHeight <= PINNED_SLACK;
-    if (pinned.current) el.scrollTop = el.scrollHeight;
-    else {
-      const rows = new Map(Array.from(el.querySelectorAll<HTMLElement>(".tl-ev"), (row) => [row.dataset.key, row]));
-      const anchor = anchors.current.find((a) => rows.has(a.key));
-      const row = anchor && rows.get(anchor.key);
-      // Where the anchor was before this render: its place as remembered, moved by what was scrolled since.
-      if (anchor && row) el.scrollTop += row.getBoundingClientRect().top - el.getBoundingClientRect().top - (anchor.top - scrolled);
-    }
-    remember();
-  });
-  // The panel or the content changed its size without a render (the window, a font): stay at the bottom.
-  useEffect(() => {
-    const el = scrollerRef.current;
-    if (!el || typeof ResizeObserver === "undefined") return;
-    const observer = new ResizeObserver(() => {
-      if (pinned.current) el.scrollTop = el.scrollHeight;
-      remember();
-    });
-    observer.observe(el);
-    if (el.firstElementChild) observer.observe(el.firstElementChild);
-    return () => observer.disconnect();
-  }, []);
-
   return (
-    <div ref={scrollerRef} className="tl" data-testid="room-timeline" data-room-id={roomId} onScroll={remember}>
-      <div className="tl-in">
-        {offset === 0 && atStart ? (
-          <p className="tl-top tl-start">Start of the room</p>
-        ) : (
-          <div ref={topRef} className="tl-top" onFocus={() => (olderFocused.current = true)}>
-            <Button sm aria-disabled={busy || undefined} onClick={loadOlder}>
-              {busy ? "Loading older events…" : "Load older events"}
-            </Button>
-          </div>
-        )}
-        {days.map((day) => {
-          const id = `${ids}-day-${day.key}`;
-          return (
-            <section key={day.key} className="tl-day">
-              <h3 className="tl-day-h" id={id}>
-                {day.label}
-              </h3>
-              <ul className="tl-list" aria-labelledby={id}>
-                {day.events.map(({ key, event }) => (
-                  <TimelineRow key={key} rowKey={key} event={event} open={open.has(key)} onToggle={toggle} />
-                ))}
-              </ul>
-            </section>
-          );
-        })}
+    <div className="tl-tab">
+      <div ref={timelineRef} className="tl" data-testid="room-timeline" data-room-id={roomId}>
+        <I18nContext.Provider value={I18N}>
+          <TooltipProvider>
+            <TimelineView key={roomId} vm={vm} renderItem={renderItem} />
+          </TooltipProvider>
+        </I18nContext.Provider>
       </div>
+      <Composer roomId={roomId} send={vm.send} />
     </div>
+  );
+}
+
+/** Frames the timeline has to stay at the bottom before `useStartAtBottom` lets go, and the most it waits (~3 s). */
+const SETTLED_FRAMES = 10;
+const MAX_FRAMES = 180;
+
+/**
+ * Every open starts at the newest event. The TimelineView scrolls there itself, but gives up after
+ * a second (`REVEAL_TIMEOUT_MS`) while rows still change height (images, long or formatted
+ * messages), and is then shown wherever it got to. So once it is shown, keep it at the bottom
+ * until it has stayed there for a few frames (again for another room); a wheel, touch, key or
+ * pointer press in it ends this at once.
+ */
+function useStartAtBottom(container: RefObject<HTMLDivElement | null>, roomId: RoomId) {
+  useEffect(() => {
+    const root = container.current;
+    if (!root) return;
+    let frame = 0;
+    let settled = 0;
+    let raf = 0;
+    const stop = () => cancelAnimationFrame(raf);
+    const events = ["wheel", "touchstart", "keydown", "pointerdown"] as const;
+    events.forEach((e) => root.addEventListener(e, stop, { capture: true, passive: true }));
+    const tick = () => {
+      const el = root.querySelector<HTMLElement>('[data-testid="timeline-scroller"]');
+      // Hidden: still loading or placing its first rows, however long that takes.
+      if (el?.checkVisibility({ visibilityProperty: true })) {
+        const bottom = el.scrollHeight - el.clientHeight;
+        if (el.scrollTop < bottom - 1) ((el.scrollTop = bottom), (settled = 0));
+        else if (++settled >= SETTLED_FRAMES) return;
+        if (++frame >= MAX_FRAMES) return;
+      }
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => {
+      stop();
+      events.forEach((e) => root.removeEventListener(e, stop, { capture: true }));
+    };
+  }, [container, roomId]);
+}
+
+/** Below the timeline: a text message as the account (the view model's `send`, else `room/sendMessage`); Enter sends it. */
+function Composer({ roomId, send: sendBody }: { roomId: RoomId; send?: (body: string) => void }) {
+  const dispatch = useDispatch();
+  const [text, setText] = useState("");
+  const send = (e: FormEvent) => {
+    e.preventDefault();
+    if (!text.trim()) return;
+    if (sendBody) sendBody(text);
+    else dispatch({ type: "room/sendMessage", roomId, body: text });
+    setText("");
+  };
+  return (
+    <form className="tl-composer" aria-label="Send a message" onSubmit={send}>
+      <input className="input grow" aria-label="Message" placeholder="Send a message…" value={text} onChange={(e) => setText(e.target.value)} />
+      <Button kind="primary" type="submit" disabled={!text.trim()}>
+        Send
+      </Button>
+    </form>
   );
 }

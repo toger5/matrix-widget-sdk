@@ -182,7 +182,9 @@ must find it. Clear deviations without a real choice go to the "Trivial" list as
 
 ## Rules
 
-- No Element Web or Compound components. No new dependency without asking.
+- Element Web's shared components (`@element-hq/web-shared-components`) and Compound only in the
+  Timeline tab (`RoomTimeline`, the lowest layer `element` in `src/styles/app.css`); elsewhere the host's own
+  atoms. No new dependency without asking.
 - Never edit generated files (the bindings).
 - Do not commit. Screenshots and other temporary files go to a scratch directory outside the
   repository (the one you were given, if any). Delete files with `rm` and full absolute paths.

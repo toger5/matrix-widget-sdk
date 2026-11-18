@@ -1505,6 +1505,10 @@ export class AppController {
           }
         })();
       }
+      case "room/sendMessage": {
+        const sender = this.activeSession()?.userId;
+        return sender ? this.sendEvent(intent.roomId, { type: "m.room.message", sender, content: { msgtype: "m.text", body: intent.body } }, undefined) : undefined;
+      }
       case "room/loadOlderEvents":
         return void this.activeSession()
           ?.loadOlderEvents(intent.roomId, OLDER_EVENTS_PER_LOAD)
