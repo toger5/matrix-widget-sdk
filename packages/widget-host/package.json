@@ -8,6 +8,7 @@
   "scripts": {
     "dev": "vite",
     "dev:js": "vite --mode js",
+    "dock": "vite --config vite.dock.config.ts",
     "build": "tsc --noEmit && vite build",
     "build:js": "tsc --noEmit && vite build --mode js",
     "preview": "vite preview",

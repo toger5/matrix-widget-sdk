@@ -32,3 +32,4 @@
 @import "../views/widget/devtools.css" layer(views);
 @import "../views/widget/widget.css" layer(views);
 @import "../views/pip/pip.css" layer(views);
+@import "../views/dock/dock.css" layer(views);

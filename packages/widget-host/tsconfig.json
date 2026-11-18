@@ -22,6 +22,8 @@
     "vite.config.ts",
     ".storybook",
     "e2e",
-    "playwright.config.ts"
+    "playwright.config.ts",
+    "dock-playground",
+    "vite.dock.config.ts"
   ]
 }

@@ -1,0 +1,30 @@
+/* Playground only (not part of the app): the page around the DockArea and the fake windows. */
+.pg-mount, .pg { height: 100vh; }
+.pg { display: flex; flex-direction: column; gap: 8px; padding: 8px; background: var(--bg); color: var(--text); font: 13px/1.4 var(--font-ui); }
+.pg-bar { flex: none; display: flex; align-items: center; gap: 10px; padding: 4px 6px; }
+.pg-bar .muted, .pg .muted { color: var(--text-muted); }
+.pg .sp { flex: 1; }
+.pg-full { padding: 3px 10px; border-radius: var(--r-3); border: 1px solid var(--warning); color: var(--warning); font-size: 12px; font-weight: 500; }
+.pg-main { flex: 1; min-height: 0; display: flex; gap: 8px; }
+.pg-json { flex: 0 0 280px; overflow: auto; border: 1px solid var(--border); border-radius: var(--r-4); background: var(--surface); padding: 10px; font: 11px/1.4 var(--font-mono); color: var(--text-muted); }
+.pg-json pre { margin: 0 0 12px; }
+.pg-json ol { margin: 0; padding-left: 18px; }
+
+/* A fake window: like a room panel, with a room colour. */
+.pg-host { display: flex; flex-direction: column; }
+.pg-win { flex: 1; min-height: 0; display: flex; flex-direction: column; border-radius: var(--r-4); border: 1px solid var(--border); background: var(--surface); overflow: hidden; }
+.pg-head { flex: none; height: 44px; display: flex; align-items: center; gap: 8px; padding: 0 8px; border-bottom: 1px solid var(--border); cursor: grab; touch-action: none; user-select: none; }
+.pg-room { display: inline-flex; align-items: center; gap: 7px; font-weight: 600; white-space: nowrap; }
+.pg-room i { width: 10px; height: 10px; border-radius: 3px; background: hsl(var(--hue) 70% 60%); }
+.pg-tabs { display: flex; gap: 4px; min-width: 0; overflow: hidden; }
+.pg-tab { height: 28px; display: inline-flex; align-items: center; padding: 0 10px; border-radius: var(--r-3); border: 1px solid transparent; background: var(--surface-2); color: var(--text-muted); white-space: nowrap; cursor: grab; touch-action: none; }
+.pg-tab.active { background: var(--surface-3); border-color: var(--border-strong); color: var(--text); }
+.pg-x { width: 26px; height: 26px; border-radius: 6px; color: var(--text-muted); font-size: 16px; }
+.pg-x:hover { background: var(--surface-3); color: var(--text); }
+.pg-body { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 6px; padding: 16px; background: linear-gradient(160deg, hsl(var(--hue) 70% 60% / 0.12), transparent 60%); }
+.pg-body h2 { margin: 0; font-size: 20px; font-weight: 600; }
+.pg-body p { margin: 0; }
+.pg-body iframe { flex: 1; min-height: 0; border: 1px dashed var(--border); border-radius: var(--r-2); background: transparent; }
+
+/* The drag ghost. */
+.pg-ghost { padding: 6px 12px; border-radius: var(--r-3); border: 1px solid hsl(var(--hue) 70% 60%); background: var(--surface-3); color: var(--text); font-weight: 600; white-space: nowrap; }

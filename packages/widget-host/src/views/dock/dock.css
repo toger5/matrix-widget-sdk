@@ -1,0 +1,39 @@
+/* Dock (layer views, app-only): the DockArea's rows and side items, its gaps and splitters, and the drop targets of drag mode. */
+
+/* Columns: up to two left side columns | center | up to two right side columns; the center has 1–3 rows. Every gap is an element (no flex gap):
+   the 8px splitters between neighbours (GAP in dockTargets.ts) and 0px gaps at the edges. */
+.dock { position: relative; flex: 1; min-width: 0; min-height: 0; display: flex; }
+.dock-center { position: relative; flex: 1 1 0; min-width: 0; min-height: 0; display: flex; flex-direction: column; }
+.dock-row { flex: 1 1 0; min-height: 0; display: flex; }
+.dock-item { position: relative; flex: 1 1 0; min-width: 0; min-height: 0; display: flex; flex-direction: column; }
+.dock-item > * { flex: 1 1 0; min-width: 0; min-height: 0; }
+/* the window being dragged */
+.dock-item[data-dock-source] { opacity: 0.45; transition: opacity 0.12s; }
+
+.dock-gap { position: relative; flex: none; }
+.dock-gap.x { width: 0; align-self: stretch; }
+.dock-gap.y { height: 0; }
+
+.dock-split { position: relative; z-index: 2; flex: none; display: grid; place-items: center; touch-action: none; border-radius: 4px; }
+.dock-split.x { width: 8px; align-self: stretch; cursor: col-resize; }
+.dock-split.y { height: 8px; cursor: row-resize; }
+.dock-split i { border-radius: 1px; background: transparent; }
+.dock-split.x i { width: 2px; height: 36px; }
+.dock-split.y i { width: 36px; height: 2px; }
+.dock-split:hover i, .dock-split:focus-visible i, .dock-split:active i { background: var(--text-muted); }
+.dock-split:focus-visible { outline-offset: -1px; }
+.dock[data-dragging] .dock-split { pointer-events: none; }
+.dock[data-dragging] .dock-split i { background: transparent; }
+
+/* Drag mode: the overlay keeps the pointer away from the widget iframes; the ghost follows the pointer. */
+.dock-overlay { position: fixed; inset: 0; z-index: 1000; cursor: grabbing; user-select: none; }
+.dock-ghost { position: fixed; left: 0; top: 0; pointer-events: none; filter: drop-shadow(0 6px 16px var(--scrim)); }
+
+/* Drop targets. A shown target's gap opens to 48px (DROP_SPACE in dockTargets.ts) and holds a dashed gray box;
+   the one a release drops on is blue with a light blue shade. `into` targets are a box inside their item. */
+.dock[data-dragging] :is(.dock-gap, .dock-split) { transition: width 0.14s ease, height 0.14s ease; }
+:is(.dock-gap, .dock-split).x[data-dock-drop] { width: 48px; }
+:is(.dock-gap, .dock-split).y[data-dock-drop] { height: 48px; }
+[data-dock-drop]::after { content: ""; position: absolute; inset: 4px; z-index: 3; box-sizing: border-box; border: 2px dashed var(--border-strong); border-radius: 10px; pointer-events: none; transition: background-color 0.12s, border-color 0.12s; }
+:is(.dock-item, .dock-center)[data-dock-drop]::after { inset: 6px; border-radius: var(--r-4); }
+[data-dock-drop="active"]::after { border-style: solid; border-color: var(--info); background: color-mix(in srgb, var(--info) 18%, transparent); }
