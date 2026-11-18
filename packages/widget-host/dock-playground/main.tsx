@@ -84,7 +84,8 @@ function Playground() {
     }
     return el;
   };
-  // Windows emptied by a tab drop, removed when the dock reports the new layout (the provider's job).
+  // Windows emptied by a tab drop, removed when the dock reports the new layout (the provider's job). Filled in `drop`
+  // itself, never in a state updater: the dock calls `onLayoutChange` right after `drop`, before React runs the updaters.
   const emptied = useRef(new Set<DockItemId>());
   const note = (line: string) => setLog((l) => [line, ...l].slice(0, 6));
 
@@ -119,6 +120,9 @@ function Playground() {
     cancel: () => note(`cancelled: tab ${tab}`),
     drop(target, itemId) {
       note(`tab ${tab} → ${JSON.stringify(target)} as ${itemId}`);
+      // its last tab left (dropped into its own window, it stays)
+      const intoItself = target.kind === "into" && itemId === w.id;
+      if (w.tabs.length === 1 && !intoItself) emptied.current.add(w.id);
       setState((s) => {
         const source = s.wins[w.id];
         const tabs = source.tabs.filter((t) => t !== tab);
@@ -129,7 +133,6 @@ function Playground() {
         } else {
           wins[itemId] = { id: itemId, room: w.room, tabs: [tab], active: 0 };
         }
-        if (wins[w.id].tabs.length === 0) emptied.current.add(w.id);
         return { ...s, wins };
       });
       return containerFor(itemId);
