@@ -130,6 +130,13 @@ function MainScreen({ vm, main }: { vm: AppViewModel; main: MainViewModel }) {
         if (collapsed && !expandButtonVisible && !modalOpen) dispatch({ type: "leftBar/revealExpandButton" });
         return;
       }
+      // Ctrl+K / Cmd+K: the room picker dialog (again: closes it); also while typing, not over another dialog.
+      if (e.code === "KeyK" && (e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey) {
+        if (main.addAccount || (main.modal && main.modal.kind !== "roomPicker")) return;
+        e.preventDefault();
+        dispatch(main.modal ? { type: "modal/close" } : { type: "modal/open", modal: { kind: "roomPicker" } });
+        return;
+      }
       if (!e.altKey || e.ctrlKey || e.metaKey || modalOpen) return;
       // The UI is in a shadow root: `composedPath()[0]` is the focused element, `e.target` is the host element.
       if (isTextField(e.composedPath()[0])) return;
@@ -147,7 +154,7 @@ function MainScreen({ vm, main }: { vm: AppViewModel; main: MainViewModel }) {
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [dispatch, collapsed, expandButtonVisible, modalOpen, focusedPanelId, activeTabId, altWClosesPanel]);
+  }, [dispatch, collapsed, expandButtonVisible, modalOpen, main.modal, main.addAccount, focusedPanelId, activeTabId, altWClosesPanel]);
 
   // "Also reveal the LeftBar expand button when the mouse reaches the screen edge."
   useEffect(() => {
@@ -211,7 +218,7 @@ function MainScreen({ vm, main }: { vm: AppViewModel; main: MainViewModel }) {
             </div>
           ))}
         </div>
-        {main.modal && <Modal modal={main.modal} />}
+        {main.modal && <Modal modal={main.modal} main={main} />}
       </div>
       {main.addAccount && (
         // TODO-FINDING add-account-overlay - "Add account" is not designed: the login page covers the whole app for now (the designed "Add account" row has the external-link icon, which suggests another flow).

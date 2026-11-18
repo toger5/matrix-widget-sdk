@@ -17,6 +17,7 @@ Every story of Storybook (`src/**/*.stories.tsx`), one row each, with what reach
 | `app-appshell--dev-backend-active` | `shell.spec.ts` › the DevBackend is signalled by the fence, the badge and the account icon |
 | `app-appshell--dev-backend-collapsed` | `shell.spec.ts` › collapse → toast → Escape reveals the expand button → the bar is back |
 | `app-appshell--dev-backend-empty` | `shell.spec.ts` › a fresh browser without a stored login shows the login page; skipping it leads into the empty DevBackend (a second browser context); `devbackend.spec.ts` › no rooms yet: the RoomsArea is empty, a new room panel has no room to offer; “Create a room” adds and selects the first room |
+| `app-appshell--room-picker-modal` | `rooms.spec.ts` › Ctrl+K opens the room picker in a dialog: a pick opens the room in a new panel, an open widget is jumped to, Ctrl+K again and Escape close it |
 | `app-appshell--confirm` | `shell.spec.ts` › stopping an always-on-screen widget is confirmed (the story's text, activating the DevBackend, needs a Matrix account) |
 | `app-appshell--info-modal` | `shell.spec.ts` › the app info modal closes with Escape, with its button and with a press next to it |
 | `app-appshell--fullscreen` | `shell.spec.ts` › with exactly one widget tab the widget is fullscreen; the header shows the tab while hovered; `rooms.spec.ts` › fullscreen: LeftBar collapsed and one shown widget tab hide the tab and the + until the header is hovered or focused |
@@ -47,6 +48,7 @@ Every story of Storybook (`src/**/*.stories.tsx`), one row each, with what reach
 | `app-loginview--adding-busy` | **catalogue**: "Add account" while the homeserver is looked up |
 | `app-modal--info` | **catalogue**: the modal alone; on the screen: `app-appshell--info-modal` |
 | `app-modal--confirm` | **catalogue**: the modal alone; on the screen: `app-appshell--confirm` |
+| `app-modal--room-picker` | **catalogue**: the modal alone; on the screen: `app-appshell--room-picker-modal` |
 | `app-modal--confirm-danger` | **catalogue**: the modal alone; on the screen: `app-appshell--room-tools-confirm` |
 | `app-pippanel--idle` | `widgetMove.spec.ts` › always on screen: the tab gets a pin, moving away shows the widget in the PiP panel, without a reload |
 | `app-pippanel--idle-four` | `pip.spec.ts` › four always-on-screen widgets: four boxes; hover and focus show the surround without moving the boxes |

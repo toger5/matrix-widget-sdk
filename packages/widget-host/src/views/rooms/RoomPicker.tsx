@@ -11,6 +11,8 @@ export interface RoomPickerProps {
   main: MainViewModel;
   /** The room panel whose body the picker is. Without it, it is the Room list of the SidePanel. */
   panelId?: PanelId;
+  /** The room picker dialog (Ctrl+K): a pick opens a new panel and closes the dialog; the search field has the focus, the recents stay in view until a query is typed. */
+  dialog?: boolean;
 }
 
 /** The name with the part that matches the filter marked. */
@@ -82,9 +84,9 @@ function Tile({ label, avatar, name, sub, onClick, ...data }: { label: string; a
 /**
  * Choosing a room, no title: "Recent widgets" and "Recent rooms" (tiles; a group without entries
  * is left out), then "All rooms" with the search field and the list. The body of a room panel
- * without a room, and the Room list of the SidePanel. stories `rooms-roompicker--*`, `sidepanel-sidepanel--room-list`
+ * without a room, the Room list of the SidePanel and the room picker dialog (Ctrl+K). stories `rooms-roompicker--*`, `sidepanel-sidepanel--room-list`, `app-appshell--room-picker-modal`
  */
-export function RoomPicker({ main, panelId }: RoomPickerProps) {
+export function RoomPicker({ main, panelId, dialog = false }: RoomPickerProps) {
   const dispatch = useDispatch();
   const { narrow, widgetEvents } = useViewEnv();
   const ids = useId();
@@ -109,6 +111,10 @@ export function RoomPicker({ main, panelId }: RoomPickerProps) {
   }, [scrollRequest]);
 
   const open = (roomId: RoomId, widgetKey?: WidgetKey) => {
+    if (dialog) {
+      dispatch({ type: "room/openInNewPanel", roomId, widgetKey });
+      return dispatch({ type: "modal/close" });
+    }
     if (panelId !== undefined) return dispatch({ type: "panel/openRoom", panelId, roomId, widgetKey });
     dispatch({ type: "room/open", roomId, widgetKey });
     // In a narrow window the SidePanel lies over the room panel the pick opened in.
@@ -188,6 +194,7 @@ export function RoomPicker({ main, panelId }: RoomPickerProps) {
   const matches = query ? list.filter((r) => r.name.toLowerCase().includes(query.toLowerCase())) : list;
   const search = (value: string) => {
     setFilter(value);
+    if (dialog) setSearched(true);
     setScrollRequest((n) => n + 1);
   };
 
@@ -242,7 +249,10 @@ export function RoomPicker({ main, panelId }: RoomPickerProps) {
             placeholder="Search rooms"
             value={filter}
             autoComplete="off"
+            data-autofocus={dialog || undefined}
+            // In the dialog the field has the focus from the start: the recents stay in view until a query is typed.
             onFocus={() => {
+              if (dialog) return;
               setSearched(true);
               setScrollRequest((n) => n + 1);
             }}

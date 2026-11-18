@@ -760,6 +760,16 @@ export class AppController {
     if (widgetKey !== undefined) this.openWidget(panelId, widgetKey);
   }
 
+  /** A pick in the room picker dialog: a new panel with the room right of the focused one; a widget that has a tab already is jumped to. */
+  private openRoomInNewPanel(roomId: RoomId, widgetKey?: WidgetKey): void {
+    const tab = widgetKey !== undefined && this.workspace ? findWidgetTab(this.workspace, widgetInstanceId(roomId, widgetKey)) : undefined;
+    if (tab) return this.setWorkspace((w) => activateTab(w, tab.panelId, tab.tabId));
+    const panelId = this.addPanel({ kind: "room", roomId, tabs: [] }, this.workspace?.roomsArea.focusedPanelId);
+    if (panelId === undefined) return;
+    this.addRecent(roomId);
+    if (widgetKey !== undefined) this.openWidget(panelId, widgetKey);
+  }
+
   private jumpToWidget(id: WidgetInstanceId): void {
     const ws = this.workspace;
     const widget = this.main?.widgets[id];
@@ -1408,6 +1418,8 @@ export class AppController {
         return this.openRoomIn(intent.panelId, intent.roomId, intent.widgetKey);
       case "room/open":
         return this.openRoom(intent.roomId, intent.widgetKey);
+      case "room/openInNewPanel":
+        return this.openRoomInNewPanel(intent.roomId, intent.widgetKey);
 
       // tabs
       case "tab/showOverview":

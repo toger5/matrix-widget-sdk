@@ -112,6 +112,52 @@ test("Alt+N opens a panel with the recent widgets and rooms: the search scrolls 
   expect((await host.main()).data.recentWidgets.map((r) => r.widgetKey)).toEqual(["m.widget/notes"]);
 });
 
+test("Ctrl+K opens the room picker in a dialog: a pick opens the room in a new panel, an open widget is jumped to, Ctrl+K again and Escape close it", async ({ host }) => {
+  await host.populate("two-rooms", { sidePanel: null, behavior: { autoApproveCapabilities: true }, open: [{ room: STANDUP, widgets: ["notes"] }] });
+  await host.ready(NOTES);
+  const dialog = host.page.getByRole("dialog", { name: "Open a room" });
+  const search = dialog.getByRole("searchbox", { name: "Search rooms" });
+
+  // The content of an empty panel; the search field has the focus, the recents stay in view.
+  await host.page.keyboard.press("ControlOrMeta+KeyK");
+  await expect(dialog).toBeVisible();
+  await expect(search).toBeFocused();
+  await expect(dialog.getByRole("heading")).toHaveText(["Open a room", "Recent widgets", "Recent rooms", "All rooms 2"]);
+  await expect(dialog.getByRole("heading", { name: "Recent widgets" })).toBeInViewport();
+  await host.story("app-appshell--room-picker-modal");
+
+  // A widget that has a tab is jumped to: no new panel.
+  await dialog.getByRole("button", { name: "Jump to the tab of Standup notes in Standup" }).click();
+  await expect(dialog).toHaveCount(0);
+  await expect(host.panels).toHaveCount(1);
+
+  // Ctrl+K again closes it, Escape too.
+  await host.page.keyboard.press("ControlOrMeta+KeyK");
+  await expect(dialog).toBeVisible();
+  await host.page.keyboard.press("ControlOrMeta+KeyK");
+  await expect(dialog).toHaveCount(0);
+  await host.page.keyboard.press("ControlOrMeta+KeyK");
+  await expect(search).toBeFocused();
+  await host.page.keyboard.press("Escape");
+  await expect(dialog).toHaveCount(0);
+
+  // A query and Enter: the first match in a new panel right of the focused one.
+  await host.page.keyboard.press("ControlOrMeta+KeyK");
+  await search.fill("lab");
+  await search.press("Enter");
+  await expect(dialog).toHaveCount(0);
+  await expect(host.panels).toHaveCount(2);
+  await expect(host.panels.nth(1)).toHaveAttribute("data-room-id", LAB);
+  await expect(host.panels.nth(1)).toHaveAttribute("data-focused", "true");
+  await expect(host.panels.nth(1).getByRole("tab", { name: "Widget lab", exact: true })).toHaveAttribute("aria-selected", "true");
+
+  // A room tile opens a new panel too, also for a room a panel shows already.
+  await host.page.keyboard.press("ControlOrMeta+KeyK");
+  await dialog.getByRole("button", { name: "Open Standup", exact: true }).click();
+  await expect(host.panels).toHaveCount(3);
+  await expect(host.panels.nth(2)).toHaveAttribute("data-room-id", STANDUP);
+});
+
 test("two panels with different rooms: the splitter resizes them, double click resets, a panel closes with its widgets", async ({ host }) => {
   await host.populate("two-rooms", { sidePanel: null, behavior: { autoApproveCapabilities: true }, open: [{ room: LAB, widgets: [NEW_WIDGET, LEGACY_WIDGET], active: NEW_WIDGET }, { room: STANDUP, widgets: ["notes"] }] });
   await expect(host.panels).toHaveCount(2);

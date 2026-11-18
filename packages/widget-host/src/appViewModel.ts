@@ -239,6 +239,8 @@ export const RECENT_TILES = 4;
 export type ModalViewModel =
   /** story `app-appshell--info-modal` */
   | { kind: "appInfo" }
+  /** Ctrl+K / Cmd+K: the RoomPicker in a dialog; a pick opens the room in a new panel (`room/openInNewPanel`). story `app-appshell--room-picker-modal` */
+  | { kind: "roomPicker" }
   /** Actions that lose state are confirmed: activating the DevBackend, logging out, revoking capabilities, changing a real room's configuration. `danger`: the alert icon and a danger button. stories `app-appshell--confirm`, `app-appshell--room-tools-confirm` */
   | { kind: "confirm"; title: string; body: string; confirmLabel: string; danger: boolean; intent: AppIntent };
 
@@ -816,6 +818,7 @@ export type AppIntent =
   | { type: "panel/merge"; panelId: PanelId; intoPanelId: PanelId } // a panel dragged by its header onto a panel of the same room: its tabs join that panel's (at the end, the active one shown), the panel goes
   | { type: "panel/openRoom"; panelId: PanelId; roomId: RoomId; widgetKey?: WidgetKey } // a pick in the RoomPicker of that panel: the panel becomes the room, on its RoomOverview or with the widget as a new tab. A widget that has a tab already: jumps to it, the panel stays the picker
   | { type: "room/open"; roomId: RoomId; widgetKey?: WidgetKey } // a pick in the Room list of the SidePanel: like panel/openRoom, in the panel that shows the room (focused; a room selects its room name), else the focused picker panel, else a new panel right of the focused one
+  | { type: "room/openInNewPanel"; roomId: RoomId; widgetKey?: WidgetKey } // a pick in the room picker dialog (Ctrl+K / Cmd+K): a new panel right of the focused one with the room, on its RoomOverview or with the widget as a new tab. A widget that has a tab already: jumps to it, no new panel
   | { type: "picker/reloadRooms" } // "Try again" of the RoomPicker's error state (`data.rooms.status === "error"`, story `rooms-roompicker--load-error`): asks the session for the rooms again
   // tabs
   | { type: "tab/showOverview"; panelId: PanelId } // the room name tab and the + button of the tab bar: selects the room name, the body shows the RoomOverview; the tab left behind may enter the PiP panel

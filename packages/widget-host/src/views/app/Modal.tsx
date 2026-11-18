@@ -1,11 +1,14 @@
 import { useEffect, useId, useRef, type KeyboardEvent } from "react";
 
-import type { ModalViewModel } from "../../appViewModel";
+import type { MainViewModel, ModalViewModel } from "../../appViewModel";
 import { useDispatch } from "../env";
+import { RoomPicker } from "../rooms/RoomPicker";
 import { Button, Icon, IconButton, Logo } from "../ui/atoms";
 
 export interface ModalProps {
   modal: ModalViewModel;
+  /** What the room picker dialog lists. */
+  main: MainViewModel;
   /** Shown in the app info modal. */
   version?: string;
 }
@@ -22,8 +25,8 @@ function activeElementOf(node: Node): Element | null {
 const SOURCE_URL = "https://github.com/toger5/matrix-widget-sdk";
 const DOCS_URL = `${SOURCE_URL}#readme`;
 
-/** stories `app-appshell--info-modal`, `app-appshell--confirm`, `app-appshell--room-tools-confirm` (`danger`: the alert icon and a danger button): scrim + dialog, focus trap, Escape closes (modal/close). A confirm dispatches its `intent`, then closes. */
-export function Modal({ modal, version = "0.1.0" }: ModalProps) {
+/** stories `app-appshell--info-modal`, `app-appshell--confirm`, `app-appshell--room-tools-confirm` (`danger`: the alert icon and a danger button), `app-appshell--room-picker-modal`: scrim + dialog, focus trap, Escape closes (modal/close). A confirm dispatches its `intent`, then closes. */
+export function Modal({ modal, main, version = "0.1.0" }: ModalProps) {
   const dispatch = useDispatch();
   const ref = useRef<HTMLDivElement>(null);
   const titleId = useId();
@@ -61,6 +64,23 @@ export function Modal({ modal, version = "0.1.0" }: ModalProps) {
       first.focus();
     }
   };
+
+  if (modal.kind === "roomPicker") {
+    return (
+      <>
+        <div className="scrim" onClick={close} />
+        <div ref={ref} className="modal picker-modal" role="dialog" aria-modal="true" aria-labelledby={titleId} tabIndex={-1} onKeyDown={onKeyDown} data-testid="modal">
+          <header>
+            <h2 id={titleId}>Open a room</h2>
+            <span className="muted">in a new panel</span>
+            <span className="sp" />
+            <IconButton icon="x" title="Close" onClick={close} />
+          </header>
+          <RoomPicker main={main} dialog />
+        </div>
+      </>
+    );
+  }
 
   if (modal.kind === "confirm") {
     return (

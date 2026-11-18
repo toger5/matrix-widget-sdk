@@ -113,6 +113,15 @@ export const Confirm: Story = { args: { vm: appVm(twoRooms({ modal: SWITCH_TO_DE
 /** App info modal: what the app is (the app icon of the LeftBar opens it). */
 export const InfoModal: Story = { args: { vm: appVm(mainVm({ modal: { kind: "appInfo" } })) } };
 
+/**
+ * The room picker dialog (Ctrl+K / Cmd+K) over one room panel: the content of an empty room panel
+ * (recent widgets, recent rooms, all rooms), the search field has the focus. A pick opens the room
+ * in a new panel right of the focused one; Element Call has a tab already, so it is jumped to.
+ */
+export const RoomPickerModal: Story = {
+  args: { vm: appVm(panelsVm([roomPanel("design", [widgetTab("design", "call")])], [call], { modal: { kind: "roomPicker" } })) },
+};
+
 const fullscreen = panelsVm([roomPanel("design", [widgetTab("design", "call")])], [call], { leftBar: { collapsed: true, expandButtonVisible: false } });
 
 /**

@@ -40,6 +40,12 @@
 .picker { container: picker / size; }
 .pick-sec.searching { min-height: calc(100cqh + 16px); scroll-margin-top: 8px; }
 .side-body > .picker .pick-sec.searching { min-height: calc(100cqh + 6px); }
+/* The room picker dialog (Ctrl+K): a fixed height (the picker is a size container), the picker scrolls. */
+.modal.picker-modal { width: min(640px, calc(100vw - 32px)); height: min(620px, calc(100vh - 48px)); padding: 20px 8px 8px; grid-template-rows: auto minmax(0, 1fr); gap: 8px; }
+.modal.picker-modal > header { padding: 0 8px 0 16px; }
+.modal.picker-modal > .picker { padding: 8px 16px 16px; overflow-y: auto; }
+/* the picker's group headings, not the dialog's title size (`.modal h2`) */
+.modal.picker-modal .picker h2.side-h { font-size: 11px; }
 /* a real search input inside the `.input.search` box */
 .picker .input.search { cursor: text; }
 .picker .input.search input { flex: 1; min-width: 0; height: 26px; padding: 0; border: 0; outline: 0; background: none; color: inherit; font: inherit; appearance: none; }
