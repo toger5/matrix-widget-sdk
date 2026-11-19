@@ -4,21 +4,9 @@ The concepts and views of the host app. Every state listed under [Required visua
 
 # Design
 
-Take inspiration from IDE designs, but make things a bit more rounded.
-
-![reference_image](https://cdn.dribbble.com/userupload/47290357/file/0f4b08fa1dd0007d68725d26938fc2d4.jpg?resize=1504x1128&vertical=center)
+![reference_image](../screenshots/matrix-client.png)
 
 Support a light and a dark theme. Work with a configurable color palette (highlight, dark, primary, ... the usual app palette roles).
-
-What to take from the `reference_image`:
-
-- The leftmost bar: its style and its small size (see [LeftBar](#leftbar)).
-- The panel named "Core product": this is the position and style of the [SidePanel](#sidepanel).
-- The rounded boxes are the inspiration for room panels, tabs and the PiP boxes.
-- The header bar is removed.
-- The "Overview" label becomes the room name.
-- The tiles are replaced by the widget. The widget gets no padding and spans the full area of its box.
-- The tab style of the room box: the tabs sit in the header row of the box, next to the room name. Every tab has a slightly different background than the header. Only the active tab has a border. There is no accent color.
 
 While the [DevBackend](#devbackend) is active, the app background (on which all panels are shown) becomes a "construction fence": 45° stripes alternating between a slightly lighter and a slightly darker shade. This indicates that the widgets only get the values of the DevBackend.
 
@@ -279,99 +267,6 @@ A simple fullscreen login. It allows skipping the login, which immediately ends 
 - Collapsing the LeftBar while the only tab open is a widget, and shown, renders the widget fullscreen: no rounded containers anymore.
   - The room header stays (it is important information); the tab, the + button and the close button are not shown. Selecting the room name ends it.
   - The header spans the full page: no rounded corners, no padding for the room view.
-
-# Required visualisations
-
-Every state of the UI. Each is one story in Storybook, a sketch story (`Sketch/…`) while it is not built. All in one theme, plus the complete screen in the other theme.
-
-- App
-  - Login page (with the skip login option)
-  - Default screen: LeftBar + one room panel
-  - DevBackend active: construction-fence background + DevBackend badge
-  - App info modal
-  - Room picker dialog (Ctrl+K)
-  - Fullscreen: LeftBar collapsed, one widget, no rounded containers: room header without tab and + button / header hovered
-  - Narrow window: SidePanel overlays, one room panel
-- LeftBar
-  - Expanded: dev tools disabled / enabled (Dev tools button) / DevBackend active (button highlighted) / active and hovered ("Dev tools" tooltip)
-  - Collapsed with toast
-  - Collapsed, expand icon revealed (after Esc)
-- SidePanel
-  - Closed
-  - AccountView
-    - One account
-    - Several accounts, DevBackend enabled (switch list at the bottom with the DevBackend, ending with "Add account")
-    - DevBackend mode (full account list)
-    - Device not verified: the box / after a failure (with the reason) / verified ("Done")
-      - With another device: waiting for it / comparing the emoji / waiting for it to confirm
-      - Recovery key: entering it / checking it / refused
-  - Settings
-    - Both switches off / both on / DevBackend active (its switch locked), dev tools off
-  - Room list: the room picker / next to the room panels (LeftBar button pressed)
-  - Dev tools of a Matrix account
-    - No room open / room dropdown open (the rooms of the room panels) / reading the room: loading, failed
-    - Bar on the left, State and Timeline stacked, "sending as" / State's form open beside Timeline / only State: its form open; the form menu open, no "add member" / only Timeline: fixed sender, a scheduled event, "Load older events"
-    - Next to the room panels (LeftBar button pressed), "Switch to the DevBackend" at the bottom / confirming a change of the room's configuration
-  - Dev tools while the DevBackend is active (DevBackendView)
-    - No rooms yet
-    - Room dropdown open (rooms + add room)
-    - State: shortcuts, send state with the test widget form / the widget form / the Element Call form / as raw JSON, "Update widget" for an existing widget, state explorer, edit state
-    - Timeline: send event with a predefined form, send event as raw JSON, send delayed event, event list, a widget's pagination request
-    - Tools: collapsed (the "Client Backend Tool" and "Media Backend Tool" buttons below the room dev tools) / Client Backend Tool open below the room box (resize handle, minimise button): WidgetHostBehavior, To-device messages / Media Backend Tool open (media list)
-    - "Leave DevBackend" text button at the bottom (part of every DevBackendView state)
-- PictureInPicturePanel
-  - Idle: borderless boxes, 1 widget / 4 widgets
-  - More widgets than fit: overflow menu closed / open
-  - Stacked horizontal / vertical
-  - Hover: surrounding box with room name, widget name and buttons
-  - Enlarged, with the WidgetDevToolBar of one widget open
-- RoomsArea
-  - Layout
-    - One room panel
-    - Several room panels next to each other
-    - Panels in two rows with a side column
-    - Shifted by an open SidePanel
-  - Room panel (empty): the room picker
-    - Recent widgets (one of them open in a tab), recent rooms, all rooms
-    - No recents yet: all rooms only
-    - Searching: scrolled to the search field, the matches below
-    - No rooms
-  - RoomView (1)
-    - Tab bar
-      - Room name selected, no widget tab (name, number of widgets and users)
-      - WidgetTab active / room name selected
-      - Tab marked as always on screen (pin icon)
-      - Timeline tab active
-      - Room dev tools tab active
-      - More tabs than fit
-    - RoomOverview
-      - No widget open, dev tools disabled
-      - A widget open in this panel ("jump to tab"), a local widget, dev tools and DevBackend enabled ("Add widget", "Open room dev tools", copy to DevBackend)
-      - The panel has a room dev tools tab: "Show room dev tools"
-      - Add widget: the test widget form, the widget form, only in this host / a pasted state event / to the room, refused (the reason)
-    - RoomTimeline
-      - Events of every kind, one showing its JSON, "Load older events"
-      - Start of the room reached
-      - Loading / failed to load
-    - Room dev tools tab: bar on top, side by side, forms open as columns / bar on the left, stacked / a narrow panel / one panel closed (DevBackend: a widget's pagination request) / reading the room / no row matches the filters / an empty room
-    - WidgetTab
-      - WidgetView
-        - Loading / failed to load
-        - A widget on this app's own site, before it loads: dev tools disabled ("Close tab" only) / enabled ("Open anyway")
-        - Capability prompt: summary and sections / a long list, scrolled / a second request joined, "Approve" blocked / one OpenID capability, "Once", "Approve" blocked / a call widget asking for browser permissions
-        - Dev tools: no (full widget)
-        - Dev tools: yes
-          - Bar only, docked top / bottom / left / right
-          - One panel open (full width)
-          - Two and three panels next to each other
-          - Fourth panel opened: the oldest one closes
-          - WidgetDevToolMessagesPanel: list, one message expanded
-          - WidgetDevToolStatsPanel: total graph / one direction in a narrow panel
-          - WidgetDevToolDriverPanel / with webview capabilities ("Webview of this load", "Add and restart")
-          - WidgetDevToolConsolePanel
-  - RoomView (2)
-    - A different room next to RoomView (1)
-    - The same room as RoomView (1) (Alt+Shift+N): its RoomOverview offers "jump to tab" and "move widget here"
 
 # Details
 
