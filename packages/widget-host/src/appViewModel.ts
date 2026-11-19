@@ -1,5 +1,5 @@
 /**
- * The view model of the whole host app, as described in `appDesign.md`: one serialisable value
+ * The view model of the whole host app, as described in `docs/product.md`: one serialisable value
  * that the views render from, plus the list of intents that change it. It is the high-level shape
  * only. Three kinds of state are deliberately NOT in it:
  *

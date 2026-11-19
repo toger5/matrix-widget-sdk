@@ -169,7 +169,7 @@ function RoomHeader({ mode, rooms, room }: { mode: RoomBoxMode; rooms: RoomTools
           </button>
           {actions.open && (
             <div ref={actions.popupRef} className="dropdown" role="menu" aria-label="Room actions" onKeyDown={actions.onKeyDown}>
-              {/* TODO-FINDING devbackend-destructive-confirm - "clear room" and "remove room" lose state; appDesign.md wants such actions confirmed. The view sends the intents directly and leaves the confirmation to the controller. */}
+              {/* TODO-FINDING devbackend-destructive-confirm - "clear room" and "remove room" lose state; docs/product.md wants such actions confirmed. The view sends the intents directly and leaves the confirmation to the controller. */}
               <button
                 type="button"
                 className="dd-row"

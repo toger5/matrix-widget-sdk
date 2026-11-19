@@ -1,6 +1,6 @@
 # Performance findings: the Timeline tab (rust build)
 
-Why opening the Timeline tab of `src/matrix_session/rust/` is costly in matrix-rust-sdk on the web, what the host does about it, and fixes to propose upstream (none filed yet). The open decision is `rust-timeline-open-cost` in [implementation_findings.md](implementation_findings.md).
+Why opening the Timeline tab of `src/matrix_session/rust/` is costly in matrix-rust-sdk on the web, what the host does about it, and fixes to propose upstream (none filed yet). The open decision is `rust-timeline-open-cost` in [findings.md](findings.md).
 
 Measured on a local Synapse 1.163 (native sliding sync), one room with 3000 messages, Chromium through Playwright: IndexedDB transactions per open counted by object store, plus a CPU profile. With the workarounds below, opening the tab takes ~230 ms the first time and ~0.2 s again after all 3000 messages were paginated (no IndexedDB transaction), with or without the Dev tools open.
 

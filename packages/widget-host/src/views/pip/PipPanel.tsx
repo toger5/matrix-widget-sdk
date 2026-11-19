@@ -357,7 +357,7 @@ export function PipPanel({ pip, items, more, renderWidget, forceHover = false, d
       <div className="pip-list">
         {items.map((item) => (
           // The cell and the label are always rendered (CSS hides the label while idle), so a box is never remounted when the surround appears.
-          // TODO-FINDING pip-vertical-label-space - stacked vertically the design puts the label rows between the boxes, so showing them would push the boxes apart. The space is reserved while idle instead (32px between the boxes, not the 6px of story `app-pippanel--vertical-idle`). Alternative: labels left of the boxes ("next to each box", appDesign.md), which keeps the idle gaps but differs from story `app-pippanel--vertical`.
+          // TODO-FINDING pip-vertical-label-space - stacked vertically the design puts the label rows between the boxes, so showing them would push the boxes apart. The space is reserved while idle instead (32px between the boxes, not the 6px of story `app-pippanel--vertical-idle`). Alternative: labels left of the boxes ("next to each box", docs/product.md), which keeps the idle gaps but differs from story `app-pippanel--vertical`.
           <div key={item.widgetId} className="pip-cell" style={{ width: boxSize.width }}>
             <div className="pip-label">
               <span className="pip-names">

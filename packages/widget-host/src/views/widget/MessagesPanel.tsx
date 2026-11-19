@@ -67,7 +67,7 @@ export function MessagesPanel({ widgetId, messages, initialExpanded }: MessagesP
           Clear
         </Button>
       </div>
-      {/* TODO-FINDING message-log-not-virtualized - appDesign.md asks to virtualize the message list; the log is capped at 500 collapsed rows, so it is a plain list for now */}
+      {/* TODO-FINDING message-log-not-virtualized - docs/product.md asks to virtualize the message list; the log is capped at 500 collapsed rows, so it is a plain list for now */}
       <div className="msgs" role="list" aria-label="Widget API messages" data-testid="devtools-messages">
         {rows.length === 0 && <p className="dt-empty">{messages.length === 0 ? "No messages yet. Every action the widget and the host send each other is listed here." : "No message matches the filter."}</p>}
         {rows.map((m) => (

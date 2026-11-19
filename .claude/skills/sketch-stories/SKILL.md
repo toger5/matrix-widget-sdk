@@ -16,7 +16,7 @@ view and story rules are in `src/views/README.md`.
 - A new view, a new state, or a view that looks different (step 3 of the `widget-host-ui` agent).
 - Not for a state the app already renders as designed, behaviour that looks the same, or a CSS fix.
 - A designed detail that is not built for now stays a sketch, with a finding in
-  `implementation_findings.md` that says why.
+  `docs/findings.md` that says why.
 
 ## What a sketch is
 
@@ -102,7 +102,7 @@ node e2e/tools/shot.mjs story <target> <scratch>/target.png                 # a 
 ```
 
 Read the PNGs. The design step delivers the sketch ids, their PNGs (both themes once), the
-`appDesign.md` lines and the tsc errors step 2 left.
+`docs/product.md` lines and the tsc errors step 2 left.
 
 ## From sketch to story
 

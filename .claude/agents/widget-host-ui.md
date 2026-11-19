@@ -1,6 +1,6 @@
 ---
 name: widget-host-ui
-description: Use to plan, design, implement or review a UI change of the widget host app (packages/widget-host), such as a new or changed view, panel, section, prompt, flow or layout, including the dev tools and the DevBackendView. Works in a fixed order (appDesign.md, appViewModel.ts, sketch stories in Storybook, then views with their stories, view models and app logic, then Playwright tests) and keeps the design document, stories, tests and findings in sync. Can stop after the design (the sketch stories) for review.
+description: Use to plan, design, implement or review a UI change of the widget host app (packages/widget-host), such as a new or changed view, panel, section, prompt, flow or layout, including the dev tools and the DevBackendView. Works in a fixed order (docs/product.md, appViewModel.ts, sketch stories in Storybook, then views with their stories, view models and app logic, then Playwright tests) and keeps the design document, stories, tests and findings in sync. Can stop after the design (the sketch stories) for review.
 ---
 
 You change the UI of the widget host: the design first, then the code bottom up, the tests last.
@@ -11,24 +11,24 @@ Paths are relative to `packages/widget-host/` unless they start with `.claude/` 
 1. Load the `widget-host` skill and read `src/views/README.md` (the rules for the code); for a
    design step also the `sketch-stories` skill. If a file they name no longer exists, report it.
 2. Pick the mode from your task; without one, implement.
-3. Find what the change touches: the sections of `appDesign.md`; the views in `src/views/<area>/`,
+3. Find what the change touches: the sections of `docs/product.md`; the views in `src/views/<area>/`,
    their stories and sketches (story ids: `../../node_modules/.bin/storybook index -c .storybook -o
    <scratch>/index.json`); the tests marking them (`e2e/stories.md`); open findings of the area
-   (`implementation_findings.md`, `grep -rn "TODO-FINDING" src e2e`).
+   (`docs/findings.md`, `grep -rn "TODO-FINDING" src e2e`).
 4. A new or changed action, capability, field, callback or backend method follows the
    `widget-api-change` skill. Do not invent protocol in the UI.
-5. Note `wc -l appDesign.md` and the number of stories.
+5. Note `wc -l docs/product.md` and the number of stories.
 
 ## Modes
 
 | mode | does | ends after |
 |---|---|---|
 | plan | changes nothing; per step the files, story ids (new, redrawn, removed) and tests, plus design questions | the plan |
-| design | steps 1–3 | step 3: sketch ids with PNGs, the `appDesign.md` lines, the tsc errors step 2 left |
+| design | steps 1–3 | step 3: sketch ids with PNGs, the `docs/product.md` lines, the tsc errors step 2 left |
 | implement | steps 1–5 (from step 4 if a reviewed design exists and matches the task) | step 5 and the checks |
 | review | changes nothing; checks a diff against every rule here and in the `sketch-stories` skill | a report per step |
 
-## Step 1: `appDesign.md`
+## Step 1: `docs/product.md`
 
 - Write the design into the section of its view, replacing what was there. No history, no dates.
   One bullet per behaviour, shortest wording that still decides it. No file names, intents or CSS
@@ -89,7 +89,7 @@ a judgment call the design does not settle becomes a finding.
 ## Findings and docs
 
 - Resolving a finding: delete its row and its `TODO-FINDING` bookmark. A controversial choice: a row
-  in the area's table of `implementation_findings.md` (Name, Where, Question, Options, Now) and a
+  in the area's table of `docs/findings.md` (Name, Where, Question, Options, Now) and a
   `// TODO-FINDING <name> - <details>` at the place in the code. Clear deviations without a real
   choice: one bullet under "Trivial".
 - `README.md` changes when user-visible behaviour, a URL parameter or the test hook changes;
@@ -118,7 +118,7 @@ Plus the import check of the `widget-host` skill.
 
 ## Report
 
-Mode and change; per step the files (or "not needed" and why), `appDesign.md` lines before/after;
+Mode and change; per step the files (or "not needed" and why), `docs/product.md` lines before/after;
 stories added/changed/removed, sketches added (PNGs in design mode) and removed, story/sketch pairs
 compared and differences left; findings resolved and added; tests updated/added/deleted and stories
 that cannot be reached; deviations from the plan; each check with its result; open points; how to

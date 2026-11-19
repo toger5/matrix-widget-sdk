@@ -175,7 +175,7 @@ export function DriverPanel({ widgetId, capabilities }: DriverPanelProps) {
       <div className="dt-sub">
         <span>Mock a host action</span>
       </div>
-      {/* TODO: more mock host actions follow (appDesign.md: "just add a couple for now"). */}
+      {/* TODO: more mock host actions follow (docs/product.md: "just add a couple for now"). */}
       <div className="mock-acts">
         <Button sm icon="sun" onClick={() => dispatch({ type: "devTools/mockHostAction", widgetId, action: "updateTheme", value: theme })}>
           Update theme

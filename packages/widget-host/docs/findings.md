@@ -1,6 +1,6 @@
 # Implementation findings
 
-Open decisions of the widget host where the design ([appDesign.md](appDesign.md), the stories) says nothing or something else. Performance of the rust Timeline tab: [performance_findings.md](performance_findings.md).
+Open decisions of the widget host where the design ([product.md](product.md), the stories) says nothing or something else. Performance of the rust Timeline tab: [performance.md](performance.md).
 
 - **Controversial**: no clear best option, so you decide. Each is marked in the code with `// TODO-FINDING <name> - <details>` (`grep -rn "TODO-FINDING" src`). "Now" is what the code does until you decide.
 - **Trivial**: a clear best option; listed at the end.
@@ -17,7 +17,7 @@ Open decisions of the widget host where the design ([appDesign.md](appDesign.md)
 | `console-panel-source` | `widgetRuntime.ts` (constructor) | The console panel should show the widget's own console; a cross-origin iframe's console cannot be read | (a) a new widget API action with which the SDK / compat wrapper forwards logs (b) show the host's and the driver's log about the widget | (b). The driver's log is global, so with several widgets every console shows every record |
 | `widget-url-changes-while-running` | `src/app/controller.ts` (`reconcile`) | A widget's state event changes (URL, name) while it runs | (a) reload at once (loses state) (b) mark the tab "changed, reload?" (c) nothing | (c): it keeps the old URL until it is reloaded (reload button of the dev tool bar) or closed and opened again |
 | `dev-tools-off-same-origin-widget` | `src/app/controller.ts` (`settings/set`) | Dev tools are turned off while a widget on this host's own origin that the user opened ("Open anyway") runs | (a) stop it at once, back to the prompt (b) ask first (c) let it run until it is closed or reloaded | (c): a reload then shows the prompt without "Open anyway" |
-| `close-tab-of-always-on-screen-widget` | `controller.ts` (`closeTab`) | Closing the tab or the room panel of an always-on-screen widget | (a) it keeps running in the PiP panel; only the PiP close button stops it (b) it stops like any widget | (a), not in appDesign.md |
+| `close-tab-of-always-on-screen-widget` | `controller.ts` (`closeTab`) | Closing the tab or the room panel of an always-on-screen widget | (a) it keeps running in the PiP panel; only the PiP close button stops it (b) it stops like any widget | (a), not in product.md |
 
 ### App shell, login, accounts
 
@@ -69,8 +69,8 @@ The DevBackend runtime (`src/matrix_session/memory/devBackend.ts`):
 
 | Name | Where | Question | Options | Now |
 | --- | --- | --- | --- | --- |
-| `fullscreen-close-button` | `src/views/rooms/RoomView.tsx` | appDesign.md lists what the fullscreen header hides (tab, +) and does not mention "close panel"; the design drew it | always visible / hidden with the tab | Hidden with the tab and +, back on hover or focus |
-| `tab-arrow-keys-manual-activation` | `src/views/rooms/TabBar.tsx` | appDesign.md: "arrow keys switch". Switching a tab can move an always-on-screen widget into the PiP panel | (a) arrows activate (b) arrows move focus, Enter/Space activates | (b) |
+| `fullscreen-close-button` | `src/views/rooms/RoomView.tsx` | product.md lists what the fullscreen header hides (tab, +) and does not mention "close panel"; the design drew it | always visible / hidden with the tab | Hidden with the tab and +, back on hover or focus |
+| `tab-arrow-keys-manual-activation` | `src/views/rooms/TabBar.tsx` | product.md: "arrow keys switch". Switching a tab can move an always-on-screen widget into the PiP panel | (a) arrows activate (b) arrows move focus, Enter/Space activates | (b) |
 | `inactive-tab-buttons-overlay` | `TabBar.tsx` | ⋯ and × of an inactive tab appear on hover | (a) overlay the end of the label (b) take space (the tabs shift) (c) only on the active tab | (a). With five or more tabs the tabs are so narrow that a press in the middle of an inactive tab hits ⋯ and opens the dev tools instead of activating the tab |
 | `overview-show-all-members` | `src/views/rooms/RoomOverview.tsx` | The design has a "Show all 12 members" link; there is no data and no intent for the full list | add an intent and a member list view / drop the link | A text line with the count |
 | `tile-widget-without-tab` | `src/views/rooms/RoomOverview.tsx` | A widget that runs without a tab (always on screen, its panel was closed) in the widget list of the RoomOverview | treat as "open in another panel" / own state | Both buttons, labelled "running without a tab" |
@@ -102,7 +102,7 @@ Login, sync, suspend/resume, device verification and the storage migration of bo
 | `rust-resume-room-subscription` | `rust/session.ts` | Whether a room's full-state subscription survives stop/start of the sync service | verify on a homeserver | It is requested again on resume |
 | `verification-incoming-requests` | `rust/verification.ts` (`didReceiveVerificationRequest`) | A verification request that another device of the account sends to this one | (a) ignore it (b) show it in the AccountView (design, view model, both SDKs) | (a): only this device starts a verification |
 | `rust-one-room-subscription` | `rust/session.ts` (`open`) | The rust session subscribes to one room with its full state at a time: opening the widgets, the Timeline tab or the Dev tools of room B moves the subscription away from room A, whose widgets and timeline then only get what the room list syncs | (a) keep (b) subscribe to every room on screen, with an SDK addition next to `subscribeToRoomWithFullState` that takes the list | (a). A Timeline tab and the Dev tools subscribe when they show the room, not again on each new event |
-| `rust-timeline-open-cost` | `rust/timelineViewModel.ts` (`rustTimelineViewModel`) | Opening the SDK timeline costs about one IndexedDB transaction per event the room's event cache holds in memory (thread info reads of matrix-sdk-ui), and the raw event feed of widgets and the Dev tools keeps the cache full ([performance_findings.md](performance_findings.md)) | (a) keep (b) batch the thread info reads upstream in matrix-sdk-ui (c) let the raw feed hold the event cache only while a widget or the Dev tools need it | (a), with the workarounds listed there |
+| `rust-timeline-open-cost` | `rust/timelineViewModel.ts` (`rustTimelineViewModel`) | Opening the SDK timeline costs about one IndexedDB transaction per event the room's event cache holds in memory (thread info reads of matrix-sdk-ui), and the raw event feed of widgets and the Dev tools keeps the cache full ([performance.md](performance.md)) | (a) keep (b) batch the thread info reads upstream in matrix-sdk-ui (c) let the raw feed hold the event cache only while a widget or the Dev tools need it | (a), with the workarounds listed there |
 | `rust-late-decryption-not-reported` | `rust/roomData.ts` (`onTimelineChanged`) | A late decryption and a reset of the event cache are reported (`subscribeToTimelineChangesRaw`, sdk-addition `raw_timeline_changes.rs`; also behind `notify_timeline_update`), but not a redaction the event cache applies to a cached event in place: the RoomTimeline shows it as it was until the room's next event arrives | (a) report replaced events of every kind in the SDK addition (b) read again on a timer. Verify on a homeserver first | (a) for decryptions only |
 | `verification-cancel-on-suspend` | `src/app/controller.ts` (`switchAccount`) | Activating the DevBackend cancels a running verification, but the sessions are suspended right after, so the cancel likely never reaches the other device | (a) wait for the cancel (with a time limit) before suspending (b) let the other device time out | (b) |
 
@@ -126,7 +126,7 @@ Login, sync, suspend/resume, device verification and the storage migration of bo
 - `pip-menu-placement`: the overflow menu always opens above the container; `pip-menu-roles`: its rows have two menu items each instead of nested buttons.
 - `pip-overflow-no-swap`: a widget behind the PiP overflow button can be jumped to or stopped, not swapped into a box; `pip-dev-tools-close-only`: a PiP box can close its widget's dev tools but not open them.
 - Fonts are self-hosted (`@fontsource`) instead of loaded from Google Fonts: an adopted stylesheet cannot `@import`, and a dev tool should not call a third party.
-- The stats graph samples also while its panel is hidden (cheap; appDesign.md asks to pause it).
+- The stats graph samples also while its panel is hidden (cheap; product.md asks to pause it).
 - An always-on-screen widget without a tab that turns always-on-screen off is stopped: there is no place left to show it.
 - A reload (or Retry) keeps the widget's always-on-screen flag until the restarted widget changes it, so a widget in the PiP panel stays there while it starts again.
 - The DevBackend's workspace is not restored after a page reload, because its content only lives in memory.
@@ -152,7 +152,7 @@ Login, sync, suspend/resume, device verification and the storage migration of bo
 - `room-view-without-room`, `overview-encryption-unknown`: texts for states the design does not have.
 - `panel-focus-from-widget`: a press inside a widget iframe does not reach the host; the app root focuses the widget's panel when the iframe takes the focus (`src/app/AppRoot.tsx`).
 - Room picker: once the search field had the focus, the "All rooms" group keeps the height of the scroll area (empty space under a short list), so a press on a row that takes the focus from the field does not move the row away. Without recents above it, the field is at the top already and nothing scrolls. A pick that only jumps to a widget's tab changes no recents.
-- Alt+N inserts the new panel to the right of the focused panel, not at the far right (appDesign.md: "a new panel on the right").
+- Alt+N inserts the new panel to the right of the focused panel, not at the far right (product.md: "a new panel on the right").
 - The timeline list of the Dev tools and its count include state events (the lab seed shows "12 events" for 3 messages), as the RoomTimeline does. Its rows show the generic content preview (`previewOf`), not the descriptions of the RoomTimeline (`describeEvent`: "joined", "👍") of the design.
 - `populate` does not reset view-local drafts (send forms, filters, the delayed toggle).
 - Scheduled rows show "timeline" where the design shows a body preview: `ScheduledEvent` has no content.

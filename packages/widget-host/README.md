@@ -50,9 +50,9 @@ login options of matrix.org; after the login it is only tested against faked cli
 ![Test host, test widgets and the in-memory store](../../docs/diagrams/07-test-setup.svg)
 
 Architecture and where to change what: [`.claude/skills/widget-host/SKILL.md`](../../.claude/skills/widget-host/SKILL.md).
-The design is [`appDesign.md`](appDesign.md) and the stories (`npm run storybook`); rules for views
+The design is [`docs/product.md`](docs/product.md) and the stories (`npm run storybook`); rules for views
 are in [`src/views/README.md`](src/views/README.md); open decisions in
-[`implementation_findings.md`](implementation_findings.md).
+[`docs/findings.md`](docs/findings.md).
 
 ## Running
 

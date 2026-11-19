@@ -15,9 +15,9 @@ the `rust-host-crates` skill.
 
 Read, do not repeat: `README.md` (running, choosing the SDK, URL parameters, the test hook, security notes),
 `src/views/README.md` (rules for views, CSS, stories, `e2e/tools/shot.mjs`), `e2e/README.md` and
-`e2e/stories.md` (Playwright harness, which test reaches which story), `appDesign.md` (the design),
+`e2e/stories.md` (Playwright harness, which test reaches which story), `docs/product.md` (the design),
 the stories (the visual specification), the header comment of `src/appViewModel.ts` (the view model
-tree), `implementation_findings.md` (open decisions, bookmarked in code as `// TODO-FINDING <name>`).
+tree), `docs/findings.md` (open decisions, bookmarked in code as `// TODO-FINDING <name>`).
 
 ## Layers and import rules
 

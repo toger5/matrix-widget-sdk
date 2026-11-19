@@ -10,7 +10,7 @@ room's `MatrixBackend` follows the `widget-api-change` skill, section 4.
 
 **Neither SDK implementation has run against a homeserver beyond the login options.** Everything
 after login is checked by tsc and tests on faked clients only. Say so when a change depends on real
-SDK behaviour; open questions are in `implementation_findings.md` ("Matrix sessions").
+SDK behaviour; open questions are in `docs/findings.md` ("Matrix sessions").
 
 ## Files
 

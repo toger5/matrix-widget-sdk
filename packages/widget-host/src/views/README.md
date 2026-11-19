@@ -1,6 +1,6 @@
 # Views
 
-The views of the widget host, one folder per area of `appDesign.md`. Read this before changing a view.
+The views of the widget host, one folder per area of `docs/product.md`. Read this before changing a view.
 
 ## MVVM
 
@@ -20,7 +20,7 @@ A view
 
 ## Markup and styles
 
-The stories are the visual specification, with `appDesign.md`. A state that is designed but not built yet is a sketch story (`Sketch/…`, [`.claude/skills/sketch-stories/SKILL.md`](../../../../.claude/skills/sketch-stories/SKILL.md)); port its markup 1:1 (elements, class names, `aria-*`, `title`s), replacing the literals with props. Do not restyle.
+The stories are the visual specification, with `docs/product.md`. A state that is designed but not built yet is a sketch story (`Sketch/…`, [`.claude/skills/sketch-stories/SKILL.md`](../../../../.claude/skills/sketch-stories/SKILL.md)); port its markup 1:1 (elements, class names, `aria-*`, `title`s), replacing the literals with props. Do not restyle.
 
 - Atoms: `src/views/ui/atoms.tsx` (icons only from `ICONS` of `src/views/ui/icons.ts`); story `ui-atoms--atoms` shows them all. Shared form pieces: `src/views/ui/forms.tsx`, `src/views/forms/widgetForms.tsx`.
 - A running widget is shown with `<WidgetSlot widgetId>` (`src/views/ui/WidgetSlot.tsx`), never with an `<iframe>`.
@@ -36,12 +36,12 @@ The stylesheet is plain CSS per area; `src/styles/app.css` lists the files and e
 
 The Playwright tests find elements by role and accessible name, so the names in the stories are part of the contract.
 
-- Every interactive element is a `<button>`, `<a>` or form control with an accessible name (the visible label, or `aria-label` = the `title` of the button). See also `appDesign.md`, Details › Accessibility.
+- Every interactive element is a `<button>`, `<a>` or form control with an accessible name (the visible label, or `aria-label` = the `title` of the button). See also `docs/product.md`, Details › Accessibility.
 - Keep existing `data-testid`s, and add `data-panel-id`, `data-tab-id`, `data-widget-id`, `data-room-id`, `data-widget-key` where the element stands for one.
 
 ## Stories
 
-Every state of the UI is one story: the states of "Required visualisations" of `appDesign.md`, the states a test marks (`host.story`) and the states a finding names. One story per state, at the level where the state lives (a component when it is the component's state, `App/AppShell` when it is a screen; `App/Complete` holds screens with several features at once). Every story has a row in `e2e/stories.md`; `node e2e/tools/stories.mjs` checks it (no server needed).
+Every state of the UI is one story: the states of "Required visualisations" of `docs/product.md`, the states a test marks (`host.story`) and the states a finding names. One story per state, at the level where the state lives (a component when it is the component's state, `App/AppShell` when it is a screen; `App/Complete` holds screens with several features at once). Every story has a row in `e2e/stories.md`; `node e2e/tools/stories.mjs` checks it (no server needed).
 
 - `<View>.stories.tsx` next to the view, title `<Area>/<View>`; the id is the kebab-case title, `--`, the kebab-case export name (`App/LeftBar` › `DevBackendHover` → `app-leftbar--dev-backend-hover`). No `meta.id`, no `name`.
 - A JSDoc comment on each story: what the state shows.

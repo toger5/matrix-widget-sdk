@@ -7,7 +7,7 @@
 //   "not reachable", "sketch" or "catalogue"; a row that says none of these of a story no test marks; a row that
 //   says "sketch" of a story that is no sketch;
 // - an id that is no story: in a `.story("…")` call, or any story id (`<title>--<export>` in kebab case; `*` is a
-//   wildcard) in e2e/, src/ (the stories included), appDesign.md, README.md, implementation_findings.md and the
+//   wildcard) in e2e/, src/ (the stories included), docs/product.md, README.md, docs/findings.md and the
 //   process docs that use story ids as examples (the widget-host-ui agent, the widget-host and sketch-stories
 //   skills). The target of a sketch (its id without `sketch-`) counts as known: a sketch of a new view names its
 //   future story;
@@ -88,7 +88,7 @@ const ID = /(?<![\w*-])([a-z0-9*]+(?:-[a-z0-9*]+)*--[a-z0-9*]+(?:-[a-z0-9*]+)*)(
 const sources = [
   ...walk(join(root, "src")),
   ...walk(join(root, "e2e")),
-  ...["appDesign.md", "README.md", "implementation_findings.md"].map((f) => join(root, f)),
+  ...["docs/product.md", "README.md", "docs/findings.md"].map((f) => join(root, f)),
   ...["agents/widget-host-ui.md", "skills/widget-host/SKILL.md", "skills/sketch-stories/SKILL.md"].map((f) => join(root, "../../.claude", f)),
 ].filter((f) => /\.(ts|tsx|mjs|md)$/.test(f));
 for (const file of sources) {

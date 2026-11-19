@@ -120,7 +120,7 @@ export function TabBar({ main, settings, panelId, roomId, room, roomName, tabs, 
   };
 
   /** Arrow keys move the focus between the tabs, the room name first; Enter or Space (the button) activates; Delete closes a tab other than the room name (the focus moves on: `focusAfterClose`). */
-  // TODO-FINDING tab-arrow-keys-manual-activation - arrow keys only move the focus, they do not activate the tab ("manual activation" of the ARIA tabs pattern): activating a tab moves widgets in and out of the PiP panel, which is too much for a key that is used to walk through the tabs. appDesign.md says "arrow keys switch".
+  // TODO-FINDING tab-arrow-keys-manual-activation - arrow keys only move the focus, they do not activate the tab ("manual activation" of the ARIA tabs pattern): activating a tab moves widgets in and out of the PiP panel, which is too much for a key that is used to walk through the tabs. docs/product.md says "arrow keys switch".
   const onTabKeyDown = (e: KeyboardEvent<HTMLButtonElement>, tab?: TabViewModel) => {
     const all = Array.from(tablistRef.current?.querySelectorAll<HTMLElement>('[role="tab"]') ?? []);
     const i = all.indexOf(e.currentTarget);

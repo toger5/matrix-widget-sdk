@@ -41,7 +41,7 @@ export function RoomView({ main, settings, panelId, content, fullscreen = false,
 
   return (
     <>
-      {/* TODO-FINDING fullscreen-close-button - appDesign.md ("Custom behavior") says "no close button shown" in fullscreen; the design drew "Close panel" in the fullscreen header. For now it is hidden like the tab and the + button, and comes back with them on hover / focus (else the panel could not be closed without expanding the LeftBar). */}
+      {/* TODO-FINDING fullscreen-close-button - docs/product.md ("Custom behavior") says "no close button shown" in fullscreen; the design drew "Close panel" in the fullscreen header. For now it is hidden like the tab and the + button, and comes back with them on hover / focus (else the panel could not be closed without expanding the LeftBar). */}
       <header className={`rp-head ${fullscreen ? "fs" : ""}`} onPointerDown={drag?.panel({ panelId, roomId, label: name })}>
         <TabBar main={main} settings={settings} panelId={panelId} roomId={roomId} room={room} roomName={name} tabs={tabs} activeTabId={active?.id} fullscreen={fullscreen} />
         <span className="sp" />

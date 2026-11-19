@@ -119,7 +119,7 @@ function MainScreen({ vm, main }: { vm: AppViewModel; main: MainViewModel }) {
     [main, settings.devTools, workspace],
   );
 
-  // Keyboard shortcuts (appDesign.md, Details > Keyboard). `code`, not `key`: Alt changes `key` on macOS.
+  // Keyboard shortcuts (docs/product.md, Details > Keyboard). `code`, not `key`: Alt changes `key` on macOS.
   const activeTabId = focusedPanel?.content.kind === "room" ? focusedPanel.content.activeTabId : undefined;
   const altWClosesPanel = !!focusedPanel && !hasTab(focusedPanel);
   useEffect(() => {

@@ -716,7 +716,7 @@ export class AppController {
     if (!tab) return;
     this.setWorkspace((ws) => removeTab(ws, panelId, tabId));
     if (tab.kind !== "widget") return;
-    // TODO-FINDING close-tab-of-always-on-screen-widget - closing the tab (or the room panel) of an always-on-screen widget keeps it running in the PiP panel; only the PiP close button stops it. Not in appDesign.md. The alternative: closing the tab stops the widget like any other.
+    // TODO-FINDING close-tab-of-always-on-screen-widget - closing the tab (or the room panel) of an always-on-screen widget keeps it running in the PiP panel; only the PiP close button stops it. Not in docs/product.md. The alternative: closing the tab stops the widget like any other.
     if (!this.main?.widgets[tab.widgetId]?.alwaysOnScreen) this.stopWidget(tab.widgetId, false);
   }
 
