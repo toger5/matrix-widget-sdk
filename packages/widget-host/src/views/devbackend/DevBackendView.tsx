@@ -20,7 +20,7 @@ export interface DevBackendViewProps {
  * children of the SidePanel column (`.sidecol`): the room box (`RoomBox`), the tools (the Client
  * Backend Tool and the Media Backend Tool, each a button or, at most one, its box) and the leave link.
  */
-// TODO-FINDING devbackend-extra-store-tools - the old app had store tools without a place in the design: push TURN credentials, set room account data, set RTC transports, fire the oldest delayed event. Not ported.
+// TODO-FINDING devbackend-extra-store-tools - the old app had store tools without a place in the design: push TURN credentials, set room account data, set RTC transports. Not ported.
 // TODO-FINDING devbackend-raw-form-shape - the raw JSON form is one editor for the whole event ({ type, sender, content }) as in story `sidepanel-devbackendview--timeline-raw-json`, not separate type + content fields.
 export function DevBackendView({ roomTools, roomId, canLeave }: DevBackendViewProps) {
   const dispatch = useDispatch();

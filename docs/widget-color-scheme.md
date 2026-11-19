@@ -80,20 +80,18 @@ iframe has `color-scheme: normal`, which passes the wrapper's preference on.
 
 When the iframe's colour scheme and the scheme of the widget's root element match, the widget's
 canvas is transparent (§2.4); when they differ the browser paints an opaque canvas of the widget's
-scheme. The host used to give the iframe `background: #fff`. A page with `color-scheme: light
-dark` in the dark theme was therefore drawn with light text (`CanvasText`) on white. Now it is
-`background: Canvas`: the iframe's own `Canvas` colour, which is what the widget would get as a
-top-level page (rgb(18, 18, 18) in Chromium, rgb(28, 27, 34) in Firefox). Pages that do not opt in
+scheme. The host gives the iframe `background: Canvas` (a fixed `#fff` would draw a page with
+`color-scheme: light dark` with light `CanvasText` on white in the dark theme): the iframe's own
+`Canvas` colour, which is what the widget would get as a top-level page (rgb(18, 18, 18) in Chromium, rgb(28, 27, 34) in Firefox). Pages that do not opt in
 are unaffected: they show white either way (their own opaque canvas in the dark theme, the light
 `Canvas` backdrop in the light theme). `e2e/widgetTheme.spec.ts` checks it.
 
 ## 3. Hidden widgets
 
-- **Loading** (until `notify_ready`): the iframe has the `hidden` attribute. It used to be
-  `display: none`, which has no computed style. The widget then saw the OS preference in Chromium
-  and Firefox and flipped to the theme when it was shown, although MSC4412 expects a widget to
-  set itself up before `notify_ready`. Now it is `visibility: hidden`: the iframe is laid out
-  under the loading layer, so the widget already has the theme's scheme and its final size. It is
+- **Loading** (until `notify_ready`): the iframe has the `hidden` attribute, styled
+  `visibility: hidden`, not `display: none`: without a computed style the widget would see the OS
+  preference in Chromium and Firefox and flip to the theme when shown, although MSC4412 expects a
+  widget to set itself up before `notify_ready`. The iframe is laid out under the loading layer, so the widget already has the theme's scheme and its final size. It is
   still not painted and not reached by a click or Tab (the e2e test presses Tab 25 times; an
   iframe that can take focus is reached after 14). In Chromium a widget can still focus itself by
   script (`input.focus()`) and then gets the keys typed into the host, as a shown widget can;
@@ -118,12 +116,12 @@ of this path calls `page.emulateMedia({ colorScheme: null })` first and restores
 ## 5. Options that were considered
 
 Measured with the host's CSS for `::slotted(iframe)` changed (Chromium and Firefox; in WebKit
-27.2 every row but "now" gives the OS):
+27.2 every row but the chosen one gives the OS):
 
 | `::slotted(iframe)` | widget's `prefers-color-scheme` | `light dark` page readable in the dark theme |
 |---|---|---|
-| inherited scheme, `background: #fff` (before) | the theme | no: light text on white |
-| the theme's scheme set on the iframe, `background: Canvas` (**now**) | the theme | yes |
+| inherited scheme, `background: #fff` | the theme | no: light text on white |
+| the theme's scheme set on the iframe, `background: Canvas` (**chosen**) | the theme | yes |
 | `color-scheme: normal` | the OS | yes |
 | `color-scheme: light dark` | the OS | no, when the OS is dark |
 | `color-scheme: light dark; background: Canvas` | the OS | yes |

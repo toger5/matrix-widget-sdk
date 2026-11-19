@@ -1,9 +1,6 @@
-//! `get_matrix_context`, widget -> host: ask who and where the widget is on Matrix.
-//!
-//! Not part of an MSC yet; needed because the new API no longer passes these as URL template
-//! parameters (`$matrix_user_id`, `$matrix_room_id`, ...). Empty request body. Requires the
-//! `widget:…get_matrix_context` capability. The action carries the MSC4412 prefix until it gets an
-//! MSC of its own.
+//! `get_matrix_context` (no MSC yet), widget -> host: who and where the widget is on Matrix, what
+//! the legacy URL template parameters (`$matrix_user_id`, `$matrix_room_id`, ...) carried. Empty
+//! request body. Requires `widget:…get_matrix_context`.
 //!
 //! Response:
 //!
@@ -34,7 +31,7 @@ mod tests {
     use serde_json::json;
 
     use super::*;
-    use crate::{Source, WidgetRequest, WidgetResponse, WireMessage};
+    use crate::{WidgetRequest, WidgetResponse};
 
     #[test]
     fn roundtrip() {
@@ -42,8 +39,6 @@ mod tests {
         assert_eq!(wire.action, "org.matrix.mscXXXX.get_matrix_context");
         assert_eq!(wire.to_value()["request"], json!({}));
         assert_eq!(WidgetRequest::from_wire(&wire).unwrap(), WidgetRequest::GetMatrixContext);
-        let plain = WireMessage::request(Source::Widget, "m.get_matrix_context", "x", json!({}));
-        assert_eq!(WidgetRequest::from_wire(&plain).unwrap(), WidgetRequest::GetMatrixContext);
 
         let response = wire.response_to(json!({
             "user_id": "@user:test.org", "device_id": "DEVICEID", "room_id": "!room:test.org",

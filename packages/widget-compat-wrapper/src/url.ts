@@ -1,27 +1,17 @@
 /**
- * The check in front of the inner iframe: which legacy widget URLs the wrapper loads at all.
- *
- * A client often serves the wrapper from its own origin, with `allow-same-origin` on the wrapper's
- * iframe, and the inner iframe has no sandbox. A `javascript:` URL there would run on the client's
- * origin; `data:`, `blob:` and `about:` pages, and a URL the iframe resolves against the wrapper
- * page (`/x`, `http:/x`), would be pages of that origin too. So the wrapper loads only absolute
- * `http:` and `https:` URLs that name their own host: the rule of `widget_url_problem` in
- * `crates/matrix-widget-host-driver/src/widget_url.rs` (with `http:` allowed), and its texts, which name
- * the scheme, never the URL.
- *
- * `parseConfig` checks the template in `legacy_widget_url`, so a refused widget fails before the
- * wrapper talks to the host; `templatedLegacyUrl` checks the template again and the templated URL,
- * which is what the iframe loads.
+ * Which legacy widget URLs the wrapper loads. The wrapper often runs on the client's origin with
+ * `allow-same-origin`, so a `javascript:`, `data:`, `blob:` or `about:` URL, or one resolved
+ * against the wrapper page (`/x`, `http:/x`), would run as that origin. Only absolute `http:` /
+ * `https:` URLs that name their own host are loaded: the rule (and texts) of `widget_url_problem`
+ * in `crates/matrix-widget-host-driver/src/widget_url.rs`, with `http:` allowed.
  */
 import { renderLegacyUrl, type TemplateInput } from "./template";
 
 const NOT_ABSOLUTE = "the URL is not an absolute http: or https: URL";
 
 /**
- * Why the wrapper must not load `url` into its inner iframe, or `undefined`: only an absolute
- * `http:` or `https:` URL that is the same URL whatever page it is resolved against (pages of its
- * scheme on two hosts: a relative URL takes the host of the page, so it cannot equal itself on
- * both). A template that starts with a `$variable` has no scheme and is refused.
+ * Why the wrapper must not load `url`, or `undefined`. A URL is absolute when it resolves to
+ * itself against pages on two different hosts.
  */
 export function legacyUrlProblem(url: string): string | undefined {
   if (!URL.canParse(url)) return NOT_ABSOLUTE;
@@ -32,11 +22,8 @@ export function legacyUrlProblem(url: string): string | undefined {
 }
 
 /**
- * The legacy widget URL with its template variables filled in (`renderLegacyUrl`), checked before
- * and after: the URL to put into the inner iframe, or why there is none. Before, because
- * `renderLegacyUrl` serialises the URL, which makes `http:/x` look like the absolute `http://x/`;
- * after, because the templated URL is what the iframe loads. A template that does not give a URL
- * is refused as well.
+ * The templated legacy URL for the inner iframe, or why there is none. Checked before templating
+ * (serialising turns `http:/x` into the absolute `http://x/`) and after (that is what loads).
  */
 export function templatedLegacyUrl(url: string, input: TemplateInput): { url: string } | { problem: string } {
   const problem = legacyUrlProblem(url);

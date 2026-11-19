@@ -1,17 +1,14 @@
 /**
  * One running widget: its `WidgetHostDriver`, the message pump between the driver and the iframe,
- * and the data its dev tools show. The driver is made from the widget's definition and tells the
- * runtime what the iframe is (`WidgetHostPlatform.loadIframe`: URL, `sandbox`, `allow`), first when
- * it starts and again whenever the widget's webview capabilities change the attributes; the runtime
- * passes that on (`WidgetRuntimeEvents.loadIframe`), and the iframe element is rendered by
- * `WidgetIframes`, which hands it over with `attach()`. A runtime is created when a widget starts
- * and disposed when it stops; a reload (`widget/reload`: "Retry", the reload button of the dev tool
- * bar) disposes it and creates a new one.
+ * and the data its dev tools show. The driver says what the iframe is (`loadIframe`), the runtime
+ * passes it on (`WidgetRuntimeEvents.loadIframe`), and `WidgetIframes` renders it and hands the
+ * element over with `attach()`. A reload (`widget/reload`) disposes the runtime and makes a new one.
  */
 import { capabilityIsKnown, DriverError, WidgetHostDriver, type DriverSnapshot, type MatrixBackend, type WidgetHostPlatform } from "@matrix-widget-sdk/host";
 
 import { MAX_STATS_BUCKETS, STATS_BUCKET_MS, type WidgetDevToolsData, type WidgetInstanceId, type WidgetMessage } from "../../appViewModel";
 import { loadCapabilities, saveCapabilities } from "../../lib/capabilityStore";
+import { envelope as asEnvelope } from "../../lib/format";
 import { onDriverLog } from "../../lib/hostLogging";
 import { canonicalWebview, isWebviewCapability } from "../../lib/webview";
 import { embedOptions, sameOriginOptions } from "../../lib/widgetEvents";
@@ -37,12 +34,9 @@ export interface WidgetRuntimeEvents {
   /** A message was handled: the backend may have changed (the DevBackend has no change notification). */
   activity(): void;
   /**
-   * The driver says what the widget's iframe is (`WidgetHostPlatform.loadIframe`): build it, in place
-   * of the one before, behind the loading state. The first time when the runtime starts; again when
-   * the widget's webview capabilities changed its `sandbox` or `allow` (one was granted after the
-   * widget asked, added in the driver panel, or revoked). The widget starts over in the new iframe;
-   * the driver grants it what it held without asking, and an open capability question is gone.
-   * `ready()` follows: when the widget says so, or at once for a widget without the widget API.
+   * Build the widget's iframe (in place of the one before, behind the loading state): when the
+   * runtime starts, and again when its webview capabilities changed `sandbox` or `allow`. The widget
+   * starts over in it, holding what it held; an open capability question is gone. `ready()` follows.
    */
   loadIframe(iframe: WidgetIframe): void;
 }
@@ -65,20 +59,10 @@ export interface WidgetRuntimeOptions {
   events: WidgetRuntimeEvents;
 }
 
-interface Envelope {
-  action: string;
-  request_id: string;
-  request?: unknown;
-  response?: unknown;
-}
-
-const asEnvelope = (data: unknown): Envelope | undefined => {
-  if (typeof data !== "object" || data === null) return undefined;
-  const msg = data as Record<string, unknown>;
-  return typeof msg.action === "string" && typeof msg.request_id === "string" ? (msg as unknown as Envelope) : undefined;
-};
-
 const isError = (response: unknown) => typeof response === "object" && response !== null && "error" in response;
+
+/** The webview capabilities an iframe is built from: those the widget holds or gets without asking. */
+const appliedWebview = ({ approved, autoApproved }: Pick<DriverSnapshot, "approved" | "autoApproved">): string[] => [...new Set([...autoApproved, ...approved].filter(isWebviewCapability))];
 
 const emptyData = (): WidgetDevToolsData => ({
   messages: [],
@@ -223,10 +207,8 @@ export class WidgetRuntime {
     }, timeoutMs);
   }
 
-  /** The webview capabilities the iframe is built from: those the widget holds or gets without asking (the driver's snapshot). */
   get appliedWebview(): string[] {
-    const { approved, autoApproved } = this.driver.snapshot();
-    return [...new Set([...autoApproved, ...approved].filter(isWebviewCapability))];
+    return appliedWebview(this.driver.snapshot());
   }
 
   /** The iframe of this widget was mounted (or unmounted: `null`). */
@@ -324,10 +306,8 @@ export class WidgetRuntime {
     // Taking every capability away makes the driver cancel its backend subscriptions. (Not the webview ones: they would load the iframe again.)
     this.driver.revokeCapabilities(this.driver.snapshot().approved.filter((cap) => !isWebviewCapability(cap)));
     this.iframe = null;
-    // Free the driver now: the bindings keep the platform callbacks (which hold this runtime, and so
-    // the driver) in a global handle map until the driver is freed, so its finalizer never runs and
-    // every stop or reload would keep the old driver and its data. A driver call still in flight
-    // holds its own reference. Nothing calls the driver after this (`disposed`, `later`).
+    // Free the driver now: the bindings hold the platform callbacks (and so this runtime and the
+    // driver) in a global handle map until then, so its finalizer would never run.
     this.driver.uniffiDestroy();
   }
 
@@ -351,7 +331,8 @@ export class WidgetRuntime {
   }
 
   private refreshCapabilities(): void {
-    const { approved, autoApproved, singleUse, iframe } = this.driver.snapshot();
+    const snapshot = this.driver.snapshot();
+    const { approved, autoApproved, singleUse, iframe } = snapshot;
     const old = this.data.capabilities;
     const next = {
       approved: [...approved].sort(),
@@ -359,7 +340,7 @@ export class WidgetRuntime {
       // TODO-FINDING driver-denied-list - `DriverSnapshot` has no denied list; this is what this host denied itself since the widget started, minus what was granted later.
       denied: [...this.denied].filter((cap) => !approved.includes(cap)).sort(),
       singleUse: [...singleUse].sort(),
-      webview: { applied: [...new Set([...autoApproved, ...approved].filter(isWebviewCapability))].sort(), sandbox: iframe.sandbox, allow: iframe.allow },
+      webview: { applied: appliedWebview(snapshot).sort(), sandbox: iframe.sandbox, allow: iframe.allow },
     };
     if (JSON.stringify(old) === JSON.stringify(next)) return;
     this.data = { ...this.data, capabilities: next };
@@ -385,22 +366,22 @@ export class WidgetRuntime {
 
     let messages = this.data.messages;
     const envelope = asEnvelope(message);
-    if (envelope && "response" in envelope) {
+    if (envelope?.direction === "response") {
       // A response travels against the direction of its request.
       const requestDirection = direction === "fromWidget" ? "toWidget" : "fromWidget";
       messages = messages.map((m) =>
-        m.id === `${requestDirection}:${envelope.request_id}` && m.response.state === "pending"
-          ? { ...m, response: { state: isError(envelope.response) ? "error" : "ok", afterMs: now - m.timestamp, data: envelope.response } }
+        m.id === `${requestDirection}:${envelope.requestId}` && m.response.state === "pending"
+          ? { ...m, response: { state: isError(envelope.body) ? "error" : "ok", afterMs: now - m.timestamp, data: envelope.body } }
           : m,
       );
-      if (direction === "toWidget" && !isError(envelope.response) && envelope.action.endsWith(".send_event")) stats.eventsSentFromWidget += 1;
+      if (direction === "toWidget" && !isError(envelope.body) && envelope.action.endsWith(".send_event")) stats.eventsSentFromWidget += 1;
     } else {
       const entry: WidgetMessage = {
-        id: `${direction}:${envelope?.request_id ?? `raw-${this.wireLog.length}`}`,
+        id: `${direction}:${envelope?.requestId ?? `raw-${this.wireLog.length}`}`,
         direction,
         action: envelope?.action ?? "(not a widget API message)",
         timestamp: now,
-        request: envelope ? envelope.request : message,
+        request: envelope ? envelope.body : message,
         response: { state: "pending" },
       };
       messages = [entry, ...messages].slice(0, MAX_MESSAGES);
@@ -411,7 +392,7 @@ export class WidgetRuntime {
         stats.actionsToWidget += 1;
         if (envelope?.action.endsWith(".forward_event")) stats.eventsSharedWithWidget += 1;
         if (envelope?.action.endsWith(".update_state")) {
-          const events = (envelope.request as { events?: unknown[] } | undefined)?.events;
+          const events = (envelope.body as { events?: unknown[] } | undefined)?.events;
           stats.eventsSharedWithWidget += Array.isArray(events) ? events.length : 1;
         }
       }

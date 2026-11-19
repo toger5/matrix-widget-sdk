@@ -57,12 +57,8 @@ describe("capability store", () => {
     expect(loadCapabilities(KEY, URL_A)).toEqual([]);
     expect(loadCapabilities(bob, URL_A)).toEqual([NAVIGATE]);
   });
-});
 
-describe("capability store migration from version 1", () => {
-  beforeEach(() => items.clear());
-
-  it("drops version 1 and the entries without a URL: they do not say which page they were approved for", () => {
+  it("migrating drops version 1 and the entries without a URL: they do not say which page they were approved for", () => {
     const v1 = KEY.replace("widget_host_capabilities_v2 ", "widget_host_capabilities_v1 ");
     items.set(v1, JSON.stringify([SEND_MESSAGE]));
     items.set(KEY, JSON.stringify([NAVIGATE]));

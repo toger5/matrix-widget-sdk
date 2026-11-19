@@ -1,9 +1,7 @@
-> **Draft in matrix-widget-sdk.** Status: draft. Implemented here: the action and its response
+> **Draft in matrix-widget-sdk.** Status: draft. Implemented here: the action
 > (`crates/matrix-widget-actions/src/actions/widget/get_openid.rs`), single use in the host driver
-> (`crates/matrix-widget-host-driver/src/driver/requests.rs`, `WidgetHostDriver::set_single_use`), the
-> widget SDK's `request_openid_token` (`crates/matrix-widget-sdk/src/client.rs`), legacy widgets
-> through the compat wrapper (`packages/widget-compat-wrapper/src/bridge.ts`), the widget host's
-> capability prompt (`packages/widget-host`).
+> (`WidgetHostDriver::set_single_use`), the widget SDK's `request_openid_token`, legacy widgets
+> through the compat wrapper (`packages/widget-compat-wrapper/src/bridge.ts`).
 > Related patches: [`../msc4412/capability-lifetimes.md`](../msc4412/capability-lifetimes.md)
 > (limited grants). Remove this block when opening the MSC.
 

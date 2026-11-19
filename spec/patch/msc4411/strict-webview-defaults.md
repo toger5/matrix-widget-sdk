@@ -3,23 +3,15 @@
 - **Target:** [MSC4411](https://github.com/matrix-org/matrix-spec-proposals/pull/4411), `proposals/4411-widget-state-event.md`
 - **Base:** `5fb0ac8c877820e89c84a955fa33d663c7adb42b`
 - **Status:** draft
-- **Implemented here:** the strict default and the legacy set: the driver's `webview_attributes`,
-  `WebviewPolicy` and `legacy_auto_approved` (`crates/matrix-widget-host-driver/src/webview.rs`). The
-  driver hands the iframe's URL and attributes to the client (`WidgetHostPlatform::load_iframe`,
-  `WidgetIframe`) and grants a legacy widget's compat wrapper the legacy set without asking; the
-  widget host builds every iframe from that (`packages/widget-host/src/app/runtime/widgetRuntime.ts`,
-  `src/app/AppRoot.tsx` `WidgetIframes`). A widget without the widget API is shown at once and its
-  messages are refused (`DriverError::NoWidgetApi`). Widgets of the
-  client's own origin are refused by `parse_widget_state_event` and `WidgetHostDriver::new`
-  (`crates/matrix-widget-host-driver/src/widget_url.rs`, `EmbedOptions`); the widget host passes
-  `location.origin`, with two deliberate exceptions for a developer tool: the test widgets it ships
-  itself (`ownWidgetDirs` in `packages/widget-host/src/lib/widgetEvents.ts`, the dev site serves them
-  from the host's origin), and, with its dev tools on, a widget the user chose to open anyway from
-  the prompt that explains the risk. The compat wrapper gives its inner iframe the legacy set, without
-  `allow-same-origin` for a legacy widget on its own origin
-  (`packages/widget-compat-wrapper/src/wrapper.ts` `innerIframe`). The webview capabilities
-  themselves: [`../new/webview-capabilities.md`](../new/webview-capabilities.md); the capability
-  source they need: [`../msc4412/capability-sources.md`](../msc4412/capability-sources.md).
+- **Implemented here:** the strict default and the legacy set
+  (`crates/matrix-widget-host-driver/src/webview.rs`: `webview_attributes`, `WebviewPolicy`,
+  `legacy_auto_approved`), handed to the client with `WidgetHostPlatform::load_iframe`; widgets of the
+  client's own origin are refused (`widget_url.rs`, `EmbedOptions`). The widget host makes two
+  developer-tool exceptions: its own test widgets (`ownWidgetDirs`) and, with dev tools on, a widget
+  the user opens anyway. The compat wrapper's inner iframe:
+  `packages/widget-compat-wrapper/src/wrapper.ts` `innerIframe`. Related:
+  [`../new/webview-capabilities.md`](../new/webview-capabilities.md),
+  [`../msc4412/capability-sources.md`](../msc4412/capability-sources.md).
 
 ## Why
 

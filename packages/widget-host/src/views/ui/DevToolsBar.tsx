@@ -25,7 +25,7 @@ export interface BarStatus {
 }
 
 /** A toggle of the bar: a panel, pressed while it is open. */
-export interface BarToggle {
+interface BarToggle {
   /** `data-dev-panel`, and the React key. */
   panel: string;
   icon: IconName;
@@ -39,7 +39,7 @@ export interface BarToggle {
 }
 
 /** A button of the bar that is no toggle: the widget's reload (before the dock switch) and close (after it). */
-export interface BarButton {
+interface BarButton {
   icon: IconName;
   label: string;
   className?: string;
@@ -150,7 +150,7 @@ export function DevToolsBar({ label, title, status, toggles, dock, onDock, befor
   return (
     <div ref={ref} className={`dt-bar ${compact ? "dt-compact" : ""}`} role="toolbar" aria-label={label} aria-orientation={vertical ? "vertical" : "horizontal"} onKeyDown={onKeyDown}>
       <span className="dt-title">
-        {/* TODO-FINDING tooltip-component - tooltips are `title` attributes as designed; a keyboard user never sees them (designFeedback "Later": use a tooltip component) */}
+        {/* TODO-FINDING tooltip-component - tooltips are `title` attributes as designed; a keyboard user never sees them */}
         <i className={`dot ${status.cls}`} role="img" aria-label={status.label} title={status.label} />
         <span>{title}</span>
       </span>

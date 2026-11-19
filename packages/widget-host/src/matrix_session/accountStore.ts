@@ -1,17 +1,12 @@
 /**
- * The logins stored in this browser, one `localStorage` entry per login, so several can be stored
- * side by side and a token refresh of one never rewrites another.
+ * The logins stored in this browser and the clients running for them; SDK free, used by both SDK
+ * sessions.
  *
- * Layout: the key `<prefix><accountId>` holds `{ order, record }`. `record` is whatever the SDK
- * session needs to restore the login, `order` the position in `list()` (the order the logins
- * were made in). There is no index entry that could disagree with the entries.
- *
- * Before multi-account there was one login under one key (`legacyKey`). It is moved into the
- * new layout the first time the store is read, so the user stays logged in on the same device.
- *
- * Knows no SDK: both SDK sessions use it (the matrix-rust-sdk one imports it from here).
+ * Storage: the key `<prefix><accountId>` holds `{ order, record }` (`record`: what the SDK session
+ * needs to restore the login; `order`: its position in `list()`). One entry per login, so a token
+ * refresh of one never rewrites another, and no index entry that could disagree with them. The
+ * single login of the old layout (`legacyKey`) is moved into this one on first read.
  */
-// TODO-FINDING account-store-location - this file is SDK independent and used by both providers; it lives under js/ only because the task allowed no file outside js/ and rust/. Move it to src/matrix_session/ or src/lib/.
 
 export interface StoredAccount<T> {
   accountId: string;
@@ -70,7 +65,7 @@ export class AccountStore<T> {
     return found.sort((a, b) => a.order - b.order || a.accountId.localeCompare(b.accountId));
   }
 
-  /** Move the login of the old single-key layout into the new one. The new entry is written before the old key is removed. */
+  /** The new entry is written before the old key is removed. */
   private migrateLegacy(): void {
     const storage = this.storage;
     const raw = storage.getItem(this.options.legacyKey);
@@ -79,7 +74,7 @@ export class AccountStore<T> {
     try {
       migrated = this.options.migrate(JSON.parse(raw));
     } catch {
-      // The old code treated an entry it could not parse as "no login" too.
+      // Unparsable: "no login", as before.
     }
     if (migrated) this.save(migrated.accountId, migrated.record);
     storage.removeItem(this.options.legacyKey);
@@ -96,14 +91,14 @@ export class AccountStore<T> {
     return this.read(this.key(accountId))?.record;
   }
 
-  /** Store a login. A new one goes to the end of the list, an existing one keeps its place. */
+  /** A new login goes to the end of the list, an existing one keeps its place. */
   save(accountId: string, record: T): void {
     const existing = this.read(this.key(accountId));
     const order = existing?.order ?? this.scan().reduce((max, entry) => Math.max(max, entry.order), 0) + 1;
     this.storage.setItem(this.key(accountId), JSON.stringify({ order, record } satisfies Entry<T>));
   }
 
-  /** Change a stored login. Does nothing when it is not stored (any more): a late token refresh must not bring a removed login back. */
+  /** Does nothing when the login is not stored (any more): a late token refresh must not bring a removed login back. */
   update(accountId: string, change: (record: T) => T): void {
     const existing = this.read(this.key(accountId));
     if (existing) this.storage.setItem(this.key(accountId), JSON.stringify({ order: existing.order, record: change(existing.record) } satisfies Entry<T>));
@@ -111,5 +106,40 @@ export class AccountStore<T> {
 
   remove(accountId: string): void {
     this.storage.removeItem(this.key(accountId));
+  }
+}
+
+/**
+ * The client of each account of this page, or its start in progress. There must never be two for
+ * one account: they would share its stores (the js crypto store: both upload one-time keys under
+ * the same ids, and encryption breaks for good). React's strict mode calls `restore()` twice.
+ */
+// TODO-FINDING concurrent-sessions - clients of several accounts run at once; not verified against a homeserver with two clients on one page.
+export class RunningClients<T extends { logout(): Promise<void> }> {
+  private readonly clients = new Map<string, Promise<T>>();
+
+  /** The account's client, else `start()` becomes it (unless it fails). */
+  get(accountId: string, start: () => Promise<T>): Promise<T> {
+    return this.clients.get(accountId) ?? this.set(accountId, start());
+  }
+
+  set(accountId: string, start: Promise<T>): Promise<T> {
+    const tracked: Promise<T> = start.catch((e: unknown) => {
+      if (this.clients.get(accountId) === tracked) this.clients.delete(accountId);
+      throw e;
+    });
+    this.clients.set(accountId, tracked);
+    return tracked;
+  }
+
+  delete(accountId: string): void {
+    this.clients.delete(accountId);
+  }
+
+  /** Log the account's running client out; false when none runs. A second client must not open its stores. */
+  async logout(accountId: string): Promise<boolean> {
+    const running = await this.clients.get(accountId)?.catch(() => undefined);
+    if (running) await running.logout();
+    return running !== undefined;
   }
 }

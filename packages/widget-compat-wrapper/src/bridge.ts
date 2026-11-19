@@ -1,45 +1,28 @@
 /**
  * The protocol bridge: a legacy widget on one side, an MSC4412 host on the other.
  *
- * Most messages are only re-enveloped (envelope.ts) and forwarded. The bridge does four things
- * itself:
+ * Most messages are only re-enveloped (envelope.ts) and forwarded. The bridge itself does:
  *
- * 1. **Bootstrap.** A legacy widget URL contains template variables (`$matrix_user_id`, ...).
- *    Before loading the widget, the bridge asks the host for the `get_matrix_context` and
- *    `get_client_context` capabilities, fetches both contexts and fills in the URL (template.ts).
- *    If the host refuses, the variables stay empty and the widget still loads. A templated URL
- *    that is not an absolute http(s) URL is never loaded (url.ts). In the same request it asks
- *    for the webview capabilities of a legacy client's iframe (`LEGACY_WEBVIEW_CAPABILITIES`), so
- *    that a host with strict iframes gives the wrapper's iframe what legacy widgets expect.
- * 2. **Startup handshake.** The two protocols start differently:
- *    - Legacy capabilities are requested by the host (`capabilities` to the widget). MSC4412
- *      capabilities are requested by the widget (`request_capabilities`). The bridge plays the
- *      legacy host: it asks the widget, then requests the result from the real host.
- *    - A legacy host starts that round on the iframe `load` event (`waitForIframeLoad: true`)
- *      or on the widget's `content_loaded` (`waitForIframeLoad: false`). The bridge does the same,
- *      and tells the real host `notify_ready` at that moment.
- *    - The legacy widget asks `supported_api_versions`, which MSC4412 does not have. The bridge
- *      answers it.
- * 3. **Capabilities.** The widget asks for legacy capabilities; the host only knows the new ones.
- *    The bridge requests what each legacy capability stands for, plus what the legacy api allowed
- *    without asking, and translates the host's answer back (capabilities.ts): the host's
- *    `update_capabilities { allowed }` becomes the legacy `notify_capabilities
- *    { requested, approved }`.
- * 4. **Files.** Legacy widgets send files as `Blob`; MSC4412 hosts expect base64 (files.ts).
- * 5. **Reading events.** The host has no `read_events`: a timeline read becomes `read_timeline`
- *    reads (and `paginate_timeline` while the answer is short), a state read is answered from the
- *    host's `update_state` pushes (readEvents.ts). The host's `notify_timeline_update` is
- *    acknowledged here and not passed on: legacy widgets do not know it.
- * 6. **OpenID.** A legacy widget may always ask for a token (`get_openid`); the host hands one out
- *    only while the widget holds `widget:…get_openid`, which it grants for one token at a time.
- *    The bridge answers `get_openid` itself: while the capability is held it fetches the token at
- *    once (`state: "allowed"`). Otherwise it answers `state: "request"`, requests the capability
- *    once for every token request waiting, takes the host's next `update_capabilities` after the
- *    ack as the answer, and sends each waiting request `openid_credentials` (`allowed` with the
- *    token, or `blocked`). A host that takes capabilities away in between is read as a refusal.
+ * 1. **Bootstrap.** Before loading the widget it requests the context capabilities (and the
+ *    webview capabilities of a legacy client's iframe), fetches `get_matrix_context` and
+ *    `get_client_context` and fills in the URL's template variables (template.ts, checked by
+ *    url.ts). A refused context leaves the variables empty.
+ * 2. **Startup handshake.** Legacy capabilities are host-initiated, MSC4412 ones widget-initiated:
+ *    the bridge plays the legacy host (asks the widget, then requests the result from the host),
+ *    starting on iframe `load` or on `content_loaded` per `waitForIframeLoad`, and sends the host
+ *    `notify_ready` at that moment. It answers `supported_api_versions` itself.
+ * 3. **Capabilities** are translated both ways (capabilities.ts).
+ * 4. **Files**: `Blob` ↔ base64 (files.ts).
+ * 5. **`read_events`** is answered by {@link LegacyEventReader} (readEvents.ts); the host's
+ *    `notify_timeline_update` is acknowledged here and not passed on.
+ * 6. **OpenID.** A legacy widget may always ask for a token; the host grants `get_openid` per
+ *    token. While held, the token is fetched at once (`state: "allowed"`). Otherwise the widget
+ *    gets `state: "request"`, the capability is requested once for all waiting requests, the
+ *    host's next `update_capabilities` after the ack is the answer, and each waiting request gets
+ *    `openid_credentials` (`allowed` with the token, or `blocked`).
  *
- * The class does no I/O. It is driven by `start`, `onIframeLoad`, `onWidgetMessage` and
- * `onHostMessage`, and sends through the callbacks in {@link BridgeOptions}.
+ * The class does no I/O: it is driven by `start`, `onIframeLoad`, `onWidgetMessage` and
+ * `onHostMessage` and sends through {@link BridgeOptions}.
  */
 import { CurrentApiVersions } from "matrix-widget-api";
 
@@ -71,24 +54,18 @@ import { LEGACY_READ_EVENTS_ACTION, LegacyEventReader, NOTIFY_TIMELINE_UPDATE_AC
 import { templatedLegacyUrl } from "./url";
 import { log } from "./log";
 
-/** The context actions, in the unstable spelling the host emits (`docs/parity.md`). */
-export const MATRIX_CONTEXT_ACTION = `${PLACEHOLDER}.get_matrix_context`;
-export const CLIENT_CONTEXT_ACTION = `${PLACEHOLDER}.get_client_context`;
-/** The capabilities for the context actions. */
+const MATRIX_CONTEXT_ACTION = `${PLACEHOLDER}.get_matrix_context`;
+const CLIENT_CONTEXT_ACTION = `${PLACEHOLDER}.get_client_context`;
 export const CONTEXT_CAPABILITIES = [widgetCapability("get_matrix_context"), widgetCapability("get_client_context")];
-/** What `start()` requests: the context capabilities and the webview capabilities of a legacy client's iframe. */
+/** What `start()` requests. */
 export const START_CAPABILITIES = [...CONTEXT_CAPABILITIES, ...LEGACY_WEBVIEW_CAPABILITIES];
-/** The legacy widget's `get_openid`, which the bridge answers itself (see the module comment). */
 const LEGACY_GET_OPENID = "get_openid";
-/** The host's name of it, and its capability. */
-export const GET_OPENID_ACTION = toNewAction(LEGACY_GET_OPENID, "widget");
-export const GET_OPENID_CAPABILITY = widgetCapability("get_openid");
-/** The host's `update_state`: the bridge keeps the state for legacy state reads. */
+const GET_OPENID_ACTION = toNewAction(LEGACY_GET_OPENID, "widget");
+const GET_OPENID_CAPABILITY = widgetCapability("get_openid");
 const UPDATE_STATE_ACTION = `${PLACEHOLDER}.update_state`;
-/** The legacy host -> widget action with the outcome of a `get_openid` answered `state: "request"`. */
+/** The legacy host -> widget outcome of a `get_openid` answered `state: "request"`. */
 const LEGACY_OPENID_CREDENTIALS = "openid_credentials";
 
-/** The `code` of an error body, if it is one. */
 const errorCode = (body: unknown): unknown => (isErrorBody(body) ? (body as { error: { code?: unknown } }).error.code : undefined);
 
 const capabilitiesOf = (body: unknown): string[] => {
@@ -111,22 +88,22 @@ export interface BridgeOptions {
   sendToHost(message: NewMessage): void;
   /** Post a message to the legacy widget (the inner iframe). */
   sendToWidget(message: LegacyMessage): void;
-  /** Load the templated legacy widget URL into the inner iframe: an absolute http(s) URL, checked (url.ts). Called at most once. */
+  /** Load the templated, checked legacy widget URL into the inner iframe. Called at most once. */
   loadWidget(url: string): void;
-  /** The templated URL is refused (`reason`, from url.ts): there is no widget. Called instead of `loadWidget`. */
+  /** The templated URL is refused (url.ts). Called instead of `loadWidget`. */
   refuseWidget(reason: string): void;
   /** API versions announced to the widget. Default: matrix-widget-api's `CurrentApiVersions`. */
   supportedVersions?: string[];
   /** Generates the request ids of the bridge's own requests. Default: `crypto.randomUUID`. */
   nextId?: () => string;
-  /** How long a legacy timeline read may wait for paginations. Default: `LEGACY_READ_DEADLINE_MS`. */
+  /** How long a legacy timeline read may wait for paginations. Default: 7 s. */
   readDeadlineMs?: number;
 }
 
 /** Called with the response body of one of the bridge's own requests. */
 type Responder = (response: unknown) => void;
 
-/** Translates between one legacy widget and its MSC4412 host. See the module comment. */
+/** Translates between one legacy widget and its MSC4412 host. */
 export class CompatBridge {
   /** Widget requests forwarded to the host, by request id. A legacy reply repeats the request. */
   private readonly fromWidget = new Map<string, LegacyMessage>();
@@ -156,7 +133,6 @@ export class CompatBridge {
   private openIdStep: "none" | "sent" | "acked" | "fetching" = "none";
   /** The widget's room, from `get_matrix_context`. */
   private roomId?: string;
-  /** Answers the legacy `read_events` (readEvents.ts). */
   private readonly reader: LegacyEventReader;
 
   constructor(private readonly o: BridgeOptions) {
@@ -171,10 +147,7 @@ export class CompatBridge {
     });
   }
 
-  /**
-   * Start the bootstrap by requesting the context capabilities and the webview capabilities of a
-   * legacy client ({@link START_CAPABILITIES}). The host answers with `update_capabilities`.
-   */
+  /** Start the bootstrap; the host answers with `update_capabilities`. */
   start(): void {
     this.requestHost(REQUEST_CAPABILITIES_ACTION, { capabilities: START_CAPABILITIES });
   }
@@ -216,7 +189,6 @@ export class CompatBridge {
     const done = () => {
       if (--pending > 0) return;
       const input = { widgetId: this.o.widgetId, wrapperUrl: this.o.wrapperUrl, matrix, client, data: this.o.widgetData };
-      // Checked before and after templating: the templated URL is what the iframe loads (url.ts).
       const templated = templatedLegacyUrl(this.o.legacyWidgetUrl, input);
       if ("problem" in templated) {
         this.phase = "refused";
@@ -237,8 +209,7 @@ export class CompatBridge {
   private onWidgetRequest(m: LegacyMessage): void {
     switch (m.action) {
       case "supported_api_versions":
-        // Answered here: an MSC4412 host does not know this action. The widget asks during its
-        // start and again while answering `capabilities`.
+        // MSC4412 has no such action.
         return this.o.sendToWidget(
           legacyResponse(m, { supported_versions: this.o.supportedVersions ?? CurrentApiVersions }),
         );
@@ -265,10 +236,7 @@ export class CompatBridge {
     }
   }
 
-  /**
-   * Forward a widget request, with `data` as its body if given. The original request is kept:
-   * the widget's reply must echo it unchanged (with the widget's own `Blob`, for example).
-   */
+  /** Forward a widget request, with `data` as its body. The original is kept: the reply echoes it (with the widget's own `Blob`). */
   private forwardToHost(m: LegacyMessage, data: unknown = m.data): void {
     this.fromWidget.set(m.requestId, m);
     this.o.sendToHost(legacyRequestToNew({ ...m, data }));

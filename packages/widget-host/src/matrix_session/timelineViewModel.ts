@@ -1,8 +1,6 @@
 /**
- * The view models of the Timeline tab (Element Web's `TimelineView`, `LiveSession.timelineViewModel`).
- * The rust session has its own on the SDK timeline (`./rust/timelineViewModel.ts`); the js session
- * and the DevBackend use `rawTimelineViewModel`, kept small on purpose (the js session is to be
- * dropped, the DevBackend needs the tab for debugging only).
+ * The Timeline tab (`LiveSession.timelineViewModel`) of the js session and the DevBackend: one row
+ * per raw event, deliberately minimal. The rust session's is `./rust/timelineViewModel.ts`.
  */
 import type { TimelineItem } from "@element-hq/web-shared-components";
 

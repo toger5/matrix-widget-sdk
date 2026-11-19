@@ -12,7 +12,8 @@ import { SECRET_STORAGE_ALGORITHM_V1_AES, ServerSideSecretStorageImpl } from "ma
 import { describe, expect, it, vi } from "vitest";
 
 import { FetchGate, SuspendedError } from "../src/matrix_session/js/fetchGate";
-import { accountInfo, exportRoom, loadOlderEvents, LOAD_MEMBERS_UP_TO, MEMBER_LIMIT, onTimelineChanged, roomDetails, roomState, timelineEvents } from "../src/matrix_session/js/roomData";
+import { accountInfo, exportRoom, loadOlderEvents, onTimelineChanged, roomDetails, roomState, timelineEvents } from "../src/matrix_session/js/roomData";
+import { LOAD_MEMBERS_UP_TO, MEMBER_LIMIT } from "../src/matrix_session/shared";
 import { needsVerification, onVerificationChanged, RecoveryKeySlot, startEmojiVerification, verifyWithRecoveryKey } from "../src/matrix_session/js/verification";
 
 const ROOM = "!room:example.org";

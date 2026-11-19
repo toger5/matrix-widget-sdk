@@ -81,7 +81,7 @@ export type DockSplit =
   | { kind: "columns"; index: number };
 
 export const MAX_ROWS = 3;
-export const MAX_SIDE_ITEMS = 2;
+const MAX_SIDE_ITEMS = 2;
 /** Items side by side at most: the widest row plus all side items. */
 export const MAX_HORIZONTAL = 6;
 /** A new side column's share against the center's (one side column: about 29% of the width). */
@@ -117,7 +117,7 @@ export function dockItems(layout: DockLayout): DockItem[] {
   return [...sideItems(layout, "left"), ...layout.center.rows.flatMap((r) => r.items), ...sideItems(layout, "right")];
 }
 
-export const findItem = (layout: DockLayout, id: DockItemId): DockItem | undefined => dockItems(layout).find((i) => i.id === id);
+const findItem = (layout: DockLayout, id: DockItemId): DockItem | undefined => dockItems(layout).find((i) => i.id === id);
 
 /** Where an item is: its side or its row, and its index there. */
 export function locateItem(layout: DockLayout, id: DockItemId): { side: DockSide; index: number } | { row: number; index: number } | undefined {

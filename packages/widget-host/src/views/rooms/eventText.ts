@@ -8,7 +8,7 @@ import { WIDGET_EVENT_TYPES } from "../../widgetStateEvent";
 import { previewOf } from "../helpers";
 import type { IconName } from "../ui/icons";
 
-export interface EventDescription {
+interface EventDescription {
   /** What happened, in words. */
   text: string;
   /** Shown before the text. */

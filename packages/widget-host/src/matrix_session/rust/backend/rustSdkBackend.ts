@@ -32,21 +32,11 @@ import { subscribeRoomFeed } from "./roomFeed";
 import { subscribeTurnServers } from "./turnServer";
 
 /**
- * `MatrixBackend` for one room of a matrix-rust-sdk client (`matrix-sdk-uniffi-js`).
- *
- * Everything goes through the SDK, so sends are encrypted in encrypted rooms and what is read or
- * received is decrypted. Some of the calls are not upstream yet: they are this repository's
- * additions to the ffi (`packages/matrix-sdk-uniffi-js/sdk-additions`). The one exception is the
- * TURN servers, which the SDK has no call for (`turnServer.ts`).
- *
- * State is read from the SDK's store. That is complete for every state type only because the
- * session subscribes to the room with its full state before creating the backend.
- *
- * The timeline cache of `read_timeline` is the room's event cache (`eventsRaw`); its pagination is
- * the session's `RoomTimelines`, shared with the RoomTimeline and the room's other widgets. Resets
- * and late decryptions come from `subscribeToTimelineChangesRaw` (an addition to the ffi).
- *
- * To-device messages are only sent encrypted; a widget asking for an unencrypted send gets an error.
+ * `MatrixBackend` for one room of a matrix-rust-sdk client. Everything but the TURN servers
+ * (`turnServer.ts`) goes through the SDK, partly through this repository's additions
+ * (`packages/matrix-sdk-uniffi-js/sdk-additions`). State comes from the SDK's store, complete
+ * because the session subscribes to the room with its full state first. The timeline cache of
+ * `read_timeline` is the room's event cache (`../../timelineFeed`).
  */
 export class RustSdkBackend implements MatrixBackend {
   private readonly subscriptions = new Set<Subscription>();
@@ -72,10 +62,7 @@ export class RustSdkBackend implements MatrixBackend {
     });
   }
 
-  /**
-   * The trait's identity getters are synchronous, so the profile is fetched up front. `timelines`
-   * is the session's (paginations are shared); without it the backend keeps its own.
-   */
+  /** The identity getters are synchronous: the profile is fetched up front. Without the session's `timelines` the backend keeps its own. */
   static async create(client: ClientLike, room: RoomLike, timelines?: RoomTimelines): Promise<RustSdkBackend> {
     const [displayName, avatarUrl] = await Promise.all([
       client.displayName().catch(() => client.userId()),
@@ -306,10 +293,7 @@ const isRedacted = (unsigned: JsonValue | undefined) => typeof unsigned === "obj
 
 const fail = (reason: string) => new BackendError.Failed({ errcode: undefined, status: undefined, reason });
 
-/**
- * SDK errors are not `BackendError`s; wrap them so the driver can report them to the widget. The
- * SDK passes on the homeserver's error code but not the HTTP status.
- */
+/** An SDK error as a `BackendError` for the widget: the homeserver's error code, not the HTTP status (the SDK drops it). */
 function rethrow(e: unknown): never {
   if (ClientError.MatrixApi.instanceOf(e)) throw new BackendError.Failed({ errcode: e.inner.code, status: undefined, reason: e.inner.msg });
   if (ClientError.Generic.instanceOf(e)) throw fail(e.inner.msg);

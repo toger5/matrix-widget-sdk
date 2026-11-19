@@ -6,7 +6,7 @@
 import { useLayoutEffect, useRef, useState, type KeyboardEvent, type PointerEvent, type ReactNode, type RefObject } from "react";
 
 /** A panel keeps at least this share (in %) of the two panels a separator divides. */
-export const MIN_SHARE = 15;
+const MIN_SHARE = 15;
 
 const RESIZE_TITLE = "Drag or use the arrow keys to resize · double click or Enter to reset";
 

@@ -5,7 +5,7 @@
  */
 import { ROOM_CONFIGURATION_TYPES, type AccountId, type MockedStateEvent, type RoomId, type RoomToolsViewModel, type ScheduledEvent, type WidgetHostBehavior } from "../appViewModel";
 import { describesWidget } from "../lib/widgetEvents";
-import { WIDGET_EVENT_TYPES, type StateEvent } from "../widgetStateEvent";
+import { WIDGET_EVENT_TYPES, widgetEventName, type StateEvent } from "../widgetStateEvent";
 import { roomDevToolsLayout } from "./layout";
 
 /** How the host answers widgets in the DevBackend until the Client Backend Tool changes it. */
@@ -56,8 +56,7 @@ export function roomChangeConfirmation(event: MockedStateEvent, room: { userId: 
     if (!room.widgetEvents) return { title: `Replace a widget in ${room.name}?`, body: "The widgets of the room are still loading, so this may replace one of them. Everyone in the room gets the new one instead." };
     const existing = room.widgetEvents.find((e) => e.type === event.type && e.state_key === event.stateKey && describesWidget(e));
     if (existing) {
-      const name = typeof existing.content.name === "string" && existing.content.name ? existing.content.name : existing.state_key;
-      return { title: `Replace ${name} in ${room.name}?`, body: "The room already has a widget with this type and ID. Everyone in the room gets the new one instead." };
+      return { title: `Replace ${widgetEventName(existing)} in ${room.name}?`, body: "The room already has a widget with this type and ID. Everyone in the room gets the new one instead." };
     }
   }
   return undefined;

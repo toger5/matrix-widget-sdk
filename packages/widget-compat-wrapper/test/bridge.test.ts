@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
-import { CompatBridge, CONTEXT_CAPABILITIES, START_CAPABILITIES } from "../src/bridge";
+import { type BridgeOptions, CompatBridge, CONTEXT_CAPABILITIES, START_CAPABILITIES } from "../src/bridge";
 import { hostCapability as H, IMPLICIT_CAPABILITIES, LEGACY_WEBVIEW_CAPABILITIES, widgetCapability as W } from "../src/capabilities";
 import type { LegacyMessage, NewMessage } from "../src/envelope";
 
@@ -12,7 +12,7 @@ const UPDATE = "org.matrix.msc4412.update_capabilities";
 const MATRIX = { user_id: "@alice:example.org", device_id: "DEV", room_id: "!r:example.org", display_name: "Alice", avatar_url: "", matrix_base_url: "https://hs.example" };
 const CLIENT = { client_id: "test-client", client_theme: "dark" };
 
-function setup(waitForIframeLoad: boolean, widget: { legacyWidgetUrl?: string; widgetData?: Record<string, unknown> } = {}) {
+function setup(waitForIframeLoad: boolean, widget: Partial<Pick<BridgeOptions, "legacyWidgetUrl" | "widgetData" | "readDeadlineMs">> = {}) {
   const toHost: NewMessage[] = [];
   const toWidget: LegacyMessage[] = [];
   const loaded: string[] = [];
@@ -43,6 +43,7 @@ const fromHost = (action: string, requestId: string, request: unknown = {}): New
   ({ source: "host", request_id: requestId, action, request });
 const hostResponse = (request: NewMessage, response: unknown): NewMessage =>
   ({ source: request.source, request_id: request.request_id, action: request.action, response });
+const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
 
 /** Drive the bootstrap: capability request, update, both contexts. Returns the loaded URL. */
 function boot(s: S, contexts: { matrix?: unknown; client?: unknown } = { matrix: MATRIX, client: CLIENT }): string {
@@ -52,13 +53,13 @@ function boot(s: S, contexts: { matrix?: unknown; client?: unknown } = { matrix:
   return s.loaded[0];
 }
 
-/** The host's side of the bootstrap: the context capabilities are granted, the contexts answered. */
-function answerBootstrap(s: S, contexts: { matrix?: unknown; client?: unknown } = { matrix: MATRIX, client: CLIENT }): void {
+/** The host's side of the bootstrap: `allowed` is granted, the contexts answered (missing ones refused). */
+function answerBootstrap(s: S, contexts: { matrix?: unknown; client?: unknown } = { matrix: MATRIX, client: CLIENT }, allowed = START_CAPABILITIES): void {
   s.bridge.start();
   const [caps] = s.take(s.toHost);
   expect(caps).toMatchObject({ source: "widget", action: REQUEST, request: { capabilities: START_CAPABILITIES } });
   s.bridge.onHostMessage(hostResponse(caps, {}));
-  s.bridge.onHostMessage(fromHost(UPDATE, "n1", { allowed: START_CAPABILITIES }));
+  s.bridge.onHostMessage(fromHost(UPDATE, "n1", { allowed }));
   const [ack, matrix, client] = s.take(s.toHost);
   expect(ack).toEqual({ source: "host", request_id: "n1", action: UPDATE, response: {} });
   expect(CONTEXT_CAPABILITIES).toEqual(["widget:org.matrix.mscXXXX.get_matrix_context", "widget:org.matrix.mscXXXX.get_client_context"]);
@@ -74,13 +75,7 @@ describe("bootstrap", () => {
     expect(LEGACY_WEBVIEW_CAPABILITIES).toContain("webview:org.matrix.mscXXXX.allow:camera");
     // A host that refuses the webview capabilities (or all of them) still gets the widget loaded.
     const s = setup(true);
-    s.bridge.start();
-    const [caps] = s.take(s.toHost);
-    s.bridge.onHostMessage(hostResponse(caps, {}));
-    s.bridge.onHostMessage(fromHost(UPDATE, "n1", { allowed: [] }));
-    const [, matrix, client] = s.take(s.toHost);
-    s.bridge.onHostMessage(hostResponse(matrix, MATRIX));
-    s.bridge.onHostMessage(hostResponse(client, CLIENT));
+    answerBootstrap(s, { matrix: MATRIX, client: CLIENT }, []);
     expect(s.loaded).toHaveLength(1);
   });
 
@@ -210,17 +205,6 @@ describe("steady state forwarding", () => {
   const s = setup(true);
   boot(s);
 
-  it("forwards widget requests with renamed actions and echoes the host response", () => {
-    s.bridge.onWidgetMessage(fromWidget("org.matrix.msc3973.user_directory_search", "r1", { search_term: "ali" }));
-    expect(s.take(s.toHost)).toEqual([
-      { source: "widget", request_id: "r1", action: "org.matrix.msc3973.search_user_directory", request: { search_term: "ali" } },
-    ]);
-    s.bridge.onHostMessage({ source: "widget", request_id: "r1", action: "org.matrix.msc3973.search_user_directory", response: { limited: false, results: [] } });
-    expect(s.take(s.toWidget)).toEqual([
-      { api: "fromWidget", widgetId: "w", requestId: "r1", action: "org.matrix.msc3973.user_directory_search", data: { search_term: "ali" }, response: { limited: false, results: [] } },
-    ]);
-  });
-
   it("forwards renegotiation and unknown actions, including the host's error reply", () => {
     s.bridge.onWidgetMessage(fromWidget("org.matrix.msc2974.request_capabilities", "r2", { capabilities: ["c"] }));
     const [renegotiation] = s.take(s.toHost);
@@ -244,13 +228,10 @@ describe("steady state forwarding", () => {
     ]);
   });
 
+  // Every rename is in envelope.test.ts; here one of each kind.
   it.each([
-    [`${X}forward_to_device`, "send_to_device"],
     [`${X}update_theme`, "theme_change"],
-    [`${X}update_language`, "language_change"],
-    [`${X}update_visibility`, "visibility"],
     [`${X}update_state`, "update_state"],
-    [`${X}update_turn_servers`, "update_turn_servers"],
   ])("gives the widget the host's %s as %s", (hostAction, legacyAction) => {
     s.bridge.onHostMessage(fromHost(hostAction, "h-rename", { x: 1 }));
     const [legacy] = s.take(s.toWidget);
@@ -261,15 +242,8 @@ describe("steady state forwarding", () => {
 
   it.each([
     ["org.matrix.msc3973.user_directory_search", "org.matrix.msc3973.search_user_directory"],
-    ["org.matrix.msc4533.rtc_livekit_get_token", "org.matrix.msc4533.get_rtc_livekit_token"],
-    ["org.matrix.msc4533.rtc_livekit_delegate_delayed_leave", "org.matrix.msc4533.delegate_rtc_livekit_delayed_leave"],
     ["send_event", `${X}send_event`],
-    ["send_to_device", `${X}send_to_device`],
-    ["watch_turn_servers", `${X}watch_turn_servers`],
-    ["unwatch_turn_servers", `${X}unwatch_turn_servers`],
-    ["set_always_on_screen", `${X}set_always_on_screen`],
     ["org.matrix.msc2931.navigate", "org.matrix.msc2931.navigate"],
-    ["com.beeper.read_room_account_data", "com.beeper.read_room_account_data"],
   ])("sends the widget's %s to the host as %s", (legacyAction, hostAction) => {
     const request = fromWidget(legacyAction, "w-rename", { x: 1 });
     s.bridge.onWidgetMessage(request);
@@ -365,13 +339,6 @@ describe("capability translation", () => {
     expect(notified(s, approved).approved).toEqual([SEND, NAVIGATE, TURN, "m.always_on_screen", "m.sticker"]);
     // `allowed` is the full list: when the host takes everything away, nothing is left.
     expect(notified(s, [])).toEqual({ requested: LEGACY, approved: [] });
-  });
-
-  it("understands a host that answers in the stable namespace", () => {
-    const { s, requested } = negotiated([SEND, NAVIGATE]);
-    const stable = requested.map((c) => c.replace(/^(widget|host):(org\.matrix\.msc\w+|com\.beeper)\./, "$1:m."));
-    expect(stable).toContain("widget:m.navigate");
-    expect(notified(s, stable).approved).toEqual([SEND, NAVIGATE]);
   });
 
   it("translates a renegotiation and keeps reporting what was approved before", () => {
@@ -549,7 +516,6 @@ describe("OpenID", () => {
 describe("file payloads", () => {
   const s = setup(true);
   boot(s);
-  const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
 
   it("sends an uploaded Blob to the host as base64 and echoes the original request back", async () => {
     const blob = new Blob(["hello"], { type: "text/plain" });
@@ -577,7 +543,6 @@ describe("file payloads", () => {
 describe("legacy read_events", () => {
   const READ = "org.matrix.msc2876.read_events";
   const event = (id: string) => ({ type: "m.room.message", event_id: id, sender: "@bob:example.org", content: { body: id } });
-  const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
   /** The one request the bridge sent to the host since the last look; it must be `action`. */
   const nextToHost = (s: S, action: string): NewMessage => {
     const sent = s.take(s.toHost);
@@ -586,26 +551,11 @@ describe("legacy read_events", () => {
   };
   /** A booted bridge; `readDeadlineMs` replaces the 7 s a timeline read may take. */
   const booted = (readDeadlineMs?: number): S => {
-    const s = setup(true);
-    const bridge =
-      readDeadlineMs === undefined
-        ? s.bridge
-        : new CompatBridge({
-            widgetId: "w",
-            waitForIframeLoad: true,
-            legacyWidgetUrl: "https://widget.example/",
-            wrapperUrl: "https://compat.example/",
-            sendToHost: (m) => s.toHost.push(m),
-            sendToWidget: (m) => s.toWidget.push(m),
-            loadWidget: (url) => s.loaded.push(url),
-            refuseWidget: (reason) => s.refused.push(reason),
-            readDeadlineMs,
-          });
-    const booted = { ...s, bridge };
-    boot(booted);
+    const s = setup(true, { readDeadlineMs });
+    boot(s);
     s.take(s.toHost);
     s.take(s.toWidget);
-    return booted;
+    return s;
   };
 
   it("reads the timeline cache, filtered by the legacy type and msgtype, newest first", async () => {

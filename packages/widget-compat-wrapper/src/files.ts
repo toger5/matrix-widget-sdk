@@ -1,18 +1,11 @@
 /**
- * File payloads.
- *
- * Legacy widgets send files as `Blob` (more generally any `XMLHttpRequestBodyInit`). A `Blob`
- * survives `postMessage`, but not the JSON strings every MSC4412 host passes them through (UniFFI,
- * the Android / iOS WebView bridges). So towards the host a file is always
- *
- *   { "mimetype": "image/png", "base64": "iVBORw0…" }
- *
- * Two actions carry a file: `upload_file` (widget → host, in the request) and `download_file`
- * (host → widget, in the response).
+ * File payloads. Legacy widgets send files as `Blob` (any `XMLHttpRequestBodyInit`), which does
+ * not survive the JSON strings MSC4412 hosts pass messages through (UniFFI, WebView bridges).
+ * Towards the host a file is `{ mimetype, base64 }`: in the `upload_file` request and the
+ * `download_file` response.
  */
 
-/** A file as it travels between the wrapper and an MSC4412 host. */
-export interface Base64File {
+interface Base64File {
   mimetype?: string;
   base64: string;
 }
@@ -20,7 +13,7 @@ export interface Base64File {
 export const UPLOAD_FILE_ACTION = "org.matrix.msc4039.upload_file";
 export const DOWNLOAD_FILE_ACTION = "org.matrix.msc4039.download_file";
 
-export const isBase64File = (v: unknown): v is Base64File =>
+const isBase64File = (v: unknown): v is Base64File =>
   typeof v === "object" && v !== null && typeof (v as Base64File).base64 === "string";
 
 /** The body of a legacy `upload_file` request, with its `file` converted to base64. */
@@ -35,13 +28,7 @@ export function downloadResponseToLegacy(response: unknown): unknown {
   return isBase64File(file) ? { ...(response as object), file: fromBase64File(file) } : response;
 }
 
-/**
- * Convert any `XMLHttpRequestBodyInit` (Blob, ArrayBuffer, typed array, string, URLSearchParams,
- * FormData) to base64.
- *
- * `Response` reads the body and picks the content type a browser would send for it. A value that
- * already is a `Base64File` is returned unchanged.
- */
+/** Any `XMLHttpRequestBodyInit` as base64; `Response` picks the content type a browser would send. */
 export async function toBase64File(value: unknown): Promise<Base64File> {
   if (isBase64File(value)) return value;
   const response = new Response(value as BodyInit);

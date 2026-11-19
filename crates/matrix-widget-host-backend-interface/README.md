@@ -35,12 +35,7 @@ impl MatrixBackend for MySdkBackend {
 }
 ```
 
-Errors are `BackendError::Failed { errcode, status, reason }`; the driver forwards `errcode`
-and `status` to the widget as `matrix_api_error`. `timeline_read` answers a `from` it does not
-cache with `BackendError::EventNotCached { event_id }`, which the widget gets as
-`…event_not_cached`.
-
-With the `uniffi` feature the trait can be implemented in Kotlin / Swift / Python / TypeScript.
+Errors are `BackendError` (see `src/error.rs`). With the `uniffi` feature the trait can be implemented in Kotlin / Swift / Python / TypeScript.
 
 ## InMemoryBackend
 

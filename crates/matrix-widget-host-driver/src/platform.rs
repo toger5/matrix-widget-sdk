@@ -9,14 +9,14 @@ use crate::{PlatformError, WidgetIframe};
 #[cfg_attr(feature = "uniffi", uniffi::export(with_foreign))]
 pub trait WidgetHostPlatform: Send + Sync {
     /// Build the widget's iframe (webview) from `iframe` behind a loading state, in place of the
-    /// one before, and start the timeout of [`on_ready`](Self::on_ready).
+    /// one before, and start the timeout of [`on_ready`](Self::on_ready). Accept messages only from
+    /// the window of the iframe built last, and only from [`WidgetIframe::origin`].
     ///
     /// Called by [`WidgetHostDriver::start`], and again whenever the widget's webview
-    /// capabilities change `sandbox` or `allow`: a browser applies them only to a new iframe, so
-    /// the widget starts over in it. The driver has forgotten the old page by then (drop an open
-    /// capability prompt) and grants the new one what the old one held without asking. Accept
-    /// messages only from the window of the iframe built last, and only from
-    /// [`WidgetIframe::origin`]. A client should stop a widget that is reloaded too often.
+    /// capabilities change `sandbox` or `allow` (a browser applies them only to a new iframe). The
+    /// widget starts over then: the driver has forgotten the old page (drop an open capability
+    /// prompt) and grants the new one what the old one held. Stop a widget that is reloaded too
+    /// often.
     ///
     /// [`WidgetHostDriver::start`]: crate::WidgetHostDriver::start
     fn load_iframe(&self, iframe: WidgetIframe);
@@ -30,40 +30,27 @@ pub trait WidgetHostPlatform: Send + Sync {
     /// The widget asked for capabilities that need a decision; the driver has already
     /// acknowledged the request.
     ///
-    /// `requested` is the whole open question: every capability the widget requested since the
-    /// last answer, without those it holds already and those granted without asking
-    /// ([`WidgetHostDriver::set_auto_approved`]). A request that arrives before the answer joins
-    /// the question; if it adds something to decide, this is called again with the whole
-    /// question, which replaces the earlier one (the merge proposed for MSC4412 in
-    /// `spec/patch/msc4412/merge-capability-requests.md`).
+    /// `requested` is the whole open question: everything requested since the last answer, without
+    /// what the widget holds or gets without asking. A request before the answer joins it; if it
+    /// adds something to decide, this is called again with the whole question, which replaces the
+    /// earlier one (`spec/patch/msc4412/merge-capability-requests.md`).
     ///
-    /// Ask the user (or a policy), then call [`WidgetHostDriver::approve_capabilities`] once
-    /// with the approved subset: it answers every request so far. An empty list denies
-    /// everything and still completes the negotiation. A host that prompts should not accept an
-    /// approval for a few seconds after the question appeared or changed, so that the widget
-    /// cannot change what the user approves just before the click.
-    /// Clients should remember what was approved, so that the user is not asked again every time
-    /// the widget starts (pass it to [`WidgetHostDriver::set_auto_approved`]), except a
-    /// single-use capability ([`WidgetHostDriver::set_single_use`], `get_openid` by default): it
-    /// is asked about for every use, unless the user chose to allow it always.
-    ///
-    /// [`WidgetHostDriver::set_auto_approved`]: crate::WidgetHostDriver::set_auto_approved
-    /// [`WidgetHostDriver::set_single_use`]: crate::WidgetHostDriver::set_single_use
+    /// Ask the user (or a policy), then call [`WidgetHostDriver::approve_capabilities`] once with
+    /// the approved subset (empty denies everything). A prompt should not accept an approval for a
+    /// few seconds after the question appeared or changed, so that the widget cannot change it just
+    /// before the click. Remember approvals for [`WidgetHostDriver::set_auto_approved`], except
+    /// single-use ones ([`WidgetHostDriver::set_single_use`]) unless the user chose "always".
     ///
     /// [`WidgetHostDriver::approve_capabilities`]: crate::WidgetHostDriver::approve_capabilities
+    /// [`WidgetHostDriver::set_auto_approved`]: crate::WidgetHostDriver::set_auto_approved
+    /// [`WidgetHostDriver::set_single_use`]: crate::WidgetHostDriver::set_single_use
     fn on_capabilities_requested(&self, requested: Vec<Capability>);
 
     /// Hide the loading state and show the iframe built by the last
-    /// [`load_iframe`](Self::load_iframe). Called once after each `load_iframe`:
-    ///
-    /// * when the widget sends `notify_ready`, or
-    /// * right after `load_iframe`, from inside the same driver call, for a widget whose state
-    ///   event does not say `uses_widget_api: true`: it never sends `notify_ready`.
-    ///
-    /// Until then the client shows a loading state in place of the widget. If this is not called
-    /// in time (MSC4412 recommends 15 seconds,
-    /// [`NOTIFY_READY_TIMEOUT_MS`](matrix_widget_actions::NOTIFY_READY_TIMEOUT_MS)), the client should
-    /// show an error instead.
+    /// [`load_iframe`](Self::load_iframe). Called once after each `load_iframe`: when the widget
+    /// sends `notify_ready`, or, for a widget without `uses_widget_api: true` (it never does), right
+    /// after `load_iframe` from inside the same driver call. Not in time (MSC4412 recommends
+    /// [`NOTIFY_READY_TIMEOUT_MS`](matrix_widget_actions::NOTIFY_READY_TIMEOUT_MS)): show an error.
     fn on_ready(&self);
 
     /// Open `uri` (the `navigate` action). The driver has checked that it is a

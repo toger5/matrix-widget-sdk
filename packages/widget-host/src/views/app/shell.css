@@ -1,4 +1,4 @@
-/* App shell, app-only (layer views, after the design files): the app root, the login overlay, stacked toasts, tooltips, real login inputs. The design rules are src/styles/shell.css. */
+/* App shell, app-only (layer views): the app root, the login overlay, stacked toasts, tooltips, real login inputs. The design rules are src/styles/shell.css. */
 
 .app-root { width: 100%; height: 100%; font: 13px/1.4 var(--font-ui); color: var(--text); }
 

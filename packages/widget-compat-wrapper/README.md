@@ -4,66 +4,49 @@ A hosted widget that makes a **legacy widget** (built on [matrix-widget-api], `a
 look like an **MSC4412 widget** to its host. The host embeds the wrapper; the wrapper embeds the legacy
 widget in an inner iframe and translates between the two protocols.
 
-It contains **no action logic**. It translates envelopes, action names and capability names,
-forwards every other body untouched except file payloads (converted between `Blob` and base64,
-see below) and the error responses of the legacy widget (which get the `code` MSC4412 requires),
-and implements only two things itself:
-the legacy **URL templating** (`$matrix_user_id` & co., fed by the `get_matrix_context` /
-`get_client_context` actions) and the startup handshake, where the two protocols are structurally
-different.
-
-The wrapper is the **only** place the legacy names are understood. The host knows the action and
-capability names of [`capability-naming-proposal.md`](../../docs/spec-appendix/capability-naming-proposal.md)
-and nothing else.
+It translates envelopes, action names and capability names and passes other bodies through,
+except file payloads (`Blob` ↔ base64) and legacy error responses (which get the `code` MSC4412
+requires). The wrapper is the **only** place legacy names are understood: the host knows only the
+names of [`capability-naming-proposal.md`](../../docs/spec-appendix/capability-naming-proposal.md).
 
 ![Using legacy widgets with the new driver](../../docs/diagrams/02-legacy-widgets.svg)
 
-## How a client uses it during the transition
+## How a client uses it
 
-The client speaks MSC4412 only (for example through `matrix-widget-host-driver`) and keeps one piece of
-transition code: a check on the widget state event.
+The client speaks MSC4412 only and keeps one piece of transition code, a check on the widget
+state event:
 
-1. The client reads the widget state event of the room.
-2. **Legacy event** (`im.vector.modular.widgets`): embed
-   `https://example.org/myHostedCompatWidget?legacy_widget_url=<urlencoded content.url>&legacy_widget_id=<state_key>`
-   as a new-style widget with `usesWidgetAPI: true`. The URL is passed **untemplated**; the host
-   knows nothing about template variables. The wrapper resolves them (it asks the host for
-   `get_matrix_context` and `get_client_context`), appends the `widgetId` / `parentUrl` query parameters
-   legacy clients used to add, and loads the result in its inner iframe.
-3. **New event** (`m.widget`): embed `content.url` directly, unless it is a page of the client's
-   own compat wrapper: that runs on the client's origin and loads the `legacy_widget_url` the
-   event put into its query, unchecked by the client
-   ([Which URLs the wrapper loads](#which-urls-the-wrapper-loads)).
+- **Legacy event** (`im.vector.modular.widgets`): embed
+  `https://example.org/compat-wrapper/?legacy_widget_url=<urlencoded content.url>&legacy_widget_id=<state_key>`
+  as an MSC4412 widget with `uses_widget_api: true`. The URL is passed **untemplated**; the wrapper
+  resolves the template variables.
+- **New event** (`m.widget`): embed `content.url` directly, unless it is a page of the client's own
+  compat wrapper (that would load an unchecked `legacy_widget_url` on the client's origin).
 
-That URL construction is the only client code specific to the transition. Once legacy widgets are
-gone, delete it and the wrapper. The host keeps no template engine at all. `matrix-widget-host-driver`
-has it: a `WidgetHostDriver` made from a legacy widget's definition, with the client's wrapper URL
-in `EmbedOptions`, hands the wrapper's URL to the client (`WidgetHostPlatform::load_iframe`). It
-makes the URL check of the widget and of the wrapper, and refuses a widget of either kind whose URL
-is a page of the wrapper; it sets `legacy_widget_url`, `legacy_widget_id`,
-`legacy_wait_for_iframe_load` and `legacy_widget_data`.
+`matrix-widget-host-driver` does both: a `WidgetHostDriver` made from a legacy definition, with
+the wrapper URL in `EmbedOptions`, hands the wrapper's URL to `WidgetHostPlatform::load_iframe`
+with `legacy_widget_url`, `legacy_widget_id`, `legacy_wait_for_iframe_load` and
+`legacy_widget_data` set, and refuses a widget of either kind whose URL is a page of the wrapper.
 
 ## Query parameters
 
 | parameter | required | from the legacy state event | meaning |
 |---|---|---|---|
-| `legacy_widget_url` | yes | `content.url`, **untemplated** | Template variables are resolved by the wrapper. `widgetId` is added if missing and `parentUrl` is always set to the wrapper's own URL, because the widget's parent is now the wrapper. Only an absolute `http:` / `https:` URL is loaded, see [below](#which-urls-the-wrapper-loads). |
-| `legacy_widget_id` | no | `state_key` | `widgetId` put on every legacy message and value of `$matrix_widget_id`. Default: the `widgetId` query parameter of `legacy_widget_url`. One of the two must exist. |
+| `legacy_widget_url` | yes | `content.url`, **untemplated** | Templated by the wrapper; `widgetId` is added if missing and `parentUrl` is set to the wrapper. Only an absolute `http:` / `https:` URL is loaded, see [below](#which-urls-the-wrapper-loads). |
+| `legacy_widget_id` | no | `state_key` | `widgetId` on every legacy message and `$matrix_widget_id`. Default: the `widgetId` query parameter of `legacy_widget_url`; one of the two must exist. |
 | `legacy_widget_name` | no | `content.name` | Accessible name (`title`) of the inner iframe. Default: the widget id. |
-| `legacy_wait_for_iframe_load` | no | `content.waitForIframeLoad` (default `true`) | Decides when the legacy capability round starts, see below. |
-| `legacy_widget_data` | no | `content.data` as JSON | Extra `$key` template variables, as in legacy clients. |
-| `client_origin` | no | | Target origin for `postMessage` to the host. Default `*`. Set it in production. |
-| `log_level` | no | | What the wrapper writes to the console (prefix `[widget-compat-wrapper]`): `off`, `error`, `warn` (default), `info`, `debug`. `warn` reports dropped responses and refused requests, `debug` adds one line per message. |
+| `legacy_wait_for_iframe_load` | no | `content.waitForIframeLoad` (default `true`) | When the capability round starts, see [Startup](#startup). |
+| `legacy_widget_data` | no | `content.data` as JSON | Extra `$key` template variables. |
+| `client_origin` | no | | Target origin for `postMessage` to the host. Default `*`; set it in production. |
+| `log_level` | no | | Console output (prefix `[widget-compat-wrapper]`): `off`, `error`, `warn` (default: dropped and refused messages), `info`, `debug` (one line per message). |
 
 ## What the wrapper does
 
 ### Bootstrap: templating the legacy URL
 
-Before the inner iframe exists the wrapper sends `request_capabilities` for
+Before the inner iframe exists, the wrapper requests
 `widget:org.matrix.mscXXXX.get_matrix_context` and `widget:org.matrix.mscXXXX.get_client_context`
-(and the webview capabilities of a legacy client's iframe, see [The iframes](#the-iframes)),
-waits for the host's `update_capabilities`, requests both contexts
-(`org.matrix.mscXXXX.get_matrix_context`, `org.matrix.mscXXXX.get_client_context`) and
+(plus the webview capabilities of [the iframes](#the-iframes)), then fetches both contexts and
 renders the URL:
 
 | variable | source |
@@ -74,149 +57,70 @@ renders the URL:
 | `$matrix_widget_id` | `legacy_widget_id` |
 | `$<key>` | `legacy_widget_data` |
 
-Values are URI-encoded, unknown variables stay as they are, and if the host denies a capability
-or does not implement an action the corresponding variables are empty (the widget still loads).
-Any other host request during this phase is answered with an `invalid_request` error, since there
-is no widget yet.
-
-This means a host prompts twice for a wrapped widget: once for the wrapper's context
-capabilities, once for the capabilities the legacy widget itself asks for. A host may of course
-grant the context capabilities without prompting.
+Values are URI-encoded and unknown variables stay as they are. A refused context leaves its
+variables empty; the widget still loads. Other host requests in this phase get `invalid_request`.
+So a host prompts twice for a wrapped widget (the wrapper's context capabilities, then the
+widget's own) unless it grants the context capabilities without asking.
 
 ### The iframes
 
-A host with strict iframes ([`spec/patch/msc4411/strict-webview-defaults.md`](../../spec/patch/msc4411/strict-webview-defaults.md))
-gives a widget only `sandbox="allow-scripts allow-same-origin"` until it holds webview capabilities
-([`spec/patch/new/webview-capabilities.md`](../../spec/patch/new/webview-capabilities.md)). A legacy
-widget was written for the iframe Element Web gives every widget, so the wrapper requests that set
-in its first `request_capabilities` (`LEGACY_WEBVIEW_CAPABILITIES` in `src/capabilities.ts`, fifteen
-in all):
+A host with strict iframes ([`strict-webview-defaults.md`](../../spec/patch/msc4411/strict-webview-defaults.md))
+gives a widget only `allow-scripts allow-same-origin` until it holds webview capabilities
+([`webview-capabilities.md`](../../spec/patch/new/webview-capabilities.md)). The wrapper requests the
+iframe Element Web gives every widget (`LEGACY_WEBVIEW_CAPABILITIES` in `src/capabilities.ts`):
 
 | `sandbox` (`webview:org.matrix.mscXXXX.sandbox:<token>`) | `allow` (`webview:org.matrix.mscXXXX.allow:<feature>`) |
 |---|---|
 | `allow-forms`, `allow-popups`, `allow-popups-to-escape-sandbox`, `allow-same-origin`, `allow-scripts`, `allow-presentation`, `allow-downloads` | `microphone`, `camera`, `encrypted-media`, `autoplay`, `display-capture`, `clipboard-write`, `clipboard-read`, `fullscreen` |
 
-A host that keeps legacy widgets working grants them without a prompt and builds the wrapper's
-iframe with them from the start, so the request needs no reload (`matrix-widget-host-driver` does both for
-a legacy widget: `legacy_auto_approved`, the same set).
-The wrapper's own iframe for the legacy widget (`innerIframe` in `src/wrapper.ts`) always has these
-attributes (`INNER_SANDBOX`, `INNER_ALLOW`), whatever the host granted: a legacy widget cannot request
-webview capabilities (a `webview:` string in its list expands to nothing). One exception: a legacy
-widget on the wrapper's own origin, which is often the client's, would share that origin with
-`allow-same-origin`. It loads without it, so its origin is opaque, and the wrapper posts to it with
-the target origin `*` (it is still only that iframe's window that gets the message).
+A host that keeps legacy widgets working grants them unasked and builds the wrapper's iframe with
+them from the start (`matrix-widget-host-driver`: `legacy_auto_approved`). The inner iframe always
+has these attributes, whatever the host granted; a legacy widget cannot request webview
+capabilities. Exception: a legacy widget on the wrapper's own origin loads without
+`allow-same-origin` (its origin is opaque, messages go to `*` on that one window).
 
 ### Which URLs the wrapper loads
 
-The wrapper is often served from its client's own origin (this repository's test host does that),
-and the client gives its iframe `allow-same-origin`. A
-`javascript:` URL in the inner iframe would run on the client's origin, and `data:`, `blob:`,
-`about:` pages or a URL resolved against the wrapper page (`/x`, `http:/x`) would be pages of that
-origin. So the wrapper loads only an **absolute `http:` or `https:` URL that names its own host**:
-the rule of `widget_url_problem` in `matrix-widget-host-driver` (`src/url.ts`; its tests run the driver's
-URL table, `crates/matrix-widget-host-driver/tests/widget_urls.json`). It checks:
+The wrapper often runs on its client's origin with `allow-same-origin`, so it loads only an
+**absolute `http:` or `https:` URL that names its own host**, the rule of `widget_url_problem` in
+`matrix-widget-host-driver` (`src/url.ts`; tested against
+`crates/matrix-widget-host-driver/tests/widget_urls.json`). It checks the template when it reads
+its configuration, and the templated URL before creating the inner iframe (a value cannot change
+the scheme, but can make the URL invalid: `https://$server/` with `server` = `widgets.example:8443`).
 
-1. the template in `legacy_widget_url`, when it reads its configuration: a refused one stops the
-   wrapper before it talks to the host (a template that starts with a `$variable` has no scheme
-   and is refused);
-2. the template again and the templated URL, before the inner iframe is created: that is what
-   the iframe loads, and it gets the URL as the URL parser serialised it. A value cannot change
-   the scheme (it is URI-encoded), but it can make the URL invalid (`https://$server/` with
-   `server` = `widgets.example:8443`).
+A refused URL creates no inner iframe. The wrapper logs and shows the reason (naming the scheme,
+never the URL), never sends `notify_ready`, and answers later host requests with `invalid_request`.
+A client should still check the URL itself; the wrapper's check protects clients that do not.
 
-A refused URL creates no inner iframe. The wrapper logs the reason (`console.error`, also at
-`log_level=warn`), shows it in its page ("Widget compat wrapper: refused …", the same place as the
-errors of a missing parameter), never sends `notify_ready` (so the host's widget stays in its
-loading state until the host gives up) and answers every later host request with
-`invalid_request`. The texts name the scheme, never the URL.
-
-A client should still check the URL first (the driver's `WidgetDefinition::embed` does, before
-templating) and should not load its own compat wrapper as a widget (`embed` refuses that too):
-the wrapper's check protects clients that do not, and copies of the wrapper the client does not
-know about.
-
-### Envelope translation (both directions, stateless)
+### Envelope and action names
 
 | legacy | MSC4412 |
 |---|---|
 | `api: "fromWidget"` / `"toWidget"` | `source: "widget"` / `"host"` |
 | `widgetId` | absent; added from `legacy_widget_id` |
-| `data` | `request` |
+| `requestId`, `data` | `request_id` (same value), `request` |
 | response = echo of the request + `response` | response = header + `response` |
-| `requestId` | `request_id`, same value, so responses correlate without extra state |
-| `response.error: { message }` from the widget | `response.error: { code: "org.matrix.msc4412.unknown", message }` |
-| `response.error` from the host | unchanged: the widget reads `message` (and `matrix_api_error`) and ignores `code` |
+| `error: { message }` from the widget | `error: { code: "org.matrix.msc4412.unknown", message }` |
 
-Neither format has a version. They are told apart by `api` versus `source`; the wrapper routes by
-window (`event.source`) and ignores a message of the wrong format.
+Messages are routed by `event.source` (parent vs. inner iframe); a message of the wrong format or
+with another `widgetId` is ignored. Legacy action names that differ from the host's are renamed
+per direction (`LEGACY_TO_NEW` in `src/envelope.ts`); everything else passes through, so an action
+the host does not implement gets the host's own error.
 
-### Action names (`src/envelope.ts`)
-
-The host does not accept the legacy names of the actions below, so the wrapper renames them.
-MSC4412 demands a namespace on every action, so that includes every legacy name without one. The
-table depends on the direction, because `send_event` and `send_to_device` are legacy names in both.
-
-`…` is `org.matrix.mscXXXX.`, the placeholder namespace of actions without an MSC of their own.
-
-| direction | legacy widget | host |
-|---|---|---|
-| widget → host | `content_loaded` | `org.matrix.msc4412.notify_ready` (sent by the wrapper itself, see the handshake) |
-| widget → host | `org.matrix.msc2974.request_capabilities` | `org.matrix.msc4412.request_capabilities` |
-| widget → host | `send_event` | `…send_event` |
-| widget → host | `send_to_device` | `…send_to_device` |
-| widget → host | `get_openid` | `…get_openid`, sent by the wrapper itself (see [OpenID](#openid-get_openid-and-openid_credentials)) |
-| widget → host | `watch_turn_servers` / `unwatch_turn_servers` | `…watch_turn_servers` / `…unwatch_turn_servers` |
-| widget → host | `set_always_on_screen` | `…set_always_on_screen` |
-| widget → host | `org.matrix.msc3973.user_directory_search` | `org.matrix.msc3973.search_user_directory` |
-| widget → host | `org.matrix.msc4533.rtc_livekit_get_token` | `org.matrix.msc4533.get_rtc_livekit_token` |
-| widget → host | `org.matrix.msc4533.rtc_livekit_delegate_delayed_leave` | `org.matrix.msc4533.delegate_rtc_livekit_delayed_leave` |
-| host → widget | `notify_capabilities` | `org.matrix.msc4412.update_capabilities` (body rewritten, see below) |
-| host → widget | `send_event` | `…forward_event` |
-| host → widget | `send_to_device` | `…forward_to_device` |
-| host → widget | `update_state` | `…update_state` |
-| host → widget | `update_turn_servers` | `…update_turn_servers` |
-| host → widget | `theme_change` | `…update_theme` |
-| host → widget | `language_change` | `…update_language` |
-| host → widget | `visibility` | `…update_visibility` |
-
-Everything else passes through unchanged (the host emits and accepts the unstable MSC spellings
-such as `org.matrix.msc3869.read_relations` itself, see `docs/parity.md`), so an
-action the host does not implement is answered by the host's own error response, which is
-forwarded to the widget as is.
-
-### Reading events (`src/readEvents.ts`)
-
-The host has no `org.matrix.msc2876.read_events`: it reads its timeline cache with
-`…read_timeline`, `…paginate_timeline` and `…notify_timeline_update`
-([draft](../../spec/patch/new/timeline-reading.md)). The wrapper answers the legacy action itself:
-
-- **Timeline read** (no `state_key`): `read_timeline` with the legacy `type` / `msgtype` as filter.
-  While the answer is short of `limit` and the host's pagination is `idle`, it sends
-  `paginate_timeline`, waits for the `notify_timeline_update` that ends it and reads on below the
-  oldest event it has. It stops at `limit`, at `start_reached`, at a failed or refused pagination
-  and after 7 seconds (under the 10 seconds a legacy widget waits), and answers with what it has,
-  **newest first** (as Element Web does). Without `limit` it answers from the cache only. `since`
-  is not supported.
-- **State read** (`state_key` a string or `true`): answered from the state the host pushed with
-  `update_state` (the wrapper keeps the last set per type); refused when the widget does not hold
-  `host:…update_state:<type>`.
-- `room_ids`: only the widget's room is served; a list without it reads nothing.
-- The host's `notify_timeline_update` is acknowledged by the wrapper and never reaches the legacy
-  widget.
+![How the envelope changed](../../docs/diagrams/03-wire-format-changes.svg)
 
 ### Capabilities (`src/capabilities.ts`)
 
-A legacy widget asks for matrix-widget-api capabilities; the host grants one capability per
-action. Every legacy capability stands for a fixed set of new ones. The wrapper requests that set
-and tells the widget a legacy capability is approved when the host approved **all** of its set.
+Every legacy capability stands for a fixed set of new ones. The wrapper requests that set and
+reports the legacy capability as approved only when the host approved **all** of it.
 
-| legacy capability (its MSC prefix or `m.`) | requested from the host (`…` = the unstable namespace of the action) |
+| legacy capability (its MSC prefix or `m.`) | requested from the host (`…` = the action's namespace) |
 |---|---|
 | `send.event:<t>` | `widget:…send_event.timeline:<t>` |
 | `send.state_event:<t>` | `widget:…send_event.state:<t>` |
-| `receive.event:<t>` | `widget:…read_timeline:<t>`, `widget:…read_relations:<t>`, `host:…forward_event.timeline:<t>`, `widget:…paginate_timeline`, `host:…notify_timeline_update` (the last three for the legacy `read_events`) |
-| `receive.state_event:<t>` | `host:…update_state:<t>` (also answers the legacy state reads), `host:…forward_event.state:<t>` |
-| `timeline:<room>` | nothing: never requested, never reported as approved |
+| `receive.event:<t>` | `widget:…read_timeline:<t>`, `widget:…read_relations:<t>`, `host:…forward_event.timeline:<t>`, `widget:…paginate_timeline`, `host:…notify_timeline_update` |
+| `receive.state_event:<t>` | `host:…update_state:<t>`, `host:…forward_event.state:<t>` |
+| `timeline:<room>` | nothing: one widget, one room; never reported as approved |
 | `send.to_device:<t>` / `receive.to_device:<t>` | `widget:…send_to_device:<t>` / `host:…forward_to_device:<t>` |
 | `receive.room_account_data:<t>` | `widget:…read_room_account_data:<t>` |
 | `send.delayed_event` / `update_delayed_event` | `widget:…send_event.delayed` / `widget:…update_delayed_event` |
@@ -229,137 +133,58 @@ and tells the widget a legacy capability is approved when the host approved **al
 | `navigate` | `widget:…navigate` |
 | `rtc_livekit_get_token` / `rtc_livekit_delegate_delayed_leave` | `widget:…get_rtc_livekit_token` / `widget:…delegate_rtc_livekit_delayed_leave` |
 | `m.always_on_screen` | `widget:…set_always_on_screen` |
-| anything else (`m.sticker`, custom strings) | the same string, unchanged |
+| anything else (`m.sticker`, custom strings) | unchanged |
 
-`<t>` keeps its `#<msgtype>` / `#<state_key>` suffix.
+`<t>` keeps its `#<msgtype>` / `#<state_key>` suffix. A host answer in the stable namespace
+(`widget:m.navigate`) is understood.
 
-A capability embeds the wire name of its action, so `…` is the prefix the host sends that action
-with: `org.matrix.msc3869.` (`read_relations`),
-`org.matrix.msc4157.` (`update_delayed_event`), `org.matrix.msc4515.` (`get_rtc_transports`),
-`org.matrix.msc3973.` (`search_user_directory`), `org.matrix.msc4039.` (`upload_file`,
-`download_file`, `get_media_config`), `org.matrix.msc4533.` (the LiveKit actions),
-`org.matrix.msc2931.` (`navigate`), `com.beeper.` (`read_room_account_data`) and
-`org.matrix.mscXXXX.` for everything else. A host that answers in the stable spelling
-(`widget:m.navigate`) is understood as well.
+- **Always requested:** `host:…update_theme`, `host:…update_language`, `host:…update_visibility`
+  (the legacy api needs no capability for them; `legacy_auto_approved` grants them unasked).
+- **`update_capabilities { allowed }` becomes `notify_capabilities { requested, approved }`:**
+  `requested` is the widget's latest list, `approved` every legacy capability it ever requested
+  whose whole set is in `allowed`, in the widget's own spelling. It shrinks when the host takes
+  capabilities away. A partial grant is reported as not approved, but the granted parts work.
 
-- **Always requested**, whatever the widget asks for: `host:…update_theme`,
-  `host:…update_language`, `host:…update_visibility`. The legacy api has no capability for these;
-  a legacy host simply allows them. A host that wants the legacy behaviour grants them without a
-  prompt (`matrix-widget-host-driver` does for a legacy widget: `legacy_auto_approved`).
-- **Webview capabilities** (`webview:…`) of a legacy client's iframe are requested when the wrapper
-  starts (see [The iframes](#the-iframes)); the legacy widget cannot request any.
-- **`widget:…get_openid` is requested per token**, when the widget asks for one (see
-  [OpenID](#openid-get_openid-and-openid_credentials)), not up front: a host grants it for one
-  token at a time.
-- **`timeline:<room>` is never granted.** One widget, one room: nothing reaches another room. A
-  request that names the widget's own room works without it.
-- **`update_capabilities { allowed }` becomes `notify_capabilities { requested, approved }`** for
-  the widget: `requested` is the widget's own latest list, `approved` every legacy capability it
-  has ever requested whose whole set is in `allowed`. `allowed` is always the full list, so
-  `approved` shrinks when the host takes capabilities away. The widget only ever sees legacy
-  names, in the spelling it used.
-- A partially approved set (the host grants reading but not `forward_event`, say) is reported as
-  **not** approved. The host still holds the partial grant, so the parts that were approved work.
+### Reading events (`src/readEvents.ts`)
 
-![How the envelope changed](../../docs/diagrams/03-wire-format-changes.svg)
+The host has no `org.matrix.msc2876.read_events`; the wrapper answers it with `read_timeline`,
+`paginate_timeline` and `notify_timeline_update` ([draft](../../spec/patch/new/timeline-reading.md)),
+paginating while the answer is short of `limit`, for at most 7 s, newest first. State reads are
+answered from the host's `update_state` pushes. Only the widget's own room is served; `since` is
+not supported.
 
-### OpenID: `get_openid` and `openid_credentials`
+### OpenID
 
-A legacy widget may always ask for an OpenID token, and a legacy host asked the user per token
-(MSC1960). An MSC4412 host hands a token out only while the widget holds `widget:…get_openid`,
-which it grants for one token at a time
-([`spec/patch/new/openid-capability.md`](../../spec/patch/new/openid-capability.md)); there is no
-host action for a late answer. The wrapper (`src/bridge.ts`) plays the legacy host:
+An MSC4412 host hands out a token only while the widget holds `widget:…get_openid`, granted per
+token ([`openid-capability.md`](../../spec/patch/new/openid-capability.md)). While it is held, the
+widget's `get_openid` gets `{ state: "allowed", ...token }`. Otherwise the widget gets
+`{ state: "request" }`, the wrapper requests the capability, and each waiting request later gets
+`openid_credentials` with `state: "allowed"` and the token, or `state: "blocked"`.
 
-- While the host's last `update_capabilities` allowed `widget:…get_openid`, the widget's
-  `get_openid` is sent to the host as `…get_openid`, and the token comes back to the widget as
-  `{ state: "allowed", ...token }`. If the host answers `missing_capability` (the grant ended
-  before the request arrived), the wrapper goes on as below.
-- Otherwise the widget gets `{ state: "request" }` at once, and the wrapper requests
-  `widget:…get_openid` (once for every request that waits). The host's first
-  `update_capabilities` after it acknowledged that request is the answer: granted, the wrapper
-  asks for one token and sends every waiting request `openid_credentials { state: "allowed",
-  original_request_id, ...token }`; refused (or no token), `openid_credentials { state:
-  "blocked", original_request_id }`. A host that takes capabilities away in between is read as a
-  refusal.
+### File payloads
 
-### File payloads: Blob → base64
+The MSC4412 file format is `{ "mimetype": "image/png", "base64": "iVBORw0…" }`: a `Blob` does not
+survive the JSON strings MSC4412 hosts carry. The wrapper converts the `file` of
+`org.matrix.msc4039.upload_file` requests (any `XMLHttpRequestBodyInit` → base64) and
+`org.matrix.msc4039.download_file` responses (base64 → `Blob`). The legacy `screenshot` action is
+not supported.
 
-> **The MSC4412 file format is base64.** A file always travels between widget and host as
-> `{ "mimetype": "image/png", "base64": "iVBORw0…" }`. Only legacy widgets send files as `Blob`,
-> and only the wrapper ever sees one.
+### Startup
 
-matrix-widget-api passes files as `Blob` (`XMLHttpRequestBodyInit`) through `postMessage`
-structured cloning. That does not survive the JSON string boundary every MSC4412 host has: the
-UniFFI layer and the Android / iOS WebView bridges carry strings only (`JSON.stringify(blob)` is
-`{}`, so the file would be silently lost). The wrapper converts on the two actions that carry a
-file (`src/files.ts`):
+Legacy capabilities are requested by the host, MSC4412 capabilities by the widget, so the wrapper
+plays the legacy host towards the inner iframe:
 
-| action | direction | conversion |
-|---|---|---|
-| `org.matrix.msc4039.upload_file` | widget → host, request `file` | `Blob` → base64 |
-| `org.matrix.msc4039.download_file` | host → widget, response `file` | base64 → `Blob` |
+- `waitForIframeLoad = true` (default): on the inner iframe's `load` the wrapper sends the host
+  `notify_ready` and the widget `capabilities`, then requests the translated list from the host. A
+  `content_loaded` from the widget gets the legacy error.
+- `waitForIframeLoad = false`: the same happens on the widget's `content_loaded`.
+- On an inner reload the capability round runs again; `notify_ready` is sent once.
+- `supported_api_versions` is answered with matrix-widget-api's `CurrentApiVersions`.
+- Renegotiation (`org.matrix.msc2974.request_capabilities`) is translated like the first round.
 
-Any `XMLHttpRequestBodyInit` (Blob, ArrayBuffer, typed array, string, ...) is accepted; the
-`mimetype` is the content type the browser would send for that body. The widget still gets its
-own request echoed back with the original `Blob`. Base64 adds about 33% to the size, which is
-fine for widget-sized files.
-
-The legacy `screenshot` action (host → widget) is **intentionally not supported**: there is no
-conversion for it, and an MSC4412 host never asks for one.
-
-### Startup handshake
-
-After the bootstrap above has loaded the inner iframe. Legacy capabilities are **host-initiated**
-(`toWidget capabilities` → the widget answers with its list), MSC4412 capabilities are
-**widget-initiated** (`request_capabilities`). The wrapper plays the legacy host towards the
-inner iframe:
-
-`waitForIframeLoad = true` (legacy default)
-
-```
-inner iframe load  ──► host:   notify_ready             (once per wrapper lifetime)
-                   ──► widget: capabilities {}
-widget: { capabilities } ──► host: request_capabilities { capabilities }   (host acks, ignored)
-host: update_capabilities ──► widget: notify_capabilities (legacy)  ──► widget ack ──► host ack
-```
-
-A `content_loaded` from the widget in this mode is answered with the legacy error
-"Improper sequence: not expecting ContentLoaded event" and never forwarded.
-
-`waitForIframeLoad = false`
-
-```
-inner iframe load  ──► nothing
-widget: content_loaded ──► widget: {} ack, host: notify_ready, then the same capability round
-```
-
-A second `content_loaded` before a reload is answered with an error, as legacy hosts do.
-
-Always:
-
-- `supported_api_versions` from the widget is **answered locally** with matrix-widget-api's
-  `CurrentApiVersions`. The widget asks during `start()` and again while handling `capabilities`;
-  forwarding it would make the widget believe the host supports nothing (no MSC2871 → `ready`
-  before capabilities are approved, no MSC2974 → no renegotiation).
-- Renegotiation (`org.matrix.msc2974.request_capabilities`) is forwarded with its capability list
-  translated like the first round's; the resulting `update_capabilities` is translated back.
-- On an inner reload the capability round runs again (legacy hosts do the same); `notify_ready`
-  is sent to the host only once.
-- Messages are routed by `event.source` (parent window vs. inner iframe), never by sniffing the
-  format. Messages with another `widgetId`, and messages from the parent that are not MSC4412
-  (no `source` / `request_id`), are ignored.
-
-### Parity notes
-
-- Legacy widgets overwrite their approved list with `notify_capabilities.approved`, so it must be
-  the full set. MSC4412's `update_capabilities.allowed` is exactly that.
-- The wrapper needs the host to wait for `notify_ready` (`uses_widget_api: true`); the driver
-  always does for a legacy widget, whatever its state event says.
-- Legacy widgets built with `new WidgetApi(widgetId, clientOrigin)` only accept a parent at
-  `clientOrigin`; widgets derive it from `parentUrl`, which the wrapper sets to itself. A widget
-  that passes `null` cannot talk to any parent, wrapper or not.
-- The legacy 10 s request timeout still applies between widget and host.
+Legacy widgets built with `new WidgetApi(widgetId, clientOrigin)` only accept a parent at
+`clientOrigin`; most derive it from `parentUrl`, which is the wrapper. The legacy 10 s request
+timeout still applies between widget and host.
 
 ## From npm
 
@@ -367,26 +192,22 @@ Always:
 npm install @matrix-widget-sdk/compat-wrapper
 ```
 
-The package is the built page and nothing else: `dist/index.html` plus `dist/assets/`, with
-relative asset paths. Copy `node_modules/@matrix-widget-sdk/compat-wrapper/dist/` into the
-client's web root (for example to `/widget_compatibility_wrapper/`) and pass that URL as
-`EmbedOptions.wrapperUrl`. Pinning the package version pins the wrapper the client serves.
+The package is the built page only (`dist/index.html` and `dist/assets/`, relative paths). Copy
+`dist/` into the client's web root (for example `/widget_compatibility_wrapper/`) and pass that URL
+as `EmbedOptions.wrapperUrl`.
 
 ## Development
 
 ```sh
 npm install              # from the repository root (npm workspaces)
-npm test                 # vitest: envelope translation, handshake state machine, config parsing, URL check
-npm run dev              # http://localhost:5174/ (standalone; the test host serves its own copy and does not need this)
-npm run build            # static output in dist/, serve it under its own origin
+npm test                 # vitest
+npm run dev              # http://localhost:5174/ (standalone)
+npm run build            # static output in dist/
 ```
 
-Source layout: `src/envelope.ts` (translation tables), `src/template.ts` (legacy URL
-templating), `src/url.ts` (which legacy URLs are loaded), `src/files.ts` (Blob ↔ base64), `src/bridge.ts` (bootstrap and handshake state machine, transport free),
-`src/wrapper.ts` (URL config, iframe, `postMessage` routing), `src/main.ts`.
-
-For an end-to-end run use the test host in `../widget-host` with the legacy test widget from
-`../test-widgets`. The host builds `src/main.ts` into its own page `/widget_compatibility_wrapper/`,
-so changes here show up there without starting this package's dev server.
+`src/bridge.ts` is the transport-free state machine, `src/wrapper.ts` the browser glue (config,
+iframe, `postMessage`); the other modules are pure translations. For an end-to-end run use the
+test host in `../widget-host` with the legacy test widget from `../test-widgets`: the host builds
+`src/main.ts` into its own page `/widget_compatibility_wrapper/`.
 
 [matrix-widget-api]: https://github.com/matrix-org/matrix-widget-api

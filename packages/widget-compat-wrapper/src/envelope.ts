@@ -4,14 +4,11 @@
  *     legacy:  { api: "fromWidget" | "toWidget", widgetId, requestId, action, data }
  *     MSC4412: { source: "widget" | "host", request_id, action, request }
  *
- * The two are told apart by `api` versus `source`; neither carries a version.
- *
- * Pure functions without state. Bodies are passed through and never inspected. Action names are
- * translated where the two protocols differ.
+ * Pure functions. Bodies pass through uninspected; action names are translated where they differ.
  */
 
 /** Who started the exchange in the legacy protocol: `fromWidget` = the widget, `toWidget` = the host. */
-export type LegacyApi = "fromWidget" | "toWidget";
+type LegacyApi = "fromWidget" | "toWidget";
 /** Who started the exchange in MSC4412. */
 export type Source = "widget" | "host";
 
@@ -37,36 +34,25 @@ export interface NewMessage {
   response?: unknown;
 }
 
-/** Unstable namespace of what MSC4412 itself defines: the three core actions and the base error codes. */
-export const MSC4412 = "org.matrix.msc4412";
+/** Unstable namespace of what MSC4412 itself defines: the core actions and the base error codes. */
+const MSC4412 = "org.matrix.msc4412";
 /** Unstable namespace of actions that have no MSC of their own yet. */
 export const PLACEHOLDER = "org.matrix.mscXXXX";
 
-/** The core actions of MSC4412. */
 export const NOTIFY_READY_ACTION = `${MSC4412}.notify_ready`;
 export const REQUEST_CAPABILITIES_ACTION = `${MSC4412}.request_capabilities`;
 export const UPDATE_CAPABILITIES_ACTION = `${MSC4412}.update_capabilities`;
 
-/** The base error codes of MSC4412. */
-export const ERROR_UNKNOWN = `${MSC4412}.unknown`;
+const ERROR_UNKNOWN = `${MSC4412}.unknown`;
 export const ERROR_INVALID_REQUEST = `${MSC4412}.invalid_request`;
 export const ERROR_MISSING_CAPABILITY = `${MSC4412}.missing_capability`;
 
 /**
- * Legacy action names that differ from the host's, per source (who sends the action).
- *
- * - MSC4412 demands a namespace on every action, so every legacy name without one is listed.
- * - The core actions are renamed by MSC4412 itself (`content_loaded` → `notify_ready`,
- *   `notify_capabilities` → `update_capabilities`).
- * - The rest are the renames of the capability naming proposal
- *   (`docs/spec-appendix/capability-naming-proposal.md`): action names are verbs, and the host's
- *   deliveries are `forward_*` / `update_*` instead of sharing a name with the widget's requests.
- *
- * The host accepts none of the legacy names, so this table is the only place they are understood.
- * Every other action passes through: the host sends and accepts the unstable MSC spellings
- * (`org.matrix.msc3869.read_relations`) the legacy api uses. The legacy
- * `org.matrix.msc2876.read_events`, which the host does not have, is answered by the bridge
- * (readEvents.ts).
+ * Legacy action names that differ from the host's, per source (who sends the action): every
+ * legacy name without a namespace, MSC4412's core renames, and the renames of
+ * `docs/spec-appendix/capability-naming-proposal.md` (verbs; host deliveries are `forward_*` /
+ * `update_*`). The host accepts none of them: this table is the only place they are understood.
+ * Every other action passes through unchanged.
  */
 const LEGACY_TO_NEW: Record<Source, Record<string, string>> = {
   widget: {
@@ -126,7 +112,7 @@ export function isNewMessage(m: unknown): m is NewMessage {
   );
 }
 
-/** A legacy request becomes an MSC4412 request. The request id is kept so responses correlate. */
+/** A legacy request as an MSC4412 request; the request id is kept so responses correlate. */
 export function legacyRequestToNew(m: LegacyMessage): NewMessage {
   const source: Source = m.api === "fromWidget" ? "widget" : "host";
   return {
@@ -137,7 +123,7 @@ export function legacyRequestToNew(m: LegacyMessage): NewMessage {
   };
 }
 
-/** An MSC4412 request becomes a legacy request addressed to `widgetId`. */
+/** An MSC4412 request as a legacy request addressed to `widgetId`. */
 export function newRequestToLegacy(m: NewMessage, widgetId: string): LegacyMessage {
   return {
     api: m.source === "host" ? "toWidget" : "fromWidget",
@@ -153,7 +139,7 @@ export function legacyResponse(request: LegacyMessage, response: unknown): Legac
   return { ...request, response };
 }
 
-/** MSC4412 responses repeat the header and add `response`; repeating `request` is optional and not done. */
+/** MSC4412 responses repeat the header and add `response` (repeating `request` is optional). */
 export function newResponse(request: NewMessage, response: unknown): NewMessage {
   return {
     source: request.source,
@@ -166,19 +152,16 @@ export function newResponse(request: NewMessage, response: unknown): NewMessage 
 /** A legacy error body: `{ error: { message } }`. */
 export const errorBody = (message: string) => ({ error: { message } });
 
-/** An MSC4412 error body: the legacy shape plus the required, machine readable `code`. */
+/** An MSC4412 error body: the legacy shape plus the required `code`. */
 export const newErrorBody = (code: string, message: string) => ({ error: { code, message } });
 
-/** Is `body` an error body? In both protocols that is a body whose `error` is an object. */
+/** In both protocols an error body is one whose `error` is an object. */
 export const isErrorBody = (body: unknown): boolean => isRecord(body) && isRecord(body.error);
 
 /**
- * A response body from the legacy widget, fit for the host: MSC4412 requires a `code` and a
- * `message` on every error, a legacy widget sends `{ error: { message } }`. A legacy error becomes
- * an `unknown` error; any other body is returned as it is.
- *
- * The other direction needs nothing: a legacy widget reads `error.message` (and
- * `error.matrix_api_error`) and ignores the `code`.
+ * A legacy widget's response body, fit for the host: MSC4412 requires `code` and `message` on
+ * every error, so a legacy error becomes `unknown`. The other direction needs nothing: a legacy
+ * widget reads `error.message` and ignores `code`.
  */
 export function legacyResponseBodyToNew(body: unknown): unknown {
   if (!isRecord(body) || !isRecord(body.error)) return body;

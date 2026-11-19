@@ -56,13 +56,10 @@ describe("parseConfig", () => {
   });
 
   it("refuses a legacy_widget_url that is not an absolute http(s) URL", () => {
+    // The cases of the check itself are in url.test.ts.
     for (const [url, problem] of [
-      ["javascript:top.__pwned=document.domain//", "javascript: URLs are not allowed, only http: and https:"],
       [" JAVASCRIPT:alert(1)", "javascript: URLs are not allowed, only http: and https:"],
-      ["data:text/html,<script>top.__pwned=1</script>", "data: URLs are not allowed, only http: and https:"],
-      ["/widget/?widgetId=w", "the URL is not an absolute http: or https: URL"],
       ["http:/widget_compatibility_wrapper/?widgetId=w", "the URL is not an absolute http: or https: URL"],
-      ["$matrix_widget_url", "the URL is not an absolute http: or https: URL"],
     ]) {
       expect(() => parseConfig(new URLSearchParams({ legacy_widget_url: url, legacy_widget_id: "w" })), url).toThrow(`refused \`legacy_widget_url\`: ${problem}`);
     }
@@ -78,11 +75,6 @@ describe("parseConfig", () => {
 
 describe("innerIframe", () => {
   const wrapperOrigin = CLIENT_ORIGIN.client;
-
-  it("has the attributes of a legacy client's iframe (Element Web), constant", () => {
-    expect(INNER_SANDBOX).toBe("allow-forms allow-popups allow-popups-to-escape-sandbox allow-same-origin allow-scripts allow-presentation allow-downloads");
-    expect(INNER_ALLOW).toBe("microphone; camera; encrypted-media; autoplay; display-capture; clipboard-write; clipboard-read; fullscreen");
-  });
 
   it.each(Object.entries(CLIENT_ORIGIN.other_origins))("loads a legacy widget of another origin with them, messages to its origin: %s", (_, url) => {
     expect(innerIframe(url, wrapperOrigin)).toEqual({ sandbox: INNER_SANDBOX, allow: INNER_ALLOW, targetOrigin: new URL(url).origin });

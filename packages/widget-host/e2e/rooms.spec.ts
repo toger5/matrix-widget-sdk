@@ -1,9 +1,7 @@
-/** The RoomsArea: room panels, the room picker of an empty panel, a room opening on its overview, resizing, dragging panels and tabs, fullscreen and the narrow window. */
-import { expect, LAB, LEGACY_WIDGET, NEW_WIDGET, test, widgetId } from "./host";
+/** The RoomsArea: room panels, the room picker of an empty panel, a room opening on its overview, resizing, dragging panels and tabs. Fullscreen and the narrow window: shell.spec.ts. */
+import { expect, LAB, LEGACY_WIDGET, NEW, NEW_WIDGET, STANDUP, test, widgetId } from "./host";
 
-const STANDUP = "!standup:dev.local";
 const NOTES = widgetId(STANDUP, "m.widget/notes");
-const NEW = widgetId(LAB, NEW_WIDGET);
 
 const width = async (panel: import("@playwright/test").Locator) => (await panel.boundingBox())!.width;
 
@@ -46,7 +44,7 @@ test("a new panel shows the picker: no recents, all rooms with search, then the 
   await expect(roomTab).toHaveAttribute("aria-selected", "true");
   await expect(host.page.getByRole("tab")).toHaveCount(1);
   await host.story("rooms-roomview--overview");
-  const overview = host.page.getByTestId("room-overview");
+  const overview = host.overview;
   await expect(overview.getByRole("heading", { name: "Standup", level: 1 })).toBeVisible();
 
   // A widget opens as a tab after the room name.
@@ -297,49 +295,4 @@ test("Alt+Shift+N opens the same room in a second panel, where the running widge
   await expect(host.panels.first()).toHaveAttribute("data-focused", "true");
   await expect(host.tab(/Legacy test widget/)).toHaveAttribute("aria-selected", "true");
   expect(Object.keys((await host.main()).widgets)).toHaveLength(2);
-});
-
-test("fullscreen: LeftBar collapsed and one shown widget tab hide the tab and the + until the header is hovered or focused", async ({ host }) => {
-  await host.populate("lab", { sidePanel: null, leftBarCollapsed: true, behavior: { autoApproveCapabilities: true }, open: [{ room: LAB, widgets: [NEW_WIDGET] }] });
-  await host.ready(NEW);
-  await host.page.mouse.move(640, 500);
-
-  await expect(host.page.getByTestId("app")).toHaveClass(/fullscreen/);
-  await expect(host.leftBar).toHaveCount(0);
-  await expect(host.panels.first()).toHaveCSS("border-top-left-radius", "0px");
-  await expect(host.page.getByTitle("Widget lab · open the room overview")).toBeVisible();
-  await expect(host.tab(/New test widget/)).toBeHidden();
-  await expect(host.button("Open a widget")).toBeHidden();
-  await host.story("app-appshell--fullscreen");
-
-  await host.page.getByTitle("Widget lab · open the room overview").hover();
-  await expect(host.tab(/New test widget/)).toBeVisible();
-  await expect(host.button("Open a widget")).toBeVisible();
-  await host.story("app-appshell--fullscreen-header-focused");
-
-  // Keyboard focus inside the header shows them as well. The room name is the tab stop while the widget tab is hidden.
-  await host.page.mouse.move(640, 500);
-  await expect(host.button("Open a widget")).toBeHidden();
-  await expect(host.page.getByTitle("Widget lab · open the room overview")).toHaveAttribute("tabindex", "0");
-  await host.page.getByTitle("Widget lab · open the room overview").focus();
-  await expect(host.button("Open a widget")).toBeVisible();
-
-  // Selecting the room name (the + does that too) ends the fullscreen view.
-  await host.button("Open a widget").click();
-  await expect(host.page.getByTestId("app")).not.toHaveClass(/fullscreen/);
-  await expect(host.tab("Widget lab")).toHaveAttribute("aria-selected", "true");
-});
-
-test("a narrow window shows only the focused panel, with a pager for the others", async ({ host }) => {
-  await host.populate("two-rooms", { sidePanel: null, behavior: { autoApproveCapabilities: true }, open: [{ room: LAB }, { room: STANDUP }] });
-  await expect(host.panels).toHaveCount(2);
-
-  await host.page.setViewportSize({ width: 800, height: 800 });
-  await expect(host.panels).toHaveCount(1);
-  await expect(host.panels.first()).toHaveAttribute("data-room-id", LAB);
-
-  await host.button("Next room panel").click();
-  await expect(host.panels).toHaveCount(1);
-  await expect(host.panels.first()).toHaveAttribute("data-room-id", STANDUP);
-  await expect(host.page.getByRole("group", { name: "Room panels" })).toContainText("Standup · 2 of 2");
 });

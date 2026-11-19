@@ -8,44 +8,25 @@ each basic action. They only work when embedded by a widget host, for example `.
 | `/legacy/` | [matrix-widget-api] | legacy (`api: fromWidget / toWidget`) |
 | `/new/` | `matrix-widget-sdk` (wasm, this repository) | MSC4412 (`source: widget / host`) |
 
-Both pages have the same layout: an **actions** column (capability list input, message body
-input, one button per action), a **state** panel, and a **log** of outgoing results and incoming
-host messages, newest first. Button results and errors are logged with the button's label.
+Both pages have the same layout: an **actions** column (capability list, message body, one
+button per action, see `legacy/main.ts` / `new/main.ts`), a **state** panel, and a **log** of
+results and incoming host messages, newest first. Incoming host requests are acknowledged and
+logged.
 
 ![Test host, test widgets and the in-memory store](../../docs/diagrams/07-test-setup.svg)
 
-## Actions
-
-Legacy (`/legacy/`): start (requests the listed capabilities, calls `start()`, fetches the host's
-supported versions), `content_loaded`, renegotiate capabilities (MSC2974), send `m.room.message`,
-send state `m.room.topic`, read `m.room.message`, read state `m.room.topic`, and a custom action
-`org.example.custom` to see the host's unknown-action error.
-
-Both pages also have **file** controls (MSC4039): an `mxc uri` input (default
-`mxc://example.org/demo-landscape`, a demo image the test host seeds), **download_file** (images
-are previewed, other files get a save link), **upload_file: last download** and **upload_file:
-chosen file** (pick any file from disk). An upload puts the new URI into the input, so the file
-can be downloaded straight back. The new widget sends the bytes as base64; the legacy widget
-sends a `Blob`, which the compat wrapper converts. Incoming `send_event` and
-`update_state` are acknowledged and logged. The legacy widget requests matrix-widget-api
-capabilities (`legacy/capabilities.ts`); the compat wrapper translates them. The state panel shows `urlParams`, the query
-parameters the page was loaded with: when embedded through the compat wrapper that is the
-wrapper's templating result (`userId`, `baseUrl`, `parentUrl`, ...). The same object is written
-to the console once on load, so headless runs can read it.
-
-New (`/new/`): `request_capabilities`, `notify_ready`, send `m.room.message`, send state
-`m.room.topic`, `read_timeline` (the newest 10, then "older" from the oldest event read so far),
-`paginate_timeline` (limit 5), `get_matrix_context`, `get_client_context`. The default capability list (`new/capabilities.ts`) uses the names of
-`docs/spec-appendix/capability-naming-proposal.md`, one capability per action, e.g.
-`widget:org.matrix.mscXXXX.send_event.timeline:m.room.message`. Incoming `forward_event`,
-`update_state`, `notify_timeline_update` and `update_capabilities` are logged and the state panel shows the SDK's state.
-
-The **webview** buttons of the new widget are about its own iframe, which a host with strict
-iframes builds with `sandbox="allow-scripts allow-same-origin"` and nothing in `allow`:
-**request camera + microphone** requests `WEBVIEW_CAPABILITIES` (`webview:org.matrix.mscXXXX.allow:camera`
-and `…:microphone`, not in the default list; the host restarts the widget to apply a grant),
-**try camera** calls `getUserMedia`, **open popup** logs whether `window.open` was blocked, and
-**feature policy** logs which features the iframe may use (`document.featurePolicy`, Chromium).
+- The default capability lists are `legacy/capabilities.ts` (matrix-widget-api names, translated
+  by the compat wrapper) and `new/capabilities.ts` (the names of
+  `docs/spec-appendix/capability-naming-proposal.md`).
+- **File** controls (MSC4039): download an `mxc` URI (default `mxc://example.org/demo-landscape`,
+  which the test host seeds), upload the last download or a file from disk. The new widget sends
+  base64, the legacy widget a `Blob` that the compat wrapper converts.
+- The legacy widget's state panel shows `urlParams`, the query it was loaded with (behind the
+  compat wrapper: the templating result). It is also written to the console once on load, for
+  headless runs.
+- The new widget's **webview** buttons concern its own iframe: request camera + microphone
+  (`WEBVIEW_CAPABILITIES`, not in the default list; the host restarts the widget to apply a
+  grant), try the camera, open a popup, and log the iframe's `document.featurePolicy` (Chromium).
 
 ## URL parameters
 
@@ -67,10 +48,7 @@ npm run dev:new          # same server, opens the new page
 npm run build            # static multi-page build in dist/
 ```
 
-The pages share `shared/ui.ts` (a few DOM helpers) and `shared/style.css`.
-
-The pages refer to each other and to their files with relative paths, so the build can be served
-under a sub-path (`npx vite build --base /some/path/`). The [dev site](../../README.md#dev-site-github-pages) serves
+The pages use relative paths, so the build can be served under a sub-path (`npx vite build --base /some/path/`). The [dev site](../../README.md#dev-site-github-pages) serves
 both pages at `widgets/new/` and `widgets/legacy/`, next to a widget host that uses them.
 
 [matrix-widget-api]: https://github.com/matrix-org/matrix-widget-api

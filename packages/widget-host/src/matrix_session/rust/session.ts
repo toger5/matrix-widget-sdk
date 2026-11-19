@@ -23,8 +23,9 @@ import {
 import { RustSdkBackend } from "./backend/rustSdkBackend";
 import { accountInfo, exportRoom, loadOlderEvents, onTimelineChanged, roomDetails, roomState, timelineEvents } from "./roomData";
 import { needsVerification, onVerificationChanged, startEmojiVerification, verifyWithRecoveryKey } from "./verification";
-import { AccountStore } from "../js/accountStore";
+import { AccountStore, RunningClients } from "../accountStore";
 import { RoomTimelines } from "../roomTimelines";
+import { appUrl } from "../shared";
 import { rustTimelineViewModel, SharedTimelines, timelineConfiguration } from "./timelineViewModel";
 import { AVATAR_SIZE, AvatarCache } from "../../lib/avatarCache";
 import { describesWidget } from "../../lib/widgetEvents";
@@ -45,21 +46,18 @@ import {
 } from "../../session";
 
 /**
- * The matrix-rust-sdk implementation of `../../session` (`matrix-sdk-uniffi-js`). With
- * `./backend` it is the only code that knows which SDK the app runs on.
- *
- * Several logins are stored side by side (`../js/accountStore`): each has its own `localStorage`
- * entry and its own IndexedDB stores, named after its store id, which is also its account id.
+ * The matrix-rust-sdk `SessionProvider` (`matrix-sdk-uniffi-js`). Each login has its own IndexedDB
+ * stores, named after its store id, which is also its account id.
  */
 
-/** One `localStorage` entry per login: this prefix followed by the account id. Not the prefix of the matrix-js-sdk implementation: the two store different things. */
+/** One `localStorage` entry per login: this prefix followed by the account id. */
 export const STORAGE_PREFIX = "widget_host_rust_session_v2:";
 /** Where the one login was stored before multi-account. */
 export const LEGACY_STORAGE_KEY = "widget_host_rust_session_v1";
 const ROOM_LIST_PAGE_SIZE = 500;
 /** How long to wait for the full state of a room that was just opened. */
 const FULL_STATE_TIMEOUT_MS = 5000;
-/** The least time between two reads of the widget events of all rooms, each of which asks the store once per room and widget event type. */
+/** The least time between two reads of the widget events of all rooms (a store read per room and type). */
 const WIDGET_EVENTS_INTERVAL_MS = 1000;
 
 interface Stored {
@@ -71,7 +69,7 @@ interface Stored {
 }
 
 /** The login of the old single-key layout as an account of the new one: the record is unchanged, its store id becomes the account id. */
-export function migrateLegacyLogin(legacy: unknown): { accountId: string; record: Stored } | undefined {
+function migrateLegacyLogin(legacy: unknown): { accountId: string; record: Stored } | undefined {
   const stored = legacy as Partial<Stored> | null;
   if (!stored || typeof stored.storeId !== "string" || !stored.storeId || typeof stored.passphrase !== "string" || !stored.session) return undefined;
   return { accountId: stored.storeId, record: stored as Stored };
@@ -152,7 +150,6 @@ function init(): Promise<void> {
   return (initialised ??= Promise.all([initSdk(), initHostBindings()]).then(() => undefined));
 }
 
-/** A homeserver chosen on the login screen, before the user has authenticated. */
 class RustSdkPendingLogin implements PendingLogin {
   private authData: OAuthAuthorizationDataLike | undefined;
 
@@ -180,17 +177,13 @@ class RustSdkPendingLogin implements PendingLogin {
     return this.finish();
   }
 
-  /** The URL to send the user to; `completeOAuth` takes the URL the server redirects back to. */
   async oauthUrl(): Promise<string> {
-    const origin = location.origin;
-    // This app's URL, also when it is served under a sub-path (Vite's `base`, e.g. the dev site's `/<repo>/host/`).
-    const appUrl = new URL(import.meta.env.BASE_URL, origin).href;
     this.authData = await this.client.urlForOauth(
       {
         clientName: "Widget host",
-        redirectUri: `${appUrl}oidc-callback.html`,
+        redirectUri: `${appUrl()}oidc-callback.html`,
         // Authorization servers reject a localhost client URI.
-        clientUri: origin.includes("localhost") ? "https://element.io" : appUrl,
+        clientUri: location.origin.includes("localhost") ? "https://element.io" : appUrl(),
         logoUri: undefined,
         tosUri: undefined,
         policyUri: undefined,
@@ -214,7 +207,6 @@ class RustSdkPendingLogin implements PendingLogin {
     this.authData = undefined;
   }
 
-  /** Drop the stores of a login that was never completed. */
   async discard(): Promise<void> {
     await this.abortOAuth();
     await deleteStore(this.storeId);
@@ -227,26 +219,11 @@ class RustSdkPendingLogin implements PendingLogin {
     }
     // Only now is the login stored: one that is never completed does not show up in `stored()`.
     store.save(this.storeId, { session: this.client.session(), passphrase: this.passphrase, storeId: this.storeId });
-    return activate(this.storeId, RustSdkSession.start(this.client, this.storeId));
+    return running.set(this.storeId, RustSdkSession.start(this.client, this.storeId));
   }
 }
 
-/**
- * The client of each account of this page, or its start in progress. There must never be two on
- * the same stores. `restore()` is called twice in a row by React's strict mode, for one.
- */
-// TODO-FINDING concurrent-sessions - the provider lets clients of several accounts run at once (each has its own stores); whether the UI keeps the inactive accounts syncing or restores only the active one is the UI's choice. Not verified against a homeserver with two clients on one page.
-const active = new Map<string, Promise<RustSdkSession>>();
-
-/** Make `start` the account's client, unless it fails. */
-function activate(accountId: string, start: Promise<RustSdkSession>): Promise<RustSdkSession> {
-  const tracked: Promise<RustSdkSession> = start.catch((e: unknown) => {
-    if (active.get(accountId) === tracked) active.delete(accountId);
-    throw e;
-  });
-  active.set(accountId, tracked);
-  return tracked;
-}
+const running = new RunningClients<RustSdkSession>();
 
 /** A client with the stored login restored into it, not syncing yet. */
 async function restoredClient(stored: Stored): Promise<ClientLike> {
@@ -266,7 +243,6 @@ async function widgetStateEvents(room: RoomLike): Promise<StateEvent[]> {
   return perType.flat();
 }
 
-/** A logged-in, syncing client. */
 class RustSdkSession implements LiveSession {
   private readonly listeners = new Set<() => void>();
   /** Handles the SDK needs kept alive for the room list updates to keep coming. */
@@ -291,7 +267,6 @@ class RustSdkSession implements LiveSession {
     if (this.suspended) throw new Error("the session is suspended");
     return this.client.getMediaContent(MediaSource.fromJson(source));
   });
-  /** The RoomTimelines: the start of the room, a running pagination, the listeners (`./roomData`). */
   private readonly timelines = new RoomTimelines((roomId, changed) => {
     const room = this.client.getRoom(roomId);
     const stop = room ? onTimelineChanged(room, changed) : () => {};
@@ -311,14 +286,12 @@ class RustSdkSession implements LiveSession {
     this.roomListService = sync.roomListService();
   }
 
-  /** Restore a stored login. */
   static async restore(accountId: string): Promise<RustSdkSession> {
     const stored = loadStored(accountId);
     if (!stored) throw new Error(`No login is stored for the account ${accountId}.`);
     const client = await restoredClient(stored);
-    // A token the server no longer knows cannot be restored; anything else (being offline, say)
-    // is left to the sync, which keeps retrying. The ffi has no `whoami`, so this asks for the
-    // media configuration, the cheapest request that needs the token.
+    // Only an unknown token fails the restore; being offline is left to the sync. The ffi has no
+    // `whoami`: the media configuration is the cheapest request that needs the token.
     try {
       await client.getMaxMediaUploadSize();
     } catch (e) {
@@ -349,8 +322,6 @@ class RustSdkSession implements LiveSession {
     return session;
   }
 
-  /** The store id: chosen when the login was started, and what its IndexedDB stores are named after. */
-  // TODO-FINDING account-id-choice - what identifies a stored login? Options: a random id per login (done: the store id, a UUID that existed before multi-account, so the migrated login needs no renaming), or `userId` + `deviceId` (readable, but not known before the login completes, when the stores are already created).
   get accountId(): string {
     return this.storeId;
   }
@@ -420,7 +391,7 @@ class RustSdkSession implements LiveSession {
    * it stay as they are: reads from the store keep working, and the subscriptions of the backends
    * deliver again once `resume()` has restarted the sync.
    */
-  // TODO-FINDING rust-suspend-explicit-requests - the bindings offer no way to refuse requests, so suspend() only stops what runs by itself (sync, send queues, this session's own requests). A request a room backend makes for a widget while suspended (a send, the TURN server poll of backend/turnServer.ts, media) still reaches the homeserver. Options: the UI disposes or detaches the backends of a suspended session, or RustSdkBackend gets a gate like the js provider's FetchGate. `Client::pause()` was not used: it also closes the stores, which the backends read from, and is untested on IndexedDB.
+  // TODO-FINDING rust-suspend-explicit-requests - a request a backend makes for a widget (send, TURN poll, media) still goes out while suspended. `Client::pause()` would close the stores.
   async suspend(): Promise<void> {
     if (this.suspended) return;
     this.suspended = true;
@@ -433,7 +404,7 @@ class RustSdkSession implements LiveSession {
     this.suspended = false;
     await this.client.enableAllSendQueues(true).catch(() => undefined);
     await this.sync.start();
-    // TODO-FINDING rust-resume-room-subscription - could not be verified without a homeserver: whether the full-state subscription of the open room survives SyncService stop/start. It is asked for again here, which is what switching rooms back and forth does too.
+    // TODO-FINDING rust-resume-room-subscription - unverified whether the subscription survives stop/start; asked for again.
     const opened = this.opened;
     if (opened) {
       const ready = this.roomListService.subscribeToRoomWithFullState(opened.roomId, FULL_STATE_TIMEOUT_MS).catch((e: unknown) => console.warn("subscribing to the open room again failed", e));
@@ -442,7 +413,7 @@ class RustSdkSession implements LiveSession {
     this.readWidgetEvents();
   }
 
-  /** Joined rooms, by name. The room list stream only says "something changed"; this reads the result. */
+  /** The room list stream only says "something changed"; this reads the result. */
   rooms(): RoomSummary[] {
     return this.client
       .rooms()
@@ -493,7 +464,6 @@ class RustSdkSession implements LiveSession {
     })();
   }
 
-  /** Call `listener` whenever `rooms()` may have changed. Returns the unsubscribe function. */
   onRoomsChanged(listener: () => void): () => void {
     this.listeners.add(listener);
     return () => this.listeners.delete(listener);
@@ -505,7 +475,7 @@ class RustSdkSession implements LiveSession {
    * when that state is in the SDK's store. The RoomTimeline opens its room too: the subscription
    * makes the sliding sync deliver the room's timeline.
    */
-  // TODO-FINDING rust-one-room-subscription - the session subscribes to exactly one room at a time: opening the widgets or the timeline of room B moves the full-state subscription away from room A, whose widgets and timeline then only get what the room list syncs (no full state, a short timeline). This predates the timeline (widgets of two rooms side by side). Options: keep it; or subscribe to every room on screen, with an SDK addition next to `subscribeToRoomWithFullState` that takes a list of rooms (the SDK's `set_room_subscriptions_with_full_state` it calls already does, and replaces the previous list).
+  // TODO-FINDING rust-one-room-subscription - one room at a time: opening room B takes the subscription away from room A's widgets and timeline.
   private async open(roomId: string): Promise<RoomLike> {
     const room = this.client.getRoom(roomId);
     if (!room) throw new Error(`unknown room ${roomId}`);
@@ -521,7 +491,6 @@ class RustSdkSession implements LiveSession {
     return room;
   }
 
-  /** The widget state events of a room that currently describe a widget (removed ones have no `url`). */
   async widgets(roomId: string): Promise<StateEvent[]> {
     return (await widgetStateEvents(await this.open(roomId))).filter(describesWidget);
   }
@@ -543,12 +512,10 @@ class RustSdkSession implements LiveSession {
     return () => handles.forEach((handle) => handle.cancel());
   }
 
-  /** A `MatrixBackend` bound to `roomId`; `dispose()` it when the room view closes. */
   async backendFor(roomId: string): Promise<RustSdkBackend> {
     return RustSdkBackend.create(this.client, await this.open(roomId), this.timelines);
   }
 
-  /** Device verification: `./verification`. */
   needsVerification(): Promise<boolean> {
     return needsVerification(this.client);
   }
@@ -565,9 +532,8 @@ class RustSdkSession implements LiveSession {
     return startEmojiVerification(this.client);
   }
 
-  /** Log out and delete this login's entry and its IndexedDB stores. */
   async logout(): Promise<void> {
-    active.delete(this.accountId);
+    running.delete(this.accountId);
     this.stopped = true;
     this.avatars.clear();
     this.images.clear();
@@ -582,11 +548,9 @@ class RustSdkSession implements LiveSession {
 export const rustSdkSessions: SessionProvider = {
   startLogin: (server) => RustSdkPendingLogin.start(server),
   stored: async () => store.list().map(({ accountId, record }) => ({ accountId, userId: record.session.userId, homeserver: record.session.homeserverUrl })),
-  restore: async (accountId) => active.get(accountId) ?? activate(accountId, RustSdkSession.restore(accountId)),
+  restore: (accountId) => running.get(accountId, () => RustSdkSession.restore(accountId)),
   async clearStored(accountId) {
-    // A running client of this login ends it itself: a second client must not open its stores.
-    const running = await active.get(accountId)?.catch(() => undefined);
-    if (running) return running.logout();
+    if (await running.logout(accountId)) return;
     const raw = store.get(accountId);
     if (!raw) return;
     const stored = loadStored(accountId);

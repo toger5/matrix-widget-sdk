@@ -1,11 +1,8 @@
 /**
- * Everything the widget host needs from a Matrix client, as interfaces. The app (`src/app`,
- * `src/views`) only uses this module, so supporting another Matrix SDK means writing another
- * `SessionProvider` and adding it to the choice at the bottom. Nothing here, and nothing in the
- * app, may import an SDK; only `src/matrix_session/*` does.
- *
- * The in-memory mode (`./matrix_session/memory/devBackend`) implements `LiveSession` too, which is why it gets the
- * same views as a logged-in client.
+ * The session seam: everything the widget host needs from a Matrix client, as interfaces. Only
+ * `src/matrix_session/{rust,js}/` import an SDK; what they share stays SDK free. `LiveSession` has
+ * three implementations (rust, js and the DevBackend, `./matrix_session/memory/devBackend`): a
+ * member added here is added to all three.
  */
 import type { EventSendState, TimelineViewModel } from "@element-hq/web-shared-components";
 import type { MatrixBackend } from "@matrix-widget-sdk/host";
@@ -267,25 +264,21 @@ export interface SessionProvider {
   clearStored(accountId: string): Promise<void>;
 }
 
-/** Load the SDK's module only when a login is started or restored, so the in-memory mode never does. */
-function lazyProvider(load: () => Promise<SessionProvider>): SessionProvider {
-  let provider: Promise<SessionProvider> | undefined;
-  const get = () => (provider ??= load());
-  return {
-    startLogin: async (server) => (await get()).startLogin(server),
-    stored: async () => (await get()).stored(),
-    restore: async (accountId) => (await get()).restore(accountId),
-    clearStored: async (accountId) => (await get()).clearStored(accountId),
-  };
-}
-
+let provider: Promise<SessionProvider> | undefined;
 /**
- * The Matrix SDK this build of the widget host runs on: matrix-rust-sdk, or matrix-js-sdk when built
- * with `VITE_MATRIX_SDK=js` (`npm run dev:js`, `npm run build:js`). Vite replaces the variable
- * at build time, so the other SDK is not part of the build at all.
+ * The SDK's module, loaded on first use (the DevBackend alone never loads it): matrix-rust-sdk, or
+ * matrix-js-sdk when built with `VITE_MATRIX_SDK=js` (`npm run dev:js`). Vite replaces the
+ * variable at build time, so the other SDK is not part of the build.
  */
-export const sessions: SessionProvider = lazyProvider(
-  import.meta.env.VITE_MATRIX_SDK === "js"
-    ? () => import("./matrix_session/js/session").then((m) => m.jsSdkSessions)
-    : () => import("./matrix_session/rust/session").then((m) => m.rustSdkSessions),
-);
+const load = () =>
+  (provider ??=
+    import.meta.env.VITE_MATRIX_SDK === "js"
+      ? import("./matrix_session/js/session").then((m) => m.jsSdkSessions)
+      : import("./matrix_session/rust/session").then((m) => m.rustSdkSessions));
+
+export const sessions: SessionProvider = {
+  startLogin: async (server) => (await load()).startLogin(server),
+  stored: async () => (await load()).stored(),
+  restore: async (accountId) => (await load()).restore(accountId),
+  clearStored: async (accountId) => (await load()).clearStored(accountId),
+};

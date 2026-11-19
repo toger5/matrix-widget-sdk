@@ -1,6 +1,4 @@
-//! Shared matrix types: Matrix objects used in widget action bodies *and* outside of them (backend
-//! trait, driver callbacks, widget client). Types that only ever appear as the body of one action
-//! live with that action under `actions/`.
+//! Matrix types used in action bodies *and* outside them (backend, driver, widget client).
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -52,9 +50,8 @@ pub fn matrix_event_to_json(event: MatrixEvent) -> String {
     event.to_value().to_string()
 }
 
-/// A to-device message as delivered to widgets (MSC3819): the message plus whether it arrived
-/// Olm-encrypted. Used by the host's `send_to_device` action and by the backend's to-device
-/// subscription.
+/// A to-device message as delivered to widgets (MSC3819 `forward_to_device`, and the backend's
+/// to-device subscription).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct ToDeviceEvent {

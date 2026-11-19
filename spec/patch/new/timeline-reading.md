@@ -1,11 +1,9 @@
-> **Draft in matrix-widget-sdk.** Status: draft. Implemented here: `crates/matrix-widget-actions`
-> (`read_timeline.rs`, `paginate_timeline.rs`, `notify_timeline_update.rs`, `ErrorKind::EventNotCached`),
-> the driver (`crates/matrix-widget-host-driver`), the backend trait (`timeline_read`,
+> **Draft in matrix-widget-sdk.** Status: draft. Implemented here: the actions
+> (`crates/matrix-widget-actions`), the driver, the backend trait (`timeline_read`,
 > `timeline_paginate_backwards`, `subscribe_timeline`) with `InMemoryBackend` and both SDK backends of
 > `packages/widget-host`, the widget SDK (`readTimeline`, `paginateTimeline`, `onTimelineUpdate`); no
-> rate limiting of `m.paginate_timeline` (plan: `session_archive/todo-groups/21-timeline-reading.md`). Replaces this repository's
-> `read_events` (MSC2876); legacy widgets keep `read_events` through the compat wrapper
-> (`packages/widget-compat-wrapper`), which translates it into the actions below.
+> rate limiting of `m.paginate_timeline`. Legacy widgets keep `read_events` (MSC2876) through the
+> compat wrapper, which translates it into the actions below.
 > Related patches: none. Remove this block when opening the MSC.
 
 # MSCXXXX: Reading the room timeline from the client's cache

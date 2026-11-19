@@ -1,8 +1,6 @@
 /** The app shell: the LeftBar (Dev tools button, collapse, fullscreen), the modals, the narrow window and the login page. */
-import { expect, Host, LAB, LEGACY_WIDGET, NEW_WIDGET, test, widgetId } from "./host";
+import { expect, freshHost, LAB, LEGACY_WIDGET, NEW, NEW_WIDGET, STANDUP, test } from "./host";
 
-const NEW = widgetId(LAB, NEW_WIDGET);
-const STANDUP = "!standup:dev.local";
 const TWO_PANELS = [{ room: LAB }, { room: STANDUP }];
 
 test.describe("LeftBar while the DevBackend is active", () => {
@@ -37,7 +35,7 @@ test.describe("LeftBar while the DevBackend is active", () => {
     expect((await host.main()).modal).toBeUndefined();
 
     await button.click();
-    await expect(host.page.getByTestId("devbackend-view")).toBeVisible();
+    await expect(host.devBackendView).toBeVisible();
     // "Leave DevBackend" needs a Matrix account to go back to: after a skipped login there is none.
     await expect(host.button("Leave DevBackend")).toHaveCount(0);
   });
@@ -100,32 +98,43 @@ test.describe("collapsing the LeftBar", () => {
     await expect(host.button("Show the left bar")).toBeVisible();
   });
 
-  test("with exactly one widget tab the widget is fullscreen; the header shows the tab while hovered", async ({ host }) => {
+  test("with exactly one widget tab the widget is fullscreen; the header shows the tab and the + while hovered or focused", async ({ host }) => {
     await host.populate("lab", { sidePanel: null, behavior: { autoApproveCapabilities: true }, open: [{ room: LAB, widgets: [NEW_WIDGET] }] });
     await host.ready(NEW);
     await expect(host.app).not.toHaveClass(/fullscreen/);
     const token = await host.token(NEW);
+    const roomName = host.page.getByTitle("Widget lab · open the room overview");
 
     await host.button("Collapse the bar").click();
     await host.toast.getByRole("button", { name: "Dismiss" }).click();
     await host.page.mouse.move(640, 500);
     await expect(host.app).toHaveClass(/fullscreen/);
+    await expect(roomName).toBeVisible();
     await expect(host.tab(/New test widget/)).toBeHidden();
     await expect(host.button("Open a widget")).toBeHidden();
     await expect(host.app.locator(".dev-badge")).toBeVisible();
-    // No padding around the only panel: it fills the window.
+    // No padding and no rounded corner around the only panel: it fills the window.
     expect(await host.panels.boundingBox()).toEqual({ x: 0, y: 0, width: 1280, height: 800 });
+    await expect(host.panels).toHaveCSS("border-top-left-radius", "0px");
     expect(await host.token(NEW)).toBe(token);
     await host.story("app-appshell--fullscreen");
 
-    await host.page.locator(".rp-head").hover();
+    await roomName.hover();
     await expect(host.tab(/New test widget/)).toBeVisible();
     await expect(host.button("Open a widget")).toBeVisible();
     await host.story("app-appshell--fullscreen-header-focused");
 
+    // Keyboard focus inside the header shows them as well. The room name is the tab stop while the widget tab is hidden.
+    await host.page.mouse.move(640, 500);
+    await expect(host.button("Open a widget")).toBeHidden();
+    await expect(roomName).toHaveAttribute("tabindex", "0");
+    await roomName.focus();
+    await expect(host.button("Open a widget")).toBeVisible();
+
     // Selecting the room name (the + does that too) ends the fullscreen view.
     await host.button("Open a widget").click();
     await expect(host.app).not.toHaveClass(/fullscreen/);
+    await expect(host.tab("Widget lab")).toHaveAttribute("aria-selected", "true");
     await expect(host.tab(/New test widget/)).toBeVisible();
   });
 
@@ -171,8 +180,7 @@ test.describe("modals", () => {
   test("stopping an always-on-screen widget is confirmed", async ({ host }) => {
     await host.populate("lab", { sidePanel: null, behavior: { autoApproveCapabilities: true }, open: [{ room: LAB, widgets: [NEW_WIDGET, LEGACY_WIDGET], active: NEW_WIDGET }] });
     await host.ready(NEW);
-    await host.frame(NEW).getByRole("button", { name: "set_always_on_screen true" }).click();
-    await expect(host.tab(/New test widget/).locator(".ico")).not.toHaveCount(0);
+    await host.alwaysOnScreen(NEW);
     await host.tab(/Legacy test widget/).click();
     const confirm = host.page.getByRole("alertdialog");
     const stop = async () => {
@@ -241,8 +249,7 @@ test("narrow window: the SidePanel overlays the RoomsArea, one room panel is sho
 });
 
 test("a fresh browser without a stored login shows the login page; skipping it leads into the empty DevBackend", async ({ browser }) => {
-  const context = await browser.newContext({ viewport: { width: 1280, height: 800 } });
-  const fresh = new Host(await context.newPage());
+  const fresh = await freshHost(browser);
   await fresh.page.goto("/");
   await expect(fresh.page.getByTestId("login")).toBeVisible();
   await expect(fresh.page.getByRole("textbox", { name: "Homeserver" })).toHaveValue("matrix.org");
@@ -251,11 +258,11 @@ test("a fresh browser without a stored login shows the login page; skipping it l
 
   await fresh.button(/Skip login and use the DevBackend/).click();
   await expect(fresh.app).toHaveClass(/fence/);
-  await expect(fresh.page.getByTestId("devbackend-view")).toBeVisible();
+  await expect(fresh.devBackendView).toBeVisible();
   await expect(fresh.panels).toHaveCount(0);
   // Skipping the login enables the dev tools and the DevBackend, and there is no account to leave the DevBackend for.
   expect((await fresh.state()).settings).toMatchObject({ devTools: true, devBackend: true });
   await expect(fresh.button("Leave DevBackend")).toHaveCount(0);
   await fresh.story("app-appshell--dev-backend-empty");
-  await context.close();
+  await fresh.page.context().close();
 });

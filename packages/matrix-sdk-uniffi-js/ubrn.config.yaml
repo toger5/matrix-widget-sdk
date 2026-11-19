@@ -1,15 +1,6 @@
 # uniffi-bindgen-react-native (ubrn) configuration, `web` flavour, for matrix-sdk-ffi.
-#
-# `ubrn checkout` clones the SDK at `rust.ref` into `rust_modules/matrix-rust-sdk`.
-# `ubrn build web` builds matrix-sdk-ffi natively to read the UniFFI metadata, generates
-# TypeScript for every namespace into `src/generated`, writes a wasm-bindgen shim crate to
-# `bindings/wasm` inside the SDK checkout, builds it for wasm32-unknown-unknown and runs
-# `wasm-bindgen`. Do not run it directly: `scripts/build.sh` patches the checkout first.
-#
-# The pin is `main` of 2026-11-13. The SDK is on uniffi 0.32.1, which released ubrn does not
-# support yet (jhugman/uniffi-bindgen-react-native#449), so `package.json` takes ubrn from the
-# unmerged 0.32 branch `uniffi-0.32/ci-typecheck` of neekolas/uniffi-bindgen-react-native.
-# The last SDK commit that builds with released ubrn (uniffi 0.31) is b994f47f.
+# Do not run `ubrn build web` directly: `scripts/build.sh` patches the checkout first.
+# The pin (`rust.ref`, and ubrn's in package.json) is explained in README.md, "The pin".
 rust:
   repo: https://github.com/matrix-org/matrix-rust-sdk
   ref: ce0552083826b15f41e05cf03abbca0d6b9e68d2

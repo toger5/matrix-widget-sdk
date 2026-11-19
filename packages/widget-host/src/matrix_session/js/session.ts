@@ -13,14 +13,15 @@ import {
   type ValidatedAuthMetadata,
 } from "matrix-js-sdk";
 
-import { AccountStore } from "./accountStore";
 import { JsSdkBackend } from "./backend/jsSdkBackend";
 import { FetchGate } from "./fetchGate";
 import { accountInfo, exportRoom, loadOlderEvents, onTimelineChanged, roomDetails, roomState, timelineEvents } from "./roomData";
 import { needsVerification, onVerificationChanged, RecoveryKeySlot, startEmojiVerification, verifyWithRecoveryKey } from "./verification";
 import { AVATAR_SIZE, AvatarCache } from "../../lib/avatarCache";
 import { describesWidget } from "../../lib/widgetEvents";
+import { AccountStore, RunningClients } from "../accountStore";
 import { RoomTimelines } from "../roomTimelines";
+import { appUrl } from "../shared";
 import { rawTimelineViewModel } from "../timelineViewModel";
 import { WIDGET_EVENT_TYPES, type StateEvent } from "../../widgetStateEvent";
 import {
@@ -39,14 +40,8 @@ import {
 } from "../../session";
 
 /**
- * The matrix-js-sdk implementation of `../../session`. With `./backend` it is the only code that
- * knows which SDK the app runs on.
- *
- * Sync is classic `/sync` v2 with the SDK's in-memory store, so every start does an initial sync;
- * the crypto store is in IndexedDB and survives reloads.
- *
- * Several logins are stored side by side (`./accountStore`): each has its own `localStorage`
- * entry and its own crypto store (`cryptoDatabasePrefix`).
+ * The matrix-js-sdk `SessionProvider`. Sync is `/sync` v2 with the SDK's in-memory store (every
+ * start does an initial sync); each login has its own crypto store in IndexedDB (`cryptoDatabasePrefix`).
  */
 
 /** One `localStorage` entry per login: this prefix followed by the account id. */
@@ -74,7 +69,7 @@ interface Stored {
 }
 
 /** The login of the old single-key layout as an account of the new one, unchanged. */
-export function migrateLegacyLogin(legacy: unknown): { accountId: string; record: Stored } | undefined {
+function migrateLegacyLogin(legacy: unknown): { accountId: string; record: Stored } | undefined {
   const stored = legacy as Partial<Stored> | null;
   if (!stored || typeof stored.homeserverUrl !== "string" || typeof stored.userId !== "string" || typeof stored.accessToken !== "string") return undefined;
   return { accountId: LEGACY_ACCOUNT_ID, record: stored as Stored };
@@ -82,18 +77,10 @@ export function migrateLegacyLogin(legacy: unknown): { accountId: string; record
 
 const store = new AccountStore<Stored>({ prefix: STORAGE_PREFIX, legacyKey: LEGACY_STORAGE_KEY, migrate: migrateLegacyLogin });
 
-// TODO-FINDING account-id-choice - what identifies a stored login? Options: a random id per login (done: a UUID, which also names the crypto store; "legacy" for the migrated login), or `userId` + `deviceId` (readable and stable, but not known before the login completes and it leaks into storage names). The rust provider uses its store id (a UUID too).
+// TODO-FINDING account-id-choice - a random UUID per login (rust: its store id), "legacy" for the migrated one.
 const newAccountId = () => crypto.randomUUID();
 const cryptoPrefixFor = (accountId: string) => `widget-host-js-${accountId}`;
 
-/** Delete the SDK's stores of one login: its crypto store (the default one when `cryptoDatabasePrefix` is not set). */
-const clearSdkStores = (baseUrl: string, cryptoDatabasePrefix: string | undefined) =>
-  createClient({ baseUrl })
-    .clearStores({ cryptoDatabasePrefix })
-    .catch((e: unknown) => console.warn("clearing the stores failed", e));
-
-/** This app's URL, also when it is served under a sub-path (Vite's `base`, e.g. the dev site's `/<repo>/host/`). */
-const appUrl = () => new URL(import.meta.env.BASE_URL, location.origin).href;
 const redirectUri = () => `${appUrl()}oidc-callback.html`;
 
 /** `matrix.org` → its homeserver URL from `.well-known`; a URL is used as it is. */
@@ -199,28 +186,11 @@ class JsSdkPendingLogin implements PendingLogin {
     const accountId = newAccountId();
     const stored: Stored = { ...login, cryptoDatabasePrefix: cryptoPrefixFor(accountId) };
     store.save(accountId, stored);
-    return activate(accountId, JsSdkSession.start(accountId, stored));
+    return running.set(accountId, JsSdkSession.start(accountId, stored));
   }
 }
 
-/**
- * The client of each account of this page, or its start in progress. There must never be two for
- * one account: they would share the crypto store, and each would upload its own one-time keys
- * under the same ids (the homeserver then answers "One time key … already exists" and encryption
- * is broken for good). `restore()` is called twice in a row by React's strict mode, for one.
- */
-// TODO-FINDING concurrent-sessions - the provider lets clients of several accounts run at once (each has its own stores); whether the UI keeps the inactive accounts syncing or restores only the active one is the UI's choice. Not verified against a homeserver with two clients on one page.
-const active = new Map<string, Promise<JsSdkSession>>();
-
-/** Make `start` the account's client, unless it fails. */
-function activate(accountId: string, start: Promise<JsSdkSession>): Promise<JsSdkSession> {
-  const tracked: Promise<JsSdkSession> = start.catch((e: unknown) => {
-    if (active.get(accountId) === tracked) active.delete(accountId);
-    throw e;
-  });
-  active.set(accountId, tracked);
-  return tracked;
-}
+const running = new RunningClients<JsSdkSession>();
 
 /** The state events of the widget event types in the SDK's local copy of the room state. */
 function widgetStateEvents(room: Room): StateEvent[] {
@@ -229,7 +199,6 @@ function widgetStateEvents(room: Room): StateEvent[] {
     .map((event) => ({ type: event.getType(), state_key: event.getStateKey()!, content: event.getContent() }));
 }
 
-/** A logged-in, syncing client. */
 class JsSdkSession implements LiveSession {
   private readonly avatars = new AvatarCache(async (mxcUrl) => {
     const url = this.client.mxcUrlToHttp(mxcUrl, AVATAR_SIZE, AVATAR_SIZE, "crop", false, true, true);
@@ -239,7 +208,6 @@ class JsSdkSession implements LiveSession {
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     return response.blob();
   });
-  /** The RoomTimelines: the start of the room, a running pagination, the listeners (`./roomData`). */
   private readonly timelines = new RoomTimelines((roomId, changed) => onTimelineChanged(this.client, roomId, changed));
 
   private constructor(
@@ -252,7 +220,6 @@ class JsSdkSession implements LiveSession {
     private readonly recoveryKey: RecoveryKeySlot,
   ) {}
 
-  /** Restore a stored login. */
   static async restore(accountId: string): Promise<JsSdkSession> {
     const stored = store.get(accountId);
     if (!stored) throw new Error(`No login is stored for the account ${accountId}.`);
@@ -276,8 +243,7 @@ class JsSdkSession implements LiveSession {
       timelineSupport: true,
     });
 
-    // A token the server no longer knows cannot be restored; anything else (being offline, say)
-    // is left to the sync loop, which keeps retrying.
+    // Only an unknown token fails the restore; being offline is left to the sync loop.
     try {
       await client.whoami();
     } catch (e) {
@@ -348,7 +314,6 @@ class JsSdkSession implements LiveSession {
     return this.client.getSafeUserId();
   }
 
-  /** Joined rooms, by name. */
   rooms(): RoomSummary[] {
     return this.client
       .getRooms()
@@ -368,7 +333,6 @@ class JsSdkSession implements LiveSession {
     return this.avatars.get(mxcUrl);
   }
 
-  /** Call `listener` whenever `rooms()` may have changed. Returns the unsubscribe function. */
   onRoomsChanged(listener: () => void): () => void {
     const events = [ClientEvent.Room, ClientEvent.DeleteRoom, RoomEvent.Name, RoomEvent.MyMembership] as const;
     for (const event of events) this.client.on(event, listener);
@@ -398,13 +362,11 @@ class JsSdkSession implements LiveSession {
     return () => this.client.off(RoomStateEvent.Events, onState);
   }
 
-  /** A `MatrixBackend` bound to `roomId`; `dispose()` it when the room view closes. */
   async backendFor(roomId: string): Promise<JsSdkBackend> {
     if (!this.client.getRoom(roomId)) throw new Error(`unknown room ${roomId}`);
     return JsSdkBackend.create(this.client, roomId, this.timelines);
   }
 
-  /** Device verification: `./verification`. */
   needsVerification(): Promise<boolean> {
     return needsVerification(this.client);
   }
@@ -421,9 +383,9 @@ class JsSdkSession implements LiveSession {
     return startEmojiVerification(this.client);
   }
 
-  /** Log out (for an OAuth login this revokes the tokens) and delete this login's entry and its SDK stores. */
+  /** For an OAuth login this revokes the tokens. */
   async logout(): Promise<void> {
-    active.delete(this.accountId);
+    running.delete(this.accountId);
     this.avatars.clear();
     // The logout request has to get through, suspended or not.
     this.gate.resume();
@@ -437,19 +399,17 @@ class JsSdkSession implements LiveSession {
 export const jsSdkSessions: SessionProvider = {
   startLogin: (server) => JsSdkPendingLogin.start(server),
   stored: async () => store.list().map(({ accountId, record }) => ({ accountId, userId: record.userId, homeserver: record.homeserverUrl })),
-  restore: async (accountId) => active.get(accountId) ?? activate(accountId, JsSdkSession.restore(accountId)),
+  restore: (accountId) => running.get(accountId, () => JsSdkSession.restore(accountId)),
   async clearStored(accountId) {
-    // A running client of this login ends it itself: a second client must not open its crypto store.
-    const running = await active.get(accountId)?.catch(() => undefined);
-    if (running) return running.logout();
+    if (await running.logout(accountId)) return;
     const stored = store.get(accountId);
     if (!stored) return;
     const { homeserverUrl: baseUrl, userId, deviceId, accessToken, refreshToken, oauthClientId } = stored;
+    const client = createClient({ baseUrl, userId, deviceId, accessToken, refreshToken, oauthClientId });
     // Fails when the homeserver has already ended the login, which is as good.
-    await createClient({ baseUrl, userId, deviceId, accessToken, refreshToken, oauthClientId })
-      .logout(true)
-      .catch((e: unknown) => console.warn("logout request failed", e));
+    await client.logout(true).catch((e: unknown) => console.warn("logout request failed", e));
     store.remove(accountId);
-    await clearSdkStores(baseUrl, stored.cryptoDatabasePrefix);
+    // Without a prefix (the migrated login): the SDK's default crypto store.
+    await client.clearStores({ cryptoDatabasePrefix: stored.cryptoDatabasePrefix }).catch((e: unknown) => console.warn("clearing the stores failed", e));
   },
 };

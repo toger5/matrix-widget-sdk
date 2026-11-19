@@ -1,4 +1,4 @@
-/* Rooms (layer views): RoomsArea, RoomPanel and its tabs, room picker, room overview, RoomTimeline. The design rules: with the stories, the specification (listed in src/styles/app.css). */
+/* Rooms (layer views): RoomsArea, RoomPanel and its tabs, room picker, room overview, RoomTimeline. */
 
 /* --- room panel and tabs ----------------------------------------------------------------- */
 .roompanel { position: relative; flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; border-radius: var(--r-4); border: 1px solid var(--border); background: var(--surface); overflow: hidden; container: rp / inline-size; }
@@ -72,7 +72,6 @@
 .member { display: flex; align-items: center; gap: 10px; min-width: 0; }
 .card.devcard { border: 1px dashed var(--dev); background: var(--dev-soft); }
 .card.devcard h3 { color: var(--dev); }
-.card .link { align-self: start; font-size: 12px; }
 /* A card title with a button at its end: "Add widget" of the Widgets card. */
 .card-h { display: flex; align-items: center; gap: 8px; }
 .card-h h3 { flex: 1; }

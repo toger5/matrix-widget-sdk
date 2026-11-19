@@ -1,31 +1,21 @@
 /**
  * Capability translation between a legacy widget and an MSC4412 host.
  *
- * A legacy widget asks for matrix-widget-api capabilities (`org.matrix.msc2762.send.event:<type>`,
- * `town.robin.msc3846.turn_servers`, ...). The host only knows the capabilities of MSC4412 and
- * the naming proposal (`docs/spec-appendix/capability-naming-proposal.md`), one per action. A
- * capability embeds the wire name of its action, namespace included:
+ * The host knows one capability per action (`docs/spec-appendix/capability-naming-proposal.md`),
+ * which embeds the action's wire name:
  *
  *     source ":" action [ "." modifier ] [ ":" data ]          action = namespace "." name
  *     widget:org.matrix.mscXXXX.send_event.timeline:m.room.message
- *     widget:org.matrix.mscXXXX.read_timeline:m.room.message
  *
  * Every legacy capability maps to a fixed set of new ones ({@link expandLegacyCapability}). The
- * wrapper requests that set from the host, and reports a legacy capability to the widget as
- * approved when the host approved the whole set ({@link collapseApproved}).
- *
- * Pure functions without state.
+ * wrapper requests that set and reports the legacy capability as approved only when the host
+ * approved the whole set ({@link collapseApproved}).
  */
-
-/** The namespace of actions that have no MSC of their own yet. */
-export const PLACEHOLDER_NAMESPACE = "org.matrix.mscXXXX";
-/** The stable namespace. A host may answer with it; {@link normalizeCapability} folds it away. */
-export const STABLE_NAMESPACE = "m";
+import { PLACEHOLDER } from "./envelope";
 
 /**
- * The unstable namespace of each action that has an MSC: the prefix the host sends the action
- * with. Every other action uses {@link PLACEHOLDER_NAMESPACE}. Must match `namespace_of` in
- * `crates/matrix-widget-actions/src/capabilities.rs`.
+ * The unstable namespace of each action that has an MSC; every other action uses the placeholder.
+ * Must match `namespace_of` in `crates/matrix-widget-actions/src/capabilities.rs`.
  */
 const ACTION_NAMESPACES: Record<string, string> = {
   read_relations: "org.matrix.msc3869",
@@ -42,26 +32,19 @@ const ACTION_NAMESPACES: Record<string, string> = {
 };
 
 /** The unstable namespace of the action that `rest` (`action[.modifier][:data]`) starts with. */
-export function namespaceOf(rest: string): string {
+function namespaceOf(rest: string): string {
   const action = /^[^.:]*/.exec(rest)![0];
-  return Object.hasOwn(ACTION_NAMESPACES, action) ? ACTION_NAMESPACES[action] : PLACEHOLDER_NAMESPACE;
+  return Object.hasOwn(ACTION_NAMESPACES, action) ? ACTION_NAMESPACES[action] : PLACEHOLDER;
 }
 
 /** A capability for an action the widget sends; `rest` is `action[.modifier][:data]`. */
 export const widgetCapability = (rest: string): string => `widget:${namespaceOf(rest)}.${rest}`;
 /** A capability for an action the host sends (a subscription). */
 export const hostCapability = (rest: string): string => `host:${namespaceOf(rest)}.${rest}`;
-/**
- * A capability of the webview (iframe) the widget runs in; `rest` is `sandbox:<token>` or
- * `allow:<feature>` (`spec/patch/new/webview-capabilities.md`). It is about no action; its
- * namespace is the one of its MSC draft, the placeholder.
- */
-export const webviewCapability = (rest: string): string => `webview:${PLACEHOLDER_NAMESPACE}.${rest}`;
+/** A capability of the widget's iframe; `rest` is `sandbox:<token>` or `allow:<feature>` (`spec/patch/new/webview-capabilities.md`). */
+export const webviewCapability = (rest: string): string => `webview:${PLACEHOLDER}.${rest}`;
 
-/**
- * The `sandbox` tokens Element Web gives every widget iframe (`AppTile`): what legacy widgets were
- * written for. The base of MSC4412 hosts (`allow-scripts`, `allow-same-origin`) is among them.
- */
+/** The `sandbox` tokens Element Web gives every widget iframe (`AppTile`): what legacy widgets were written for. */
 export const LEGACY_SANDBOX: readonly string[] = [
   "allow-forms",
   "allow-popups",
@@ -84,10 +67,8 @@ export const LEGACY_ALLOW: readonly string[] = [
 ];
 
 /**
- * The webview capabilities the wrapper requests for a legacy widget when it starts: the iframe of a
- * legacy client ({@link LEGACY_SANDBOX}, {@link LEGACY_ALLOW}). A host that keeps legacy widgets
- * working grants them without asking and builds the wrapper's iframe with them from the start, so
- * the request needs no reload; the wrapper's inner iframe gets the same set (`wrapper.ts`).
+ * The webview capabilities the wrapper requests when it starts: a legacy client's iframe. A host
+ * that keeps legacy widgets working grants them unasked from the start, so no reload is needed.
  */
 export const LEGACY_WEBVIEW_CAPABILITIES: readonly string[] = [
   ...LEGACY_SANDBOX.map((token) => webviewCapability(`sandbox:${token}`)),
@@ -95,11 +76,8 @@ export const LEGACY_WEBVIEW_CAPABILITIES: readonly string[] = [
 ];
 
 /**
- * Capabilities the wrapper always requests for a legacy widget.
- *
- * In the legacy api these actions need no capability: the host always sends theme, language and
- * visibility changes. (A legacy widget could also always ask for an OpenID token. That capability
- * is granted for one token at a time, so the bridge requests it when the widget asks for a token.)
+ * Always requested: the legacy api sends these without a capability. (`get_openid` needs none in
+ * the legacy api either, but it is granted per token, so the bridge requests it per token.)
  */
 export const IMPLICIT_CAPABILITIES: readonly string[] = [
   hostCapability("update_theme"),
@@ -107,7 +85,7 @@ export const IMPLICIT_CAPABILITIES: readonly string[] = [
   hostCapability("update_visibility"),
 ];
 
-/** The stable prefix every legacy capability may be spelled with instead of its MSC's prefix. */
+/** Every legacy capability may be spelled with this instead of its MSC's prefix. */
 const LEGACY_STABLE_PREFIX = "m.";
 const MSC2762 = "org.matrix.msc2762.";
 const MSC3819 = "org.matrix.msc3819.";
@@ -125,16 +103,12 @@ interface LegacyRule {
 
 const unit = (prefix: string, body: string, ...expansion: string[]): LegacyRule => ({ prefix, body, expand: () => expansion });
 
-/**
- * The migration table of the naming proposal. `<type>` keeps its `#<msgtype>` / `#<state_key>`
- * suffix unchanged: both schemes read it the same way.
- */
+/** The migration table of the naming proposal. `<type>` keeps its `#<msgtype>` / `#<state_key>` suffix. */
 const LEGACY_RULES: LegacyRule[] = [
   { prefix: MSC2762, body: "send.event:", expand: (t) => [widgetCapability(`send_event.timeline:${t}`)] },
   { prefix: MSC2762, body: "send.state_event:", expand: (t) => [widgetCapability(`send_event.state:${t}`)] },
   {
-    // One legacy capability for reading, reading relations and being sent new events. Reading
-    // (the legacy `read_events`, readEvents.ts) is the timeline cache, paginated while short.
+    // Reading (the legacy `read_events`, readEvents.ts), relations and new events.
     prefix: MSC2762,
     body: "receive.event:",
     expand: (t) => [
@@ -146,8 +120,7 @@ const LEGACY_RULES: LegacyRule[] = [
     ],
   },
   {
-    // One legacy capability for reading state, state updates and state events in the timeline. A
-    // legacy state read is answered from the `update_state` pushes (readEvents.ts).
+    // `update_state` also answers legacy state reads (readEvents.ts).
     prefix: MSC2762,
     body: "receive.state_event:",
     expand: (t) => [
@@ -155,8 +128,7 @@ const LEGACY_RULES: LegacyRule[] = [
       hostCapability(`forward_event.state:${t}`),
     ],
   },
-  // One widget, one room: access to other rooms does not exist any more. Expanding to nothing
-  // means it is never requested and never reported as approved.
+  // One widget, one room: never requested, never reported as approved.
   { prefix: MSC2762, body: "timeline:", expand: () => [] },
   { prefix: MSC3819, body: "send.to_device:", expand: (t) => [widgetCapability(`send_to_device:${t}`)] },
   { prefix: MSC3819, body: "receive.to_device:", expand: (t) => [hostCapability(`forward_to_device:${t}`)] },
@@ -183,15 +155,9 @@ const LEGACY_RULES: LegacyRule[] = [
 ];
 
 /**
- * The new capabilities one legacy capability stands for.
- *
- * - A legacy capability is accepted with its MSC's unstable prefix or with the stable `m.`.
- * - `timeline:<room>` expands to nothing: it cannot be granted.
- * - A webview capability (`webview:…`) expands to nothing too: the legacy widget's iframe is the
- *   wrapper's, with constant attributes (`wrapper.ts`), so the host's answer would change nothing
- *   for the widget and only restart the wrapper.
- * - Any other string (a capability this table does not know, `m.sticker`, something custom) is
- *   passed through unchanged, so the host decides about it.
+ * The new capabilities one legacy capability stands for. A `webview:` capability expands to
+ * nothing: the inner iframe's attributes are constant (`wrapper.ts`), a grant would only reload
+ * the wrapper. Unknown strings pass through unchanged, so the host decides about them.
  */
 export function expandLegacyCapability(legacy: string): string[] {
   if (legacy.startsWith("webview:")) return [];
@@ -213,10 +179,8 @@ export function capabilitiesToRequest(legacy: readonly string[]): string[] {
 }
 
 /**
- * A capability with the stable namespace rewritten to the unstable one of its action, so that the
- * spellings `widget:m.navigate` and `widget:org.matrix.msc2931.navigate` compare equal (and
- * `webview:m.allow:camera` and `webview:org.matrix.mscXXXX.allow:camera`). Strings that are not
- * capabilities of the naming scheme are returned unchanged.
+ * A capability with the stable namespace `m` rewritten to its action's unstable one, so that
+ * `widget:m.navigate` equals `widget:org.matrix.msc2931.navigate`. Other strings are unchanged.
  */
 export function normalizeCapability(capability: string): string {
   const match = /^(widget|host|webview):m\./.exec(capability);
@@ -226,11 +190,8 @@ export function normalizeCapability(capability: string): string {
 }
 
 /**
- * The legacy capabilities out of `legacyRequested` that the host's `allowed` list grants.
- *
- * A legacy capability is granted only when **every** capability of its expansion is approved: a
- * widget that was told it holds `receive.event:<type>` expects to read, to read relations and to
- * be sent new events. A capability that expands to nothing (`timeline:<room>`) is never granted.
+ * The legacy capabilities out of `legacyRequested` that `approved` grants: those whose whole,
+ * non-empty expansion is approved (a widget told it holds `receive.event:<type>` expects all of it).
  */
 export function collapseApproved(legacyRequested: readonly string[], approved: readonly string[]): string[] {
   const held = new Set(approved.map(normalizeCapability));

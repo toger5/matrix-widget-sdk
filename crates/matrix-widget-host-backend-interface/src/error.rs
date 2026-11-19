@@ -1,20 +1,15 @@
 /// A failure reported by the host's Matrix client.
 ///
-/// `Failed` has the shape of matrix-rust-rtc's `BackendError`: the Matrix `errcode` and HTTP status
-/// when the client had them, plus a message. The driver forwards all three to the widget
-/// (`error.message` and `error.matrix_api_error`), so `reason` should be something a widget
-/// developer can act on. `EventNotCached` is the answer of
-/// [`timeline_read`](crate::MatrixBackend::timeline_read) for a `from` the timeline cache does not
-/// hold; the driver turns it into the widget API error `…event_not_cached`.
-///
-/// (An enum because UniFFI errors are enums; `reason` rather than `message` because Kotlin's
-/// generated exception already has a `message` property.)
+/// `Failed` has the shape of matrix-rust-rtc's `BackendError`; the driver forwards all three fields
+/// to the widget (`error.message`, `error.matrix_api_error`), so `reason` should be something a
+/// widget developer can act on. (`reason`, not `message`: Kotlin exceptions already have one.)
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Error))]
 pub enum BackendError {
     #[error("{reason}")]
     Failed { errcode: Option<String>, status: Option<u16>, reason: String },
-    /// The event `event_id` is not in the timeline cache.
+    /// [`timeline_read`](crate::MatrixBackend::timeline_read)'s `from` is not in the timeline
+    /// cache; the widget gets `…event_not_cached`.
     #[error("event {event_id} is not in the timeline cache")]
     EventNotCached { event_id: String },
 }
@@ -72,8 +67,8 @@ impl BackendError {
     }
 }
 
-/// A foreign `MatrixBackend` threw something that is not a `BackendError`. Report it as an
-/// ordinary error so the widget gets an error response instead of the driver panicking.
+/// A foreign `MatrixBackend` threw something that is not a `BackendError`: an ordinary error
+/// response for the widget instead of a panic.
 #[cfg(feature = "uniffi")]
 impl From<uniffi::UnexpectedUniFFICallbackError> for BackendError {
     fn from(err: uniffi::UnexpectedUniFFICallbackError) -> Self {

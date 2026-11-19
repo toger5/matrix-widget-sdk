@@ -1,13 +1,9 @@
 /**
- * `LiveSession.suspend()` for matrix-js-sdk: a `fetch` the client is created with (`fetchFn`),
- * which refuses every request while the session is suspended.
- *
- * The client itself keeps running. `MatrixClient.stopClient()` would stop the sync too, but it
- * also shuts the crypto module down for good, so the same client (which the room backends hold)
- * could not be started again. With the requests refused the sync loop behaves as if the network
- * were gone: it waits and probes, and every probe ends here without reaching the network.
+ * `LiveSession.suspend()` for matrix-js-sdk: the client's `fetchFn`, which refuses every request
+ * while suspended. The sync loop then behaves as if the network were gone. `stopClient()` is not
+ * used: it shuts the crypto module down for good, and the room backends hold the client.
  */
-// TODO-FINDING suspend-in-flight-requests - what happens to requests on suspend? Options: (a) refuse new ones and abort all in flight, (b) refuse new ones, abort only the /sync long poll and let short requests (a send that may already have reached the server) finish, (c) hold requests until resume. Done: (b); a request made while suspended rejects right away (the SDK reports a connection error), it is not queued for resume.
+// TODO-FINDING suspend-in-flight-requests - new requests are refused, the /sync long poll is aborted, requests in flight finish.
 
 /** What a request made while suspended rejects with. Deliberately not an `AbortError`: the SDK then treats it as a lost connection and retries later. */
 export class SuspendedError extends Error {

@@ -18,14 +18,11 @@ It contains:
   `from` the client does not cache (both in the placeholder namespace).
 * `Action` and its four leaf enums `WidgetRequest`, `WidgetResponse`, `HostRequest`,
   `HostResponse`: one variant per action, one file per action under `src/actions/`.
-* `Capability` / `CapabilitySet`: capability strings and the `allows_*` checks. A capability
-  embeds the wire name of its action (`widget:org.matrix.msc3869.read_relations:<type>`); the
-  stable `m.` spelling is parsed as well. `capability_is_known` (exported to the bindings) tells
-  them from strings outside the scheme (`Capability::Other`). The source `webview` is about no
-  action: `WebviewSandbox` / `WebviewAllow` are one token of the widget iframe's `sandbox` or
-  `allow` attribute (`webview:org.matrix.mscXXXX.allow:camera`, `is_webview`); a value that is no
-  single web token (`is_webview_value`) is `Other`.
-* `MatrixEvent`, `WidgetError` and the other shared payload types.
+* `Capability` / `CapabilitySet`: capability strings
+  ([naming rules](../../docs/spec-appendix/capability-naming-proposal.md)) and the `allows_*`
+  checks. Strings outside the scheme are `Capability::Other` (`capability_is_known`, exported to
+  the bindings).
+* `MatrixEvent` and the other shared payload types.
 
 ![matrix-widget-actions: wire vs. typed](../../docs/diagrams/04-actions-crate.svg)
 
@@ -53,15 +50,13 @@ let approved = vec![Capability::parse("widget:org.matrix.mscXXXX.send_event.time
 assert!(approved.allows_send("m.room.message", None, Some("m.text")));
 ```
 
-To add an action, create `src/actions/<widget|host>/<action>.rs` with its body types, add a
-variant with `#[serde(rename = "<wire name>")]` to the enums in that folder's `mod.rs`, and
-re-export the body types from `lib.rs`.
+To add an action, follow the steps in `src/actions/mod.rs` (and the `widget-api-change` skill).
 
 Enable the `uniffi` feature to export all types to Kotlin / Swift / Python / TypeScript (via
 `matrix-widget-host-driver`).
 
-## All supported actions
-Currently the actions crate supports the following actions:
+## Supported actions
+
 ![matrix-widget-actions: inventory](../../docs/diagrams/05-action-inventory.svg)
 
 ### More diagrams

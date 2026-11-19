@@ -13,9 +13,9 @@ export interface SidePanelProps {
   settings: SettingsViewModel;
 }
 
-export const SIDE_PANEL_MIN_WIDTH = 260;
-export const SIDE_PANEL_MAX_WIDTH = 560;
-export const SIDE_PANEL_DEFAULT_WIDTH = 324;
+const SIDE_PANEL_MIN_WIDTH = 260;
+const SIDE_PANEL_MAX_WIDTH = 560;
+const SIDE_PANEL_DEFAULT_WIDTH = 324;
 const KEY_STEP = 16;
 
 const clampWidth = (width: number) => Math.round(Math.min(SIDE_PANEL_MAX_WIDTH, Math.max(SIDE_PANEL_MIN_WIDTH, width)));

@@ -20,8 +20,8 @@ Every story of Storybook (`src/**/*.stories.tsx`), one row each, with what reach
 | `app-appshell--room-picker-modal` | `rooms.spec.ts` › Ctrl+K opens the room picker in a dialog: a pick opens the room in a new panel, an open widget is jumped to, Ctrl+K again and Escape close it |
 | `app-appshell--confirm` | `shell.spec.ts` › stopping an always-on-screen widget is confirmed (the story's text, activating the DevBackend, needs a Matrix account) |
 | `app-appshell--info-modal` | `shell.spec.ts` › the app info modal closes with Escape, with its button and with a press next to it |
-| `app-appshell--fullscreen` | `shell.spec.ts` › with exactly one widget tab the widget is fullscreen; the header shows the tab while hovered; `rooms.spec.ts` › fullscreen: LeftBar collapsed and one shown widget tab hide the tab and the + until the header is hovered or focused |
-| `app-appshell--fullscreen-header-focused` | `shell.spec.ts` › with exactly one widget tab the widget is fullscreen; the header shows the tab while hovered; `rooms.spec.ts` › fullscreen: LeftBar collapsed and one shown widget tab hide the tab and the + until the header is hovered or focused |
+| `app-appshell--fullscreen` | `shell.spec.ts` › with exactly one widget tab the widget is fullscreen; the header shows the tab and the + while hovered or focused |
+| `app-appshell--fullscreen-header-focused` | `shell.spec.ts` › with exactly one widget tab the widget is fullscreen; the header shows the tab and the + while hovered or focused |
 | `app-appshell--narrow` | `shell.spec.ts` › narrow window: the SidePanel overlays the RoomsArea, one room panel is shown and the pager steps through them (the AccountView is the DevBackend one) |
 | `app-appshell--collapsed-toast` | `shell.spec.ts` › collapse → toast → Escape reveals the expand button → the bar is back |
 | `app-appshell--collapsed-expand` | `shell.spec.ts` › collapse → toast → Escape reveals the expand button → the bar is back |
@@ -46,10 +46,6 @@ Every story of Storybook (`src/**/*.stories.tsx`), one row each, with what reach
 | `app-loginview--login` | `shell.spec.ts` › a fresh browser without a stored login shows the login page; skipping it leads into the empty DevBackend |
 | `app-loginview--password-with-error` | **catalogue**: a homeserver that offers only a password |
 | `app-loginview--adding-busy` | **catalogue**: "Add account" while the homeserver is looked up |
-| `app-modal--info` | **catalogue**: the modal alone; on the screen: `app-appshell--info-modal` |
-| `app-modal--confirm` | **catalogue**: the modal alone; on the screen: `app-appshell--confirm` |
-| `app-modal--room-picker` | **catalogue**: the modal alone; on the screen: `app-appshell--room-picker-modal` |
-| `app-modal--confirm-danger` | **catalogue**: the modal alone; on the screen: `app-appshell--room-tools-confirm` |
 | `app-pippanel--idle` | `widgetMove.spec.ts` › always on screen: the tab gets a pin, moving away shows the widget in the PiP panel, without a reload |
 | `app-pippanel--idle-four` | `pip.spec.ts` › four always-on-screen widgets: four boxes; hover and focus show the surround without moving the boxes |
 | `app-pippanel--vertical-idle` | `pip.spec.ts` › the stacking switch puts the boxes below each other |
@@ -80,9 +76,7 @@ The Dev tools of a Matrix account (`sidepanel-roomtoolsview--*`) are **not reach
 | `sidepanel-settingsview--both-off` | **not reachable**: a Matrix account (DevBackend inactive) |
 | `sidepanel-settingsview--both-on` | `sidepanel.spec.ts` › settings: two independent switches; the DevBackend's is locked while it is active, dev tools can be turned off there and the Dev tools stay (with the lock of the active DevBackend; the unlocked switch needs a Matrix account) |
 | `sidepanel-settingsview--dev-backend-active` | `sidepanel.spec.ts` › settings: two independent switches; the DevBackend's is locked while it is active, dev tools can be turned off there and the Dev tools stay |
-| `sidepanel-sidepanel--account-open` | **catalogue**: the SidePanel with several accounts (a Matrix account) |
 | `sidepanel-sidepanel--room-list` | `sidepanel.spec.ts` › Room list: a pick opens in the panel showing the room, else in the focused picker, else in a new panel; an open widget is jumped to; a narrow window closes the list |
-| `sidepanel-sidepanel--narrow-overlay` | **catalogue**: the SidePanel alone; on the screen: `app-appshell--narrow` |
 | `sidepanel-devbackendview--no-rooms` | `devbackend.spec.ts` › no rooms yet: the RoomsArea is empty, a new room panel has no room to offer; “Create a room” adds and selects the first room |
 | `sidepanel-devbackendview--room-dropdown` | `devbackend.spec.ts` › room dropdown: select a room, add a room and open it in a new room panel |
 | `sidepanel-devbackendview--state` | `devbackendState.spec.ts` › send state and the state explorer: the sent event is listed by type and key (the state of a widget's write: › the state is read like a real room's) |
@@ -119,7 +113,6 @@ The Dev tools of a Matrix account (`sidepanel-roomtoolsview--*`) are **not reach
 | `rooms-roompicker--loading` | **not reachable**: the DevBackend's room list is always ready |
 | `rooms-roompicker--load-error` | **not reachable**: `DevBackend.rooms()` never fails |
 | `rooms-roomview--overview` | `rooms.spec.ts` › a new panel shows the picker: no recents, all rooms with search, then the room overview |
-| `rooms-roomview--widget-open` | **catalogue**: a room panel with a widget tab active; on the screen in most tests |
 | `rooms-tabbar--widget-active` | `tabs.spec.ts` › the room name is the first tab: it shows the overview, where running widgets offer “Jump to tab”; the + selects it too |
 | `rooms-tabbar--overview-active` | `tabs.spec.ts` › the room name is the first tab: it shows the overview, where running widgets offer “Jump to tab”; the + selects it too |
 | `rooms-tabbar--pinned` | `widgetMove.spec.ts` › always on screen: the tab gets a pin, moving away shows the widget in the PiP panel, without a reload |
@@ -183,12 +176,3 @@ The Dev tools of a Matrix account (`sidepanel-roomtoolsview--*`) are **not reach
 | Story | Reached by |
 | --- | --- |
 | `ui-atoms--atoms` | **catalogue**: the atoms of `src/views/ui/atoms.tsx` and every icon |
-
-## Sketch
-
-| Story | Reached by |
-| --- | --- |
-| `sketch-rooms-roomoverview--plain` | **sketch**, redraw of `rooms-roomoverview--plain`: the "Show all 12 members" link (finding `overview-show-all-members`) |
-| `sketch-sidepanel-devbackendview--timeline` | **sketch**, redraw of `sidepanel-devbackendview--timeline`: the Sender of the send forms as a select with avatars (`implementation_findings.md`, Trivial) |
-| `sketch-sidepanel-devbackendview--timeline-delayed` | **sketch**, redraw of `sidepanel-devbackendview--timeline-delayed`: what a scheduled row sends, event rows in words (`implementation_findings.md`, Trivial) |
-| `sketch-sidepanel-devbackendview-tools--to-device` | **sketch**, redraw of `sidepanel-devbackendview-tools--to-device`: one Sender select instead of the user and device fields (finding `devbackend-todevice-sender`) |

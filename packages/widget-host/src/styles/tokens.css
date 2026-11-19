@@ -1,4 +1,3 @@
-/* Tokens (layer tokens): the design rules; with the stories, the specification (listed in src/styles/app.css). */
 /* -------------------------------------------------------------------------------------------
    Tokens. Components only use these roles, never raw colors (the fake widgets are the exception:
    they are foreign content). One spacing scale (4px steps) and one radius scale.

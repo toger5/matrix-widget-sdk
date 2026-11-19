@@ -1,8 +1,5 @@
 /** A widget keeps running while it moves on screen: tab → PictureInPicturePanel → tab → another room panel. */
-import { expect, LAB, LEGACY_WIDGET, NEW_WIDGET, test, widgetId } from "./host";
-
-const NEW = widgetId(LAB, NEW_WIDGET);
-const LEGACY = widgetId(LAB, LEGACY_WIDGET);
+import { expect, LAB, LEGACY, LEGACY_WIDGET, NEW, NEW_WIDGET, test } from "./host";
 
 test.beforeEach(async ({ host }) => {
   await host.populate("lab", { sidePanel: null, behavior: { autoApproveCapabilities: true }, open: [{ room: LAB, widgets: [NEW_WIDGET, LEGACY_WIDGET], active: NEW_WIDGET }] });

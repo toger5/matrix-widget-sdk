@@ -3,18 +3,11 @@
 - **Target:** [MSC4412](https://github.com/matrix-org/matrix-spec-proposals/pull/4412), `proposals/4412-widget-base-postmessage-api.md`
 - **Base:** `1794f40325a449eed21dcbfce53efc80e89f56f6`
 - **Status:** draft
-- **Implemented here:** the host driver merges a request into the open question and asks the
-  platform about the whole of it, leaving out what the widget holds or gets without asking; one
-  `approve_capabilities` answers all requests (`crates/matrix-widget-host-driver/src/driver/requests.rs`
-  `request_capabilities`, `driver/mod.rs`, `platform.rs` `on_capabilities_requested`; tests
-  `requests_while_one_is_pending_add_up`, `a_request_while_a_question_is_open_never_completes_it`,
-  `held_capabilities_are_not_asked_again` in `driver/tests.rs`). The widget host shows one prompt,
-  keeps the user's choices, marks what was added "New" and blocks "Approve" for 3 s after the
-  prompt appeared or changed (`packages/widget-host/src/views/widget/WidgetView.tsx`
-  `CapabilityPrompt`, `src/app/controller.ts` `widget/answerCapabilities`,
-  `src/app/runtime/widgetRuntime.ts` `answerCapabilities`, `src/appViewModel.ts`
-  `CAPABILITY_APPROVE_DELAY_MS`; e2e `widget.spec.ts` › "a request while the prompt is open joins
-  it").
+- **Implemented here:** the host driver merges a request into the open question and asks about
+  the whole of it (`crates/matrix-widget-host-driver/src/driver/requests.rs`
+  `request_capabilities`, `platform.rs` `on_capabilities_requested`). The widget host shows one
+  prompt, marks what was added "New" and blocks "Approve" for 3 s after it appeared or changed
+  (`packages/widget-host/src/views/widget/WidgetView.tsx`, `CAPABILITY_APPROVE_DELAY_MS`).
 
 ## Why
 

@@ -1,16 +1,9 @@
 //! The logger behind the widget tools bindings.
 //!
-//! Every crate in this workspace emits through the [`log`] facade, which does nothing until an
-//! implementation is installed. The library crates never install one: a Rust application picks its
-//! own (`env_logger`, `tracing-log`, ...). The *bindings* have no such application around them, so
-//! they install the logger of this crate:
-//!
-//! * `matrix-widget-host-driver` (UniFFI: Kotlin, Swift, Python, and the web through ubrn) exposes it as
-//!   `setup_logging`,
-//! * `matrix-widget-sdk` (wasm-bindgen) exposes it as `initLogging`.
-//!
-//! Each of those is a separate binary with its own copy of the `log` globals, which is why the
-//! shared part lives here instead of in one of them.
+//! The library crates only emit through the [`log`] facade; a Rust application installs its own
+//! logger. The bindings have no such application, so they install this one:
+//! `matrix-widget-host-driver` (UniFFI) as `setup_logging`, `matrix-widget-sdk` (wasm-bindgen) as
+//! `initLogging`. Each is a separate binary with its own `log` globals, hence a crate of its own.
 //!
 //! Records fan out to two independent destinations:
 //!
@@ -38,9 +31,8 @@ pub struct LogConfig {
     pub level: LevelFilter,
     /// `RUST_LOG`-style per-target overrides, e.g. `"matrix_widget_host_driver::driver=trace"`.
     ///
-    /// Targets are module paths, so a directive matches by prefix. The roots are
-    /// `matrix_widget_host_driver`, `matrix_widget_host_backend_interface`, `matrix_widget_sdk` and `matrix_widget_actions`.
-    /// Empty means "no overrides".
+    /// Targets are module paths, so a directive matches by prefix (roots: `matrix_widget_host_driver`,
+    /// `matrix_widget_host_backend_interface`, `matrix_widget_sdk`, `matrix_widget_actions`).
     pub filter: String,
     /// Write to the platform log. Turn it off when a [`LogSink`] is installed and the records
     /// should not show up twice.
@@ -87,16 +79,10 @@ impl std::fmt::Display for InvalidFilter {
 
 impl std::error::Error for InvalidFilter {}
 
-/// Installs the logger, or reconfigures it if it is already installed.
-///
-/// `log::set_logger` works once per process, so later calls swap the filter and the platform-log
-/// setting in place. The sink is separate, see [`set_sink`]. If the application installed a logger of its own before the
-/// first call, that one stays and this call only raises `log::max_level`.
-///
-/// Also installs a panic hook that reports the panic through the logger (native) or the console
-/// (`wasm32`) before the previous hook runs.
-///
-/// With an invalid `config.filter` nothing changes.
+/// Installs the logger, or swaps the filter and platform-log setting of the installed one (the
+/// sink is [`set_sink`]'s). If the application installed a logger of its own first, that one stays
+/// and this only raises `log::max_level`. Also installs a panic hook that logs the panic before
+/// the previous hook runs. With an invalid `config.filter` nothing changes.
 pub fn configure(config: LogConfig) -> Result<(), InvalidFilter> {
     let filter = build_filter(&config)?;
     let max_level = filter.filter();
@@ -128,11 +114,8 @@ pub fn configure(config: LogConfig) -> Result<(), InvalidFilter> {
     Ok(())
 }
 
-/// Installs the logger with warnings and errors going to the platform log, unless [`configure`]
-/// (or this function) ran before.
-///
-/// The web bindings call this on start, so that a dropped message or a panic is visible in the
-/// console without any setup.
+/// [`configure`] with warnings and errors to the platform log, unless it ran before. The web
+/// bindings call this on start, so that a panic is visible in the console without any setup.
 pub fn ensure_default() {
     if !CONFIGURED.load(Ordering::Relaxed) {
         // An empty filter cannot be invalid.
@@ -140,10 +123,8 @@ pub fn ensure_default() {
     }
 }
 
-/// Sets (or with `None` removes) the host's destination for log records.
-///
-/// The sink gets what passes the filter of [`configure`], which has to be called as well: before
-/// that no logger is installed and the sink gets nothing.
+/// Sets (or with `None` removes) the host's destination for log records. It gets what passes the
+/// filter of [`configure`], so nothing before that has run.
 pub fn set_sink(sink: Option<LogSink>) {
     Logger::global().state.write().unwrap_or_else(|poisoned| poisoned.into_inner()).sink = sink;
 }

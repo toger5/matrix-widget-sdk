@@ -29,7 +29,6 @@ import {
   updatePanel,
   updateRoomToolsTab,
   upgradeWorkspace,
-  workspaceWidgetIds,
 } from "../src/app/layout";
 
 const room = (roomId: string) => ({ kind: "room" as const, roomId, tabs: [] });
@@ -41,6 +40,8 @@ const add = (ws: WorkspaceLayout, content: Parameters<typeof addPanel>[1], after
   return added;
 };
 const roomsOf = (ws: WorkspaceLayout) => panelsInOrder(ws.roomsArea).map((p) => (p.content.kind === "room" ? p.content.roomId : "picker"));
+/** Every widget a tab of the workspace refers to. */
+const workspaceWidgetIds = (ws: WorkspaceLayout) => ws.roomsArea.panels.flatMap((p) => (p.content.kind === "room" ? p.content.tabs.flatMap((t) => (t.kind === "widget" ? [t.widgetId] : [])) : []));
 /** The ids of the dock: [left, rows, right]. */
 const shape = (dock: DockLayout) => [dock.left?.map((i) => i.id) ?? [], dock.center.rows.map((r) => r.items.map((i) => i.id)), dock.right?.map((i) => i.id) ?? []];
 

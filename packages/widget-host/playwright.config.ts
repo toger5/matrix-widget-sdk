@@ -1,14 +1,11 @@
 import { defineConfig, devices } from "@playwright/test";
 
-/**
- * End-to-end tests of the host in DevBackend mode (no homeserver). See "Playwright tests" in
- * implementationPlan.md: one page per worker, repopulated from a seed before every test.
- */
+/** End-to-end tests of the host in DevBackend mode (no homeserver): e2e/README.md. */
 export default defineConfig({
   testDir: "e2e",
   testMatch: "**/*.spec.ts",
   outputDir: "test-results",
-  // Tests of one file share a page, so they run in order; files run in parallel workers.
+  // Tests of one file share a page (e2e/host.ts), so they run in order.
   fullyParallel: false,
   workers: process.env.CI ? 2 : 4,
   timeout: 15_000,

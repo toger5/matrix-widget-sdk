@@ -1,4 +1,4 @@
-/* Base (layer base): reset, focus ring, text helpers. The design rules: with the stories, the specification (listed in src/styles/app.css). */
+/* Base (layer base): reset, focus ring, text helpers. */
 
 * { box-sizing: border-box; }
 html, body { margin: 0; height: 100%; }

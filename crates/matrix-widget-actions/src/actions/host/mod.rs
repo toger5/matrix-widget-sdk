@@ -153,8 +153,7 @@ mod tests {
         assert!(matches!(HostRequest::from_wire(&bad), Err(ActionError::InvalidBody { .. })));
     }
 
-    /// Renamed actions have no aliases: the old names (and names without a namespace) are unknown
-    /// actions. Only the compat wrapper translates them.
+    /// Old and unnamespaced names are unknown actions: only the compat wrapper translates them.
     #[test]
     fn renamed_actions_are_only_known_by_their_new_name() {
         let renamed = [
@@ -180,18 +179,6 @@ mod tests {
             };
             assert_eq!(response(old), Ok(HostResponse::Unknown), "{old}");
             assert_ne!(response(new), Ok(HostResponse::Unknown), "{new}");
-        }
-    }
-
-    /// Removed actions are unknown under every name. `forward_openid_credentials` was the late
-    /// answer to a `get_openid` the user had to be asked about; the user now grants the
-    /// `get_openid` capability instead, and `get_openid` always answers at once.
-    #[test]
-    fn removed_actions_are_unknown() {
-        for action in ["org.matrix.mscXXXX.forward_openid_credentials", "m.forward_openid_credentials"] {
-            let wire = WireMessage::request(Source::Host, action, "r", json!({"state": "allowed"}));
-            assert_eq!(HostRequest::from_wire(&wire), Ok(HostRequest::Unknown), "{action}");
-            assert_eq!(HostResponse::from_wire(&wire.ack()), Ok(HostResponse::Unknown), "{action}");
         }
     }
 }

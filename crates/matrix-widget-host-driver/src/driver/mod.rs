@@ -37,23 +37,19 @@ pub struct DriverSnapshot {
     /// Capabilities currently granted to the widget.
     pub approved: Vec<Capability>,
     /// Capabilities the widget requested that wait for [`WidgetHostDriver::approve_capabilities`].
-    /// Without those in `approved` and `auto_approved`, this is the open question. It can hold
-    /// more than the platform was asked about: a pending capability that
-    /// [`WidgetHostDriver::revoke_capabilities`], [`WidgetHostDriver::set_auto_approved`] or a use
-    /// ([`WidgetHostDriver::set_single_use`]) took out of those lists after the question was asked
-    /// (it is granted only if the answer approves it).
+    /// Without those in `approved` and `auto_approved`, this is the open question; it can hold more
+    /// than the platform was asked about (taken away by a revoke or a use after it was asked),
+    /// which is granted only if the answer approves it.
     pub pending_requested: Vec<Capability>,
-    /// Capabilities granted without asking the platform: those of
-    /// [`WidgetHostDriver::set_auto_approved`], then what the driver adds itself (the set of a
-    /// legacy widget, [`legacy_auto_approved`](crate::legacy_auto_approved); `carried`; the webview
-    /// capabilities the iframe was built with).
+    /// Capabilities granted without asking the platform: [`WidgetHostDriver::set_auto_approved`],
+    /// then what the driver adds itself ([`legacy_auto_approved`](crate::legacy_auto_approved) for a
+    /// legacy widget, `carried`, the webview capabilities the iframe was built with).
     pub auto_approved: Vec<Capability>,
     /// Capabilities granted for one use only, see [`WidgetHostDriver::set_single_use`].
     pub single_use: Vec<Capability>,
-    /// What the widget held when its iframe was last loaded again for its webview capabilities
-    /// ([`WidgetHostPlatform::load_iframe`]), without the single-use ones and what was revoked
-    /// since: the page in the new iframe gets these without asking when it requests them. A client
-    /// that remembers approvals remembers `approved` and these.
+    /// What the widget held when its iframe was last loaded again for its webview capabilities,
+    /// without the single-use ones and what was revoked since: the page in the new iframe gets
+    /// these without asking. A client that remembers approvals remembers `approved` and these.
     pub carried: Vec<Capability>,
     /// The widget's iframe as the platform was last told to build it
     /// ([`WidgetHostPlatform::load_iframe`]); before [`WidgetHostDriver::start`], as `start` will.
@@ -189,11 +185,9 @@ pub struct WidgetHostDriver {
 #[cfg_attr(feature = "uniffi", uniffi::export)]
 impl WidgetHostDriver {
     /// Create a driver for the widget [`parse_widget_state_event`](crate::parse_widget_state_event)
-    /// read from its state event. `backend` must be bound to the room the widget lives in.
-    /// Nothing is loaded before [`start`](Self::start).
-    ///
-    /// Fails with [`WidgetEventError::Refused`] for a widget that must not be loaded: the check of
-    /// `parse_widget_state_event`, made again (a definition is plain data).
+    /// read from its state event; `backend` is bound to the widget's room. Nothing is loaded before
+    /// [`start`](Self::start). Fails with [`WidgetEventError::Refused`] like
+    /// `parse_widget_state_event` (the check is made again: a definition is plain data).
     #[cfg_attr(feature = "uniffi", uniffi::constructor)]
     pub fn new(
         widget: WidgetDefinition,
@@ -249,16 +243,11 @@ impl WidgetHostDriver {
         self.load(iframe);
     }
 
-    /// Feed a message from the widget window (`event.data`, as JSON) into the driver.
+    /// Feed a message from the widget window (`event.data`, as JSON) into the driver. Replies go
+    /// out through [`WidgetHostPlatform::send_to_widget`] before this returns.
     ///
-    /// Replies to the widget go out through [`WidgetHostPlatform::send_to_widget`] before this
-    /// returns. An error means the message does not belong to this protocol; the platform decides
-    /// whether to ignore it, log it, or pass it to a legacy implementation.
-    /// [`DriverError::LegacyWidgetApi`] says that the message has the legacy shape (`api` instead
-    /// of `source`): the first action a widget sends tells the two formats apart.
-    ///
-    /// A widget without the widget API (its state event does not say `uses_widget_api: true`) gets
-    /// no answer at all: every message is refused with [`DriverError::NoWidgetApi`].
+    /// An error means the message does not belong to this protocol; the platform ignores or logs
+    /// it ([`DriverError::LegacyWidgetApi`]: the legacy shape, `api` instead of `source`).
     pub async fn handle_message_from_widget(&self, json: String) -> Result<(), DriverError> {
         if !self.uses_widget_api {
             log::debug!("ignored a message of a widget without the widget api");
@@ -277,41 +266,27 @@ impl WidgetHostDriver {
         result
     }
 
-    /// Set the capabilities that are granted without asking the platform.
+    /// Set the capabilities that are granted without asking the platform, typically what the
+    /// client remembers of earlier approvals (not [`legacy_auto_approved`](crate::legacy_auto_approved):
+    /// the driver adds that itself). Replaces the previous list and affects only future requests.
     ///
-    /// When a widget requests capabilities, these are granted with the answer, and only the rest
-    /// reaches [`WidgetHostPlatform::on_capabilities_requested`]. If nothing is left and no
-    /// question is open, the platform is not called and `update_capabilities` goes out
-    /// immediately; while a question is open, they wait for its answer.
-    ///
-    /// Typical use: what the client remembers of earlier approvals. What a legacy widget gets
-    /// anyway ([`legacy_auto_approved`](crate::legacy_auto_approved)) the driver adds itself.
-    ///
-    /// Replaces the previous list and affects only future requests. A webview capability that is
-    /// never granted ([`WebviewPolicy::Never`]) stays refused; the others are part of the widget's
-    /// iframe, requested or not, which loads the iframe again if it changes its attributes after
-    /// [`start`](Self::start).
+    /// A request is answered at once if nothing else needs a decision and no question is open;
+    /// otherwise these are granted with the answer. Webview capabilities among them are part of
+    /// the iframe, requested or not (a change after [`start`](Self::start) loads it again), except
+    /// those that are never granted ([`WebviewPolicy::Never`]).
     pub fn set_auto_approved(&self, capabilities: Vec<Capability>) {
         self.lock().auto_approved = capabilities;
         self.sync_iframe();
     }
 
-    /// Complete the capability negotiation started by
-    /// [`WidgetHostPlatform::on_capabilities_requested`]: answers every request that arrived
-    /// since the last answer.
+    /// Answer the open question of [`WidgetHostPlatform::on_capabilities_requested`], and with it
+    /// every request since the last answer. Does nothing if no request is pending.
     ///
-    /// * Only capabilities the widget requested are granted; the rest of `approved` is ignored.
-    ///   A requested capability that is not in `approved` (and not auto-approved) is denied.
-    /// * Requested capabilities that are auto-approved are granted as well.
-    /// * Webview capabilities follow [`WebviewPolicy`]: the base `sandbox` tokens are granted
-    ///   whatever `approved` says, the `allow-top-navigation` tokens never.
+    /// * Granted: what was requested and is in `approved` or auto-approved; webview capabilities
+    ///   follow [`WebviewPolicy`] (base tokens always, `allow-top-navigation` never).
     /// * The widget gets `update_capabilities` with everything it holds now.
-    /// * If new capabilities were granted, the driver subscribes to the backend again. The backend
-    ///   then delivers the current room state, which reaches the widget as `update_state`.
-    /// * If a granted webview capability changes the iframe's `sandbox` or `allow`, the iframe is
-    ///   loaded again after that ([`WidgetHostPlatform::load_iframe`]).
-    ///
-    /// Does nothing if no request is pending.
+    /// * New grants subscribe to the backend again (the current state arrives as `update_state`),
+    ///   or, if they change the iframe's `sandbox` or `allow`, load the iframe again.
     pub fn approve_capabilities(&self, approved: Vec<Capability>) {
         let (update, changed) = {
             let mut state = self.lock();
@@ -344,16 +319,10 @@ impl WidgetHostDriver {
         }
     }
 
-    /// Take capabilities away from the widget, e.g. because the user revoked a permission.
-    ///
-    /// * The widget gets `update_capabilities` with the reduced list.
-    /// * From then on its requests for the revoked actions are answered with
-    ///   `missing_capability`, and the host stops sending the revoked subscriptions.
-    /// * The capabilities stay revoked until the widget requests them again, and are no longer
-    ///   [carried](DriverSnapshot::carried).
-    /// * If that changes the iframe's `sandbox` or `allow`, the iframe is loaded again.
-    ///
-    /// Does nothing if the widget holds none of `capabilities` and none is carried.
+    /// Take capabilities away from the widget, e.g. because the user revoked a permission. The
+    /// widget gets `update_capabilities` with the reduced list; its requests for them fail and their
+    /// pushes stop until it requests them again. They are no longer
+    /// [carried](DriverSnapshot::carried); a change of the iframe's attributes loads it again.
     pub fn revoke_capabilities(&self, capabilities: Vec<Capability>) {
         let update = {
             let mut state = self.lock();
@@ -381,28 +350,19 @@ impl WidgetHostDriver {
         }
     }
 
-    /// Set the capabilities that are granted for one use only. Default: `widget:…get_openid`.
+    /// Set the capabilities that are granted for one use only (default: `widget:…get_openid`),
+    /// replacing the previous list, also for what the widget holds already
+    /// (`spec/patch/msc4412/capability-lifetimes.md`).
     ///
-    /// A widget request that needs one of them as a whole (the rule of
-    /// `access::required_capability`: `get_openid`, `navigate`, `upload_file`, ...) uses it up. The
-    /// driver takes the capability away when the request passes the check, whatever the request's
-    /// result, and right after the reply sends `update_capabilities` with what the widget still
-    /// holds (the lifetimes proposed for MSC4412 in `spec/patch/msc4412/capability-lifetimes.md`).
-    /// For the next use the widget requests the capability again. It does not know in advance
-    /// that a grant is limited.
+    /// A request that needs one of them as a whole (`get_openid`, `navigate`, `upload_file`, ...)
+    /// uses it up when it passes the check, whatever its result; `update_capabilities` follows the
+    /// reply. Host and webview capabilities are dropped from the list (no request uses them up), and
+    /// capabilities checked against a request's body (`send_event.*`, ...) are never used up.
     ///
-    /// * Not used up: host capabilities (`host:…`, the host's pushes), webview capabilities (no
-    ///   request uses them; both are dropped from `capabilities`) and the capabilities a request is
-    ///   checked against by its body (`send_event.*`, `read_timeline:*`, ...).
-    /// * A single-use capability that is also auto-approved ([`set_auto_approved`](Self::set_auto_approved))
-    ///   is granted again, without asking, each time the widget requests it: that is how a client
-    ///   remembers "always" for it. Do not remember an approval of a single-use capability
-    ///   otherwise, or it stops being single use.
-    /// * The driver has no clock. To limit a grant in time, start a timer when the capability is
-    ///   approved and call [`revoke_capabilities`](Self::revoke_capabilities) when it fires.
-    ///
-    /// Replaces the previous list. A capability the widget holds already becomes single use too:
-    /// its next use ends it.
+    /// * "Always": a single-use capability that is also auto-approved is granted again, without
+    ///   asking, per request. Do not remember an approval of one otherwise.
+    /// * The driver has no clock: a time limit is a timer of the client that calls
+    ///   [`revoke_capabilities`](Self::revoke_capabilities).
     pub fn set_single_use(&self, capabilities: Vec<Capability>) {
         let (widget, other): (Vec<_>, Vec<_>) =
             capabilities.into_iter().partition(|c| !c.to_unstable_string().starts_with("host:") && !c.is_webview());
@@ -412,10 +372,9 @@ impl WidgetHostDriver {
         self.lock().single_use = widget;
     }
 
-    /// Tell the widget that the client's theme changed (`update_theme`, MSC2873).
-    ///
-    /// `theme` is a free-form object. Its `name` should be what `get_client_context` reports as
-    /// `client_theme`. Nothing is sent unless the widget holds `host:…update_theme`.
+    /// Tell the widget that the client's theme changed (`update_theme`, MSC2873). `theme` is
+    /// free-form; its `name` should match `client_theme` of `get_client_context`. Nothing is sent
+    /// unless the widget holds `host:…update_theme`.
     pub fn update_theme(&self, theme: JsonValue) {
         self.push(HostRequest::UpdateTheme { theme });
     }

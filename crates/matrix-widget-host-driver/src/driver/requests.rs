@@ -25,10 +25,8 @@ use crate::{PlatformError, WebviewPolicy};
 /// clamping).
 const MAX_READ_LIMIT: u32 = 1000;
 
-/// A `limit` from the wire for the backend. On the wire a limit is a `u64`, so that any number a
-/// widget sends parses and is cut down here instead of failing the whole request. The backend
-/// takes a `u32`: no page is that large, and a `u64` would be a `bigint` in the TypeScript
-/// bindings.
+/// A wire `limit` (`u64`, so that any number parses) for the backend, which takes a `u32` (a
+/// `u64` would be a `bigint` in the TypeScript bindings).
 fn backend_limit(limit: u64) -> u32 {
     u32::try_from(limit).unwrap_or(u32::MAX)
 }
@@ -41,7 +39,7 @@ impl WidgetHostDriver {
             let used = self.lock().use_capability(&capability);
             let Some(single_use) = used else {
                 log::warn!("{} ({}) refused: the widget does not hold {capability}", msg.action, msg.request_id);
-                return self.send(&msg.error_response_to(access::missing(&capability)));
+                return self.send(&msg.error_response_to(WidgetError::missing_capability(&capability)));
             };
             if single_use {
                 log::info!("{} ({}) used up the single-use {capability}", msg.action, msg.request_id);
@@ -181,17 +179,12 @@ impl WidgetHostDriver {
 
     /// `request_capabilities`: acknowledge, then merge the request into the open question.
     ///
-    /// * No question is open: if the widget holds or gets without asking everything it requests,
-    ///   the negotiation completes at once; otherwise the platform is asked about the rest.
-    /// * A question is open (the platform has not answered yet): the request joins it, and nothing
-    ///   completes before the platform answers, so one `update_capabilities` answers every
-    ///   request. If the request added something to decide, the platform is asked again, about
-    ///   the whole question.
+    /// * No question open: complete at once if nothing needs a decision, else ask the platform.
+    /// * A question open: the request joins it and waits for its answer, so one
+    ///   `update_capabilities` answers every request; the platform is asked again (about the
+    ///   whole question) only if the request added something to decide.
     ///
-    /// Webview capabilities that are granted or refused by policy ([`WebviewPolicy`]: the base
-    /// `sandbox` tokens, `allow-top-navigation`) need no decision; the platform is not asked about them.
-    ///
-    /// The ack grants nothing. A widget can only ever ask for more.
+    /// The ack grants nothing.
     fn request_capabilities(&self, msg: &WireMessage, requested: Vec<Capability>) {
         enum Next {
             Complete,
@@ -277,7 +270,7 @@ impl WidgetHostDriver {
     /// request fails, because the widget api cannot report a partial result.
     async fn send_to_device(&self, request: SendToDeviceRequest) -> Result<(), WidgetError> {
         if !self.approved().allows_send_to_device(&request.event_type) {
-            return Err(access::missing(&Capability::send_to_device(&request.event_type)));
+            return Err(WidgetError::missing_capability(Capability::send_to_device(&request.event_type)));
         }
         let messages: Vec<ToDeviceMessage> = request
             .messages
@@ -371,7 +364,7 @@ impl WidgetHostDriver {
         let room_id = self.backend.room_id();
         access::check_rooms(&room_id, request.room_ids.as_ref())?;
         if !approved.allows_read_room_account_data(&request.event_type) {
-            return Err(access::missing(&Capability::read_room_account_data(&request.event_type)));
+            return Err(WidgetError::missing_capability(Capability::read_room_account_data(&request.event_type)));
         }
         let events = self
             .backend
@@ -425,8 +418,6 @@ impl WidgetHostDriver {
     }
 }
 
-/// Turns a failed backend call into the widget's error: `"<context>: <reason>"` as the message,
-/// plus the Matrix error details (if the backend had any) as `matrix_api_error`.
 /// The target and reason of an `m.room.redaction`, from its content.
 fn redaction_of(content: &serde_json::Value) -> Result<(String, Option<String>), WidgetError> {
     let Some(redacts) = content.get("redacts").and_then(|v| v.as_str()) else {
@@ -438,6 +429,8 @@ fn redaction_of(content: &serde_json::Value) -> Result<(String, Option<String>),
     Ok((redacts.to_owned(), reason))
 }
 
+/// Turns a failed backend call into the widget's error: `"<context>: <reason>"` as the message,
+/// plus the Matrix error details (if the backend had any) as `matrix_api_error`.
 fn backend_error(context: &'static str) -> impl FnOnce(BackendError) -> WidgetError {
     move |err| {
         WidgetError::with_matrix_error(

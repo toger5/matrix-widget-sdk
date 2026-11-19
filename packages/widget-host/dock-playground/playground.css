@@ -2,7 +2,7 @@
 .pg-mount, .pg { height: 100vh; }
 .pg { display: flex; flex-direction: column; gap: 8px; padding: 8px; background: var(--bg); color: var(--text); font: 13px/1.4 var(--font-ui); }
 .pg-bar { flex: none; display: flex; align-items: center; gap: 10px; padding: 4px 6px; }
-.pg-bar .muted, .pg .muted { color: var(--text-muted); }
+.pg .muted { color: var(--text-muted); }
 .pg .sp { flex: 1; }
 .pg-full { padding: 3px 10px; border-radius: var(--r-3); border: 1px solid var(--warning); color: var(--warning); font-size: 12px; font-weight: 500; }
 .pg-main { flex: 1; min-height: 0; display: flex; gap: 8px; }

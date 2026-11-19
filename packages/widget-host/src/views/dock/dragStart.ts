@@ -8,10 +8,10 @@ import type { DockAreaHandle, DragItem } from "./DockArea";
 import { clearSelection, preventSelection } from "./noSelection";
 
 /** Movement (px) with the button down that starts a drag. */
-export const DRAG_THRESHOLD = 4;
+const DRAG_THRESHOLD = 4;
 
 /** The click that follows the release of a drag is not a click on the element it started on. */
-export function swallowNextClick() {
+function swallowNextClick() {
   const swallow = (e: Event) => {
     e.stopPropagation();
     e.preventDefault();

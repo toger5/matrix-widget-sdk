@@ -1,8 +1,6 @@
-//! `get_client_context`, widget -> host: ask for the basic facts about the embedding client.
-//!
-//! Not part of an MSC yet; needed because the new API no longer passes these as URL template
-//! parameters. Empty request body. Requires the `widget:…get_client_context`
-//! capability; see `get_matrix_context` for the action's prefix.
+//! `get_client_context` (no MSC yet), widget -> host: the basic facts about the embedding client,
+//! what the legacy URL template parameters carried. Empty request body. Requires
+//! `widget:…get_client_context`.
 //!
 //! Response:
 //!

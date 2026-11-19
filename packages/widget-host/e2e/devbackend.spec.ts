@@ -1,12 +1,9 @@
 /** DevBackendView: the mocked rooms (dropdown, add, clear, remove), the room dev tools below the slim header, and the tools: the Client Backend Tool (widget host behavior, to-device messages) and the Media Backend Tool. */
-import { expect, LAB, NEW_WIDGET, test, widgetId } from "./host";
-
-const NEW = widgetId(LAB, NEW_WIDGET);
-const STANDUP = "!standup:dev.local";
+import { expect, LAB, NEW, NEW_WIDGET, STANDUP, test } from "./host";
 
 test("no rooms yet: the RoomsArea is empty, a new room panel has no room to offer; “Create a room” adds and selects the first room", async ({ host }) => {
   await host.populate("empty");
-  const view = host.page.getByTestId("devbackend-view");
+  const view = host.devBackendView;
   await expect(view.getByText("No mocked rooms yet")).toBeVisible();
   await expect(host.panels).toHaveCount(0);
   await expect(host.page.getByText("No room panel open")).toBeVisible();
@@ -30,7 +27,7 @@ test("no rooms yet: the RoomsArea is empty, a new room panel has no room to offe
 
 test("room dropdown: select a room, add a room and open it in a new room panel", async ({ host }) => {
   await host.populate("two-rooms");
-  const view = host.page.getByTestId("devbackend-view");
+  const view = host.devBackendView;
   await view.getByRole("button", { name: /^Widget lab !lab/ }).click();
   const rooms = host.page.getByRole("listbox", { name: "Mocked rooms" });
   await expect(rooms.getByRole("option")).toHaveText([/Widget lab/, /Standup/]);
@@ -58,7 +55,7 @@ test("room dropdown: select a room, add a room and open it in a new room panel",
 
 test("remove room: its room panel closes and the next room is selected", async ({ host }) => {
   await host.populate("two-rooms", { open: [{ room: LAB }, { room: STANDUP }] });
-  const view = host.page.getByTestId("devbackend-view");
+  const view = host.devBackendView;
   await expect(host.panels).toHaveCount(2);
   await view.getByRole("button", { name: "Room actions" }).click();
   await host.page.getByRole("menuitem", { name: /Remove room/ }).click();
@@ -71,7 +68,7 @@ test("remove room: its room panel closes and the next room is selected", async (
 
 test("clear room: the events and the widgets are gone, the room stays", async ({ host }) => {
   await host.populate("lab", { open: [{ room: LAB }] });
-  const view = host.page.getByTestId("devbackend-view");
+  const view = host.devBackendView;
   await expect(host.panels.getByRole("button", { name: "Open New test widget" })).toBeVisible();
   await view.getByRole("button", { name: "Room actions" }).click();
   await host.page.getByRole("menuitem", { name: /Clear room/ }).click();
@@ -87,8 +84,8 @@ test("clear room: the events and the widgets are gone, the room stays", async ({
 
 test("widget host behavior: the same for every room; without auto-approve the widget asks for permissions", async ({ host }) => {
   await host.populate("two-rooms", { behavior: { autoApproveCapabilities: true }, open: [{ room: LAB }] });
-  const view = host.page.getByTestId("devbackend-view");
-  const side = host.page.getByTestId("sidepanel");
+  const view = host.devBackendView;
+  const side = host.sidePanel;
   await side.getByRole("button", { name: "Client Backend Tool" }).click();
   // "Widget host behavior" is open when the tool opens; the room box keeps its room dev tools.
   const client = host.page.getByTestId("devbackend-client");
@@ -108,7 +105,7 @@ test("widget host behavior: the same for every room; without auto-approve the wi
   await expect(autoApprove).not.toBeChecked();
   expect((await host.main()).roomTools?.behavior.autoApproveCapabilities).toBe(false);
   await host.button("Open New test widget").click();
-  await expect(host.page.getByTestId("capability-prompt")).toBeVisible();
+  await expect(host.prompt).toBeVisible();
   expect((await host.main()).widgets[NEW].prompts.capabilities).toBeDefined();
 
   // By keyboard: the control that replaces the pressed one takes the focus.
@@ -124,7 +121,7 @@ test("widget host behavior: the same for every room; without auto-approve the wi
 test("widget host behavior: “fail sends” answers the widget's send with an error", async ({ host }) => {
   await host.populate("lab", { behavior: { autoApproveCapabilities: true }, open: [{ room: LAB, widgets: [NEW_WIDGET] }] });
   await host.ready(NEW);
-  await host.page.getByTestId("sidepanel").getByRole("button", { name: "Client Backend Tool" }).click();
+  await host.sidePanel.getByRole("button", { name: "Client Backend Tool" }).click();
   const view = host.page.getByTestId("devbackend-client");
   await view.getByRole("checkbox", { name: "Fail sends" }).click();
   await expect(view.getByRole("checkbox", { name: "Fail sends" })).toBeChecked();
@@ -142,7 +139,7 @@ test("widget host behavior: “fail sends” answers the widget's send with an e
 test("to-device: a message sent from the view reaches the widget, one sent by the widget is listed", async ({ host }) => {
   await host.populate("lab", { behavior: { autoApproveCapabilities: true }, open: [{ room: LAB, widgets: [NEW_WIDGET] }] });
   await host.ready(NEW);
-  await host.page.getByTestId("sidepanel").getByRole("button", { name: "Client Backend Tool" }).click();
+  await host.sidePanel.getByRole("button", { name: "Client Backend Tool" }).click();
   const view = host.page.getByTestId("devbackend-client");
   await view.getByRole("button", { name: "Widget host behavior" }).click();
   await view.getByRole("button", { name: /^To-device messages/ }).click();
@@ -180,7 +177,7 @@ test("to-device: a message sent from the view reaches the widget, one sent by th
 
 test("media tool: open (closing the client tool), upload a file, copy its MXC URI, minimise", async ({ host }) => {
   await host.populate("lab");
-  const side = host.page.getByTestId("sidepanel");
+  const side = host.sidePanel;
   await expect(side.getByRole("button", { name: "Client Backend Tool" })).toBeVisible();
   await expect(side.getByRole("button", { name: /Media Backend Tool/ })).toContainText("3 files");
   await host.story("sidepanel-devbackendview--tools-collapsed");
@@ -217,7 +214,7 @@ test("media tool: open (closing the client tool), upload a file, copy its MXC UR
   await expect(uploaded).toContainText("text/plain · 11 B · uploaded here");
 
   await uploaded.getByRole("button", { name: "Copy the MXC URI of upload.txt" }).click();
-  await expect(host.page.getByTestId("toast")).toContainText("MXC URI copied");
+  await expect(host.toast).toContainText("MXC URI copied");
   const mxc = await host.page.evaluate(() => navigator.clipboard.readText());
   expect(mxc).toMatch(/^mxc:\/\//);
   await expect(uploaded).toContainText(mxc);
@@ -230,7 +227,7 @@ test("media tool: open (closing the client tool), upload a file, copy its MXC UR
 test("media tool: a file the widget uploads is listed with the widget as uploader", async ({ host }) => {
   await host.populate("lab", { behavior: { autoApproveCapabilities: true }, open: [{ room: LAB, widgets: [NEW_WIDGET] }] });
   await host.ready(NEW);
-  await host.page.getByTestId("sidepanel").getByRole("button", { name: /Media Backend Tool/ }).click();
+  await host.sidePanel.getByRole("button", { name: /Media Backend Tool/ }).click();
   const files = host.page.getByTestId("devbackend-media").getByRole("list", { name: "Media files" }).getByRole("listitem");
   const seeded = await files.count();
 

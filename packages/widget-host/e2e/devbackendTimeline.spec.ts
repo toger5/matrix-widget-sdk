@@ -1,16 +1,14 @@
 /** DevBackendView › the Timeline panel of the room dev tools: the predefined forms, the raw JSON form, delayed events and a widget's pagination request. Every sent event reaches the store and a running widget. */
-import { expect, type Host, LAB, NEW_WIDGET, test, widgetId } from "./host";
+import { expect, type Host, LAB, NEW, NEW_WIDGET, roomToolsToggle, test } from "./host";
 
-const NEW = widgetId(LAB, NEW_WIDGET);
 type TimelineEvent = { eventType: string; sender: string; content: Record<string, unknown> };
 const last = async (host: Host) => ((await host.store(LAB)).timeline as TimelineEvent[]).at(-1)!;
 const forwards = async (host: Host) => (await host.actions(NEW, "toWidget")).filter((a) => a.endsWith("forward_event")).length;
 
-/** The toggle of a panel in the bar of the room dev tools ("Timeline, 12"). */
-const toggle = (host: Host, panel: "State" | "Timeline") => host.page.getByTestId("devbackend-view").getByRole("toolbar", { name: "Room dev tools" }).getByRole("button", { name: new RegExp(`^${panel}(,|$)`) });
+const toggle = (host: Host, panel: "State" | "Timeline") => roomToolsToggle(host.devBackendView, panel);
 /** Chooses a form in the menu of "Send event". */
 const eventForm = async (host: Host, name: "Message" | "Sticker" | "RTC member" | "Image / audio" | "Raw JSON") => {
-  await host.page.getByTestId("devbackend-view").getByRole("button", { name: /^Send event form, / }).click();
+  await host.devBackendView.getByRole("button", { name: /^Send event form, / }).click();
   await host.page.getByRole("menu", { name: "Send event form" }).getByRole("menuitemradio", { name, exact: true }).click();
 };
 
@@ -21,7 +19,7 @@ test.beforeEach(async ({ host }) => {
   await toggle(host, "State").click();
   await toggle(host, "Timeline").click();
   await toggle(host, "Timeline").click();
-  await host.page.getByTestId("devbackend-view").getByRole("button", { name: "Send event", exact: true }).click();
+  await host.devBackendView.getByRole("button", { name: "Send event", exact: true }).click();
 });
 
 /** The widget only asks to be told about messages and reactions: ask for another event type too. */
@@ -34,7 +32,7 @@ async function follow(host: Host, type: string) {
 }
 
 test("message form: the event is added to the timeline and forwarded to the widget", async ({ host }) => {
-  const view = host.page.getByTestId("devbackend-view");
+  const view = host.devBackendView;
   const form = view.getByRole("form", { name: "Send event" });
   const events = view.getByRole("list", { name: "Timeline events" }).getByRole("listitem");
   const count = await events.count();
@@ -60,7 +58,7 @@ test("message form: the event is added to the timeline and forwarded to the widg
 });
 
 test("sticker form: needs an mxc:// URI, then sends m.sticker", async ({ host }) => {
-  const view = host.page.getByTestId("devbackend-view");
+  const view = host.devBackendView;
   const form = view.getByRole("form", { name: "Send event" });
   await follow(host, "m.sticker");
   const forwarded = await forwards(host);
@@ -78,7 +76,7 @@ test("sticker form: needs an mxc:// URI, then sends m.sticker", async ({ host })
 });
 
 test("RTC member form: sends a membership, and an empty content when not joined", async ({ host }) => {
-  const view = host.page.getByTestId("devbackend-view");
+  const view = host.devBackendView;
   const form = view.getByRole("form", { name: "Send event" });
   await follow(host, "org.matrix.msc4143.rtc.member");
   const forwarded = await forwards(host);
@@ -95,7 +93,7 @@ test("RTC member form: sends a membership, and an empty content when not joined"
 });
 
 test("image / audio form: sends an m.room.message with the chosen message type", async ({ host }) => {
-  const view = host.page.getByTestId("devbackend-view");
+  const view = host.devBackendView;
   const form = view.getByRole("form", { name: "Send event" });
   const forwarded = await forwards(host);
 
@@ -109,7 +107,7 @@ test("image / audio form: sends an m.room.message with the chosen message type",
 });
 
 test("raw JSON form: invalid JSON shows an error and sends nothing, a valid event is sent", async ({ host }) => {
-  const view = host.page.getByTestId("devbackend-view");
+  const view = host.devBackendView;
   const form = view.getByRole("form", { name: "Send event" });
   const editor = form.getByLabel("Event (JSON)");
   const count = (await host.store(LAB)).timeline.length;
@@ -135,7 +133,7 @@ test("raw JSON form: invalid JSON shows an error and sends nothing, a valid even
 });
 
 test("delayed event: it is listed under “Scheduled”; “Cancel” drops it and “Send now” sends it", async ({ host }) => {
-  const view = host.page.getByTestId("devbackend-view");
+  const view = host.devBackendView;
   const form = view.getByRole("form", { name: "Send event" });
   const scheduled = view.getByRole("list", { name: "Scheduled events" }).getByRole("listitem");
   const count = (await host.store(LAB)).timeline.length;
@@ -167,12 +165,12 @@ test("delayed event: it is listed under “Scheduled”; “Cancel” drops it a
 });
 
 test("a delayed event of another sender is refused", async ({ host }) => {
-  const form = host.page.getByTestId("devbackend-view").getByRole("form", { name: "Send event" });
+  const form = host.devBackendView.getByRole("form", { name: "Send event" });
   await form.getByLabel("Sender").fill("@bob:dev.local");
   await form.getByLabel("Body").fill("Not mine");
   await form.getByRole("checkbox", { name: "Send delayed" }).check();
   await form.getByRole("button", { name: "Schedule" }).click();
-  await expect(host.page.getByTestId("toast")).toContainText("a delayed event is always sent by @alice:dev.local");
+  await expect(host.toast).toContainText("a delayed event is always sent by @alice:dev.local");
   expect((await host.store(LAB)).delayed).toHaveLength(0);
 });
 
@@ -190,7 +188,7 @@ async function logged<T>(host: Host, id: string, label: string): Promise<T> {
 
 test("a widget's pagination waits at the top of the events for “Resolve”: the generated messages reach the widget, then the start of the room", async ({ host }) => {
   type Read = { events: { event_id: string; type: string; content: { msgtype?: string } }[]; pagination: string };
-  const view = host.page.getByTestId("devbackend-view");
+  const view = host.devBackendView;
   const widget = host.frame(NEW);
   const log = widget.locator("#log");
   const request = view.getByRole("form", { name: "Pagination request" });

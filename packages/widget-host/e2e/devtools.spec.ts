@@ -2,9 +2,8 @@
 import type { Locator } from "@playwright/test";
 
 import type { WidgetDevToolsLayout } from "../src/appViewModel";
-import { capabilityBoxes, expect, type Host, LAB, LEGACY_WIDGET, NEW_WIDGET, test, widgetId } from "./host";
+import { capabilityBoxes, expect, type Host, LAB, LEGACY_WIDGET, NEW, NEW_WIDGET, test } from "./host";
 
-const NEW = widgetId(LAB, NEW_WIDGET);
 const SEND_MESSAGE = "widget:org.matrix.mscXXXX.send_event.timeline:m.room.message";
 
 const devTools = (host: Host): Locator => host.page.getByTestId("widget-dev-tools");
@@ -15,7 +14,6 @@ const dock = (host: Host, side: "left" | "top" | "bottom" | "right"): Locator =>
 /** The open panels, left to right (top to bottom when docked to a side). */
 const openPanels = (host: Host) => devTools(host).locator("section[data-dev-panel]").evaluateAll((els) => els.map((el) => el.getAttribute("data-dev-panel")));
 const layout = async (host: Host): Promise<WidgetDevToolsLayout> => Object.values((await host.main()).workspaces)[0].devTools[NEW];
-const approved = (host: Host) => host.page.evaluate((i) => window.widgetHost!.driverSnapshot(i)?.approved ?? [], NEW);
 const box = async (locator: Locator) => (await locator.boundingBox())!;
 
 test.beforeEach(async ({ host }) => {
@@ -248,7 +246,7 @@ test("driver panel: revoke one capability and all (confirm modal), add a capabil
   const driver = host.page.getByTestId("devtools-driver");
   const held = driver.getByRole("list", { name: "Approved capabilities" }).getByRole("listitem");
   const modal = host.page.getByRole("alertdialog");
-  const all = (await approved(host)).length;
+  const all = (await host.approved(NEW)).length;
   await expect(held).toHaveCount(all);
   await expect(driver).toContainText(`Approved capabilities ${all}`);
   await host.story("widget-devtools--driver");
@@ -259,12 +257,12 @@ test("driver panel: revoke one capability and all (confirm modal), add a capabil
   await expect(modal).toContainText("Revoke this capability of New test widget?");
   await modal.getByRole("button", { name: "Cancel" }).click();
   await expect(modal).toHaveCount(0);
-  expect(await approved(host)).toContain(SEND_MESSAGE);
+  expect(await host.approved(NEW)).toContain(SEND_MESSAGE);
 
   await row.getByRole("button", { name: "Revoke this capability" }).click();
   await modal.getByRole("button", { name: "Revoke" }).click();
   await expect(held).toHaveCount(all - 1);
-  expect(await approved(host)).not.toContain(SEND_MESSAGE);
+  expect(await host.approved(NEW)).not.toContain(SEND_MESSAGE);
   // The widget is told, and its next send fails.
   await expect(host.frame(NEW).locator("#log")).toContainText("update_capabilities");
   await host.frame(NEW).getByRole("button", { name: "send m.room.message" }).click();
@@ -276,19 +274,19 @@ test("driver panel: revoke one capability and all (confirm modal), add a capabil
   await modal.getByRole("button", { name: "Revoke" }).click();
   await expect(held).toHaveCount(0);
   await expect(driver).toContainText("The widget holds no capability that you approved.");
-  expect(await approved(host)).toEqual([]);
+  expect(await host.approved(NEW)).toEqual([]);
 
   // "Add" pre-approves: the capability is granted without a prompt the next time the widget asks for it.
   await host.dispatch({ type: "mock/setBehavior", behavior: { autoApproveCapabilities: false } });
   await driver.getByRole("textbox", { name: "Add capability" }).fill(SEND_MESSAGE);
   await driver.getByRole("button", { name: "Add" }).click();
   await expect(driver.getByRole("list", { name: "Auto-approved capabilities" }).getByRole("listitem")).toHaveText(/send_event\.timeline:m\.room\.message/);
-  await host.frame(NEW).locator("button", { hasText: "request_capabilities" }).dispatchEvent("click");
-  const prompt = host.page.getByTestId("capability-prompt");
+  await host.press(NEW, "request_capabilities");
+  const prompt = host.prompt;
   // The prompt asks about the rest only; denying it still leaves the widget with the pre-approved capability.
   await expect(capabilityBoxes(prompt)).toHaveCount(all - 1);
   await prompt.getByRole("button", { name: "Deny all" }).click();
-  await expect.poll(() => approved(host)).toEqual([SEND_MESSAGE]);
+  await expect.poll(() => host.approved(NEW)).toEqual([SEND_MESSAGE]);
   await expect(driver.getByRole("list", { name: "Denied capabilities" }).getByRole("listitem")).toHaveCount(all - 1);
   await host.frame(NEW).getByRole("button", { name: "send m.room.message" }).click();
   await expect.poll(async () => (await host.store(LAB)).timeline.map((e) => (e.content as { body?: string }).body)).toContain("hello from the new widget");
@@ -404,8 +402,7 @@ test("the dev tools layout survives moving the widget into the PiP panel and bac
   expect(before).toMatchObject({ open: true, dock: "left", panels: [{ panel: "messages" }, { panel: "driver" }] });
   const token = await host.token(NEW);
 
-  await host.frame(NEW).getByRole("button", { name: "set_always_on_screen true" }).click();
-  await expect.poll(async () => (await host.main()).widgets[NEW].alwaysOnScreen).toBe(true);
+  await host.alwaysOnScreen(NEW);
   await host.tab(/Legacy test widget/).click();
   const pipBox = host.pip.getByTestId("pip-box");
   await expect(pipBox.getByRole("toolbar", { name: "Widget dev tools" })).toHaveAttribute("aria-orientation", "vertical");
@@ -426,8 +423,8 @@ test("the reload button starts the widget again: new iframe and driver, the log 
   await dock(host, "bottom").click();
   const before = await layout(host);
   const token = await host.token(NEW);
-  const generation = (await host.main()).widgets[NEW].generation!;
-  expect(await approved(host)).toContain(SEND_MESSAGE);
+  const generation = (await host.generation(NEW))!;
+  expect(await host.approved(NEW)).toContain(SEND_MESSAGE);
   const pressedAt = await host.page.evaluate(() => Date.now());
 
   // By keyboard: the reload button sits between the panel toggles and the dock group of the toolbar.
@@ -439,7 +436,7 @@ test("the reload button starts the widget again: new iframe and driver, the log 
   await expect(reload).toBeFocused();
   await expect(reload).toHaveAttribute("tabindex", "0");
   await host.page.keyboard.press("Enter");
-  await expect.poll(async () => (await host.main()).widgets[NEW].generation).toBeGreaterThan(generation);
+  await expect.poll(() => host.generation(NEW)).toBeGreaterThan(generation);
   await expect(reload).toBeFocused();
   await host.ready(NEW);
   await expect(bar(host).getByRole("img", { name: "Widget is ready" })).toBeVisible();
@@ -448,7 +445,7 @@ test("the reload button starts the widget again: new iframe and driver, the log 
 
   // The new driver negotiates the capabilities again (auto-approved by the seed's behavior), and the
   // message log only holds what happened since the reload.
-  await expect.poll(() => approved(host)).toContain(SEND_MESSAGE);
+  await expect.poll(() => host.approved(NEW)).toContain(SEND_MESSAGE);
   const timestamps = await host.page.evaluate((i) => window.widgetHost!.devTools(i)!.messages.map((m) => m.timestamp), NEW);
   expect(timestamps.length).toBeGreaterThan(0);
   expect(Math.min(...timestamps)).toBeGreaterThanOrEqual(pressedAt);
@@ -457,41 +454,35 @@ test("the reload button starts the widget again: new iframe and driver, the log 
 test("a reload decides nothing for the user: an open prompt and denied capabilities are asked again", async ({ host }) => {
   // Without auto-approval and without remembering (the DevBackend's default behavior).
   await host.populate("lab", { sidePanel: null, open: [{ room: LAB, widgets: [NEW_WIDGET], active: NEW_WIDGET }] });
-  const prompt = host.page.getByTestId("capability-prompt");
+  const prompt = host.prompt;
   await expect(prompt).toBeVisible();
   await host.button("Dev tools of New test widget").click();
   const reload = async () => {
-    const generation = (await host.main()).widgets[NEW].generation!;
+    const generation = (await host.generation(NEW))!;
     await bar(host).getByRole("button", { name: "Reload the widget" }).click();
-    await expect.poll(async () => (await host.main()).widgets[NEW].generation).toBeGreaterThan(generation);
+    await expect.poll(() => host.generation(NEW)).toBeGreaterThan(generation);
   };
 
   // Reloaded while the prompt is open: the new driver asks again, nothing is granted meanwhile.
   await reload();
   await expect.poll(() => host.actions(NEW, "fromWidget")).toContainEqual(expect.stringMatching(/\.request_capabilities$/));
   await expect(prompt).toBeVisible();
-  expect(await approved(host)).toEqual([]);
+  expect(await host.approved(NEW)).toEqual([]);
 
   await prompt.getByRole("button", { name: "Deny all" }).click();
   await host.ready(NEW);
-  expect(await approved(host)).toEqual([]);
+  expect(await host.approved(NEW)).toEqual([]);
 
   // What was denied (and not remembered) is not granted by the restart: the user is asked again.
   await reload();
   await expect.poll(() => host.actions(NEW, "fromWidget")).toContainEqual(expect.stringMatching(/\.request_capabilities$/));
   await expect(prompt).toBeVisible();
-  expect(await approved(host)).toEqual([]);
+  expect(await host.approved(NEW)).toEqual([]);
 });
 
 test("a reload loads the current URL of the widget's state event", async ({ host }) => {
   const url = "http://localhost:5175/new/?changed=1";
-  await host.dispatch({ type: "roomTools/sendState", roomId: LAB, event: { type: "m.widget", stateKey: "widget-1", content: { name: "New test widget", url, uses_widget_api: true } } });
-  const eventUrl = async () => {
-    const rooms = (await host.main()).data.rooms;
-    const event = rooms.status === "ready" ? rooms.value.find((r) => r.id === LAB)?.widgetEvents?.find((e) => e.type === "m.widget") : undefined;
-    return event?.content.url;
-  };
-  await expect.poll(eventUrl).toBe(url);
+  await host.repointNewWidget(url);
   // The running widget keeps its URL (finding widget-url-changes-while-running) until it is reloaded.
   await expect(host.iframe(NEW)).toHaveAttribute("src", "http://localhost:5175/new/");
 

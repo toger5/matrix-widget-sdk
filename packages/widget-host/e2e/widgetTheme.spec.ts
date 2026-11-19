@@ -6,7 +6,7 @@
 import type { FrameLocator } from "@playwright/test";
 
 import type { HostSeed } from "../src/app/controller";
-import { expect, type Host, LAB, LEGACY_WIDGET, NEW_WIDGET, test, widgetId } from "./host";
+import { expect, type Host, LAB, LEGACY, LEGACY_WIDGET, NEW, NEW_WIDGET, test, widgetId } from "./host";
 
 /** A page that knows nothing of the widget API, served by the test. It opts into both schemes and draws with system colours only. */
 const PLAIN = "http://plain.widget.test/";
@@ -93,7 +93,6 @@ test("behind the compat wrapper the page follows the theme by CSS too", async ({
 });
 
 test("a loading widget already sees the theme and has its size, but cannot be seen, clicked or tabbed to", async ({ host }) => {
-  const NEW = widgetId(LAB, NEW_WIDGET);
   await host.populate({
     userId: "@alice:dev.local",
     // `autostart=0`: the test widget does not send notify_ready by itself.
@@ -124,8 +123,6 @@ test("a loading widget already sees the theme and has its size, but cannot be se
 });
 
 test("a theme change is pushed as update_theme to the widgets that hold the capability, an OS change too while on System", async ({ host }) => {
-  const NEW = widgetId(LAB, NEW_WIDGET);
-  const LEGACY = widgetId(LAB, LEGACY_WIDGET);
   await host.populate("lab", {
     settings: { theme: "light" },
     sidePanel: "settings",

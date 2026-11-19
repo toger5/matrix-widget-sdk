@@ -1,8 +1,9 @@
 /**
  * Puts the controller and the views together. Rendered into the shadow root of the app's host
  * element; the widget iframes are rendered into the host element itself (its light DOM), where
- * the `<slot>`s of the views pick them up. See "Moving widgets without a reload" in
- * `implementationPlan.md`.
+ * the `<slot>`s of the views pick them up. Measured in Chromium, Firefox and WebKit: moving an
+ * iframe in the DOM (also between shadow trees) reloads it, a light-DOM iframe shown through a
+ * `<slot>` keeps its state, and WebKit has no `Element.moveBefore()`.
  */
 import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
@@ -17,6 +18,7 @@ import { DEV_ACCOUNT_ID, type AppController } from "./controller";
 
 const NARROW = "(max-width: 900px)";
 const noSubscription = () => () => {};
+const failed = (e: unknown) => ({ status: "error" as const, error: e instanceof Error ? e.message : String(e) });
 
 function useNarrow(): boolean {
   const query = useMemo(() => matchMedia(NARROW), []);
@@ -54,7 +56,7 @@ function viewEnv(controller: AppController, narrow: boolean): ViewEnv {
         const load = () =>
           session.roomDetails(roomId).then(
             (value) => !cancelled && setDetails({ status: "ready", value }),
-            (e: unknown) => !cancelled && setDetails({ status: "error", error: e instanceof Error ? e.message : String(e) }),
+            (e: unknown) => !cancelled && setDetails(failed(e)),
           );
         void load();
         const stop = session.onRoomsChanged(() => void load());
@@ -99,7 +101,7 @@ function viewEnv(controller: AppController, narrow: boolean): ViewEnv {
               const value = await session.timeline(roomId);
               if (!cancelled) setTimeline({ status: "ready", value });
             } catch (e) {
-              if (!cancelled) setTimeline({ status: "error", error: e instanceof Error ? e.message : String(e) });
+              if (!cancelled) setTimeline(failed(e));
             }
           } while (again && !cancelled);
           running = false;
@@ -128,7 +130,7 @@ function viewEnv(controller: AppController, narrow: boolean): ViewEnv {
         let cancelled = false;
         session.roomState(roomId).then(
           (value) => !cancelled && setState({ status: "ready", value }),
-          (e: unknown) => !cancelled && setState({ status: "error", error: e instanceof Error ? e.message : String(e) }),
+          (e: unknown) => !cancelled && setState(failed(e)),
         );
         return () => {
           cancelled = true;
@@ -146,12 +148,10 @@ function viewEnv(controller: AppController, narrow: boolean): ViewEnv {
 }
 
 /**
- * The iframes of the running widgets: one flat list in the light DOM of the host element, keyed
- * by widget (and start), in the order the widgets were started. An iframe is never moved; the
- * `<slot name="widget-…">` a view renders decides where it is shown. Its `src`, `sandbox` and `allow`
- * are what the driver said (`WidgetInstanceViewModel.iframe`, `WidgetHostPlatform.loadIframe`; the
- * attributes are made from the widget's webview capabilities, strict unless granted): when they
- * change the driver says so again, which is a new generation, so a new iframe.
+ * The iframes of the running widgets: one flat list in the light DOM of the host element, keyed by
+ * widget and generation, never moved; the `<slot name="widget-…">` a view renders decides where one
+ * is shown. `src`, `sandbox` and `allow` are what the driver said (`WidgetInstanceViewModel.iframe`);
+ * when they change, the driver says so again: a new generation, so a new iframe.
  */
 function WidgetIframes({ controller, widgets }: { controller: AppController; widgets: WidgetInstanceViewModel[] }) {
   return widgets.flatMap(({ id, generation, iframe, widget, load }) =>

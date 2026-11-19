@@ -50,7 +50,7 @@ export const initials = (name: string) =>
     .join("");
 
 /** A stable hue (0..359) for an id or a name, for avatars without an image. */
-export function hueOf(text: string): number {
+function hueOf(text: string): number {
   let hash = 0;
   for (let i = 0; i < text.length; i++) hash = (hash * 31 + text.charCodeAt(i)) >>> 0;
   return hash % 360;

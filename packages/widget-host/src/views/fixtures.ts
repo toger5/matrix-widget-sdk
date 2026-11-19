@@ -44,11 +44,11 @@ export const WIDGET_EVENTS = {
   stream: widgetEvent("stream", "Livestream", "stream.example.org"),
 };
 /** `widgetKey()` of a fixture widget. */
-export const wk = (key: keyof typeof WIDGET_EVENTS) => `m.widget/${key}`;
+const wk = (key: keyof typeof WIDGET_EVENTS) => `m.widget/${key}`;
 
 /** A local widget ("Add widget", only in this host): a widget in development. Its key is `LOCAL_WIDGET_KEY`. */
 export const LOCAL_WIDGET: StateEvent = { type: "m.widget", state_key: "proto", content: { name: "Poll prototype", url: "http://localhost:5180/", uses_widget_api: true } };
-export const LOCAL_WIDGET_KEY = "local:m.widget/proto";
+const LOCAL_WIDGET_KEY = "local:m.widget/proto";
 
 export const ROOMS = {
   design: { id: "!hGtVzqNmPa:example.org", name: "Design crit", memberCount: 12, widgetEvents: [WIDGET_EVENTS.call, WIDGET_EVENTS.board, WIDGET_EVENTS.poll, WIDGET_EVENTS.notes] },
@@ -315,7 +315,7 @@ export const MOCKED_ROOM_DATA: MockedRoomData = {
 };
 
 /** A time today (or yesterday, `daysAgo` 1) at the local time `hh:mm:ss`, as `origin_server_ts`. */
-export function localTime(time: string, daysAgo = 0): number {
+function localTime(time: string, daysAgo = 0): number {
   const [h, m, sec] = time.split(":").map(Number);
   const now = new Date();
   return new Date(now.getFullYear(), now.getMonth(), now.getDate() - daysAgo, h, m, sec).getTime();

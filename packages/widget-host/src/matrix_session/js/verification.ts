@@ -11,24 +11,9 @@ import {
 } from "matrix-js-sdk/lib/crypto-api";
 
 import type { EmojiVerification } from "../../session";
-import { verificationCancelReason } from "../verificationCancel";
+import { awaitVerified, verificationCancelReason } from "../shared";
 
-/**
- * Device verification on a matrix-js-sdk client: whether this device is verified, a listener for
- * changes of that, the recovery key, and the emoji (SAS) flow with another device of the account.
- * Free functions of the client, apart from the session, so they can be tested with a faked one.
- */
-
-export interface EmojiVerificationOptions {
-  /** How long the signature of the verifying device may take to arrive after both sides confirmed. */
-  verifiedTimeoutMs?: number;
-  /** How often `needsVerification` is asked meanwhile. */
-  pollMs?: number;
-}
-
-/** How long the signature of the verifying device may take to arrive after an emoji verification. */
-const VERIFIED_TIMEOUT_MS = 20_000;
-const POLL_MS = 500;
+/** Device verification on a matrix-js-sdk client (`LiveSession`), as free functions so tests can fake the client. */
 
 const NO_CRYPTO = "End-to-end encryption is not set up in this client.";
 const NO_SECRET_STORAGE = "This account has no secret storage, so it has no recovery key. Verify this device with another device.";
@@ -157,8 +142,7 @@ function accepted(request: VerificationRequest): Promise<void> {
  * request, the one that accepts it compares emoji with this one and then signs this device.
  * The secrets (cross-signing keys, backup key) follow from that device on their own.
  */
-export async function startEmojiVerification(client: MatrixClient, options: EmojiVerificationOptions = {}): Promise<EmojiVerification> {
-  const { verifiedTimeoutMs = VERIFIED_TIMEOUT_MS, pollMs = POLL_MS } = options;
+export async function startEmojiVerification(client: MatrixClient, options: { pollMs?: number } = {}): Promise<EmojiVerification> {
   const crypto = client.getCrypto();
   if (!crypto) throw new Error(NO_CRYPTO);
   const request = await crypto.requestOwnUserVerification();
@@ -212,14 +196,8 @@ export async function startEmojiVerification(client: MatrixClient, options: Emoj
       await emoji;
       await sas!.confirm();
       await Promise.race([done, ended]);
-      // This device is verified once the other device's signature of it has come down the sync,
-      // which updates the client's copy of the own devices: no download while waiting.
-      const deadline = Date.now() + verifiedTimeoutMs;
-      while (!(await crossSigned(client))) {
-        if (abandoned) throw new Error("The verification was cancelled.");
-        if (Date.now() > deadline) throw new Error("The emoji were confirmed, but this device is still not verified.");
-        await new Promise((resolve) => setTimeout(resolve, pollMs));
-      }
+      // `crossSigned`, not `needsVerification`: reads the stored devices, no download while waiting.
+      await awaitVerified(() => crossSigned(client), () => abandoned, options.pollMs);
       await crypto.checkKeyBackupAndEnable().catch((e: unknown) => console.warn("checking the key backup failed", e));
     },
     cancel: (mismatch) => {

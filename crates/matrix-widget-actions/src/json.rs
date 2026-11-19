@@ -2,29 +2,19 @@ use std::ops::{Deref, DerefMut};
 
 use serde::{Deserialize, Serialize};
 
-/// A thin newtype around [`serde_json::Value`].
-///
-/// It exists so that arbitrary JSON can cross the UniFFI boundary (where it is represented as a
-/// JSON string) while still behaving like a plain `serde_json::Value` in Rust.
+/// A [`serde_json::Value`] that crosses UniFFI as a JSON string (a plain JS value in TypeScript,
+/// see `uniffi.toml`).
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct JsonValue(pub serde_json::Value);
 
 impl JsonValue {
-    pub fn null() -> Self {
-        Self(serde_json::Value::Null)
-    }
-
     pub fn object() -> Self {
         Self(serde_json::Value::Object(Default::default()))
     }
 
     pub fn into_inner(self) -> serde_json::Value {
         self.0
-    }
-
-    pub fn parse(json: &str) -> Result<Self, serde_json::Error> {
-        serde_json::from_str(json).map(Self)
     }
 }
 

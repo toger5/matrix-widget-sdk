@@ -2,28 +2,21 @@ import { EncryptionState, MembershipState_Tags, PowerLevel_Tags, stateEventTypeF
 
 import type { AccountInfo, RawEvent, RoomDetails, RoomExport, RoomMember } from "../../session";
 import { WIDGET_EVENT_TYPES } from "../../widgetStateEvent";
+import { EXPORT_MAX_PAGES, EXPORT_PAGE_SIZE, LOAD_MEMBERS_UP_TO, MEMBER_LIMIT, roleFor } from "../shared";
 
 /**
- * What the AccountView, the RoomOverview, the RoomTimeline, the Dev tools and "Copy to DevBackend" read from a matrix-rust-sdk
- * client. Functions of the client and the room, apart from the session, so they can be tested
- * with faked ones. `online: false` (the session is suspended) keeps them to what the SDK has in
- * its store, as far as the bindings say which calls make a request.
+ * What the views read from a matrix-rust-sdk client (`LiveSession`), as free functions so tests can
+ * fake the client. `online: false` (suspended) keeps them to the SDK's store, as far as the
+ * bindings say which calls make a request.
  */
 
-/** How many members `roomDetails` returns. */
-export const MEMBER_LIMIT = 30;
-/** Up to this many joined members, `roomDetails` loads the whole member list from the homeserver. */
-export const LOAD_MEMBERS_UP_TO = 500;
 const MEMBER_CHUNK = 500;
-/** How many events one pagination of `exportRoom` asks for, and how many it makes at most. */
-const EXPORT_PAGE_SIZE = 100;
-const EXPORT_MAX_PAGES = 20;
 
 /**
  * The state event types `roomState` reads from the SDK's store when the homeserver cannot be
  * asked for the whole state: the store can only be read by type.
  */
-export const KNOWN_STATE_TYPES = [
+const KNOWN_STATE_TYPES = [
   "m.room.create",
   "m.room.member",
   "m.room.power_levels",
@@ -44,12 +37,6 @@ export const KNOWN_STATE_TYPES = [
   "org.matrix.msc3401.call.member",
   ...WIDGET_EVENT_TYPES,
 ];
-
-export function roleFor(powerLevel: number): string | undefined {
-  if (powerLevel >= 100) return "Admin";
-  if (powerLevel >= 50) return "Moderator";
-  return undefined;
-}
 
 /** A room creator of room version 12 has infinite power. */
 const powerOf = (member: SdkRoomMember): number => (member.powerLevel.tag === PowerLevel_Tags.Value ? Number(member.powerLevel.inner.value) : Infinity);
@@ -79,7 +66,6 @@ export async function roomDetails(room: RoomLike, online = true): Promise<RoomDe
   // Not known until the SDK has asked the homeserver once.
   if (encryption === EncryptionState.Unknown && online) encryption = await room.latestEncryptionState().catch(() => EncryptionState.Unknown);
 
-  // TODO-FINDING room-details-member-loading - showing the "first 30" members sorted by role needs the whole member list, one /members request that is large in big rooms. Options: always load, never load (show whoever the SDK has stored), load up to a size. Done: load when the room has at most LOAD_MEMBERS_UP_TO (500) joined members, else show the stored ones.
   const iterator = await (online && memberCount <= LOAD_MEMBERS_UP_TO ? room.members().catch(() => room.membersNoSync()) : room.membersNoSync()).catch((e: unknown) => {
     console.warn("reading the room members failed", e);
     return undefined;
@@ -119,7 +105,7 @@ export function loadOlderEvents(room: RoomLike, count: number): Promise<boolean>
  * decrypted late, and with `reset` when it dropped its events (`subscribeToTimelineChangesRaw`, an
  * addition to the ffi). A pagination resolves `loadOlderEvents` instead.
  */
-// TODO-FINDING rust-late-decryption-not-reported - The event cache reports a late decryption (and a reset) through `subscribeToTimelineChangesRaw`, but not a redaction it applies to a cached event in place: the RoomTimeline shows such an event as it was until the next sync of the room adds an event. Options: report replaced events of every kind in the SDK addition, or re-read the timeline on a timer. Not verified against a homeserver: when the SDK decrypts late, and whether a redaction redacts the cached event before the redaction event is reported.
+// TODO-FINDING rust-late-decryption-not-reported - a redaction the event cache applies in place is not reported.
 export function onTimelineChanged(room: RoomLike, listener: (reset?: boolean) => void): () => void {
   const events = room.subscribeToEventsRaw({ onEvents: () => listener() });
   const changes = room.subscribeToTimelineChangesRaw({ onReset: () => listener(true), onDecrypted: () => listener() });
@@ -165,7 +151,7 @@ async function storedState(room: RoomLike, types: Iterable<string>): Promise<Raw
  * state types among the events of its event cache.
  */
 export async function roomState(client: ClientLike, room: RoomLike, online = true): Promise<RawEvent[]> {
-  // TODO-FINDING rust-export-state - the bindings read state by event type only (`Room::state_events`), there is no "all current state". Options: (a) ask the homeserver directly with the session's access token (`GET /rooms/{id}/state`, like the TURN request in backend/turnServer.ts; bypasses the SDK, so an expired token is not refreshed), (b) read a fixed list of types from the store (incomplete: unknown custom types are missed, and rooms without the full-state subscription have little state stored), (c) add `Room::state_raw` to the Rust patches. Done: (a), and (b) plus the state types seen in the event cache when the request fails or the session is suspended. The Dev tools read it again on every state event of the timeline, which is a request each time.
+  // TODO-FINDING rust-export-state - the bindings read state by type only; `/state` is asked directly (no token refresh), the store is the fallback.
   if (online) {
     const state = await fetchState(client, room.id()).catch((e: unknown) => {
       console.warn("reading the room state from the homeserver failed, using what the SDK has stored", e);

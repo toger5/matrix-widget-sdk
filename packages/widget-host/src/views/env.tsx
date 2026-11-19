@@ -1,14 +1,7 @@
 /**
- * What a view gets besides its props. The MVVM split of the host:
- *
- * - **Model**: sessions, backends, drivers, iframes (`src/app/runtime`, `src/matrix_session`).
- * - **View model**: `AppViewModel` (`src/appViewModel.ts`), held by the `AppController`.
- * - **View**: the components in `src/views`. A view gets its slice of the view model as props,
- *   and everything else through this context: `dispatch` to send an `AppIntent`, and hooks for
- *   the data that is deliberately not in the view model (it changes too often).
- *
- * Views never import `src/app`, a session or the bindings. That keeps them renderable in
- * Storybook: `StoryEnv` (`src/views/storyEnv.tsx`) provides this context from fixtures.
+ * What a view gets besides its props: `dispatch` for intents, and hooks for the data that is kept out
+ * of the view model because it changes too often. The app provides it (`src/app/AppRoot.tsx`), the
+ * stories fake it (`src/views/storyEnv.tsx`); see `src/views/README.md`.
  */
 import { createContext, useContext, type ReactNode } from "react";
 

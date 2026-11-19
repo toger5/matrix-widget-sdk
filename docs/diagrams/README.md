@@ -1,20 +1,8 @@
 # Diagrams
 
-Overview diagrams of this repository. The SVGs are hand-written and can be edited as text.
-
-## Modules at a glance
-
-| module | where it runs | what it does |
-|---|---|---|
-| `crates/matrix-widget-actions` | both sides, optional UniFFI | Shared types only: the `WireMessage` envelope, the typed `Action` tree, `Capability`, `MatrixEvent`. No I/O, no state. |
-| `crates/matrix-widget-sdk` | **webview only** (wasm) | `WidgetClient` + the `WidgetApi` JS class: widget session state and every action as an async function. |
-| `crates/matrix-widget-host-driver` | Matrix client, UniFFI | `WidgetHostDriver`: one per widget, handles the handshake, checks capabilities, calls the backend, pushes events. |
-| `crates/matrix-widget-host-backend-interface` | Matrix client, UniFFI | `MatrixBackend` trait that the client implements once per Matrix SDK. Includes `InMemoryBackend`. |
-| `crates/uniffi-bindgen` | tooling | Generates Kotlin / Swift / Python bindings. |
-| `packages/widget-host-bindings` | browser | The host crates as TypeScript + wasm (ubrn, web flavour). |
-| `packages/widget-compat-wrapper` | browser, hosted | Runs a legacy matrix-widget-api widget on an MSC4412 host. |
-| `packages/widget-host` | browser | Minimal test host on the in-memory backend. |
-| `packages/test-widgets` | browser | A legacy and an MSC4412 test widget. |
+Overview diagrams of this repository. The SVGs are hand-written and can be edited as text; keep
+them valid XML (`xmllint --noout`) and check that text still fits its box. The crates and packages
+are listed in the [root README](../../README.md).
 
 ## 1. How a widget integration is built
 
@@ -38,7 +26,9 @@ implementations: `WidgetHostPlatform` (UI) and `MatrixBackend` (its Matrix SDK).
 
 ## 5. The actions, grouped
 
-Core is the MSC4412 handshake plus media download / media config. Experimental is everything else that works today but is not specced yet. Security / edge cases are actions we would rather not keep: multi-room access, the user directory, and client-UI features. The code does not treat the groups differently.
+Core is the MSC4412 handshake; experimental is everything that works but is not specced yet;
+security / edge cases are actions we would rather not keep. The grouping is a proposal; the code
+treats all actions the same.
 
 ![Action inventory](05-action-inventory.svg)
 

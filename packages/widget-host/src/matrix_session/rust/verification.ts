@@ -1,24 +1,9 @@
 import { ClientError, RecoveryError, SessionVerificationData, VerificationState, type ClientLike } from "matrix-sdk-uniffi-js";
 
 import type { EmojiVerification, VerificationEmoji } from "../../session";
-import { verificationCancelReason } from "../verificationCancel";
+import { awaitVerified, verificationCancelReason } from "../shared";
 
-/**
- * Device verification on a matrix-rust-sdk client: whether this device is verified, a listener for
- * changes of that, the recovery key, and the emoji (SAS) flow with another device of the account.
- * Free functions of the client, apart from the session, so they can be tested with a faked one.
- */
-
-export interface EmojiVerificationOptions {
-  /** How long the signature of the verifying device may take to arrive after both sides confirmed. */
-  verifiedTimeoutMs?: number;
-  /** How often `needsVerification` is asked meanwhile. */
-  pollMs?: number;
-}
-
-/** How long the signature of the verifying device may take to arrive after an emoji verification. */
-const VERIFIED_TIMEOUT_MS = 20_000;
-const POLL_MS = 500;
+/** Device verification on a matrix-rust-sdk client (`LiveSession`), as free functions so tests can fake the client. */
 
 /**
  * An SDK error with its text, for the AccountView. A uniffi error's `message` is only its type and
@@ -74,8 +59,7 @@ export async function verifyWithRecoveryKey(client: ClientLike, recoveryKey: str
  * Emoji (SAS) verification, started from here: every other device of the account gets the
  * request, the one that accepts it compares emoji with this one and then signs this device.
  */
-export async function startEmojiVerification(client: ClientLike, options: EmojiVerificationOptions = {}): Promise<EmojiVerification> {
-  const { verifiedTimeoutMs = VERIFIED_TIMEOUT_MS, pollMs = POLL_MS } = options;
+export async function startEmojiVerification(client: ClientLike, options: { pollMs?: number } = {}): Promise<EmojiVerification> {
   const controller = await sdk(client.getSessionVerificationController());
   let showEmoji!: (emoji: VerificationEmoji[]) => void;
   let finish!: () => void;
@@ -112,7 +96,7 @@ export async function startEmojiVerification(client: ClientLike, options: EmojiV
   const cancelCode = () => (sasStarted ? (controller.sasCancelInfo() ?? controller.requestCancelInfo()) : controller.requestCancelInfo())?.cancelCode;
 
   controller.setDelegate({
-    // TODO-FINDING verification-incoming-requests - a verification request that another device of the account sends to this one is ignored (here; the js implementation does not listen to `CryptoEvent.VerificationRequestReceived`). Only this device can start a verification, from the AccountView.
+    // TODO-FINDING verification-incoming-requests - a request another device sends to this one is ignored (js: `CryptoEvent.VerificationRequestReceived` is not listened to).
     didReceiveVerificationRequest: () => {},
     didAcceptVerificationRequest: () => void controller.startSasVerification().catch(abort),
     didStartSasVerification: () => {
@@ -142,13 +126,7 @@ export async function startEmojiVerification(client: ClientLike, options: EmojiV
       await shown;
       await sdk(controller.approveVerification());
       await Promise.race([finished, ended]);
-      // This device is verified once the other device's signature of it has come down the sync.
-      const deadline = Date.now() + verifiedTimeoutMs;
-      while (await needsVerification(client)) {
-        if (abandoned) throw new Error("The verification was cancelled.");
-        if (Date.now() > deadline) throw new Error("The emoji were confirmed, but this device is still not verified.");
-        await new Promise((resolve) => setTimeout(resolve, pollMs));
-      }
+      await awaitVerified(async () => !(await needsVerification(client)), () => abandoned, options.pollMs);
     },
     cancel: (mismatch) => {
       abandoned = true;

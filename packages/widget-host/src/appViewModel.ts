@@ -55,8 +55,7 @@
  *   themselves are started again: the iframes of an inactive account are not kept).
  *
  * The stories (`src/views/<area>/*.stories.tsx`, Storybook) show every state of this model; the story
- * ids in the comments refer to them (`e2e/stories.md` lists them all). `designFeedback.md` lists
- * what the current `LiveSession`, `SessionProvider` and `InMemoryBackend` cannot provide yet.
+ * ids in the comments refer to them (`e2e/stories.md` lists them all).
  */
 import type { TimelineItem, TimelineViewActions, TimelineViewSnapshot } from "@element-hq/web-shared-components";
 
@@ -121,7 +120,7 @@ export interface SettingsViewModel {
   /**
    * Off: the DevBackend cannot be reached (the DevBackend account in the AccountView, "Switch to the
    * DevBackend" at the bottom of the Dev tools, "Copy to DevBackend"). It cannot be turned off while
-   * the DevBackend is active. Stored settings without it take the value of `devTools`.
+   * the DevBackend is active.
    */
   devBackend: boolean;
   /** "system" follows `prefers-color-scheme`. */
@@ -386,7 +385,7 @@ export type DevBackendTool = "client" | "media";
 export interface WidgetHostBehavior {
   /** Every capability, also the single-use `get_openid`: every OpenID token is handed out without asking. */
   autoApproveCapabilities: boolean;
-  /** `false`: every start of a widget asks again (what the in-memory mode does today). */
+  /** `false`: every start of a widget asks again. */
   rememberCapabilities: boolean;
 }
 
@@ -457,8 +456,6 @@ export interface RoomViewModel {
  *   room panel, bar on top by default. The DevBackend's tools are not in it. stories
  *   `rooms-tabbar--room-dev-tools-active`, `rooms-roomdevtools--docked-top`, `rooms-roomdevtools--loading`,
  *   `rooms-roomoverview--room-dev-tools-open`
- *
- * Stored layouts can hold the removed kinds "native" (the overview) and "new": they are dropped on load.
  */
 export type TabViewModel = { kind: "widget"; id: TabId; widgetId: WidgetInstanceId } | { kind: "timeline"; id: TabId } | { kind: "roomTools"; id: TabId; layout: RoomDevToolsLayout };
 
@@ -684,7 +681,7 @@ export const LOADING_OLDER: TimelineItem = { kind: "loading", key: "backward-loa
 const objectOf = (value: unknown): Record<string, unknown> => (typeof value === "object" && value !== null ? (value as Record<string, unknown>) : {});
 
 /** What a raw event's tile shows as its body; `media` resolves the `mxc://` URI of an image. */
-export function rawBody(event: RawEvent, media: (mxcUrl: string) => Promise<string | undefined>): TimelineBody {
+function rawBody(event: RawEvent, media: (mxcUrl: string) => Promise<string | undefined>): TimelineBody {
   const { content } = event;
   if (objectOf(event.unsigned).redacted_because) return { kind: "redacted" };
   if (event.type === "m.room.encrypted") return { kind: "utd" };
@@ -868,7 +865,7 @@ export type AppIntent =
   | { type: "tab/move"; panelId: PanelId; tabId: TabId; toIndex: number }
   | { type: "tab/toPanel"; panelId: PanelId; tabId: TabId; intoPanelId: PanelId } // a tab dragged onto another panel of its room: it becomes that panel's shown tab (a timeline tab where that panel has one shows that one); the widget keeps running
   | { type: "tab/split"; panelId: PanelId; tabId: TabId; newPanelId: PanelId; dock: DockLayout } // a tab dragged to a gap of the RoomsArea: a new panel of its room with only that tab, where `dock` (the arrangement with the new panel) puts it; the widget keeps running
-  | { type: "tab/close"; panelId: PanelId; tabId: TabId } // Alt+W while a tab is shown; a widget tab stops its widget, unless it is always on screen: then it keeps running in the PiP panel (assumption, see designFeedback.md). The last tab returns the room view to its RoomOverview
+  | { type: "tab/close"; panelId: PanelId; tabId: TabId } // Alt+W while a tab is shown; a widget tab stops its widget, unless it is always on screen: then it keeps running in the PiP panel (finding `close-tab-of-always-on-screen-widget`). The last tab returns the room view to its RoomOverview
   // widgets
   | { type: "widget/reload"; widgetId: WidgetInstanceId } // "Retry" of a failed widget and the reload button of its dev tool bar: stops it and starts it again (new iframe and driver, the current URL of its state event); its dev tools data starts empty
   | { type: "widget/openSameOrigin"; widgetId: WidgetInstanceId } // "Open anyway" of a widget on this app's origin (dev tools only): loads it; remembered for this URL until the app reloads
@@ -881,10 +878,10 @@ export type AppIntent =
   | { type: "devTools/togglePanel"; widgetId: WidgetInstanceId; panel: DevToolPanel } // opening a fourth panel closes the oldest
   | { type: "devTools/resize"; widgetId: WidgetInstanceId; size?: number; shares?: number[] }
   | { type: "devTools/clear"; widgetId: WidgetInstanceId; what: "messages" | "console" }
-  | { type: "devTools/revokeCapabilities"; widgetId: WidgetInstanceId; capabilities: string[] | "all"; confirmed?: boolean } // confirmed
-  | { type: "devTools/grantCapability"; widgetId: WidgetInstanceId; capability: string } // needs a new driver method
-  | { type: "devTools/mockHostAction"; widgetId: WidgetInstanceId; action: "updateTheme" | "updateLanguage" | "updateVisibility"; value: string } // TODO: more actions
-  | { type: "devTools/copyMessage"; widgetId: WidgetInstanceId; messageId: string } // "Copy as JSON" of an expanded message of the MessagesPanel: request and response to the clipboard (added by the widget views)
+  | { type: "devTools/revokeCapabilities"; widgetId: WidgetInstanceId; capabilities: string[] | "all"; confirmed?: boolean }
+  | { type: "devTools/grantCapability"; widgetId: WidgetInstanceId; capability: string } // "Add" of the driver panel: pre-approves it (`WidgetRuntime.grant`)
+  | { type: "devTools/mockHostAction"; widgetId: WidgetInstanceId; action: "updateTheme" | "updateLanguage" | "updateVisibility"; value: string }
+  | { type: "devTools/copyMessage"; widgetId: WidgetInstanceId; messageId: string } // "Copy as JSON" of an expanded message of the MessagesPanel: request and response to the clipboard
   // picture in picture
   | { type: "pip/move"; position: PipViewModel["position"] }
   | { type: "pip/resize"; boxSize: PipViewModel["boxSize"] }

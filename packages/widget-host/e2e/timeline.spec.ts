@@ -1,8 +1,7 @@
 /** The RoomTimeline: the Timeline tab of a room panel (Element Web's TimelineView), its events (the DevBackend's), live updates, a long timeline. stories `rooms-roomtimeline--*`, `rooms-tabbar--timeline-active` */
 import type { HostSeed } from "../src/app/controller";
-import { expect, type Host, LAB, NEW_WIDGET, test, widgetId } from "./host";
+import { expect, type Host, LAB, NEW, NEW_WIDGET, test } from "./host";
 
-const NEW = widgetId(LAB, NEW_WIDGET);
 const timeline = (host: Host) => host.page.getByTestId("room-timeline");
 /** The event tiles the TimelineView renders (it is virtualised: those in and near the view). */
 const rows = (host: Host) => timeline(host).getByTestId("event-tile");
@@ -14,7 +13,7 @@ const toTop = (host: Host) => scroller(host).evaluate((el) => el.scrollTo({ top:
 
 test("“Open timeline” adds the Timeline tab at the end; its tiles are the room's events, oldest first; pressing one shows its JSON", async ({ host }) => {
   await host.populate("lab", { sidePanel: null, behavior: { autoApproveCapabilities: true }, open: [{ room: LAB, widgets: [NEW_WIDGET], overview: true }] });
-  const overview = host.page.getByTestId("room-overview");
+  const overview = host.overview;
   await overview.getByRole("button", { name: "Open timeline" }).click();
 
   await expect(host.page.getByRole("tab")).toHaveText([/Widget lab/, /New test widget/, /Timeline/]);
@@ -70,7 +69,7 @@ test("new events appear live: sent by a widget, and from the send form of the De
   await expect(rows(host).last()).toContainText(/@alice:dev\.local.*hello from the new widget.*m\.room\.message/);
   await expect(rows(host).last()).toHaveAttribute("data-event-id", (await storeIds(host)).at(-1)!);
 
-  const view = host.page.getByTestId("devbackend-view");
+  const view = host.devBackendView;
   await view.getByRole("button", { name: "Send event", exact: true }).click();
   const form = view.getByRole("form", { name: "Send event" });
   await form.getByLabel("Sender").fill("@bob:dev.local");

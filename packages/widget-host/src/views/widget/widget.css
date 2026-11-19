@@ -1,4 +1,4 @@
-/* Widget view, app-only (layer views, after the design files): the widget iframes (slotted) and the layer that covers them. The design rules are src/styles/widget.css. */
+/* Widget view, app-only (layer views): the widget iframes (slotted) and the layer that covers them. The design rules are src/styles/widget.css. */
 
 /* The widget iframes. Every widget iframe is a light-DOM child of the app's host element and is rendered where the
    shadow tree has a <slot name="widget-<id>"> (see src/views/ui/WidgetSlot.tsx).

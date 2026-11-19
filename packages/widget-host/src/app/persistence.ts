@@ -12,7 +12,7 @@ export interface PersistedUi {
   workspaces: Record<AccountId, WorkspaceLayout>;
   /** The recent widgets. */
   recents: Record<AccountId, RecentWidget[]>;
-  /** Stored since the RoomPicker shows recent rooms; for an account without an entry they are derived from its `recents`. */
+  /** For an account without an entry: derived from its `recents`. */
   recentRooms?: Record<AccountId, RecentRoom[]>;
   /** The Matrix account that was active last. */
   lastAccountId?: AccountId;
@@ -51,7 +51,7 @@ function localWidgetsOf(value: unknown): Record<AccountId, Record<RoomId, StateE
   );
 }
 
-/** The rooms of the recent widgets, newest first: the recent rooms of a layout stored before they were. */
+/** The rooms of the recent widgets, newest first. */
 function roomsOfRecentWidgets(widgets: RecentWidget[]): RecentRoom[] {
   const rooms = new Map<string, number>();
   for (const w of widgets) if (!rooms.has(w.roomId)) rooms.set(w.roomId, w.lastOpened);
@@ -66,11 +66,10 @@ export function loadPersisted(): PersistedUi | undefined {
     const recents = recentsOf(ui.recents, recentWidget);
     const recentRooms = recentsOf(ui.recentRooms, recentRoom);
     return {
-      // Stored before the DevBackend had its own switch: it was enabled with the dev tools.
+      // Without a stored `devBackend`: that of `devTools`.
       settings: { devTools: ui.settings?.devTools === true, devBackend: typeof ui.settings?.devBackend === "boolean" ? ui.settings.devBackend : ui.settings?.devTools === true, theme: ui.settings?.theme ?? "system" },
       leftBarCollapsed: ui.leftBarCollapsed === true,
       sidePanelWidth: typeof ui.sidePanelWidth === "number" ? ui.sidePanelWidth : 324,
-      // Stored by any earlier version: brought to the current shape, malformed parts dropped.
       workspaces: Object.fromEntries(Object.entries(isRecord(ui.workspaces) ? ui.workspaces : {}).map(([id, ws]) => [id, upgradeWorkspace(ws)])),
       recents,
       recentRooms: { ...Object.fromEntries(Object.entries(recents).map(([id, widgets]) => [id, roomsOfRecentWidgets(widgets)])), ...recentRooms },

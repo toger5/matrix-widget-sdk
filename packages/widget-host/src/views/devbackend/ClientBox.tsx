@@ -32,7 +32,7 @@ const BEHAVIORS: { key: keyof WidgetHostBehavior; label: string; hint: string }[
 ];
 
 /** How the host answers widgets (`WidgetHostBehavior`), and "fail sends", which the DevBackend does: a checkbox row each. */
-export function BehaviorSection({ behavior, failSends }: { behavior: WidgetHostBehavior; failSends: boolean }) {
+function BehaviorSection({ behavior, failSends }: { behavior: WidgetHostBehavior; failSends: boolean }) {
   const dispatch = useDispatch();
   const row = (label: string, hint: string, on: boolean, onChange: (on: boolean) => void) => (
     <div key={label} className="rdt-opt" title={hint}>
@@ -49,7 +49,7 @@ export function BehaviorSection({ behavior, failSends }: { behavior: WidgetHostB
   );
 }
 
-export function ToDeviceSection({ toDevice, userId = "" }: { toDevice: ToDeviceMessage[]; userId?: string }) {
+function ToDeviceSection({ toDevice, userId = "" }: { toDevice: ToDeviceMessage[]; userId?: string }) {
   const dispatch = useDispatch();
   const [draft, setDraft] = useState({ type: "", userId, deviceId: "", encrypted: true, content: "{}" });
   const [error, setError] = useState<string>();
@@ -70,7 +70,7 @@ export function ToDeviceSection({ toDevice, userId = "" }: { toDevice: ToDeviceM
         <Field label="Type">
           <input className="input mono" value={draft.type} onChange={(e) => setDraft({ ...draft, type: e.target.value })} />
         </Field>
-        {/* TODO-FINDING devbackend-todevice-sender - the design has one "Sender" select (user · device; sketch `sketch-sidepanel-devbackendview-tools--to-device`); `ToDeviceMessage` has `userId` and `deviceId` without saying whose they are. For now two text fields, meaning the sender for a message to the widget. */}
+        {/* TODO-FINDING devbackend-todevice-sender - the design has one "Sender" select (user · device); `ToDeviceMessage` has `userId` and `deviceId` without saying whose they are. For now two text fields, meaning the sender for a message to the widget. */}
         <Field label="User ID">
           <input className="input mono" value={draft.userId} onChange={(e) => setDraft({ ...draft, userId: e.target.value })} />
         </Field>

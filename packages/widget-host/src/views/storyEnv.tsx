@@ -49,7 +49,7 @@ const STORY_WIDGET_EVENTS: WidgetEventParser = {
 /** `DEV_TOOLS_DATA` with the run duration of the design ("3 m 12 s") when the stories load, instead of the fixture's fixed date. */
 const STORY_DEV_TOOLS_DATA = { ...DEV_TOOLS_DATA, stats: { ...DEV_TOOLS_DATA.stats, runningSince: Date.now() - 192_000 } };
 
-export const STORY_ENV: ViewEnv = {
+const STORY_ENV: ViewEnv = {
   ...DEFAULT_VIEW_ENV,
   useDevToolsData: () => STORY_DEV_TOOLS_DATA,
   useMockedRoomData: () => MOCKED_ROOM_DATA,
@@ -68,11 +68,11 @@ export function StoryEnv({ env, children }: { env?: Partial<ViewEnv>; children: 
 }
 
 /** The fake widgets of the stories: what a fixture widget (`WIDGET_EVENTS`) looks like. */
-export type FakeWidgetKind = "call" | "board" | "poll" | "notes" | "timer";
+type FakeWidgetKind = "call" | "board" | "poll" | "notes" | "timer";
 const FAKE_KINDS: readonly string[] = ["call", "board", "poll", "notes", "timer"] satisfies FakeWidgetKind[];
 
 /** The fake of a fixture widget, by its key (`m.widget/call` → "call"); undefined for any other widget. */
-export const fakeWidgetKind = (widgetKey: string): FakeWidgetKind | undefined => {
+const fakeWidgetKind = (widgetKey: string): FakeWidgetKind | undefined => {
   const key = widgetKey.slice(widgetKey.lastIndexOf("/") + 1);
   return FAKE_KINDS.includes(key) ? (key as FakeWidgetKind) : undefined;
 };
@@ -194,7 +194,7 @@ export function FakeWidget({ kind, name = "Widget", compact = false }: { kind?: 
 }
 
 /** The size of a story's screenshot, `parameters.size` (`.storybook/preview.tsx`): a full screen by default. */
-export const DEFAULT_STORY_SIZE: readonly [number, number] = [1280, 800];
+const DEFAULT_STORY_SIZE: readonly [number, number] = [1280, 800];
 export const storySize = (parameters: Parameters): readonly [number, number] => (parameters.size as [number, number] | undefined) ?? DEFAULT_STORY_SIZE;
 
 /**

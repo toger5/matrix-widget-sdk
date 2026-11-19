@@ -18,6 +18,7 @@ import {
   withinLimits,
   type DockItem,
   type DockLayout,
+  type DropTarget,
 } from "../src/dock/dockLayout";
 
 const item = (id: string, group?: string): DockItem => ({ id, ...(group ? { group } : {}) });
@@ -182,10 +183,20 @@ describe("limits", () => {
 describe("moveItem", () => {
   const l = dock([["a", "b", "c"]]);
 
-  it("moves within a row (targets refer to the layout as shown)", () => {
-    expect(ids(moveItem(l, "a", { kind: "between", row: 0, index: 2 })).rows).toEqual([["b", "a", "c"]]);
-    expect(ids(moveItem(l, "a", { kind: "between", row: 0, index: 3 })).rows).toEqual([["b", "c", "a"]]);
-    expect(ids(moveItem(l, "c", { kind: "between", row: 0, index: 0 })).rows).toEqual([["c", "a", "b"]]);
+  // Targets refer to the layout as shown, with the item still in its old place.
+  it.each<[string, DockLayout, string, DropTarget, Partial<ReturnType<typeof ids>>]>([
+    ["within a row, right", l, "a", { kind: "between", row: 0, index: 2 }, { rows: [["b", "a", "c"]] }],
+    ["within a row, to its end", l, "a", { kind: "between", row: 0, index: 3 }, { rows: [["b", "c", "a"]] }],
+    ["within a row, left", l, "c", { kind: "between", row: 0, index: 0 }, { rows: [["c", "a", "b"]] }],
+    ["to a new row", l, "b", { kind: "newRow", index: 1 }, { rows: [["a", "c"], ["b"]] }],
+    ["the only item of a row to a new row further down (the index is corrected)", dock([["x"], ["a"], ["b"]]), "x", { kind: "newRow", index: 2 }, { rows: [["a"], ["x"], ["b"]] }],
+    ["into a row that moves up when the item's row goes", dock([["x"], ["a", "b"]]), "x", { kind: "between", row: 1, index: 1 }, { rows: [["a", "x", "b"]] }],
+    ["before side columns fold into the row (the item is not lost, the indices hold)", dock([["x"], ["a", "b"]], { left: ["l"] }), "x", { kind: "between", row: 1, index: 1 }, { rows: [["l", "a", "x", "b"]] }],
+    ["within a side (the index is corrected)", dock([["a"], ["b"]], { left: ["l1", "l2"] }), "l1", { kind: "side", side: "left", index: 2 }, { left: ["l2", "l1"], rows: [["a"], ["b"]] }],
+    ["the only item of the top row to a side: it folds into the other row", dock([["a"], ["b"]]), "a", { kind: "side", side: "right", index: 0 }, { rows: [["b", "a"]] }],
+    ["`into` another item: removed (the target took it in)", l, "a", { kind: "into", itemId: "b" }, { rows: [["b", "c"]] }],
+  ])("moves %s", (_, layout, id, target, expected) => {
+    expect(ids(moveItem(layout, id, target))).toEqual(expected);
   });
 
   it("leaves the layout as it is for the gaps next to the item", () => {
@@ -193,39 +204,10 @@ describe("moveItem", () => {
     expect(moveItem(l, "b", { kind: "between", row: 0, index: 2 })).toBe(l);
   });
 
-  it("moves to a new row", () => {
-    expect(ids(moveItem(l, "b", { kind: "newRow", index: 1 })).rows).toEqual([["a", "c"], ["b"]]);
-  });
-
-  it("moves the only item of a row to a new row further down (the index is corrected)", () => {
-    expect(ids(moveItem(dock([["x"], ["a"], ["b"]]), "x", { kind: "newRow", index: 2 })).rows).toEqual([["a"], ["x"], ["b"]]);
-  });
-
-  it("moves into a row that moves up when the item's row goes", () => {
-    expect(ids(moveItem(dock([["x"], ["a", "b"]]), "x", { kind: "between", row: 1, index: 1 })).rows).toEqual([["a", "x", "b"]]);
-  });
-
-  it("inserts before side columns fold into the row (the item is not lost, the indices hold)", () => {
-    const out = moveItem(dock([["x"], ["a", "b"]], { left: ["l"] }), "x", { kind: "between", row: 1, index: 1 });
-    expect(ids(out)).toEqual({ rows: [["l", "a", "x", "b"]] });
-  });
-
-  it("moves within a side (the index is corrected)", () => {
-    expect(ids(moveItem(dock([["a"], ["b"]], { left: ["l1", "l2"] }), "l1", { kind: "side", side: "left", index: 2 })).left).toEqual(["l2", "l1"]);
-  });
-
   it("moves to a side, and from a side into a row", () => {
     const side = moveItem(dock([["a", "b"], ["c"]]), "b", { kind: "side", side: "left", index: 0 });
     expect(ids(side)).toEqual({ left: ["b"], rows: [["a"], ["c"]] });
     expect(ids(moveItem(side, "b", { kind: "between", row: 1, index: 1 }))).toEqual({ rows: [["a"], ["c", "b"]] });
-  });
-
-  it("the only item of the top row moved to a side folds into the other row", () => {
-    expect(ids(moveItem(dock([["a"], ["b"]]), "a", { kind: "side", side: "right", index: 0 }))).toEqual({ rows: [["b", "a"]] });
-  });
-
-  it("`into` another item removes the item (the target took it in)", () => {
-    expect(ids(moveItem(l, "a", { kind: "into", itemId: "b" })).rows).toEqual([["b", "c"]]);
   });
 
   it("keeps the item's group", () => {

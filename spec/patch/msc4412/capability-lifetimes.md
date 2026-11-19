@@ -3,19 +3,11 @@
 - **Target:** [MSC4412](https://github.com/matrix-org/matrix-spec-proposals/pull/4412), `proposals/4412-widget-base-postmessage-api.md`
 - **Base:** `1794f40325a449eed21dcbfce53efc80e89f56f6`
 - **Status:** draft
-- **Implemented here:** single use in the host driver: `WidgetHostDriver::set_single_use`
-  (default: `widget:…get_openid`) and `DriverSnapshot.single_use`
-  (`crates/matrix-widget-host-driver/src/driver/mod.rs`); the check and the use under one lock, the update
-  after the reply (`driver/requests.rs` `handle_request`); tests `openid_is_a_one_use_capability`,
-  `a_use_is_a_request_that_passed_the_check_whatever_its_result`,
-  `an_auto_approved_single_use_capability_is_granted_again_per_request`,
-  `using_a_capability_up_while_a_question_is_open` in `driver/tests.rs`; two requests in flight at
-  once: `packages/widget-host/test/jsSdkBackend.test.ts`. Time limits are not in
-  the driver (it has no clock): the platform starts a timer and calls `revoke_capabilities`. The
-  widget host does not remember a single-use approval
-  (`packages/widget-host/src/app/runtime/widgetRuntime.ts` `answerCapabilities`). The first user is
-  OpenID, [`../new/openid-capability.md`](../new/openid-capability.md). The hunks share no line
-  with [`merge-capability-requests.md`](merge-capability-requests.md); both apply, in either order.
+- **Implemented here:** single use in the host driver (`WidgetHostDriver::set_single_use`, default
+  `widget:…get_openid`; used up in `crates/matrix-widget-host-driver/src/driver/requests.rs`
+  `handle_request`). Time limits are the platform's timer plus `revoke_capabilities`. The first
+  user is OpenID, [`../new/openid-capability.md`](../new/openid-capability.md). The hunks share no
+  line with [`merge-capability-requests.md`](merge-capability-requests.md); both apply in either order.
 
 ## Why
 

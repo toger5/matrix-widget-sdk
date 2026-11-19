@@ -276,8 +276,7 @@ mod tests {
         assert_eq!(placeholder.request_body(), json!({}));
     }
 
-    /// Renamed actions have no aliases: the old names are unknown actions. Only the compat wrapper
-    /// translates them. That includes the names without a namespace, which MSC4412 does not allow.
+    /// Old and unnamespaced names are unknown actions: only the compat wrapper translates them.
     #[test]
     fn renamed_actions_are_only_known_by_their_new_name() {
         let renamed = [
@@ -292,11 +291,8 @@ mod tests {
             ("watch_turn_servers", "org.matrix.mscXXXX.watch_turn_servers"),
             ("unwatch_turn_servers", "org.matrix.mscXXXX.unwatch_turn_servers"),
             ("set_always_on_screen", "org.matrix.mscXXXX.set_always_on_screen"),
-            // `read_events` (MSC2876) was replaced by `read_timeline`; it is unknown in every spelling.
-            ("read_events", "m.read_timeline"),
-            ("m.read_events", "org.matrix.mscXXXX.read_timeline"),
-            ("org.matrix.msc2876.read_events", "org.matrix.mscXXXX.paginate_timeline"),
-            ("org.matrix.mscXXXX.read_events", "m.paginate_timeline"),
+            ("org.matrix.msc2876.read_events", "org.matrix.mscXXXX.read_timeline"),
+            ("m.read_events", "m.paginate_timeline"),
             ("org.matrix.msc4412.matrix_context", "org.matrix.mscXXXX.get_matrix_context"),
             ("org.matrix.msc4412.get_matrix_context", "m.get_matrix_context"),
             ("org.matrix.msc4412.client_context", "org.matrix.mscXXXX.get_client_context"),

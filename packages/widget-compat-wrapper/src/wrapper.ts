@@ -4,20 +4,14 @@ import { LEGACY_ALLOW, LEGACY_SANDBOX } from "./capabilities";
 import { type LogLevel, log, parseLogLevel, setLogLevel } from "./log";
 import { legacyUrlProblem } from "./url";
 
-/** The `sandbox` attribute of the inner iframe: the one of a legacy client (Element Web), constant. */
+/** The inner iframe's attributes: a legacy client's (Element Web), constant. */
 export const INNER_SANDBOX = LEGACY_SANDBOX.join(" ");
-/** The `allow` attribute of the inner iframe: the one of a legacy client (Element Web, with `fullscreen`), constant. */
 export const INNER_ALLOW = LEGACY_ALLOW.join("; ");
 
 /**
- * The inner iframe for the legacy widget at `url` (absolute http(s), checked), in a wrapper on
- * `wrapperOrigin`: its `sandbox` and `allow` attributes and the target origin of the messages to it.
- *
- * Always the attributes of a legacy client ({@link INNER_SANDBOX}, {@link INNER_ALLOW}), except
- * for a legacy widget on the wrapper's own origin: with `allow-same-origin` it would share the
- * wrapper's origin, which is often the client's, and could reach the client's window and storage.
- * It loads without `allow-same-origin`, so it gets an opaque origin, which `postMessage` can only
- * address with `"*"` (only that one window gets the message, `contentWindow`).
+ * The inner iframe for the legacy widget at `url`: attributes and `postMessage` target origin. A
+ * widget on the wrapper's own origin (often the client's) loads without `allow-same-origin`, so
+ * it cannot reach the client's window and storage; its opaque origin is addressed with `"*"`.
  */
 export function innerIframe(url: string, wrapperOrigin: string): { sandbox: string; allow: string; targetOrigin: string } {
   const origin = new URL(url).origin;
@@ -80,8 +74,6 @@ export function startWrapper(config: WrapperConfig, container: HTMLElement, pare
   setLogLevel(config.logLevel);
   log.info(`wrapping legacy widget ${config.widgetId}`);
   let iframe: HTMLIFrameElement | undefined;
-  // The legacy widget's origin, known once its URL is (`*` for one of the wrapper's own origin, which
-  // loads with an opaque origin, see `innerIframe`). Messages to the widget are posted to it.
   let widgetOrigin = "*";
 
   const bridge = new CompatBridge({
@@ -92,7 +84,6 @@ export function startWrapper(config: WrapperConfig, container: HTMLElement, pare
     wrapperUrl: location.origin + location.pathname,
     sendToHost: (m) => parent.postMessage(m, config.clientOrigin),
     sendToWidget: (m) => iframe?.contentWindow?.postMessage(m, widgetOrigin),
-    // `url` is absolute http(s), checked by the bridge (url.ts).
     loadWidget: (url) => {
       const inner = innerIframe(url, location.origin);
       widgetOrigin = inner.targetOrigin;

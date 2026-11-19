@@ -20,8 +20,8 @@ export interface RoomsAreaProps {
 }
 
 /** "Every resizable panel has a minimum size." */
-export const MIN_PANEL_WIDTH = 280;
-export const MIN_PANEL_HEIGHT = 200;
+const MIN_PANEL_WIDTH = 280;
+const MIN_PANEL_HEIGHT = 200;
 
 /** stories `app-appshell--one-panel`, `app-appshell--several-panels`, `app-appshell--panel-rows`, `app-appshell--different-rooms`, `app-appshell--same-room-twice`; its parts: `rooms-*--*`. The `<main class="roomsarea">` with its room panels. */
 export function RoomsArea({ main, settings, fullscreen, renderWidget }: RoomsAreaProps) {

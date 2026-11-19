@@ -15,20 +15,16 @@ import { describesWidget } from "../../lib/widgetEvents";
 import type { AccountInfo, LiveSession, RawEvent, RoomBackend, RoomDetails, RoomExport, RoomMember, RoomSummary, RoomTimeline } from "../../session";
 import { WIDGET_EVENT_TYPES, type StateEvent } from "../../widgetStateEvent";
 import { base64ToBytes, bytesToBase64, validateSeed, type DevBackendSeed, type SeedMedia, type SeedRoom } from "./seed";
+import { roleFor } from "../shared";
 import { rawTimelineViewModel } from "../timelineViewModel";
 
-export type { DevBackendSeed } from "./seed";
-export { validateSeed } from "./seed";
-
-/** The `LiveSession.accountId` of the DevBackend: there is one per browser tab. */
-export const DEV_BACKEND_ACCOUNT_ID = "devBackend";
 const DEFAULT_USER_ID = "@alice:dev.local";
 const DEVICE_ID = "DEVBACKEND";
 const BASE_URL = "https://matrix.dev.local";
 const FAIL_MESSAGE = "simulated failure (fail sends is on)";
 
 /** A file for the media repository, as the host adds it. */
-export interface MediaUpload {
+interface MediaUpload {
   name?: string;
   mimetype?: string;
   data: ArrayBuffer;
@@ -56,11 +52,6 @@ async function loadDemoMedia(): Promise<MediaUpload[]> {
   return Promise.all(
     DEMO_MEDIA.map(async ({ mxcUri, path, mimetype }) => ({ mxcUri, mimetype, name: path.split("/").pop(), data: (await fetchBytes(path)).data })),
   );
-}
-
-/** Put the demo files into the DevBackend's media repository. Returns their `mxc://` URIs. */
-export async function seedDemoMedia(backend: DevBackend): Promise<string[]> {
-  return backend.addMedia(await loadDemoMedia());
 }
 
 interface Member extends RoomMember {
@@ -125,7 +116,7 @@ const EMPTY_CONTENT: RoomContent = {
 };
 const NO_SCHEDULED: ScheduledEvent[] = [];
 /** The most messages "Resolve" (the pagination request of the room dev tools) generates at once. */
-export const MAX_GENERATED_EVENTS = 1000;
+const MAX_GENERATED_EVENTS = 1000;
 const GREETINGS = ["Hi all,", "Quick note:", "Reminder:", "FYI", "Hm,", "Agreed.", "Back from lunch;", "Ok so"] as const;
 const TOPICS = ["the build is green again", "who has the slides?", "standup moved to 10:30", "the widget loads now", "let's call later", "see the thread above", "nice work!", "the room key arrived"] as const;
 const PAGINATION_STATUS: Record<PaginationStatus, MockedPagination["status"]> = {
@@ -156,7 +147,8 @@ function checkEvent(event: { type?: unknown; stateKey?: unknown; content?: unkno
 }
 
 export class DevBackend implements LiveSession {
-  readonly accountId = DEV_BACKEND_ACCOUNT_ID;
+  /** One DevBackend per browser tab. */
+  readonly accountId = "devBackend";
 
   private user: string;
   /** In the order the rooms were added. */
@@ -340,13 +332,8 @@ export class DevBackend implements LiveSession {
    * Re-read the backends and tell the listeners if something changed. Returns whether it did.
    * The editing methods below call it themselves; whoever runs widgets calls it after every
    * widget message, naming the widget (`causedBy`) so that what it uploaded is attributed to it.
-   *
-   * TODO-FINDING devbackend-no-change-notification - `InMemoryBackend` cannot tell its host that a
-   * widget wrote something, so the host has to guess when to look (after every widget message)
-   * and then read everything: `timeline()`, `state()`, `delayedEvents()`, `toDeviceSent()` and
-   * `media()` (which copies every file's bytes out of the wasm memory) of every room. A change
-   * callback, or at least a version counter per section, in the Rust type would remove both.
    */
+  // TODO-FINDING devbackend-no-change-notification - `InMemoryBackend` has no change callback, so this re-reads every room, media bytes included.
   refresh(causedBy?: string): boolean {
     const now = Date.now();
     let changed = this.dirty;
@@ -379,16 +366,9 @@ export class DevBackend implements LiveSession {
       room.summaryJson = summaryJson;
       room.widgetsJson = widgetsJson;
 
-      // TODO-FINDING devbackend-shared-account-store - to-device messages and media belong to the
-      // account, but `InMemoryBackend` keeps them per room (and one `InMemoryBackend` is one
-      // room). So this class keeps the account's view and copies between the rooms' backends:
-      // media a widget uploaded in one room is added to all others here, host uploads and
-      // injected to-device messages go to every backend, and the sent list is the union. Known
-      // holes: every file exists once per room plus once here; a file is only shared once
-      // `refresh()` ran; and two rooms can hand out the same `mxc://…/media-<n>` URI for
-      // different files (the counter is per backend), in which case the first one seen is the
-      // account's file and the other room keeps its own. The clean fix is an account-level store
-      // in the Rust crate that several `InMemoryBackend` rooms share.
+      // TODO-FINDING devbackend-shared-account-store - to-device messages and media are the account's
+      // but `InMemoryBackend` keeps them per room: copied between the rooms' backends here. A file
+      // a widget uploaded is shared only once `refresh()` ran.
       const sent = room.store.toDeviceSent();
       if (sent.length < room.toDeviceSeen) room.toDeviceSeen = 0; // the backend was cleared
       for (const message of sent.slice(room.toDeviceSeen)) {
@@ -480,13 +460,8 @@ export class DevBackend implements LiveSession {
   /**
    * Drop every event, scheduled event and the room account data of a room. Media and the
    * to-device log are the account's and stay.
-   *
-   * TODO-FINDING devbackend-clear-room-keeps-skeleton - "drops all events" taken literally leaves
-   * a room without a name and without the user as member (so the dropdown shows the room id and
-   * widgets find themselves outside the room). Options: really empty; or keep the skeleton
-   * `addRoom` creates. For now the create event, the name and the user's membership are sent
-   * again; the widgets are gone, as they are state.
    */
+  // TODO-FINDING devbackend-clear-room-keeps-skeleton - the create event, the name and the user's membership are sent again; the widgets go.
   clearRoom(roomId: string): void {
     const room = this.room(roomId);
     const { name } = room.content;
@@ -526,17 +501,6 @@ export class DevBackend implements LiveSession {
     this.refresh();
   }
 
-  /** Fail the back-pagination a widget asked for: the widgets get `message` as the error. */
-  failPagination(roomId: string, message: string): void {
-    this.room(roomId).store.failPagination(message);
-    this.refresh();
-  }
-
-  /** Tell the room's widgets that the timeline cache is no longer continuous (`notify_timeline_update` with `reset`). */
-  resetTimeline(roomId: string): void {
-    this.room(roomId).store.resetTimeline();
-  }
-
   /**
    * "Copy to DevBackend": a new mocked room with the state and the timeline of a real one.
    * Returns the new (local) room id; `copiedFrom` is kept and shown in `snapshot().rooms`.
@@ -560,11 +524,7 @@ export class DevBackend implements LiveSession {
     if (!asString(asObject(state.get("m.room.name\n")?.content).name) && exported.name) {
       this.inject(room, { type: "m.room.name", stateKey: "", content: { name: exported.name } });
     }
-    // TODO-FINDING devbackend-copied-room-user - the DevBackend's user is not the account the room
-    // was copied from, so in the copy the user would not be a member (widgets that look at their
-    // own membership, like a call, break). Options: join the DevBackend's user (done here; the
-    // room has one member more than the original), act as the original user in a copied room, or
-    // rewrite the original user's events to the DevBackend's user.
+    // TODO-FINDING devbackend-copied-room-user - the DevBackend's user joins the copy (one member more than the original).
     if (asObject(state.get(`m.room.member\n${this.user}`)?.content).membership !== "join") {
       this.inject(room, { type: "m.room.member", stateKey: this.user, content: { membership: "join" } });
     }
@@ -594,15 +554,8 @@ export class DevBackend implements LiveSession {
    * `sendDelayedEvent` a widget's request ends in. So host- and widget-scheduled events are one
    * list with one kind of id, and a widget can restart or cancel what the host scheduled. The
    * price: a scheduled event is always sent by the DevBackend's user (`sender` is refused).
-   *
-   * TODO-FINDING devbackend-delayed-events-do-not-fire - `InMemoryBackend` never fires a scheduled
-   * event by itself: its delay is only a number. Options: keep it manual ("send now" in the
-   * view, `updateScheduled(…, "send")`: deterministic, what the end-to-end tests want), or let
-   * the DevBackend run a timer per scheduled event (realistic: a call widget's delayed leave
-   * would really happen; but it needs `refresh()` to notice the event first, and tests would
-   * need a switch to turn it off). For now it stays manual, and `scheduled[].scheduledAt` says
-   * when the event was scheduled or last restarted, so the view can show when it would be due.
    */
+  // TODO-FINDING devbackend-delayed-events-do-not-fire - only "Send now" (`updateScheduled`) fires it; `scheduledAt` lets the view show when it would be due.
   async sendEvent(roomId: string, event: Pick<MockedTimelineEvent, "type" | "content"> & { sender?: string }, delayMs?: number): Promise<string> {
     checkEvent(event, false);
     return this.send(this.room(roomId), event, delayMs);
@@ -618,11 +571,6 @@ export class DevBackend implements LiveSession {
     } finally {
       this.refresh();
     }
-  }
-
-  /** Fire a scheduled event as if its delay had elapsed. */
-  fireDelayedEvent(roomId: string, delayId: string): Promise<void> {
-    return this.updateScheduled(roomId, delayId, "send");
   }
 
   /** Make every send of a widget in every room fail (also uploads and scheduling), or succeed again. Host edits are not affected. */
@@ -930,10 +878,8 @@ export class DevBackend implements LiveSession {
     const stateEvents = room.store.state();
     const state = new Map(stateEvents.map((event) => [`${event.eventType}\n${event.stateKey}`, asObject(event.content)]));
 
-    // TODO-FINDING devbackend-widget-event-timestamps - an event a widget sends gets the backend's
-    // counter as `origin_server_ts` (1, 2, 3: January 1970), so the timeline cannot show when it
-    // was sent. Until the Rust `InMemoryBackend` uses a clock, such a timestamp is replaced by
-    // the time this class first saw the event.
+    // TODO-FINDING devbackend-widget-event-timestamps - a widget's event gets the backend's counter as
+    // `origin_server_ts` (1970): replaced by the time this class first saw it.
     const timestamp = (event: MatrixEvent): number => {
       const ts = Number(event.originServerTs);
       if (ts >= 1e11) return ts;
@@ -973,7 +919,7 @@ export class DevBackend implements LiveSession {
         const level = Number(powerLevels[event.stateKey!] ?? 0);
         const displayName = asString(content.displayname);
         const avatarUrl = asString(content.avatar_url);
-        const role = level >= 100 ? "Admin" : level >= 50 ? "Moderator" : undefined;
+        const role = roleFor(level);
         return {
           userId: event.stateKey!,
           joined: content.membership === "join",

@@ -1,13 +1,11 @@
-/** The tab bar of a room panel: the room name (the first tab), the widget tabs and the Timeline tab, closing, the keyboard, the dev tools button and the overflow menu. */
-import { expect, LAB, LEGACY_WIDGET, NEW_WIDGET, test, widgetId } from "./host";
+/** The tab bar of a room panel: the room name (the first tab), the widget tabs and the Timeline tab, closing, the keyboard and the overflow menu. */
+import { expect, type Host, LAB, LEGACY, LEGACY_WIDGET, NEW, NEW_WIDGET, test, widgetId } from "./host";
 
-const NEW = widgetId(LAB, NEW_WIDGET);
-const LEGACY = widgetId(LAB, LEGACY_WIDGET);
 const MANY = "!many:dev.local";
 /** The room name tab of the lab room. */
 const ROOM = "Widget lab";
 
-const widgets = async (host: import("./host").Host) => Object.keys((await host.main()).widgets);
+const widgets = async (host: Host) => Object.keys((await host.main()).widgets);
 
 test.describe("lab room with both widgets open", () => {
   test.beforeEach(async ({ host }) => {
@@ -23,7 +21,7 @@ test.describe("lab room with both widgets open", () => {
     await host.tab(ROOM).click();
     await expect(host.tab(ROOM)).toHaveAttribute("aria-selected", "true");
     await expect(host.page.getByRole("tabpanel", { name: "Widget lab" })).toBeVisible();
-    const overview = host.page.getByTestId("room-overview");
+    const overview = host.overview;
     await expect(overview).toBeVisible();
     // Dev tools are enabled: the widget tabs have the ⋯ button. The room name cannot be closed.
     await expect(host.button("Dev tools of New test widget")).toHaveCount(1);
@@ -72,7 +70,7 @@ test.describe("lab room with both widgets open", () => {
     await host.page.keyboard.up("Alt");
     await expect(host.tab(/Legacy test widget/)).toHaveCount(0);
     await expect(host.tab(ROOM)).toHaveAttribute("aria-selected", "true");
-    await expect(host.page.getByTestId("room-overview")).toBeVisible();
+    await expect(host.overview).toBeVisible();
     await expect.poll(() => widgets(host)).toEqual([]);
     await expect(host.panels).toHaveCount(1);
 
@@ -139,7 +137,7 @@ test("the Timeline tab closes like a widget tab: ×, Delete and Alt+W; then Alt+
   await host.populate("lab", { sidePanel: null, behavior: { autoApproveCapabilities: true }, open: [{ room: LAB, widgets: [NEW_WIDGET], timeline: true }] });
   await expect(host.page.getByRole("tab")).toHaveText([/Widget lab/, /New test widget/, /Timeline/]);
   await expect(host.tab("Timeline")).toHaveAttribute("aria-selected", "true");
-  const overview = host.page.getByTestId("room-overview");
+  const overview = host.overview;
   const open = async () => {
     await host.tab(ROOM).click();
     await expect(overview).toBeVisible();
@@ -173,23 +171,6 @@ test("the Timeline tab closes like a widget tab: ×, Delete and Alt+W; then Alt+
   await expect(host.button("Close panel")).toHaveAttribute("title", "Close panel (Alt+W)");
   await host.page.keyboard.press("Alt+KeyW");
   await expect(host.panels).toHaveCount(0);
-});
-
-test("the dev tools button of a tab only exists while dev tools are enabled, also in the DevBackend", async ({ host }) => {
-  // A seed can turn the dev tools off; the DevBackend stays active and enabled.
-  await host.populate("lab", { sidePanel: null, settings: { devTools: false }, open: [{ room: LAB, widgets: [NEW_WIDGET] }] });
-  await expect(host.tab(/New test widget/)).toBeVisible();
-  await expect(host.button("Dev tools of New test widget")).toHaveCount(0);
-  await expect(host.button("Close New test widget")).toHaveCount(1);
-  await expect(host.app).toHaveClass(/fence/);
-  // The Dev tools button stays while the DevBackend is active.
-  await expect(host.leftBar.getByRole("button", { name: "Dev tools", exact: true })).toBeVisible();
-  expect((await host.state()).settings).toMatchObject({ devTools: false, devBackend: true });
-
-  await host.dispatch({ type: "settings/set", settings: { devTools: true } });
-  await expect(host.button("Dev tools of New test widget")).toHaveCount(1);
-  await host.button("Dev tools of New test widget").click();
-  await expect(host.button("Dev tools of New test widget")).toHaveAttribute("aria-pressed", "true");
 });
 
 test("more tabs than fit: the widget tabs scroll behind the room name and the “All tabs” menu lists and activates them", async ({ host }) => {

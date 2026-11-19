@@ -3,14 +3,11 @@
 - **Target:** [MSC4412](https://github.com/matrix-org/matrix-spec-proposals/pull/4412), `proposals/4412-widget-base-postmessage-api.md`
 - **Base:** `1794f40325a449eed21dcbfce53efc80e89f56f6`
 - **Status:** draft
-- **Implemented here:** the source `webview` (`crates/matrix-widget-actions/src/capabilities.rs`:
-  `Capability::WebviewSandbox` / `WebviewAllow`, `is_webview`; the test
-  `webview_capabilities_name_no_action`), the host driver's policy for it
-  (`crates/matrix-widget-host-driver/src/webview.rs`); a string of any other source stays
-  `Capability::Other` and grants nothing. The first other source:
-  [`../new/webview-capabilities.md`](../new/webview-capabilities.md), which also changes
-  [`../msc4411/strict-webview-defaults.md`](../msc4411/strict-webview-defaults.md). The hunks share
-  no line with [`merge-capability-requests.md`](merge-capability-requests.md) and
+- **Implemented here:** the source `webview` (`crates/matrix-widget-actions/src/capabilities.rs`,
+  `Capability::WebviewSandbox` / `WebviewAllow`) and the driver's policy for it
+  (`crates/matrix-widget-host-driver/src/webview.rs`); a string of any other source is
+  `Capability::Other`. The first other source: [`../new/webview-capabilities.md`](../new/webview-capabilities.md).
+  The hunks share no line with [`merge-capability-requests.md`](merge-capability-requests.md) and
   [`capability-lifetimes.md`](capability-lifetimes.md); the three apply in any order.
 
 ## Why

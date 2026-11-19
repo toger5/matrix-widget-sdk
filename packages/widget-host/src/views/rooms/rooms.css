@@ -1,4 +1,4 @@
-/* Rooms, app-only (layer views, after the design files): the panels in the dock, scrolling bodies, tab hover states, the overflowing tab bar, real search and form inputs. The design rules are src/styles/rooms.css. */
+/* Rooms, app-only (layer views): the panels in the dock, scrolling bodies, tab hover states, the overflowing tab bar, real search and form inputs. The design rules are src/styles/rooms.css. */
 
 /* The RoomsArea is a DockArea (src/views/dock): its splitters are the 8px gaps between the panels. Each panel
    is rendered into a container (`.roompanel-host`) that the dock moves into its cell; the header moves the panel. */

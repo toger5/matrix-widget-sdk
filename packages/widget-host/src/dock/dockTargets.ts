@@ -42,7 +42,7 @@ export const HYSTERESIS = 64;
 /** At most this many targets are shown at once. */
 export const MAX_SHOWN = 4;
 /** The nearest target is active (blue) if it is this near; releasing elsewhere cancels. */
-export const SNAP_RADIUS = 160;
+const SNAP_RADIUS = 160;
 
 export function targetKey(t: DropTarget): string {
   switch (t.kind) {

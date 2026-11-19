@@ -52,7 +52,7 @@ import { DevBackend } from "../matrix_session/memory/devBackend";
 import { validateWidgetEvent, type DevBackendSeed } from "../matrix_session/memory/seed";
 import { sessions, StoredLoginInvalidError, type LiveSession, type PendingLogin, type RoomBackend, type RoomSummary, type SessionProvider } from "../session";
 import { roomWidgets } from "../views/helpers";
-import { WIDGET_EVENT_TYPES, localWidgetKey, widgetKey, type StateEvent, type WidgetDefinition, type WidgetIframe } from "../widgetStateEvent";
+import { WIDGET_EVENT_TYPES, localWidgetKey, widgetEventName, widgetKey, type StateEvent, type WidgetIframe } from "../widgetStateEvent";
 import {
   activateTab,
   addPanel,
@@ -80,7 +80,6 @@ import {
   updateDevTools,
   updatePanel,
   updateRoomToolsTab,
-  workspaceWidgetIds,
 } from "./layout";
 import { loadPersisted, savePersisted, type PersistedUi } from "./persistence";
 import { DEFAULT_DEV_BEHAVIOR, changeScheduled, defaultRoomToolsVm, dropScheduled, restartScheduled, roomChangeConfirmation, withoutAccount } from "./roomTools";
@@ -93,16 +92,13 @@ export const DEV_ACCOUNT_ID: AccountId = "devBackend";
 /** Recent widgets and recent rooms kept per account (the RoomPicker shows `RECENT_TILES` of each). */
 const MAX_RECENTS = 12;
 const TOAST_MS = 4000;
-/** Why a running device verification ended when the DevBackend became active. */
-/** A new room panel finds no place in the RoomsArea (`addPanel`). */
+const SIDE_PANEL_WIDTH = 324;
 const DOCK_FULL = "No room for another panel: close one first";
+/** Why a running device verification ended when the DevBackend became active. */
 const VERIFICATION_STOPPED = "The DevBackend was activated, which stops the verification.";
 
 const errorText = (e: unknown) => (e instanceof Error ? e.message : String(e));
-/**
- * The text of a failure of a `MatrixBackend` call: a uniffi error's `message` is only its type
- * ("BackendError.Failed"), the reason (and the Matrix `errcode`, as in "M_FORBIDDEN: …") is inside.
- */
+/** A uniffi error's `message` is only its type ("BackendError.Failed"); the reason and the `errcode` are inside. */
 const backendErrorText = (e: unknown) => (BackendError.Failed.instanceOf(e) ? (e.inner.errcode ? `${e.inner.errcode}: ${e.inner.reason}` : e.inner.reason) : errorText(e));
 
 /**
@@ -124,10 +120,8 @@ const SCHEDULED_SLACK_MS = 1000;
 /** The longest a `setTimeout` waits; a longer delay would fire at once. */
 const MAX_TIMER_MS = 2 ** 31 - 1;
 /**
- * The loop guard of the webview reloads: a widget whose iframe the driver loads again for its webview
- * capabilities (`WidgetRuntimeEvents.loadIframe`, after the first) more than `MAX_WEBVIEW_RELOADS`
- * times within `WEBVIEW_RELOAD_WINDOW_MS` fails instead. The reloaded iframe has what was granted,
- * so it needs no further reload: only a fault gets there.
+ * Loop guard: a widget whose iframe the driver reloads for its webview capabilities more than
+ * `MAX_WEBVIEW_RELOADS` times within `WEBVIEW_RELOAD_WINDOW_MS` fails instead. Only a fault gets there.
  */
 const MAX_WEBVIEW_RELOADS = 2;
 const WEBVIEW_RELOAD_WINDOW_MS = 10_000;
@@ -152,7 +146,7 @@ export interface HostSeed extends DevBackendSeed {
   open?: { room: RoomId; widgets?: string[]; timeline?: boolean; active?: string; overview?: boolean }[];
   /** The SidePanel view; `null` closes it. Default: the Dev tools (the DevBackendView), like after activating the DevBackend. */
   sidePanel?: "roomTools" | "settings" | "account" | "rooms" | null;
-  /** WidgetHostBehavior of the DevBackend (all mocked rooms). "Fail sends" is the content field `failSends`. */
+  /** WidgetHostBehavior of the DevBackend. "Fail sends" is the content field `failSends`. */
   behavior?: Partial<WidgetHostBehavior>;
   leftBarCollapsed?: boolean;
   /** How long a widget has for `notify_ready` before it counts as failed. Default: 15 s (`NOTIFY_READY_TIMEOUT_MS`). */
@@ -199,6 +193,7 @@ export class AppController {
   private readonly darkScheme = globalThis.matchMedia?.("(prefers-color-scheme: dark)");
   /** The theme the running widgets were last told about (`pushTheme`). */
   private theme: "light" | "dark";
+  private readonly persisted: PersistedUi | undefined;
 
   constructor(options: ControllerOptions = {}) {
     this.provider = options.provider ?? sessions;
@@ -214,8 +209,6 @@ export class AppController {
     // The OS scheme matters while the setting is "system". (The AppShell listens itself for the page's `data-theme`.)
     this.darkScheme?.addEventListener("change", () => this.pushTheme());
   }
-
-  private readonly persisted: PersistedUi | undefined;
 
   // -------------------------------------------------------------------------------------------
   // Reading the model
@@ -295,16 +288,16 @@ export class AppController {
     window.setTimeout(() => {
       this.saveQueued = false;
       const m = this.main;
-      // The DevBackend's content lives in memory only, so its workspace cannot be restored after a reload.
-      const workspaces = Object.fromEntries(Object.entries(m?.workspaces ?? this.persisted?.workspaces ?? {}).filter(([id]) => id !== DEV_ACCOUNT_ID));
+      // The DevBackend's content lives in memory only: nothing of it can be restored after a reload.
+      const withoutDev = <T>(byAccount: Record<AccountId, T>) => Object.fromEntries(Object.entries(byAccount).filter(([id]) => id !== DEV_ACCOUNT_ID));
       savePersisted({
         settings: this.vm.settings,
         leftBarCollapsed: m?.leftBar.collapsed ?? this.persisted?.leftBarCollapsed ?? false,
-        sidePanelWidth: m?.sidePanel.width ?? this.persisted?.sidePanelWidth ?? 324,
-        workspaces,
-        recents: Object.fromEntries(Object.entries(this.recentWidgets).filter(([id]) => id !== DEV_ACCOUNT_ID)),
-        recentRooms: Object.fromEntries(Object.entries(this.recentRooms).filter(([id]) => id !== DEV_ACCOUNT_ID)),
-        localWidgets: Object.fromEntries(Object.entries(this.localWidgets).filter(([id]) => id !== DEV_ACCOUNT_ID)),
+        sidePanelWidth: m?.sidePanel.width ?? this.persisted?.sidePanelWidth ?? SIDE_PANEL_WIDTH,
+        workspaces: withoutDev(m?.workspaces ?? this.persisted?.workspaces ?? {}),
+        recents: withoutDev(this.recentWidgets),
+        recentRooms: withoutDev(this.recentRooms),
+        localWidgets: withoutDev(this.localWidgets),
         lastAccountId: m && m.activeAccountId !== DEV_ACCOUNT_ID ? m.activeAccountId : (m?.returnAccountId ?? this.persisted?.lastAccountId),
       });
     }, 300);
@@ -350,7 +343,7 @@ export class AppController {
       accounts,
       activeAccountId,
       leftBar: { collapsed: this.persisted?.leftBarCollapsed ?? false, expandButtonVisible: false },
-      sidePanel: { width: this.persisted?.sidePanelWidth ?? 324 },
+      sidePanel: { width: this.persisted?.sidePanelWidth ?? SIDE_PANEL_WIDTH },
       workspaces: { ...this.persisted?.workspaces, [activeAccountId]: this.persisted?.workspaces?.[activeAccountId] ?? emptyWorkspace() },
       data: this.accountData(activeAccountId, { status: "loading" }),
       widgets: {},
@@ -389,7 +382,7 @@ export class AppController {
     }
   }
 
-  /** A session is live: keep it, show its account, and load the rooms if it is the active one. */
+  /** A session is live: keep it, show its account, and watch its rooms if it is the active one. */
   private async adoptSession(session: LiveSession): Promise<void> {
     this.sessions.set(session.accountId, session);
     const suspended = this.devActive;
@@ -407,24 +400,11 @@ export class AppController {
     this.followVerification(session);
   }
 
-  /**
-   * From now on `verified` and `verification` of the session's account follow its
-   * `AccountVerification` (a suspended session may only answer after `resume()`).
-   */
+  /** From now on `verified` and `verification` of the session's account follow its `AccountVerification`. */
   private followVerification(session: LiveSession): void {
-    this.dropVerification(session.accountId);
-    this.verifications.set(session.accountId, new AccountVerification(session, this.verificationEvents(session.accountId)));
-  }
-
-  /** Cancel what runs and stop following the account's session. */
-  private dropVerification(accountId: AccountId): void {
-    this.verifications.get(accountId)?.dispose();
-    this.verifications.delete(accountId);
-  }
-
-  /** Where the `AccountVerification` of an account reports to. */
-  private verificationEvents(accountId: AccountId): AccountVerificationEvents {
-    return {
+    const { accountId } = session;
+    this.dropVerification(accountId);
+    const events: AccountVerificationEvents = {
       changed: ({ verified, verification }) => this.setAccount(accountId, (a) => ({ ...a, verified, verification })),
       outcome: (outcome) => {
         // The AccountView shows it; elsewhere a toast says how it ended.
@@ -435,6 +415,13 @@ export class AppController {
         this.toast(outcome.verified ? `This device is verified for ${name}` : `Verifying this device for ${name} failed: ${outcome.error}`);
       },
     };
+    this.verifications.set(accountId, new AccountVerification(session, events));
+  }
+
+  /** Cancel what runs and stop following the account's session. */
+  private dropVerification(accountId: AccountId): void {
+    this.verifications.get(accountId)?.dispose();
+    this.verifications.delete(accountId);
   }
 
   /** Remove an account from the app (it was logged out, or its login is gone). */
@@ -543,7 +530,7 @@ export class AppController {
     if (complete) {
       for (const widget of Object.values(this.main?.widgets ?? {})) {
         if (!known(widget.roomId, widget.widgetKey)) this.stopWidget(widget.id, true);
-        // TODO-FINDING widget-url-changes-while-running - the widget's state event changed (new URL or name) while the widget runs. Nothing happens today: the running widget keeps the old URL until it is reloaded (the dev tool bar's reload button) or closed and opened again. Options: reload it at once (loses its state), or mark the tab "changed, reload?".
+        // TODO-FINDING widget-url-changes-while-running - the widget's state event changed (new URL or name) while the widget runs. Nothing happens: the running widget keeps the old URL until it is reloaded (the dev tool bar's reload button) or closed and opened again. Options: reload it at once (loses its state), or mark the tab "changed, reload?".
       }
     }
   }
@@ -628,16 +615,19 @@ export class AppController {
     return true;
   }
 
+  /** Dispose a widget's runtime (its driver) and release its backend; the view model is the caller's. */
+  private disposeRuntime(id: WidgetInstanceId, roomId: RoomId | undefined): void {
+    const runtime = this.runtimes.get(id);
+    if (!runtime) return;
+    runtime.dispose();
+    this.runtimes.delete(id);
+    if (roomId !== undefined) this.releaseBackend(roomId);
+  }
+
   /** Stop a widget: its driver, its iframe, its backend reference. `closeTab` also removes its tab. */
   private stopWidget(id: WidgetInstanceId, closeTab: boolean): void {
-    const widget = this.main?.widgets[id];
-    const runtime = this.runtimes.get(id);
     this.webviewReloads.delete(id);
-    if (runtime) {
-      runtime.dispose();
-      this.runtimes.delete(id);
-      if (widget) this.releaseBackend(widget.roomId);
-    }
+    this.disposeRuntime(id, this.main?.widgets[id]?.roomId);
     this.setMain((m) => {
       const { [id]: _stopped, ...widgets } = m.widgets;
       return { ...m, widgets };
@@ -668,16 +658,14 @@ export class AppController {
     if (this.main?.widgets[id]?.generation === generation) this.runtimes.get(id)?.attach(iframe);
   }
 
-  resolvedTheme(): "light" | "dark" {
+  private resolvedTheme(): "light" | "dark" {
     const { theme } = this.vm.settings;
     return theme === "system" ? (this.darkScheme?.matches ? "dark" : "light") : theme;
   }
 
   /**
-   * Tell the running widgets when the resolved theme changed (the setting, or the OS while it is
-   * "system"): `update_theme`, which the driver sends only to widgets holding `host:…update_theme`.
-   * Widgets that start later ask with `get_client_context`. The iframes follow by CSS on their own
-   * (docs/widget-color-scheme.md).
+   * Send `update_theme` to the running widgets when the resolved theme changed (widgets that start
+   * later ask with `get_client_context`; the iframes follow by CSS: docs/widget-color-scheme.md).
    */
   private pushTheme(): void {
     const theme = this.resolvedTheme();
@@ -699,14 +687,20 @@ export class AppController {
   // -------------------------------------------------------------------------------------------
   // Panels and tabs
 
+  /** Show the tab of a widget if it has one; `false`: it has none. */
+  private showWidgetTab(id: WidgetInstanceId): boolean {
+    const tab = this.workspace && findWidgetTab(this.workspace, id);
+    if (tab) this.setWorkspace((w) => activateTab(w, tab.panelId, tab.tabId));
+    return !!tab;
+  }
+
   /** Open a widget in a panel as a new tab at the end: start it, or bring its tab to the front if it already runs. */
   private openWidget(panelId: string, widgetKey: WidgetKey): void {
     const ws = this.workspace;
     const room = ws && roomOfPanel(ws, panelId);
     if (!ws || !room) return;
     const id = widgetInstanceId(room.roomId, widgetKey);
-    const existing = findWidgetTab(ws, id);
-    if (existing) return this.setWorkspace((w) => activateTab(w, existing.panelId, existing.tabId));
+    if (this.showWidgetTab(id)) return;
     // Not running, or running without a tab (always on screen, its panel was closed): it gets a tab here.
     if (!this.main?.widgets[id] && !this.startWidget(room.roomId, widgetKey)) return;
     this.setWorkspace((w) => focusPanel(putTab(w, panelId, { kind: "widget", id: newId("tab"), widgetId: id }), panelId));
@@ -722,7 +716,7 @@ export class AppController {
     if (!tab) return;
     this.setWorkspace((ws) => removeTab(ws, panelId, tabId));
     if (tab.kind !== "widget") return;
-    // TODO-FINDING close-tab-of-always-on-screen-widget - closing the tab (or the room panel) of an always-on-screen widget keeps it running in the PiP panel; only the PiP close button stops it. This is the reading of designFeedback.md ("How I read four points", 4) and is not in appDesign.md. The alternative: closing the tab stops the widget like any other.
+    // TODO-FINDING close-tab-of-always-on-screen-widget - closing the tab (or the room panel) of an always-on-screen widget keeps it running in the PiP panel; only the PiP close button stops it. Not in appDesign.md. The alternative: closing the tab stops the widget like any other.
     if (!this.main?.widgets[tab.widgetId]?.alwaysOnScreen) this.stopWidget(tab.widgetId, false);
   }
 
@@ -739,8 +733,7 @@ export class AppController {
   private openRoomIn(panelId: PanelId, roomId: RoomId, widgetKey?: WidgetKey): void {
     const ws = this.workspace;
     if (!ws || !panelOf(ws, panelId)) return;
-    const tab = widgetKey !== undefined ? findWidgetTab(ws, widgetInstanceId(roomId, widgetKey)) : undefined;
-    if (tab) return this.setWorkspace((w) => activateTab(w, tab.panelId, tab.tabId));
+    if (widgetKey !== undefined && this.showWidgetTab(widgetInstanceId(roomId, widgetKey))) return;
     const old = roomOfPanel(ws, panelId);
     if (old && old.roomId !== roomId) for (const t of old.tabs) this.closeTab(panelId, t.id);
     if (old?.roomId !== roomId) this.setWorkspace((w) => focusPanel(updatePanel(w, panelId, (p) => ({ ...p, content: { kind: "room", roomId, tabs: [] } })), panelId));
@@ -768,8 +761,7 @@ export class AppController {
 
   /** A pick in the room picker dialog: a new panel with the room right of the focused one; a widget that has a tab already is jumped to. */
   private openRoomInNewPanel(roomId: RoomId, widgetKey?: WidgetKey): void {
-    const tab = widgetKey !== undefined && this.workspace ? findWidgetTab(this.workspace, widgetInstanceId(roomId, widgetKey)) : undefined;
-    if (tab) return this.setWorkspace((w) => activateTab(w, tab.panelId, tab.tabId));
+    if (widgetKey !== undefined && this.showWidgetTab(widgetInstanceId(roomId, widgetKey))) return;
     const panelId = this.addPanel({ kind: "room", roomId, tabs: [] }, this.workspace?.roomsArea.focusedPanelId);
     if (panelId === undefined) return;
     this.addRecent(roomId);
@@ -777,22 +769,16 @@ export class AppController {
   }
 
   private jumpToWidget(id: WidgetInstanceId): void {
-    const ws = this.workspace;
     const widget = this.main?.widgets[id];
-    if (!ws || !widget) return;
-    const tab = findWidgetTab(ws, id);
-    if (tab) return this.setWorkspace((w) => activateTab(w, tab.panelId, tab.tabId));
+    if (!this.workspace || !widget || this.showWidgetTab(id)) return;
     // Its room panel was closed: open the room again, on the right.
     const tabId = newId("tab");
     this.addPanel({ kind: "room", roomId: widget.roomId, tabs: [{ kind: "widget", id: tabId, widgetId: id }], activeTabId: tabId });
   }
 
   /**
-   * The driver of a widget says what its iframe is (`WidgetRuntimeEvents.loadIframe`): a new generation
-   * with it, behind the loading state, and no open question. The first time when the widget starts;
-   * again when its webview capabilities changed the `sandbox` or `allow` (the widget starts over in
-   * the new iframe, on the same runtime and driver, which grants it what it held). A widget that
-   * gets there too often in a short time is stopped instead.
+   * `WidgetRuntimeEvents.loadIframe`: a new generation with this iframe, behind the loading state,
+   * on the same runtime and driver. Too many reloads in a short time stop the widget instead.
    */
   private loadIframe(id: WidgetInstanceId, iframe: WidgetIframe): void {
     const widget = this.main?.widgets[id];
@@ -803,12 +789,7 @@ export class AppController {
       if (recent.length >= MAX_WEBVIEW_RELOADS) {
         // Stopped, not left running hidden: "Retry" (`widget/reload`) starts it again.
         this.webviewReloads.delete(id);
-        const runtime = this.runtimes.get(id);
-        if (runtime) {
-          runtime.dispose();
-          this.runtimes.delete(id);
-          this.releaseBackend(widget.roomId);
-        }
+        this.disposeRuntime(id, widget.roomId);
         const error = `The widget was restarted ${recent.length} times within ${WEBVIEW_RELOAD_WINDOW_MS / 1000} seconds to change the permissions of its iframe, and is stopped.`;
         return this.setWidget(id, (w) => ({ ...w, generation: undefined, iframe: undefined, prompts: {}, load: { state: "failed", error } }));
       }
@@ -821,12 +802,7 @@ export class AppController {
   private reloadWidget(id: WidgetInstanceId): void {
     const widget = this.main?.widgets[id];
     if (!widget) return;
-    const runtime = this.runtimes.get(id);
-    if (runtime) {
-      runtime.dispose();
-      this.runtimes.delete(id);
-      this.releaseBackend(widget.roomId);
-    }
+    this.disposeRuntime(id, widget.roomId);
     void this.startWidget(widget.roomId, widget.widgetKey);
     // A widget without a tab (always on screen) has no place to ask.
     if (this.main?.widgets[id]?.load.state === "sameOrigin" && this.workspace && !findWidgetTab(this.workspace, id)) this.stopWidget(id, false);
@@ -882,10 +858,9 @@ export class AppController {
     if (!room.widgetEvents) throw new Error("The widget cannot be added to the room yet: its widgets are still loading");
     const existing = room.widgetEvents.find((e) => e.type === event.type && e.state_key === event.state_key && describesWidget(e));
     if (existing && !confirmed) {
-      const name = typeof existing.content.name === "string" && existing.content.name ? existing.content.name : existing.state_key;
       return this.modal({
         kind: "confirm",
-        title: `Replace ${name} in the room?`,
+        title: `Replace ${widgetEventName(existing)} in the room?`,
         body: "The room already has a widget with this type and ID. Everyone in the room gets the new one instead.",
         confirmLabel: "Replace the widget",
         danger: true,
@@ -1054,10 +1029,9 @@ export class AppController {
     const event = this.localOf(roomId).find((e) => localWidgetKey(e) === key);
     if (!event) return;
     if (!confirmed) {
-      const name = typeof event.content.name === "string" && event.content.name ? event.content.name : event.state_key;
       return this.modal({
         kind: "confirm",
-        title: `Remove ${name}?`,
+        title: `Remove ${widgetEventName(event)}?`,
         body: "The local widget is removed from this host: it stops, its tab closes and what you approved for it is forgotten. The room is not changed.",
         confirmLabel: "Remove the widget",
         danger: true,
@@ -1072,9 +1046,10 @@ export class AppController {
   // -------------------------------------------------------------------------------------------
   // Accounts and the DevBackend
 
-  private async ensureDevBackend(): Promise<DevBackend> {
+  /** The DevBackend, made from `seed` if there is none yet. */
+  private async ensureDevBackend(seed: DevBackendSeed = { demoMedia: true }): Promise<DevBackend> {
     if (!this.devBackend) {
-      this.devBackend = await DevBackend.fromSeed({ demoMedia: true });
+      this.devBackend = await DevBackend.fromSeed(seed);
       this.sessions.set(DEV_ACCOUNT_ID, this.devBackend);
     }
     return this.devBackend;
@@ -1227,7 +1202,7 @@ export class AppController {
     const localWidgets = localWidgetsOfSeed(seed.localWidgets);
     const seededRoomIds = new Set(Array.isArray(seed.rooms) ? seed.rooms.map((r) => r?.id) : []);
     for (const roomId of Object.keys(localWidgets)) if (!seededRoomIds.has(roomId)) throw new Error(`seed.localWidgets: unknown room ${roomId}`);
-    // A JSON seed is not type checked: an unknown view (the old "devBackend") would open an empty panel.
+    // A JSON seed is not type checked: an unknown view would open an empty panel.
     if (seed.sidePanel != null && !SEED_SIDE_PANEL_VIEWS.includes(seed.sidePanel)) {
       throw new Error(`seed.sidePanel: unknown view ${JSON.stringify(seed.sidePanel)}, expected one of ${SEED_SIDE_PANEL_VIEWS.join(", ")} or null`);
     }
@@ -1239,12 +1214,9 @@ export class AppController {
     this.stopWatchingRooms?.();
     // The DevBackend validates its seed strictly: hand it its own fields only.
     const content: DevBackendSeed = { userId: seed.userId, rooms: seed.rooms, media: seed.media, demoMedia: seed.demoMedia, failSends: seed.failSends };
-    if (this.devBackend) await this.devBackend.populate(content);
-    else {
-      this.devBackend = await DevBackend.fromSeed(content);
-      this.sessions.set(DEV_ACCOUNT_ID, this.devBackend);
-    }
-    const dev = this.devBackend;
+    const existed = this.devBackend;
+    const dev = await this.ensureDevBackend(content);
+    if (existed) await dev.populate(content);
     const rooms = dev.rooms();
     const behavior = { ...DEFAULT_DEV_BEHAVIOR, ...seed.behavior };
     // The DevBackend's recents and local widgets live in memory only and start again with its content.
@@ -1258,7 +1230,7 @@ export class AppController {
     this.showMain(matrixAccounts, DEV_ACCOUNT_ID, {
       returnAccountId: matrixAccounts[0]?.id,
       leftBar: { collapsed: seed.leftBarCollapsed === true, expandButtonVisible: false },
-      sidePanel: { width: 324, view: seed.sidePanel === null ? undefined : (seed.sidePanel ?? "roomTools") },
+      sidePanel: { width: SIDE_PANEL_WIDTH, view: seed.sidePanel === null ? undefined : (seed.sidePanel ?? "roomTools") },
       roomTools: this.seededRoomTools(dev.roomIds()[0], behavior),
       workspaces: { [DEV_ACCOUNT_ID]: emptyWorkspace() },
       data: this.accountData(DEV_ACCOUNT_ID, { status: "ready", value: rooms }),
@@ -1688,7 +1660,7 @@ function localWidgetsOfSeed(value: unknown): Record<RoomId, StateEvent[]> {
   );
 }
 
-/** The seed the URL parameters of the old in-memory mode describe: one room with the two test widgets, plus `event`. */
+/** The seed the URL parameters describe: one room with the two test widgets, plus `event`. */
 function seedFromParams(params: URLSearchParams): HostSeed {
   const room = params.get("room") ?? "!room:example.org";
   const widgets = [EXAMPLE_NEW, EXAMPLE_LEGACY];

@@ -16,8 +16,7 @@ async function pinned(host: Host, count: number): Promise<void> {
   await host.populate("six-widgets", { open: [{ room: LAB, widgets: keys(count), overview: true }] });
   for (let n = 1; n <= count; n++) {
     await activate(host, `Widget ${n}`);
-    await host.frame(W(n)).getByRole("button", { name: "set_always_on_screen true" }).click();
-    await expect.poll(async () => (await host.main()).widgets[W(n)]?.alwaysOnScreen, { message: `Widget ${n} is always on screen` }).toBe(true);
+    await host.alwaysOnScreen(W(n));
   }
   await activate(host, "Widget lab");
   await expect(boxes(host)).toHaveCount(Math.min(count, 4));
@@ -215,8 +214,7 @@ test("the surround drags the panel, the corner resizes the boxes, the arrow keys
 
 test("closing the room panel of an always-on-screen widget keeps it running in the PiP panel; go to reopens the room", async ({ host }) => {
   await host.populate("six-widgets", { open: [{ room: LAB, widgets: keys(1) }] });
-  await host.frame(W(1)).getByRole("button", { name: "set_always_on_screen true" }).click();
-  await expect.poll(async () => (await host.main()).widgets[W(1)]?.alwaysOnScreen).toBe(true);
+  await host.alwaysOnScreen(W(1));
   const token = await host.token(W(1));
 
   await host.panels.getByRole("button", { name: "Close panel" }).click();
@@ -239,8 +237,7 @@ test("the dev tools of a widget stay open inside its PiP box, which can be enlar
   await host.populate("six-widgets", { open: [{ room: LAB, widgets: keys(2), overview: true }] });
   for (const n of [1, 2]) {
     await activate(host, `Widget ${n}`);
-    await host.frame(W(n)).getByRole("button", { name: "set_always_on_screen true" }).click();
-    await expect.poll(async () => (await host.main()).widgets[W(n)]?.alwaysOnScreen).toBe(true);
+    await host.alwaysOnScreen(W(n));
   }
   await activate(host, "Widget 1");
   await host.button("Dev tools of Widget 1").click();

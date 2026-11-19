@@ -32,10 +32,6 @@ mod tests {
             "widget:org.matrix.mscXXXX.send_event.timeline:m.room.message"
         );
         assert_eq!(WidgetRequest::from_wire(&wire).unwrap(), caps);
-        // The MSC2974 spelling of the legacy api is not accepted: the compat wrapper renames it.
-        let mut legacy = wire.clone();
-        legacy.action = "org.matrix.msc2974.request_capabilities".into();
-        assert_eq!(WidgetRequest::from_wire(&legacy).unwrap(), WidgetRequest::Unknown);
         assert_eq!(WidgetResponse::from_wire(&wire.ack()).unwrap(), WidgetResponse::RequestCapabilities);
     }
 }

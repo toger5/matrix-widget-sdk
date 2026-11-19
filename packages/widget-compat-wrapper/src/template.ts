@@ -1,15 +1,7 @@
 /**
- * Legacy URL templating, moved from the host into the wrapper.
- *
- * Legacy clients replaced `$matrix_user_id` & co. in the widget URL before loading it. An MSC4412
- * host loads the URL as it is. The wrapper gets the same facts from the `matrix_context` and
- * `client_context` actions and fills them in here.
- *
- * The rules are those of matrix-widget-api's `runTemplate`:
- * - values are URI-encoded;
- * - unknown variables stay as they are;
- * - every key of the state event's `data` is a variable too;
- * - the built-in variables win over `data`.
+ * Legacy URL templating (`$matrix_user_id` & co.), which an MSC4412 host does not do. The rules
+ * are matrix-widget-api's `runTemplate`: values are URI-encoded, unknown variables stay, every key
+ * of the state event's `data` is a variable too, and the built-in variables win over `data`.
  */
 
 /** The `matrix_context` response (see the Rust `MatrixContextResponse`). */
@@ -42,7 +34,7 @@ export interface TemplateInput {
 }
 
 /** Every template variable by name (without the `$`). Missing facts are empty strings. */
-export function templateVariables({ widgetId, matrix, client, data }: TemplateInput): Record<string, string> {
+function templateVariables({ widgetId, matrix, client, data }: TemplateInput): Record<string, string> {
   return {
     ...Object.fromEntries(Object.entries(data ?? {}).map(([k, v]) => [k, String(v)])),
     matrix_user_id: matrix.user_id ?? "",

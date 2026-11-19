@@ -1,22 +1,15 @@
-//! The interface between the widget host driver and an actual Matrix client.
+//! The interface between the widget host driver and a Matrix client: [`MatrixBackend`], an async
+//! trait a host implements once per Matrix SDK. The driver never talks to a homeserver itself.
 //!
-//! The driver (`matrix-widget-host-driver`) never talks to a homeserver itself. Everything that touches
-//! Matrix goes through [`MatrixBackend`], an async trait a host implements once per Matrix SDK
-//! (matrix-rust-sdk, matrix-js-sdk through the UniFFI/wasm bindings, a Kotlin/Swift SDK, ...).
+//! The trait is shaped after matrix-rust-rtc's `MatrixBackend` (same names and parameter order
+//! where both need the same thing, `docs/parity.md`), so one adapter can serve both. Besides
+//! send/read methods it has subscriptions ([`MatrixBackend::subscribe_room`] and co.) that the
+//! driver opens whenever the widget's capabilities change; the backend feeds the sinks until the
+//! [`Subscription`] is cancelled.
 //!
-//! The trait is shaped after the `MatrixBackend` of
-//! [matrix-rust-rtc](https://github.com/element-hq/matrix-rust-rtc) (same method names and
-//! parameter order wherever both need the same thing, see `docs/parity.md`), so one adapter per
-//! SDK can serve both. It has a *send/read* half (the driver asks the backend to send or read)
-//! and a *subscribe* half: [`MatrixBackend::subscribe_room`] registers a [`RoomSink`] that the
-//! backend feeds with new timeline events and with the current room state until the returned
-//! [`Subscription`] is cancelled; [`MatrixBackend::subscribe_timeline`] does the same for the
-//! changes of the timeline cache ([`TimelineSink`]). The driver subscribes itself whenever the widget's capabilities
-//! change, so a host does not push events anywhere; it only implements the subscription.
-//!
-//! One backend instance is bound to **one room** (the room the widget lives in). Every method
-//! still takes the `room_id`, like matrix-rust-rtc's; the driver always passes
-//! [`MatrixBackend::room_id`] and an implementation may reject anything else.
+//! One backend serves **one room**. Every method still takes the `room_id` (like
+//! matrix-rust-rtc's); the driver always passes [`MatrixBackend::room_id`] and an implementation
+//! may reject anything else.
 //!
 //! [`InMemoryBackend`] is a complete in-process implementation for tests and prototypes.
 
@@ -182,9 +175,8 @@ pub trait Subscription: Send + Sync {
 
 /// Matrix operations the widget host driver needs, scoped to **one room**.
 ///
-/// Capability checks have already happened in the driver by the time a method here is called, so
-/// implementations only perform the operation. Every method is required (UniFFI traits have no
-/// default bodies); an operation a client cannot offer returns
+/// The driver has done the capability checks; implementations only perform the operation. Every
+/// method is required (UniFFI traits have no default bodies); one a client cannot offer returns
 /// [`BackendError::not_implemented`].
 #[cfg_attr(feature = "uniffi", uniffi::export(with_foreign))]
 #[async_trait::async_trait]

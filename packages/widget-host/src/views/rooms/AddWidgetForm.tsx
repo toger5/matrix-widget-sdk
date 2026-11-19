@@ -7,7 +7,7 @@
 import { useEffect, useState, type FormEvent, type KeyboardEvent } from "react";
 
 import type { RoomId, WidgetWriteViewModel } from "../../appViewModel";
-import type { StateEvent } from "../../widgetStateEvent";
+import { widgetEventName, type StateEvent } from "../../widgetStateEvent";
 import { useDispatch, useViewEnv } from "../env";
 import {
   ElementCallFields,
@@ -30,7 +30,7 @@ import { Button, Icon } from "../ui/atoms";
 import { FormChips, JsonArea } from "../ui/forms";
 
 type AddForm = "testWidget" | "widget" | "elementCall" | "json";
-export type AddWidgetTarget = "local" | "room";
+type AddWidgetTarget = "local" | "room";
 
 const FORMS: { form: AddForm; label: string }[] = [
   { form: "testWidget", label: "Test widget" },
@@ -173,7 +173,7 @@ export function AddWidgetForm({ roomId, roomEvents, localEvents, edit, write, us
     setDraft((d) => ({ ...d, ...part }));
   };
   const hint = TARGETS.find((t) => t.target === draft.target)?.hint;
-  const name = edit && (typeof edit.content.name === "string" && edit.content.name ? edit.content.name : edit.state_key);
+  const name = edit && widgetEventName(edit);
 
   return (
     <form className="form add-widget" aria-label={edit ? `Edit ${name}` : "Add widget"} onSubmit={submit}>

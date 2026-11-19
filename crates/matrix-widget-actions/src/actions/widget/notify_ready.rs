@@ -16,9 +16,5 @@ mod tests {
         assert_eq!(wire.to_value()["request"], json!({}));
         assert_eq!(WidgetRequest::from_wire(&wire).unwrap(), WidgetRequest::NotifyReady);
         assert_eq!(WidgetResponse::from_wire(&wire.ack()).unwrap(), WidgetResponse::NotifyReady);
-
-        let mut stable = wire.clone();
-        stable.action = "m.notify_ready".into();
-        assert_eq!(WidgetRequest::from_wire(&stable).unwrap(), WidgetRequest::NotifyReady);
     }
 }

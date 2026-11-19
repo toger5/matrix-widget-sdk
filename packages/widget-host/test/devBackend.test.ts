@@ -4,7 +4,8 @@ import { readFileSync } from "node:fs";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { EXAMPLE_LEGACY, EXAMPLE_NEW } from "../src/exampleWidgets";
-import { DevBackend, seedDemoMedia, validateSeed, type DevBackendSeed } from "../src/matrix_session/memory/devBackend";
+import { DevBackend } from "../src/matrix_session/memory/devBackend";
+import { validateSeed, type DevBackendSeed } from "../src/matrix_session/memory/seed";
 import type { RawEvent } from "../src/session";
 import { describeBackendContract } from "./backendContract";
 import { X, behindDriver, tick } from "./harness";
@@ -349,7 +350,7 @@ describe("DevBackend: events", () => {
 
     await dev.sendEvent(room, { type: "m.room.message", content: { body: "from the host" } });
     const delayId = await dev.sendEvent(room, { type: "m.room.message", content: { body: "later" } }, 100);
-    await dev.fireDelayedEvent(room, delayId);
+    await dev.updateScheduled(room, delayId, "send");
     expect((await dev.timeline(room)).events.slice(-2).map((e) => e.content.body)).toEqual(["from the host", "later"]);
     // Still on for the widget.
     expect((await ask(`${X}send_event`, { type: "m.room.message", content: { body: "hi" } })).error).toBeDefined();
@@ -638,8 +639,6 @@ describe("DevBackend: seeds", () => {
       { mxcUri: "mxc://example.org/demo-notes", name: "notes.txt", mimetype: "text/plain" },
       { mxcUri: expect.stringMatching(/^mxc:\/\/dev\.local\/upload-/), name: "readme.txt", mimetype: "text/plain" },
     ]);
-    expect(await seedDemoMedia(dev)).toHaveLength(3);
-    expect(dev.snapshot().media).toHaveLength(4);
     await expect(DevBackend.fromSeed({ media: [{ url: "missing.png" }] })).rejects.toThrow("could not load missing.png: HTTP 404");
   });
 

@@ -3,7 +3,7 @@
 //! state event) and [MSC4412](https://github.com/matrix-org/matrix-spec-proposals/pull/4412)
 //! (the JSON request/response "action" protocol spoken over `postMessage`).
 //!
-//! This crate is deliberately free of any I/O or state. It only knows how to:
+//! No I/O, no state. It can:
 //!
 //! * (de)serialize the generic wire envelope ([`WireMessage`]),
 //! * map an envelope to a typed action ([`Action`] and its leaves [`WidgetRequest`],
@@ -11,11 +11,9 @@
 //!   [`actions`], grouped by the source that initiates it,
 //! * parse and match capability strings ([`Capability`]).
 //!
-//! Everything is plain data so it can be shared with other languages through UniFFI
-//! (enable the `uniffi` feature) and compiled to WebAssembly.
+//! Everything is plain data, exported through UniFFI (feature `uniffi`) and compiled to wasm.
 
-// `ActionError` carries a full `WidgetError` (message plus Matrix error details); every parse
-// result would have to box it to satisfy this lint, for no gain on the hot path (there is none).
+// `ActionError` carries a full `WidgetError`; boxing it in every parse result gains nothing.
 #![allow(clippy::result_large_err)]
 
 pub mod actions;

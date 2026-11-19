@@ -1,23 +1,18 @@
 //! The driver's permission rules: which capability a request or a push needs, which room a widget
 //! may name and which events it may see.
 //!
-//! Every action has its own capability (`docs/spec-appendix/capability-naming-proposal.md`), so
-//! reading, being forwarded new events and receiving state updates are checked separately.
-//!
-//! Every function here only looks at the approved capabilities and the request, so the rules can
-//! be tested without a driver, backend or platform.
+//! Every action has its own capability (`docs/spec-appendix/capability-naming-proposal.md`). The
+//! functions are pure, so the rules are tested without a driver, backend or platform.
 
 use matrix_widget_actions::{
     Capability, CapabilitySet, HostRequest, JsonValue, MatrixEvent, RoomSelector, SendEventRequest, TimelineFilter,
     WidgetError, WidgetRequest,
 };
 
-/// The single capability that allows or denies `request` as a whole.
+/// The single capability that allows or denies `request` as a whole. `None`: none is needed, or
+/// the handler checks the body (`send_event`, `read_timeline`, ...).
 ///
-/// `None` means either that no capability is needed, or that the check depends on the request
-/// body and happens in the request's handler (`send_event`, `read_timeline`, ...).
-///
-/// The list is exhaustive on purpose: a new action does not compile until it has a rule here.
+/// Exhaustive on purpose: a new action does not compile until it has a rule here.
 pub(super) fn required_capability(request: &WidgetRequest) -> Option<Capability> {
     use WidgetRequest as R;
     Some(match request {
@@ -49,12 +44,9 @@ pub(super) fn required_capability(request: &WidgetRequest) -> Option<Capability>
     })
 }
 
-/// The single capability the widget must hold for the driver to send it `request`.
-///
-/// `None` means either that no capability is needed, or that the check depends on the body and
-/// happens where the push is built (`forward_event`, `update_state`, `forward_to_device`).
-///
-/// Exhaustive for the same reason as [`required_capability`].
+/// The single capability the widget must hold for the driver to send it `request`. `None`: none is
+/// needed, or the push is checked where it is built (`forward_event`, `update_state`,
+/// `forward_to_device`). Exhaustive, like [`required_capability`].
 pub(super) fn push_capability(request: &HostRequest) -> Option<Capability> {
     use HostRequest as H;
     Some(match request {
@@ -68,11 +60,6 @@ pub(super) fn push_capability(request: &HostRequest) -> Option<Capability> {
         // Checked against the event by the forwarding code.
         H::ForwardEvent { .. } | H::UpdateState { .. } | H::ForwardToDevice { .. } => return None,
     })
-}
-
-/// The error for a request that lacks `capability`.
-pub(super) fn missing(capability: &Capability) -> WidgetError {
-    WidgetError::missing_capability(capability)
 }
 
 /// Check a room the widget named explicitly (`room_id` in a request).
@@ -109,16 +96,16 @@ pub(super) fn check_send_event(
         check_room(own_room, room_id)?;
     }
     if request.is_delayed() && !approved.has(&Capability::SendDelayedEvent) {
-        return Err(missing(&Capability::SendDelayedEvent));
+        return Err(WidgetError::missing_capability(&Capability::SendDelayedEvent));
     }
     if request.is_sticky() && !approved.has(&Capability::SendStickyEvent) {
-        return Err(missing(&Capability::SendStickyEvent));
+        return Err(WidgetError::missing_capability(&Capability::SendStickyEvent));
     }
     if request.is_sticky() && request.is_state() {
         return Err(WidgetError::invalid_request("Cannot send a state event with a sticky duration"));
     }
     if !approved.allows_send(&request.event_type, request.state_key.as_deref(), msgtype(&request.content)) {
-        return Err(missing(&match &request.state_key {
+        return Err(WidgetError::missing_capability(&match &request.state_key {
             Some(key) => Capability::send_state_event(&request.event_type, Some(key.as_str())),
             None => Capability::send_event(&request.event_type),
         }));
@@ -235,23 +222,30 @@ mod tests {
     }
 
     #[test]
-    fn every_action_has_its_own_capability() {
-        // Today's shared capabilities are split: one per action.
-        assert_eq!(required_capability(&WidgetRequest::GetMediaConfig), Some(Capability::GetMediaConfig));
-        assert_eq!(required_capability(&WidgetRequest::GetOpenId), Some(Capability::GetOpenId));
-        assert_eq!(required_capability(&WidgetRequest::UnwatchTurnServers), Some(Capability::UpdateTurnServers));
-        assert_eq!(required_capability(&WidgetRequest::GetMatrixContext), Some(Capability::GetMatrixContext));
-        // The handshake needs none.
-        assert_eq!(required_capability(&WidgetRequest::NotifyReady), None);
-        assert_eq!(missing(&Capability::Navigate).message, "Missing capability: widget:org.matrix.msc2931.navigate");
-    }
-
-    #[test]
-    fn pushes_need_their_capability() {
-        let theme = HostRequest::UpdateTheme { theme: json!({}).into() };
-        assert_eq!(push_capability(&theme), Some(Capability::UpdateTheme));
-        let notify = HostRequest::UpdateCapabilities { request: Default::default() };
-        assert_eq!(push_capability(&notify), None);
+    fn every_action_and_push_has_its_own_capability() {
+        use matrix_widget_actions::{NotifyTimelineUpdateRequest, PaginateTimelineRequest, ReadTimelineRequest};
+        let paginate = WidgetRequest::PaginateTimeline { request: PaginateTimelineRequest::default() };
+        let read = WidgetRequest::ReadTimeline { request: ReadTimelineRequest::newest(1) };
+        for (request, needed) in [
+            (WidgetRequest::GetMediaConfig, Some(Capability::GetMediaConfig)),
+            (WidgetRequest::GetOpenId, Some(Capability::GetOpenId)),
+            (WidgetRequest::UnwatchTurnServers, Some(Capability::UpdateTurnServers)),
+            (WidgetRequest::GetMatrixContext, Some(Capability::GetMatrixContext)),
+            (paginate, Some(Capability::PaginateTimeline)),
+            // The handshake needs none; `read_timeline` is checked against its body.
+            (WidgetRequest::NotifyReady, None),
+            (read, None),
+        ] {
+            assert_eq!(required_capability(&request), needed, "{request:?}");
+        }
+        let notify = HostRequest::NotifyTimelineUpdate { request: NotifyTimelineUpdateRequest::default() };
+        for (push, needed) in [
+            (HostRequest::UpdateTheme { theme: json!({}).into() }, Some(Capability::UpdateTheme)),
+            (notify, Some(Capability::NotifyTimelineUpdate)),
+            (HostRequest::UpdateCapabilities { request: Default::default() }, None),
+        ] {
+            assert_eq!(push_capability(&push), needed, "{push:?}");
+        }
     }
 
     #[test]
@@ -366,16 +360,5 @@ mod tests {
             timeline_filter(&all_messages, Some(&[f("m.room.message", Some("m.notice"))])).unwrap(),
             [f("m.room.message", Some("m.notice"))]
         );
-    }
-
-    #[test]
-    fn timeline_actions_need_their_capabilities() {
-        use matrix_widget_actions::{NotifyTimelineUpdateRequest, PaginateTimelineRequest, ReadTimelineRequest};
-        let paginate = WidgetRequest::PaginateTimeline { request: PaginateTimelineRequest::default() };
-        assert_eq!(required_capability(&paginate), Some(Capability::PaginateTimeline));
-        // Checked against the body.
-        assert_eq!(required_capability(&WidgetRequest::ReadTimeline { request: ReadTimelineRequest::newest(1) }), None);
-        let notify = HostRequest::NotifyTimelineUpdate { request: NotifyTimelineUpdateRequest::default() };
-        assert_eq!(push_capability(&notify), Some(Capability::NotifyTimelineUpdate));
     }
 }

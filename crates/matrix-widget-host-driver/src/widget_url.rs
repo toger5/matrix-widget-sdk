@@ -188,7 +188,7 @@ fn served_path(url: &Url) -> String {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use std::collections::BTreeMap;
 
     use serde::Deserialize;
@@ -201,22 +201,34 @@ mod tests {
 
     /// The shared table of `tests/widget_urls.json`; the host's vitest reads it too.
     #[derive(Deserialize)]
-    struct Table {
-        allowed: BTreeMap<String, String>,
-        refused: BTreeMap<String, String>,
-        compat_wrapper: WrapperTable,
-        client_origin: ClientOriginTable,
+    pub(crate) struct Table {
+        pub allowed: BTreeMap<String, String>,
+        pub refused: BTreeMap<String, String>,
+        pub compat_wrapper: WrapperTable,
+        pub client_origin: ClientOriginTable,
     }
 
     /// Its `client_origin` part: pages of the client's origin, in its own widget directories, and
     /// of other origins.
     #[derive(Deserialize)]
-    struct ClientOriginTable {
-        client: String,
-        own_widget_dirs: Vec<String>,
-        refused: BTreeMap<String, String>,
-        own_widgets: BTreeMap<String, String>,
-        other_origins: BTreeMap<String, String>,
+    pub(crate) struct ClientOriginTable {
+        pub client: String,
+        pub own_widget_dirs: Vec<String>,
+        pub refused: BTreeMap<String, String>,
+        pub own_widgets: BTreeMap<String, String>,
+        pub other_origins: BTreeMap<String, String>,
+    }
+
+    impl ClientOriginTable {
+        /// The options of the table's client: its origin, its own widgets and a compat wrapper.
+        pub(crate) fn options(&self) -> EmbedOptions {
+            EmbedOptions {
+                wrapper_url: Some(format!("{}/widget_compatibility_wrapper/", self.client)),
+                client_origin: Some(self.client.clone()),
+                own_widget_dirs: self.own_widget_dirs.clone(),
+                allow_http: true,
+            }
+        }
     }
 
     /// The options of a client with a compat wrapper at `wrapper`, nothing else.
@@ -226,13 +238,13 @@ mod tests {
 
     /// Its `compat_wrapper` part: pages of the wrapper and other pages of its origin.
     #[derive(Deserialize)]
-    struct WrapperTable {
-        wrapper: String,
-        allowed: BTreeMap<String, String>,
-        refused: BTreeMap<String, String>,
+    pub(crate) struct WrapperTable {
+        pub wrapper: String,
+        pub allowed: BTreeMap<String, String>,
+        pub refused: BTreeMap<String, String>,
     }
 
-    fn table() -> Table {
+    pub(crate) fn table() -> Table {
         serde_json::from_str(include_str!("../tests/widget_urls.json")).unwrap()
     }
 
@@ -321,13 +333,9 @@ mod tests {
 
     #[test]
     fn no_page_of_the_clients_origin_but_its_own_widgets() {
-        let ClientOriginTable { client, own_widget_dirs, refused, own_widgets, other_origins } = table().client_origin;
-        let options = EmbedOptions {
-            wrapper_url: Some(format!("{client}/widget_compatibility_wrapper/")),
-            client_origin: Some(client.clone()),
-            own_widget_dirs: own_widget_dirs.clone(),
-            allow_http: true,
-        };
+        let table = table().client_origin;
+        let options = table.options();
+        let ClientOriginTable { client, refused, own_widgets, other_origins, .. } = table;
         for (label, url) in refused {
             assert_eq!(widget_url_problem(&url, true), None, "{label}: a widget URL on its own");
             assert_eq!(embed_url_problem(&url, options.clone()).as_deref(), Some(ON_THE_CLIENTS_ORIGIN), "{label}");

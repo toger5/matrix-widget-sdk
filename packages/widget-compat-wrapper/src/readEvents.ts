@@ -1,33 +1,26 @@
 /**
  * The legacy `org.matrix.msc2876.read_events`, answered by the wrapper: the host does not know it.
  *
- * - A **timeline** read becomes `read_timeline` reads of the host's timeline cache (MSCXXXX,
- *   `spec/patch/new/timeline-reading.md`), filtered by the legacy `type` / `msgtype`. While the
- *   answer is short of `limit` and the host's pagination is `idle`, the reader asks the host to
- *   `paginate_timeline`, waits for the `notify_timeline_update` that ends it, and reads on below
- *   the oldest event it has. It stops at `limit`, at `start_reached`, at a failed pagination or at
- *   a deadline well under the legacy 10 s timeout, and answers with what it has, newest first, as
- *   Element Web's `readRoomTimeline` does. Without `limit` (a legacy "as many as possible") it
- *   answers from the cache only. `since` is not supported (no host of this repository supported it).
- * - A **state** read (`state_key` present) is answered from the state the host pushed with
- *   `update_state` (the legacy `receive.state_event:<type>` expands to it), kept per type here.
+ * - A **timeline** read becomes `read_timeline` reads of the host's timeline cache
+ *   (`spec/patch/new/timeline-reading.md`), filtered by `type` / `msgtype`. While the answer is
+ *   short of `limit` and the host's pagination is `idle`, it sends `paginate_timeline`, waits for
+ *   the `notify_timeline_update` that ends it and reads on below the oldest event. It stops at
+ *   `limit`, `start_reached`, a failed pagination or a deadline under the legacy 10 s timeout, and
+ *   answers newest first (as Element Web's `readRoomTimeline`). Without `limit` it reads the cache
+ *   only. `since` is not supported.
+ * - A **state** read (`state_key` present) is answered from the host's `update_state` pushes.
  * - `room_ids`: only the widget's own room is served; a list without it reads nothing.
- *
- * Driven by the bridge: `read` for each request, `onUpdateState` / `onTimelineUpdate` for what the
- * host pushes.
  */
 import { errorBody, isErrorBody, PLACEHOLDER } from "./envelope";
 
-/** The legacy action, as matrix-widget-api sends it. */
 export const LEGACY_READ_EVENTS_ACTION = "org.matrix.msc2876.read_events";
-/** The host's timeline actions. */
-export const READ_TIMELINE_ACTION = `${PLACEHOLDER}.read_timeline`;
-export const PAGINATE_TIMELINE_ACTION = `${PLACEHOLDER}.paginate_timeline`;
+const READ_TIMELINE_ACTION = `${PLACEHOLDER}.read_timeline`;
+const PAGINATE_TIMELINE_ACTION = `${PLACEHOLDER}.paginate_timeline`;
 export const NOTIFY_TIMELINE_UPDATE_ACTION = `${PLACEHOLDER}.notify_timeline_update`;
 
 /** How long a legacy timeline read may take in all: under the 10 s a legacy widget waits. */
-export const LEGACY_READ_DEADLINE_MS = 7000;
-/** The largest number of events one read asks for (hosts clamp `limit`, this repository's at 1000). */
+const LEGACY_READ_DEADLINE_MS = 7000;
+/** Hosts clamp `limit` (this repository's at 1000). */
 const MAX_LIMIT = 1000;
 /** A host that keeps answering "idle" and then "start reached" must not make the reader spin. */
 const MAX_ROUNDS = 50;
@@ -62,7 +55,7 @@ export class LegacyEventReader {
 
   constructor(private readonly o: ReaderOptions) {}
 
-  /** The host's `update_state`: the current set of each event type it carries. */
+  /** The host's `update_state`: the full current set of each event type it carries. */
   onUpdateState(request: unknown): void {
     const events = (request as { state?: unknown } | undefined)?.state;
     if (!Array.isArray(events)) return;
@@ -95,7 +88,7 @@ export class LegacyEventReader {
   }
 
   private servesOwnRoom(roomIds: unknown): boolean {
-    if (!Array.isArray(roomIds)) return true; // absent, or `*`: the widget's room
+    if (!Array.isArray(roomIds)) return true; // absent or `*`
     const own = this.o.roomId();
     return own === undefined || roomIds.includes(own);
   }

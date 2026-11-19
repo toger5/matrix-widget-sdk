@@ -31,7 +31,8 @@ import initSdkWasm from "../../matrix-sdk-uniffi-js/src/generated/wasm-bindgen/i
 import * as sdkFfi from "../../matrix-sdk-uniffi-js/src/generated/matrix_sdk_ffi";
 import * as rumaEvents from "../../matrix-sdk-uniffi-js/src/generated/ruma_events";
 import { RoomTimelines } from "../src/matrix_session/roomTimelines";
-import { accountInfo, exportRoom, LOAD_MEMBERS_UP_TO, loadOlderEvents, onTimelineChanged, roomDetails, roomState, timelineEvents } from "../src/matrix_session/rust/roomData";
+import { accountInfo, exportRoom, loadOlderEvents, onTimelineChanged, roomDetails, roomState, timelineEvents } from "../src/matrix_session/rust/roomData";
+import { LOAD_MEMBERS_UP_TO } from "../src/matrix_session/shared";
 import { needsVerification, onVerificationChanged, startEmojiVerification, verifyWithRecoveryKey } from "../src/matrix_session/rust/verification";
 
 const require = createRequire(import.meta.url);

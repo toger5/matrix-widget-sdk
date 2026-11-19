@@ -207,7 +207,7 @@ export function RoomOverview({ main, panelId, roomId, devTools, devBackend, time
                 ))}
               </div>
             )}
-            {/* TODO-FINDING overview-show-all-members - the design has a "Show all 12 members" link (sketch `sketch-rooms-roomoverview--plain`), but `RoomDetails.members` is only "the first members" and there is no intent or data to get the rest. For now a plain text line says how many are shown. */}
+            {/* TODO-FINDING overview-show-all-members - the design has a "Show all 12 members" link, but `RoomDetails.members` is only "the first members" and there is no intent or data to get the rest. For now a plain text line says how many are shown. */}
             {info && memberCount !== undefined && memberCount > members.length && (
               <span className="muted ov-more">{members.length ? `The first ${members.length} of ${memberCount} members are shown.` : `${memberCount} members.`}</span>
             )}

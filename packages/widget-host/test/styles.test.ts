@@ -30,7 +30,6 @@ function files(dir: string, pattern = /\.css$/): string[] {
     return pattern.test(name) ? [path] : [];
   });
 }
-const cssFiles = (dir: string) => files(dir);
 
 const withoutComments = (css: string) => css.replace(/\/\*[\s\S]*?\*\//g, "");
 const MANIFEST = "src/styles/app.css";
@@ -40,7 +39,7 @@ const fromPackage = (i: Import) => PACKAGES.some((p) => i.file.includes(p));
 const all = imports(MANIFEST);
 const app = all.filter((i) => !fromPackage(i));
 /** The design rules: every stylesheet of src/styles apart from the manifest. */
-const designFiles = cssFiles("src/styles").filter((f) => f !== MANIFEST);
+const designFiles = files("src/styles").filter((f) => f !== MANIFEST);
 const isDesign = (file: string) => file.startsWith("src/styles/");
 
 describe("stylesheets", () => {
@@ -52,7 +51,7 @@ describe("stylesheets", () => {
 
   it("every file is imported once, with a layer; the app-only files after the design files of their layer", () => {
     // every CSS file of src/ apart from the manifest: one that is not listed would style nothing
-    expect(app.map((i) => i.file).sort()).toEqual(cssFiles("src").filter((f) => f !== MANIFEST).sort());
+    expect(app.map((i) => i.file).sort()).toEqual(files("src").filter((f) => f !== MANIFEST).sort());
     expect(app.every((i) => isDesign(i.file) || i.file.startsWith("src/views/"))).toBe(true);
     for (const i of app) expect(i.layer, i.file).toBeDefined();
     // the design files in their layers: tokens, base, atoms, then the areas
@@ -96,7 +95,7 @@ describe("stylesheets", () => {
   });
 
   it("only the manifests import, and theme selectors also match inside the shadow root", () => {
-    for (const file of [...designFiles, ...cssFiles("src/views"), ".storybook/mockup.css"]) {
+    for (const file of [...designFiles, ...files("src/views"), ".storybook/mockup.css"]) {
       const css = withoutComments(read(file));
       expect(css, file).not.toMatch(/@import/);
       expect(css, file).not.toMatch(/:root\[data-theme/); // `:root` is not in the shadow tree: `[data-theme=…]`
@@ -104,7 +103,7 @@ describe("stylesheets", () => {
   });
 
   it("app-only rules use tokens, no raw colors", () => {
-    for (const file of cssFiles("src/views")) {
+    for (const file of files("src/views")) {
       // a mask's gradient stops are alpha values, not colors
       const css = withoutComments(read(file)).replace(/(-webkit-)?mask-image:[^;}]*/g, "");
       expect(css, file).not.toMatch(/#[0-9a-f]{3,8}\b|(?<![\w-])(rgba?|hsla?|hwb|lab|lch|oklab|oklch|color)\(/i);

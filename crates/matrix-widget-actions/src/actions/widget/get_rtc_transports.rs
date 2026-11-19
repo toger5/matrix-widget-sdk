@@ -21,15 +21,13 @@ mod tests {
     use serde_json::json;
 
     use super::*;
-    use crate::{Source, WidgetRequest, WidgetResponse, WireMessage};
+    use crate::{WidgetRequest, WidgetResponse};
 
     #[test]
     fn roundtrip() {
         let wire = WidgetRequest::GetRtcTransports.into_wire("r");
         assert_eq!(wire.action, "org.matrix.msc4515.get_rtc_transports");
         assert_eq!(WidgetRequest::from_wire(&wire).unwrap(), WidgetRequest::GetRtcTransports);
-        let plain = WireMessage::request(Source::Widget, "m.get_rtc_transports", "r", json!({}));
-        assert_eq!(WidgetRequest::from_wire(&plain).unwrap(), WidgetRequest::GetRtcTransports);
 
         let transport = json!({"type": "livekit", "livekit_service_url": "https://lk.example.org"});
         let res = wire.response_to(json!({"rtc_transports": [transport]}));

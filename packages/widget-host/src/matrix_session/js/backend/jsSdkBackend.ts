@@ -1,5 +1,6 @@
 import {
   BackendError,
+  matrixEventFromJson,
   RelationDirection,
   type JsonValue,
   type MatrixBackend,
@@ -25,6 +26,7 @@ import {
 import {
   ClientEvent,
   Direction,
+  MatrixError,
   MatrixEventEvent,
   RoomStateEvent,
   type ITurnServer,
@@ -37,18 +39,11 @@ import {
 import { RoomTimelines } from "../../roomTimelines";
 import { TimelineFeed, walkCache, type CachedEvent } from "../../timelineFeed";
 import { loadOlderEvents, onTimelineChanged } from "../roomData";
-import { fail, isUnsupported, toBackendError, wrap } from "./errors";
-import { isReadable, toMatrixEvent } from "./events";
 
 /**
- * `MatrixBackend` for one room of a matrix-js-sdk client: what the widget host driver needs from
- * the Matrix client, mapped to js-sdk calls. Sends go through the SDK (so they are encrypted in
- * encrypted rooms), reads come from the SDK's local copy of the room, and subscriptions listen to
- * the SDK's sync. The timeline cache of `read_timeline` is the room's live timeline; its
- * pagination is the session's `RoomTimelines`, shared with the RoomTimeline and the room's other
- * widgets.
- *
- * With `../session.ts` this is the only code that imports matrix-js-sdk.
+ * `MatrixBackend` for one room of a matrix-js-sdk client. Sends go through the SDK (encrypted in
+ * encrypted rooms), reads come from its local copy of the room, subscriptions listen to its sync.
+ * The timeline cache of `read_timeline` is the room's live timeline (`../../timelineFeed`).
  */
 export class JsSdkBackend implements MatrixBackend {
   private readonly subscriptions = new Set<() => void>();
@@ -66,10 +61,7 @@ export class JsSdkBackend implements MatrixBackend {
     });
   }
 
-  /**
-   * The trait's identity getters are synchronous, so the profile is fetched up front. `timelines`
-   * is the session's (paginations are shared); without it the backend keeps its own.
-   */
+  /** The identity getters are synchronous: the profile is fetched up front. Without the session's `timelines` the backend keeps its own. */
   static async create(client: MatrixClient, roomId: string, timelines?: RoomTimelines): Promise<JsSdkBackend> {
     const userId = client.getSafeUserId();
     const profile = await client.getProfileInfo(userId).catch(() => undefined);
@@ -251,7 +243,7 @@ export class JsSdkBackend implements MatrixBackend {
     });
     if (!response.ok) {
       const body = (await response.json().catch(() => ({}))) as { errcode?: string; error?: string };
-      throw failWith(body.errcode, response.status, body.error ?? `downloading ${contentUri} failed with status ${response.status}`);
+      throw new BackendError.Failed({ errcode: body.errcode, status: response.status, reason: body.error ?? `downloading ${contentUri} failed with status ${response.status}` });
     }
     return { data: await response.arrayBuffer(), mimetype: response.headers.get("Content-Type") ?? undefined };
   }
@@ -364,7 +356,8 @@ export class JsSdkBackend implements MatrixBackend {
   private watchDecrypted(report: (events: MatrixEvent[]) => void): () => void {
     const roomId = this.boundRoomId;
     const room = this.client.getRoom(roomId);
-    const failed = new Set(this.cachedEventsOr(roomId).filter((ev) => ev.isDecryptionFailure()).map((ev) => ev.getId()));
+    const cached = room?.getLiveTimeline().getEvents() ?? [];
+    const failed = new Set(cached.filter((ev) => ev.isDecryptionFailure()).map((ev) => ev.getId()));
     const onDecrypted = (event: SdkEvent) => {
       const eventId = event.getId();
       if (event.getRoomId() !== roomId || eventId === undefined) return;
@@ -388,14 +381,6 @@ export class JsSdkBackend implements MatrixBackend {
     };
   }
 
-  private cachedEventsOr(roomId: string): SdkEvent[] {
-    try {
-      return this.cachedEvents(roomId);
-    } catch {
-      return [];
-    }
-  }
-
   private room(roomId: string): Room {
     const room = this.client.getRoom(roomId);
     if (!room) throw fail(`unknown room ${roomId}`);
@@ -415,6 +400,33 @@ export class JsSdkBackend implements MatrixBackend {
   }
 }
 
-function failWith(errcode: string | undefined, status: number, reason: string): Error {
-  return new BackendError.Failed({ errcode, status, reason });
+/** A js-sdk event as the bindings' `MatrixEvent`: the decrypted event where there is one. */
+function toMatrixEvent(event: SdkEvent, roomId: string): MatrixEvent {
+  return matrixEventFromJson(JSON.stringify({ room_id: roomId, ...event.getEffectiveEvent() }));
 }
+
+/** Whether `event` can be handed to a widget now; an event still waiting for its key cannot. */
+function isReadable(event: SdkEvent): boolean {
+  return !event.isBeingDecrypted() && !event.isDecryptionFailure() && event.getType() !== "m.room.encrypted";
+}
+
+const fail = (reason: string): Error => new BackendError.Failed({ errcode: undefined, status: undefined, reason });
+
+/** Anything the SDK throws, as a `BackendError`; the driver forwards `errcode` and `status` to the widget. */
+function toBackendError(e: unknown): Error {
+  if (BackendError.instanceOf(e)) return e as Error;
+  if (e instanceof MatrixError) return new BackendError.Failed({ errcode: e.errcode, status: e.httpStatus, reason: e.data?.error ?? e.message });
+  return fail(e instanceof Error ? e.message : String(e));
+}
+
+/** Await an SDK call, turning its rejection into a `BackendError`. */
+async function wrap<T>(call: Promise<T>): Promise<T> {
+  try {
+    return await call;
+  } catch (e) {
+    throw toBackendError(e);
+  }
+}
+
+/** The homeserver does not know the endpoint. */
+const isUnsupported = (e: unknown): boolean => e instanceof MatrixError && (e.errcode === "M_UNRECOGNIZED" || e.httpStatus === 404);

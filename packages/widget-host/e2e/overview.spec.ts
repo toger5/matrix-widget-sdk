@@ -12,7 +12,7 @@ test("a room opens on its overview: the room name is selected; topic, members an
   await expect(roomTab.getByTitle("2 widgets")).toHaveText("2");
   await expect(roomTab.getByTitle("3 members")).toHaveText("3");
 
-  const overview = host.page.getByTestId("room-overview");
+  const overview = host.overview;
   await expect(overview.getByRole("heading", { name: "Widget lab", level: 1 })).toBeVisible();
   await expect(overview.getByText(LAB)).toBeVisible();
   await expect(overview.getByText("Both test widgets, a few people and something to read")).toBeVisible();
@@ -26,7 +26,7 @@ test("a room opens on its overview: the room name is selected; topic, members an
 
 test("pressing a widget in the overview opens it as a new tab at the end; the room name shows the overview again, where it is grayed out", async ({ host }) => {
   await host.populate("lab", { sidePanel: null, open: [{ room: LAB, widgets: [NEW_WIDGET], overview: true }] });
-  const overview = host.page.getByTestId("room-overview");
+  const overview = host.overview;
   await expect(host.tab("Widget lab")).toHaveAttribute("aria-selected", "true");
 
   await overview.getByRole("button", { name: "Open Legacy test widget" }).click();
@@ -59,7 +59,7 @@ test("with dev tools enabled: “Add widget” and the local widgets after the r
   await expect(host.populate("lab", { localWidgets: { "!nope:dev.local": [LOCAL] } })).rejects.toThrow(/seed.localWidgets: unknown room/);
   await host.populate("lab", { sidePanel: null, localWidgets: { [LAB]: [LOCAL] }, open: [{ room: LAB, widgets: [NEW_WIDGET], timeline: true, overview: true }] });
   expect((await host.state()).settings.devTools).toBe(true);
-  const overview = host.page.getByTestId("room-overview");
+  const overview = host.overview;
   await expect(overview.locator(".member")).toHaveCount(3);
   await expect(host.button("Dev tools of New test widget")).toHaveCount(1);
   await expect(overview.getByRole("button", { name: "Jump to the tab of New test widget" })).toBeVisible();
@@ -85,21 +85,20 @@ test("with dev tools enabled: “Add widget” and the local widgets after the r
   await expect(local.getByRole("button", { name: "Remove Poll prototype" })).toBeVisible();
   await local.getByRole("button", { name: "Open Poll prototype" }).click();
   await expect(host.tab(/Poll prototype/)).toHaveAttribute("aria-selected", "true");
-  await expect(host.page.getByTestId("capability-prompt")).toBeVisible();
+  await expect(host.prompt).toBeVisible();
   expect(await roomWidgetKeys(host)).toEqual(["widget-1"]);
 });
 
 test("Add widget, only in this host: listed as “Local”, nothing is sent; it asks for its capabilities, remembered apart from the room widget's", async ({ host }) => {
   await forgetRemembered(host);
   await host.populate("lab", { sidePanel: null, behavior: { rememberCapabilities: true }, open: [{ room: LAB, widgets: [NEW_WIDGET] }] });
-  const prompt = host.page.getByTestId("capability-prompt");
+  const prompt = host.prompt;
   await expect(prompt).toBeVisible();
-  await host.passApproveDelay();
-  await prompt.getByRole("button", { name: /^Approve \d+ selected$/ }).click();
+  await host.approve();
   await expect.poll(() => rememberedKeys(host)).toEqual([NEW_WIDGET]);
 
   await host.tab("Widget lab").click();
-  const overview = host.page.getByTestId("room-overview");
+  const overview = host.overview;
   await overview.getByRole("button", { name: "Add widget" }).click();
   const form = overview.getByRole("form", { name: "Add widget" });
   // The test widget form: the new test widget under the first ID no widget of the room uses, its URL read-only.
@@ -137,15 +136,14 @@ test("Add widget, only in this host: listed as “Local”, nothing is sent; it 
 
   await row.getByRole("button", { name: "Open Local test widget" }).click();
   await expect(prompt).toBeVisible();
-  await host.passApproveDelay();
-  await prompt.getByRole("button", { name: /^Approve \d+ selected$/ }).click();
+  await host.approve();
   await expect.poll(() => rememberedKeys(host)).toEqual(["local:m.widget/widget-1", NEW_WIDGET]);
   await host.ready(widgetId(LAB, "local:m.widget/widget-1"));
 });
 
 test("a widget on this host's own origin can be added; opening it asks first, \"Open anyway\" only with dev tools", async ({ host }) => {
   await host.populate("lab", { sidePanel: null, open: [{ room: LAB }] });
-  const overview = host.page.getByTestId("room-overview");
+  const overview = host.overview;
   await overview.getByRole("button", { name: "Add widget" }).click();
   const form = overview.getByRole("form", { name: "Add widget" });
   await form.getByRole("tab", { name: "Widget", exact: true }).click();
@@ -189,7 +187,7 @@ test("a widget on this host's own origin can be added; opening it asks first, \"
 
 test("Add widget, Paste JSON: a whole state event, other fields ignored; not a widget type or not an http(s) URL is refused in the form", async ({ host }) => {
   await host.populate("lab", { sidePanel: null, open: [{ room: LAB }] });
-  const overview = host.page.getByTestId("room-overview");
+  const overview = host.overview;
   await overview.getByRole("button", { name: "Add widget" }).click();
   const form = overview.getByRole("form", { name: "Add widget" });
   await form.getByRole("tab", { name: "Paste JSON" }).click();
@@ -234,7 +232,7 @@ test("Add widget, Paste JSON: a whole state event, other fields ignored; not a w
 
 test("Add widget, to the room: the state event is sent as you; replacing a widget of the room asks first; a refusal stays in the form with the draft", async ({ host }) => {
   await host.populate("lab", { sidePanel: null, open: [{ room: LAB }] });
-  const overview = host.page.getByTestId("room-overview");
+  const overview = host.overview;
   const form = overview.getByRole("form", { name: "Add widget" });
   const modal = host.page.getByRole("alertdialog");
   const addToRoom = async (id: string, name: string) => {
@@ -299,17 +297,16 @@ test("a local widget: editing its URL forgets its capabilities and reloads it; r
   await forgetRemembered(host);
   const id = widgetId(LAB, LOCAL_KEY);
   await host.populate("lab", { sidePanel: null, behavior: { rememberCapabilities: true }, localWidgets: { [LAB]: [LOCAL] }, open: [{ room: LAB, widgets: [LOCAL_KEY] }] });
-  const prompt = host.page.getByTestId("capability-prompt");
+  const prompt = host.prompt;
   await expect(prompt).toBeVisible();
-  await host.passApproveDelay();
-  await prompt.getByRole("button", { name: /^Approve \d+ selected$/ }).click();
+  await host.approve();
   await host.ready(id);
   await expect.poll(() => rememberedKeys(host)).toEqual([LOCAL_KEY]);
   const token = await host.token(id);
 
   // Edit: type and ID are fixed; only the name changes nothing that runs.
   await host.tab("Widget lab").click();
-  const overview = host.page.getByTestId("room-overview");
+  const overview = host.overview;
   await overview.getByRole("button", { name: "Edit Poll prototype" }).click();
   const form = overview.getByRole("form", { name: "Edit Poll prototype" });
   await expect(form.getByRole("tab")).toHaveCount(0);
@@ -333,8 +330,7 @@ test("a local widget: editing its URL forgets its capabilities and reloads it; r
   await overview.getByRole("button", { name: "Jump to the tab of Poll prototype 2" }).click();
   await expect(prompt).toBeVisible();
   expect(await host.token(id)).not.toBe(token);
-  await host.passApproveDelay();
-  await prompt.getByRole("button", { name: /^Approve \d+ selected$/ }).click();
+  await host.approve();
   await expect.poll(() => rememberedKeys(host)).toEqual([LOCAL_KEY]);
 
   // Remove (while its edit form is open): asks first; the widget stops, its tab and the form close, what was approved is forgotten; the room is not changed.
@@ -365,10 +361,9 @@ test("a local legacy widget replaced with other `data` (the values of its URL's 
   const key = "local:im.vector.modular.widgets/notes";
   const id = widgetId(LAB, key);
   await host.populate("lab", { sidePanel: null, behavior: { rememberCapabilities: true }, localWidgets: { [LAB]: [legacy] }, open: [{ room: LAB, widgets: [key] }] });
-  const prompt = host.page.getByTestId("capability-prompt");
+  const prompt = host.prompt;
   await expect(prompt).toContainText("Local notes asks for permissions");
-  await host.passApproveDelay();
-  await prompt.getByRole("button", { name: /^Approve \d+ selected$/ }).click();
+  await host.approve();
   await host.ready(id);
   await expect.poll(() => rememberedKeys(host)).toEqual([key]);
   const token = await host.token(id);

@@ -1,8 +1,5 @@
 /** The SidePanel: opened by the LeftBar, shifts the RoomsArea, resizable; the SettingsView and the AccountView of the DevBackend; the complete views. */
-import { expect, LAB, LEGACY_WIDGET, NEW_WIDGET, test, widgetId } from "./host";
-
-const NEW = widgetId(LAB, NEW_WIDGET);
-const STANDUP = "!standup:dev.local";
+import { expect, LAB, LEGACY_WIDGET, NEW, NEW_WIDGET, roomToolsToggle, STANDUP, test } from "./host";
 
 test.describe("SidePanel", () => {
   test.beforeEach(async ({ host }) => {
@@ -25,7 +22,7 @@ test.describe("SidePanel", () => {
     const devTools = host.leftBar.getByRole("button", { name: "Dev tools", exact: true });
     await devTools.click();
     await expect(host.sidePanel).toHaveAttribute("data-view", "roomTools");
-    await expect(host.page.getByTestId("devbackend-view")).toBeVisible();
+    await expect(host.devBackendView).toBeVisible();
 
     await devTools.click();
     await expect(host.sidePanel).toHaveCount(0);
@@ -106,7 +103,7 @@ test.describe("SidePanel", () => {
     await expect(devToolsButton).toBeVisible();
     await host.story("sidepanel-settingsview--dev-backend-active");
     await devToolsButton.click();
-    await expect(host.page.getByTestId("devbackend-view")).toBeVisible();
+    await expect(host.devBackendView).toBeVisible();
     await host.button("Settings").click();
 
     await devTools.click();
@@ -164,7 +161,7 @@ test.describe("SidePanel", () => {
 
 test("Dev tools: the room dev tools below the slim header, the bar on the left with the panels stacked, no close or reload; the dock switch moves it", async ({ host }) => {
   await host.populate("lab", { open: [{ room: LAB }] });
-  const view = host.page.getByTestId("devbackend-view");
+  const view = host.devBackendView;
   const tools = view.getByTestId("room-dev-tools");
   const bar = tools.getByRole("toolbar", { name: "Room dev tools" });
   const [state, timeline] = [tools.getByRole("region", { name: "State", exact: true }), tools.getByRole("region", { name: "Timeline", exact: true })];
@@ -255,8 +252,7 @@ test.describe("complete views", () => {
       open: [{ room: LAB, widgets: [NEW_WIDGET, LEGACY_WIDGET], active: NEW_WIDGET }, { room: STANDUP, widgets: ["notes"] }],
     });
     await host.ready(NEW);
-    await host.frame(NEW).getByRole("button", { name: "set_always_on_screen true" }).click();
-    await expect(host.tab(/New test widget/).locator(".ico")).not.toHaveCount(0);
+    await host.alwaysOnScreen(NEW);
     await host.tab(/Legacy test widget/).click();
     await expect(host.pip.getByTestId("pip-box")).toHaveCount(1);
 
@@ -276,7 +272,7 @@ test.describe("complete views", () => {
     await host.button(/Media Backend Tool/).click();
     await expect(host.page.getByTestId("devbackend-media")).toBeVisible();
     // Only the Timeline panel of the room dev tools, as the story draws it.
-    await host.page.getByTestId("devbackend-view").getByRole("toolbar", { name: "Room dev tools" }).getByRole("button", { name: /^State/ }).click();
+    await roomToolsToggle(host.devBackendView, "State").click();
 
     await host.button("Dev tools of New test widget").click();
     const tools = host.page.getByRole("toolbar", { name: "Widget dev tools" });

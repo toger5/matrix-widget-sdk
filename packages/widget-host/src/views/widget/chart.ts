@@ -6,7 +6,7 @@ import { MAX_STATS_BUCKETS, STATS_BUCKET_MS, type WidgetStats } from "../../appV
 
 /** The three graphs: one per total of the selector. */
 export type StatsSeries = "total" | "toWidget" | "fromWidget";
-export type StatsBucket = WidgetStats["characters"][number];
+type StatsBucket = WidgetStats["characters"][number];
 
 /** A bar slot is at least this wide, so that a rotated number fits (12px line + the gap). */
 export const MIN_SLOT_PX = 14;

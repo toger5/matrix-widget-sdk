@@ -35,7 +35,7 @@ export function splitCapability(capability: string): { side: string; name: strin
 // the only source of the copy (`test/capabilityFormat.test.ts` checks it against the test widget).
 // TODO-FINDING capability-labels-in-view - the human labels are a table in the view, keyed by the action name without namespace; whether a capability is known at all comes from the driver (`CapabilityPromptViewModel.unknown`). The SDK (or the view model) could provide the labels; they change with the capability naming proposal
 
-export type CapabilitySectionId = "read" | "send" | "state" | "devices" | "account" | "files" | "calls" | "browser" | "app" | "other";
+type CapabilitySectionId = "read" | "send" | "state" | "devices" | "account" | "files" | "calls" | "browser" | "app" | "other";
 
 /**
  * A section of the prompt: title, the phrase of the summary sentence, the capabilities that belong

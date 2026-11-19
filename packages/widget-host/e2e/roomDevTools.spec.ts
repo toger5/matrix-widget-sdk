@@ -2,11 +2,11 @@
 import type { Locator } from "@playwright/test";
 
 import type { TabViewModel } from "../src/appViewModel";
-import { expect, type Host, LAB, NEW_WIDGET, test } from "./host";
+import { expect, type Host, LAB, NEW_WIDGET, roomToolsToggle, test } from "./host";
 
 const tools = (host: Host, panel: Locator = host.panels.first()) => panel.getByTestId("room-dev-tools");
 const bar = (host: Host, panel?: Locator) => tools(host, panel).getByRole("toolbar", { name: "Room dev tools" });
-const toggle = (host: Host, name: "State" | "Timeline", panel?: Locator) => bar(host, panel).getByRole("button", { name: new RegExp(`^${name}(,|$)`) });
+const toggle = (host: Host, name: "State" | "Timeline", panel?: Locator) => roomToolsToggle(tools(host, panel), name);
 const region = (host: Host, name: "State" | "Timeline", panel?: Locator) => tools(host, panel).getByRole("region", { name, exact: true });
 /** The room dev tools tabs of the DevBackend's workspace, per panel. */
 const toolsTabs = async (host: Host) =>
@@ -15,7 +15,7 @@ const toolsTabs = async (host: Host) =>
 /** The lab room on its overview with dev tools enabled; “Open room dev tools” pressed. */
 async function openTab(host: Host) {
   await host.populate("lab", { sidePanel: null, settings: { devTools: true }, behavior: { autoApproveCapabilities: true }, open: [{ room: LAB, widgets: [NEW_WIDGET], overview: true }] });
-  await host.page.getByTestId("room-overview").getByRole("button", { name: "Open room dev tools" }).click();
+  await host.overview.getByRole("button", { name: "Open room dev tools" }).click();
 }
 
 test("“Open room dev tools” adds the tab at the end: bar on top, State and Timeline side by side; “Show room dev tools” shows it again", async ({ host }) => {
@@ -51,9 +51,9 @@ test("“Open room dev tools” adds the tab at the end: bar on top, State and T
 
   // The overview offers the tab it has instead of a second one.
   await host.tab("Widget lab").click();
-  const show = host.page.getByTestId("room-overview").getByRole("button", { name: "Show room dev tools" });
+  const show = host.overview.getByRole("button", { name: "Show room dev tools" });
   await expect(show).toBeVisible();
-  await expect(host.page.getByTestId("room-overview").getByRole("button", { name: "Open timeline" })).toBeVisible();
+  await expect(host.overview.getByRole("button", { name: "Open timeline" })).toBeVisible();
   await host.story("rooms-roomoverview--room-dev-tools-open");
   await show.click();
   await expect(tab).toHaveAttribute("aria-selected", "true");

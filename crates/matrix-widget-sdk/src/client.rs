@@ -134,7 +134,7 @@ impl WidgetClient {
         Self::with_id_generator(delegate, || uuid::Uuid::new_v4().to_string())
     }
 
-    /// Create a client with a custom request id generator (deterministic ids in tests, ...).
+    /// Create a client with a custom request id generator (deterministic ids in tests).
     pub fn with_id_generator(delegate: Rc<dyn WidgetDelegate>, next_id: impl Fn() -> String + 'static) -> Self {
         Self { delegate, inner: Rc::new(RefCell::new(Inner::default())), next_id: Box::new(next_id) }
     }
@@ -150,23 +150,13 @@ impl WidgetClient {
 
     // ---- outgoing ---------------------------------------------------------------------------
 
-    /// Send any widget request. The returned future is `'static` and resolves once the host's
-    /// response has been fed into [`handle_message_from_host`](Self::handle_message_from_host).
-    /// The request itself is sent synchronously, before this returns.
+    /// Send any widget request. The request is sent before this returns; the future resolves once
+    /// the host's response has been fed into [`handle_message_from_host`](Self::handle_message_from_host).
     pub fn request(
         &self,
         request: WidgetRequest,
     ) -> impl Future<Output = Result<WidgetResponse, WidgetClientError>> + 'static {
-        self.request_with_id(request).1
-    }
-
-    /// [`request`](Self::request), also returning the request id it was sent with.
-    pub fn request_with_id(
-        &self,
-        request: WidgetRequest,
-    ) -> (String, impl Future<Output = Result<WidgetResponse, WidgetClientError>> + 'static) {
-        let (msg, fut) = self.send_request(request);
-        (msg.request_id, fut)
+        self.send_request(request).1
     }
 
     /// Send `request` to the host; `waiter` gets the response. Returns the sent envelope.
@@ -879,11 +869,7 @@ mod tests {
         client.handle_message(sent[0].ack()).unwrap();
         block(fut).unwrap();
 
-        let notify = HostRequest::UpdateCapabilities {
-            request: UpdateCapabilitiesRequest { allowed: vec![Capability::send_event("a")] },
-        }
-        .into_wire("host-1");
-        client.handle_message(notify.clone()).unwrap();
+        client.handle_message(update(vec![Capability::send_event("a")], "host-1")).unwrap();
         let sent = rec.drain();
         assert_eq!(sent.len(), 1);
         assert_eq!(sent[0].request_id, "host-1");
@@ -895,9 +881,6 @@ mod tests {
         assert!(client.state().pending_requested.is_empty());
 
         // `allowed` is the full list: it replaces what the widget held ...
-        let update = |allowed: Vec<Capability>, id: &str| {
-            HostRequest::UpdateCapabilities { request: UpdateCapabilitiesRequest { allowed } }.into_wire(id)
-        };
         client
             .handle_message(update(vec![Capability::send_event("a"), Capability::read_timeline("b")], "host-2"))
             .unwrap();
@@ -925,9 +908,7 @@ mod tests {
 
     /// The host's reply with [`token`].
     fn token_reply(request: &WireMessage) -> WireMessage {
-        request.response_to(
-            json!({"access_token": "t", "token_type": "Bearer", "matrix_server_name": "x", "expires_in": 1}),
-        )
+        request.response_to(serde_json::to_value(token()).unwrap())
     }
 
     fn update(allowed: Vec<Capability>, id: &str) -> WireMessage {

@@ -1,6 +1,6 @@
 # Widget host app design
 
-This document describes the concepts and views of the host app.
+The concepts and views of the host app. Every state listed under [Required visualisations](#required-visualisations) is a story in Storybook, the visual specification.
 
 # Design
 
@@ -41,7 +41,7 @@ While the [DevBackend](#devbackend) is active, the app background (on which all 
 See the leftmost bar in the `reference_image`. It contains:
 
 - An app icon in the top left corner. It opens a modal explaining what this app is.
-- A + button, equivalent to Ctrl+N (new room panel).
+- A + button: a new room panel (Alt+N).
 - A room list button. It opens the [Room list](#room-list).
 - A Dev tools button (while dev tools are enabled or the [DevBackend](#devbackend) is active, then highlighted). It opens and closes the [Dev tools](#dev-tools); it never switches accounts.
 - A settings button. It opens [Settings](#settings).
@@ -84,8 +84,8 @@ The [room picker](#room-picker), titled "Rooms". A pick opens in the room panel 
 The RoomsArea is the main area of the logged-in view. It arranges room panels in up to three rows, with up to two full-height columns on each side next to two or more rows (at most six panels side by side). Splitters between all of them.
 
 - By default there is one panel per room.
-- Ctrl+N opens a new panel on the right of the focused one with the [room picker](#room-picker) (a pick turns it into that room), Ctrl+Shift+N one showing the same room. Without room on the right: at the end of the last row, else in a new row. With no place left a message asks to close a panel first.
-- Ctrl+W closes the shown tab of the focused panel, and a panel whose only tab is the room name.
+- Alt+N opens a new panel on the right of the focused one with the [room picker](#room-picker) (a pick turns it into that room), Alt+Shift+N one showing the same room. Without room on the right: at the end of the last row, else in a new row. With no place left a message asks to close a panel first.
+- Alt+W closes the shown tab of the focused panel, and a panel whose only tab is the room name.
 - Ctrl+K (Cmd+K on macOS) opens the [room picker](#room-picker) in a dialog, the search field focused; a pick opens the room in a new panel right of the focused one (a widget that is open in a tab is jumped to). Ctrl+K again or Escape closes it.
 - Dragging a panel by its header (room name or free space) moves it; dropped onto a panel of the same room, its tabs join that panel.
 - Dragging a tab out of the tab bar makes it a new panel of its room; dropped onto another panel of the same room, it joins that panel. A widget keeps running.
@@ -168,10 +168,7 @@ A toolbar for a single widget, with information like the driver state (approved 
 ### WidgetDevToolMessagesPanel
 
 - A scrollable list of all messages.
-- Each message is a box that can be expanded. The collapsed overview only has the most important information:
-  - direction
-  - action type
-  - indicator whether it has been responded to
+- Each message is a row that expands to its JSON. Collapsed it shows the direction (`W→H` / `H→W`), the action (its `org.matrix.mscXXXX.` prefix dimmed), the response state (with how long it took), and the time.
 
 ### WidgetDevToolStatsPanel
 
@@ -215,7 +212,7 @@ The container:
 
 ## DevBackend
 
-The DevBackend is a custom in-memory backend. It is implemented as a separate account (part of the multi-account feature, which should be the ideal abstraction).
+The DevBackend is an in-memory backend, shown as an account of its own (see [AccountView](#accountview)).
 
 - Activating it removes all current panels (empty RoomsArea).
 - Once active, no Matrix CS API calls are made anymore. Only widget <-> host, with the memory widget driver.
@@ -374,7 +371,7 @@ Every state of the UI. Each is one story in Storybook, a sketch story (`Sketch/�
           - WidgetDevToolConsolePanel
   - RoomView (2)
     - A different room next to RoomView (1)
-    - The same room as RoomView (1) (Ctrl+Shift+N): its RoomOverview offers "jump to tab" and "move widget here"
+    - The same room as RoomView (1) (Alt+Shift+N): its RoomOverview offers "jump to tab" and "move widget here"
 
 # Details
 
@@ -382,7 +379,7 @@ Notes for the implementation. They add to the design above, they do not change i
 
 **Keyboard**
 
-- The host is a browser app, and browsers do not let a page override Ctrl+N, Ctrl+Shift+N or Ctrl+W. Bind alternatives that work in a tab (suggestion: Alt+N, Alt+Shift+N, Alt+W), ignored while typing in a text field, and show the shortcut in the button tooltips.
+- Browsers do not let a page override Ctrl+N, Ctrl+Shift+N or Ctrl+W, so the shortcuts are Alt+N, Alt+Shift+N and Alt+W, ignored while typing in a text field and shown in the button tooltips. Ctrl+K (Cmd+K) works also while typing.
 - While a widget iframe has focus, the host does not receive key events (including Escape). Also reveal the LeftBar expand button when the mouse reaches the screen edge.
 
 **Widgets are iframes**

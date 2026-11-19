@@ -28,5 +28,8 @@ export const WIDGET_EVENT_TYPES = ["m.widget", "org.matrix.msc4411.widget", "im.
 /** Identifies a widget within a room: two event types may use the same state key. */
 export const widgetKey = (event: Pick<StateEvent, "type" | "state_key">) => `${event.type}/${event.state_key}`;
 
+/** The name a widget event shows: its `name`, else its state key. */
+export const widgetEventName = (event: StateEvent): string => (typeof event.content.name === "string" && event.content.name ? event.content.name : event.state_key);
+
 /** Identifies a local widget ("Add widget", only in this host): no `widgetKey` starts with `local:`, so it never shares a key with a room widget. */
 export const localWidgetKey = (event: Pick<StateEvent, "type" | "state_key">) => `local:${widgetKey(event)}`;

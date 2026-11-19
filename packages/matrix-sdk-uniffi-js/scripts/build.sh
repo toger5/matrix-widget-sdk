@@ -45,8 +45,7 @@ fi
 npm run ubrn:checkout
 
 echo "==> Adding the ffi API of sdk-additions/"
-# API the widget host needs and upstream does not have yet. It is kept as whole new files, so
-# the only edit to an upstream file is the line declaring each new module.
+# Whole new files; the only edit to an upstream file is the line declaring each module.
 cp -R sdk-additions/. "$SDK/"
 declare_module() { # <file> <existing line to insert after> <module>
     grep -qx "$2" "$1" || { echo "cannot declare $3: no line '$2' in $1" >&2; exit 1; }
@@ -85,13 +84,9 @@ fi
 export UBRN_WASM_BINDGEN="$TOOLS/bin/wasm-bindgen"
 
 echo "==> Second pass: build with bindings/wasm in the workspace"
-# The wasm is built in the SDK's workspace, which has no [profile.release], so the profile of this
-# repository's Cargo.toml does not apply and cargo's defaults (opt-level 3, no LTO, 16 codegen
-# units) would be used. Those roughly triple the code size: generic code is duplicated per crate
-# and nothing is merged at link time. The profile is set here, through the environment, so that
-# no further edit of the checkout is needed. `strip` drops the name section (function names,
-# ~18 MB); build scripts and proc macros are left unstripped, as stripped proc-macro dylibs can
-# fail to load on recent macOS (see the SDK's small-release-stripped profile).
+# The SDK's workspace has no [profile.release], so the size profile is set through the environment
+# (no edit of the checkout); see "Wasm size" in the README. Build scripts and proc macros stay
+# unstripped: stripped proc-macro dylibs can fail to load on recent macOS.
 export CARGO_PROFILE_RELEASE_OPT_LEVEL=z
 export CARGO_PROFILE_RELEASE_LTO=fat
 export CARGO_PROFILE_RELEASE_CODEGEN_UNITS=1
@@ -103,9 +98,8 @@ sed -i.bak '/"xtask",/a\
 npm run ubrn:web
 
 echo "==> Pointing the generated code at this package's ubrn runtime"
-# Generated code imports its runtime as `@ubjs/core`. The runtime matching this ubrn is not
-# published under that name; it is the main export of the ubrn package itself. Importing it by
-# that name lets every package in this repository resolve its own runtime version.
+# The runtime matching this ubrn is not published as `@ubjs/core`; it is the ubrn package's main
+# export. Other packages of this repository keep their own `@ubjs/core`.
 sed -i.bak -E "s#(['\"])@ubjs/core['\"]#\1uniffi-bindgen-react-native\1#" src/generated/*.ts
 rm src/generated/*.bak
 

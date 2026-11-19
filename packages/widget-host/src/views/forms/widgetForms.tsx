@@ -116,7 +116,7 @@ export interface TestWidgetDraft {
 export const newTestWidgetDraft = (stateKey: string): TestWidgetDraft => ({ type: TEST_WIDGETS[0].type, stateKey });
 
 /** The test widget of this event type. */
-export const testWidgetOf = (type: string): StateEvent => TEST_WIDGETS.find((w) => w.type === type) ?? TEST_WIDGETS[0];
+const testWidgetOf = (type: string): StateEvent => TEST_WIDGETS.find((w) => w.type === type) ?? TEST_WIDGETS[0];
 
 const testWidgetLabel = (type: string) => `${type} · ${type === LEGACY_TYPE ? "legacy" : "new"} test widget`;
 
@@ -194,7 +194,7 @@ export const NEW_ELEMENT_CALL: ElementCallDraft = { url: "https://call.element.i
  * (`src/UrlParams.ts`, `docs/url_params.md`). Element Web's extras (`fontScale`, `background`,
  * analytics and rageshake parameters) are left out.
  */
-export function elementCallEvent({ url, intent, stateKey, userId }: { url: string; intent: string; stateKey: string; userId?: string }): StateEvent {
+function elementCallEvent({ url, intent, stateKey, userId }: { url: string; intent: string; stateKey: string; userId?: string }): StateEvent {
   const params = [
     `intent=${intent}`,
     "roomId=$matrix_room_id",

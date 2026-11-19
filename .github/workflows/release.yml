@@ -1,13 +1,10 @@
 # Cuts a release: the npm packages (@matrix-widget-sdk/widget, /host, /compat-wrapper) to
 # npmjs.com and the host crates (matrix-widget-actions, matrix-widget-logging, matrix-widget-host-backend-interface,
 # matrix-widget-host-driver) to crates.io, both with trusted publishing (no stored tokens), then the tag
-# v<version> and a GitHub Release with the npm tarballs attached. See RELEASING.md for the one-time
-# setup and the procedure around it.
+# v<version> and a GitHub Release with the npm tarballs attached. Procedure: RELEASING.md.
 #
-# Dispatched by hand, not on tag push: the tag is created here, after everything was published,
-# so a tag never exists without its packages. A dry run builds, tests and packs (the tarballs are
-# downloadable from the run's summary page) and stops before anything is published or tagged.
-# Re-running after a partial failure skips what is already on the registries.
+# Dispatched by hand, not on tag push: the tag is created last, so it never exists without its
+# packages. Re-running after a partial failure skips what is already on the registries.
 
 name: Release
 

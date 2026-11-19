@@ -15,56 +15,19 @@ afterEach(() => {
 });
 
 describe("loadPersisted", () => {
-  it("keeps a room dev tools tab with its layout (where its bar is, which panels are open)", () => {
+  it("brings each stored workspace through `upgradeWorkspace` (cases in test/layout.test.ts); a broken one is empty, a non-object ignored", () => {
     const tabs = [
       { kind: "widget", id: "t1", widgetId: "!a:example.org|m.widget/call" },
       { kind: "roomTools", id: "t2", layout: { dock: "left", panels: [{ panel: "timeline", share: 1 }] } },
     ];
-    storeUi({ workspaces: { ada: { roomsArea: { panels: [{ id: "p1", content: { kind: "room", roomId: "!a:example.org", tabs, activeTabId: "t2" } }] } } } });
-    expect(loadPersisted()?.workspaces.ada.roomsArea.panels[0].content).toEqual({ kind: "room", roomId: "!a:example.org", tabs, activeTabId: "t2" });
-  });
-
-  it("drops the removed tab kinds: a room whose stored active tab was the room overview tab shows its RoomOverview", () => {
-    storeUi({
-      settings: { devTools: true, theme: "dark" },
-      workspaces: {
-        ada: {
-          roomsArea: {
-            panels: [
-              {
-                id: "p1",
-                widthShare: 1,
-                content: {
-                  kind: "room",
-                  roomId: "!a:example.org",
-                  tabs: [
-                    { kind: "widget", id: "t1", widgetId: "!a:example.org|m.widget/call" },
-                    { kind: "native", id: "t2", view: "roomOverview" },
-                    { kind: "new", id: "t3" },
-                  ],
-                  activeTabId: "t2",
-                },
-              },
-            ],
-            focusedPanelId: "p1",
-          },
-          pip: { stacking: "horizontal", position: { x: 24, y: 24 }, boxSize: { width: 224, height: 140 } },
-          devTools: {},
-        },
-        broken: "not a layout",
-      },
-    });
+    const content = { kind: "room", roomId: "!a:example.org", tabs, activeTabId: "t2" };
+    storeUi({ workspaces: { ada: { roomsArea: { panels: [{ id: "p1", content: { ...content, tabs: [...tabs, { kind: "new", id: "t3" }] } }] } }, broken: "not a layout" } });
     const ui = loadPersisted();
-    expect(ui?.settings).toEqual({ devTools: true, devBackend: true, theme: "dark" });
-    expect(ui?.workspaces.ada.roomsArea.panels[0].content).toEqual({
-      kind: "room",
-      roomId: "!a:example.org",
-      tabs: [{ kind: "widget", id: "t1", widgetId: "!a:example.org|m.widget/call" }],
-      activeTabId: undefined,
-    });
-    // the panels of a layout from before the dock: one row
+    expect(ui?.workspaces.ada.roomsArea.panels[0].content).toEqual(content);
     expect(ui?.workspaces.ada.roomsArea.dock).toEqual({ center: { rows: [{ items: [{ id: "p1", group: "!a:example.org" }] }] } });
     expect(ui?.workspaces.broken.roomsArea.panels).toEqual([]);
+    storeUi({ workspaces: [1, 2] });
+    expect(loadPersisted()?.workspaces).toEqual({});
   });
 
   it("derives the recent rooms of an account that has none stored from its recent widgets, newest first", () => {
@@ -92,11 +55,6 @@ describe("loadPersisted", () => {
     const ui = loadPersisted();
     expect(ui?.recents).toEqual({ ada: [{ roomId: "!b:x", widgetKey: "m.widget/w", lastOpened: 2 }] });
     expect(ui?.recentRooms).toEqual({ ada: [{ roomId: "!c:x", lastOpened: 3 }] });
-  });
-
-  it("ignores stored workspaces that are not an object", () => {
-    storeUi({ workspaces: [1, 2] });
-    expect(loadPersisted()?.workspaces).toEqual({});
   });
 
   it("gives settings stored before the DevBackend switch the DevBackend of the dev tools, and keeps a stored one", () => {

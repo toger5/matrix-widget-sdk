@@ -331,7 +331,7 @@ export function PipPanel({ pip, items, more, renderWidget, forceHover = false, d
         <div ref={menuRef} className="dropdown pip-menu" role="menu" aria-label="More always-on-screen widgets" data-testid="pip-menu" onKeyDown={onMenuKeyDown}>
           {more.map((item) => (
             // TODO-FINDING pip-menu-roles - the design made the row the `menuitem` and puts two buttons into it, which is not valid ARIA. Here the row is presentational and the two buttons are the menu items.
-            // TODO-FINDING pip-overflow-no-swap - (designFeedback "Still open" 11) a hidden widget can only be jumped to or stopped; there is no way to swap it into one of the boxes.
+            // TODO-FINDING pip-overflow-no-swap - a hidden widget can only be jumped to or stopped; there is no way to swap it into one of the boxes.
             <div key={item.widgetId} className="dd-row" role="none" data-widget-id={item.widgetId}>
               <Avatar name={item.widgetName} id={item.widgetId} size={22} square />
               <span>
@@ -372,7 +372,7 @@ export function PipPanel({ pip, items, more, renderWidget, forceHover = false, d
                 onClick={() => dispatch({ type: "widget/jumpToTab", widgetId: item.widgetId })}
               />
               {item.devToolsOpen && (
-                // TODO-FINDING pip-dev-tools-close-only - (designFeedback "Still open" 12) a box can close its dev tools but not open them. With several boxes the name "Close dev tools" is not unique: scope by the cell.
+                // TODO-FINDING pip-dev-tools-close-only - a box can close its dev tools but not open them. With several boxes the name "Close dev tools" is not unique: scope by the cell.
                 <LabelButton icon="dots" label="Close dev tools" title="Close the widget dev tools" className="on" testId="pip-close-dev-tools" onClick={() => dispatch({ type: "devTools/toggle", widgetId: item.widgetId })} />
               )}
               {stop(item)}

@@ -22,7 +22,7 @@ export const EXAMPLE_NEW: StateEvent = {
 };
 
 /** The new test widget under the unstable event type of MSC4411. */
-export const EXAMPLE_MSC4411: StateEvent = {
+const EXAMPLE_MSC4411: StateEvent = {
   type: "org.matrix.msc4411.widget",
   state_key: "widget-1",
   content: { name: "MSC4411 test widget", url: `${TEST_WIDGETS_URL}new/`, uses_widget_api: true },

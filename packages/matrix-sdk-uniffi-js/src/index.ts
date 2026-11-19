@@ -1,12 +1,7 @@
 /**
- * matrix-sdk-ffi for the browser. This file is the package's only public entry; `generated/` is
- * build output (`npm run bindings`).
- *
- * ubrn's own entrypoint (`generated/index.web.ts`) imports the `.wasm` file as a path, which
- * bundlers like Vite turn into an ES module instead of a URL. This entry does the same work but
- * finds the module with `new URL(…, import.meta.url)`, which Vite, webpack 5, Rollup and esbuild
- * understand and which keeps working after `scripts/pack-npm.mjs` bundles the package for npm
- * (the bundle keeps the `generated/wasm-bindgen/` path next to it).
+ * The package entry (`generated/` is build output, `npm run bindings`). It replaces ubrn's own
+ * entrypoint, whose `.wasm` import bundlers turn into an ES module: `new URL(…, import.meta.url)`
+ * works in Vite, webpack 5, Rollup and esbuild, and after `scripts/pack-npm.mjs` bundles it.
  */
 import * as matrix_sdk from "./generated/matrix_sdk";
 import * as matrix_sdk_base from "./generated/matrix_sdk_base";

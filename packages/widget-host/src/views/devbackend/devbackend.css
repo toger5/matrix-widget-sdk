@@ -1,4 +1,4 @@
-/* Dev tools of the side panel and the room dev tools, app-only (layer views, after the design files): real form controls, scrolling lists, disclosure rows. The design rules are src/styles/devbackend.css and src/styles/devtools.css. */
+/* Dev tools of the side panel and the room dev tools, app-only (layer views): real form controls, scrolling lists, disclosure rows. The design rules are src/styles/devbackend.css and src/styles/devtools.css. */
 
 /* header: the room dropdown shares the row with the room actions and the close button */
 .sidebox.devb .room-pick { flex: 1; width: auto; min-width: 0; }
@@ -19,7 +19,7 @@
 :is(.sidebox.devb, .rdt) :is(input.input, select.input) { width: 100%; min-height: 24px; padding: 2px 7px; font: inherit; font-size: 12px; color: inherit; }
 :is(.sidebox.devb, .rdt) :is(input.input, select.input).mono { font-family: var(--font-mono); font-size: 11px; }
 :is(.sidebox.devb, .rdt) input.input.narrow { width: 56px; }
-/* a read-only value (the account as sender, a test widget's URL): plain text, as `.dt-val` */
+/* a read-only value (the account as sender, a test widget's URL): plain text, not a field */
 :is(.sidebox.devb, .rdt) input.input[aria-readonly="true"] { min-height: 0; padding: 0; border: 0; background: none; color: var(--text-muted); text-overflow: ellipsis; }
 :is(.sidebox.devb, .rdt) input.input[aria-readonly="true"]:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
 .rdt .ibtn.xs, .sidebox.devb .dt .ibtn.xs { flex: none; }

@@ -49,7 +49,7 @@ export const emptyWorkspace = (): WorkspaceLayout => ({
 export const DEFAULT_DEV_TOOLS: WidgetDevToolsLayout = { open: false, dock: "top", panels: [], size: { top: 240, side: 360 } };
 
 /** The panels of the room dev tools, in bar order. */
-export const ROOM_DEV_TOOL_PANELS: readonly RoomDevToolPanel[] = ["state", "timeline"];
+const ROOM_DEV_TOOL_PANELS: readonly RoomDevToolPanel[] = ["state", "timeline"];
 /** The room dev tools with both panels, the bar at `dock`: a room tab's start "top", the SidePanel's "left". */
 export const roomDevToolsLayout = (dock: RoomDevToolsLayout["dock"]): RoomDevToolsLayout => ({ dock, panels: ROOM_DEV_TOOL_PANELS.map((panel) => ({ panel, share: 1 })) });
 
@@ -91,13 +91,10 @@ export const roomOfPanel = (ws: WorkspaceLayout, panelId: PanelId): RoomViewMode
 };
 
 export function updatePanel(ws: WorkspaceLayout, panelId: PanelId, change: (panel: RoomPanelViewModel) => RoomPanelViewModel): WorkspaceLayout {
-  return withPanels(
-    ws,
-    ws.roomsArea.panels.map((p) => (p.id === panelId ? change(p) : p)),
-  );
+  return withPanels(ws, ws.roomsArea.panels.map((p) => (p.id === panelId ? change(p) : p)));
 }
 
-export function updateRoom(ws: WorkspaceLayout, panelId: PanelId, change: (room: RoomViewModel) => RoomViewModel): WorkspaceLayout {
+function updateRoom(ws: WorkspaceLayout, panelId: PanelId, change: (room: RoomViewModel) => RoomViewModel): WorkspaceLayout {
   return updatePanel(ws, panelId, (p) => (p.content.kind === "room" ? { ...p, content: change(p.content) } : p));
 }
 
@@ -108,7 +105,7 @@ export const focusPanel = (ws: WorkspaceLayout, panelId: PanelId): WorkspaceLayo
  * end of the last row, else in a new row at the bottom, else the first place left. `undefined`:
  * the dock is full (`isSaturated`).
  */
-export function newPanelTarget(dock: DockLayout, after?: PanelId): DropTarget | undefined {
+function newPanelTarget(dock: DockLayout, after?: PanelId): DropTarget | undefined {
   const targets = allowedTargets(dock, {});
   const allowed = (t: DropTarget) => targets.find((a) => targetKey(a) === targetKey(t));
   const at = after === undefined ? undefined : locateItem(dock, after);
@@ -285,11 +282,6 @@ export function findWidgetTab(ws: WorkspaceLayout, widgetId: WidgetInstanceId): 
   return undefined;
 }
 
-/** Every widget a tab of the workspace refers to. */
-export function workspaceWidgetIds(ws: WorkspaceLayout): WidgetInstanceId[] {
-  return ws.roomsArea.panels.flatMap((p) => (p.content.kind === "room" ? p.content.tabs.flatMap((t) => (t.kind === "widget" ? [t.widgetId] : [])) : []));
-}
-
 /** Where a pick of the Room list opens a room: a panel that shows it, the focused picker panel, or a new panel after `after`. */
 export type RoomTarget = { in: "room"; panelId: PanelId } | { in: "picker"; panelId: PanelId } | { in: "new"; after?: PanelId };
 
@@ -339,7 +331,7 @@ export function toggleRoomDevToolPanel(layout: RoomDevToolsLayout, panel: RoomDe
 /** The separator between the room dev tools' panels: their new shares, in panel order (a missing or invalid one keeps its share). */
 export const resizeRoomDevTools = (layout: RoomDevToolsLayout, shares: number[]): RoomDevToolsLayout => ({
   ...layout,
-  panels: layout.panels.map((p, i) => ({ ...p, share: isNumber(shares[i]) && shares[i] > 0 ? shares[i] : p.share })),
+  panels: layout.panels.map((p, i) => ({ ...p, share: positive(shares[i]) ?? p.share })),
 });
 
 // ---------------------------------------------------------------------------------------------
@@ -354,7 +346,7 @@ const isDock = (value: unknown): value is WidgetDevToolsLayout["dock"] => typeof
 const isDevToolPanel = (value: unknown): value is DevToolPanel => typeof value === "string" && Object.hasOwn(DEV_TOOL_PANELS, value);
 
 /** A stored room dev tools layout; what is missing or malformed gets the default of `dock` (both panels). */
-export function upgradeRoomDevToolsLayout(value: unknown, dock: RoomDevToolsLayout["dock"]): RoomDevToolsLayout {
+function upgradeRoomDevToolsLayout(value: unknown, dock: RoomDevToolsLayout["dock"]): RoomDevToolsLayout {
   if (!isObject(value)) return roomDevToolsLayout(dock);
   const stored = Array.isArray(value.panels) ? value.panels : roomDevToolsLayout(dock).panels;
   const panels = ROOM_DEV_TOOL_PANELS.flatMap((panel) => {
@@ -379,7 +371,7 @@ function upgradeTab(value: unknown, roomId: string, seen: SeenIds, hostKinds: Re
     seen.tabs.add(value.id);
     return value.kind === "timeline" ? { kind: "timeline", id: value.id } : { kind: "roomTools", id: value.id, layout: upgradeRoomDevToolsLayout(value.layout, "top") };
   }
-  // Older layouts also stored "native" (the room overview, now the room name) and "new" tabs.
+  // Other kinds (the removed "native" and "new") are dropped.
   if (value.kind !== "widget" || typeof value.widgetId !== "string") return undefined;
   // A widget of another room, or a second tab of a widget, would break `widgetSlot` (one place per widget).
   if (!value.widgetId.startsWith(`${roomId}|`) || seen.widgets.has(value.widgetId)) return undefined;
@@ -393,7 +385,7 @@ function upgradePanel(value: unknown, seen: SeenIds): RoomPanelViewModel | undef
   const content = value.content;
   if (content.kind === "picker") {
     seen.panels.add(value.id);
-    // Older layouts also stored the picker's `mode` (recents / all rooms).
+    // A stored `mode` of the picker is dropped.
     return { id: value.id, content: { kind: "picker" } };
   }
   if (content.kind !== "room" || typeof content.roomId !== "string") return undefined;
@@ -446,7 +438,7 @@ function upgradeDevTools(value: Record<string, unknown>): WidgetDevToolsLayout {
     open: value.open === true,
     dock: isDock(value.dock) ? value.dock : DEFAULT_DEV_TOOLS.dock,
     panels: (Array.isArray(value.panels) ? value.panels : [])
-      .flatMap((p) => (isObject(p) && isDevToolPanel(p.panel) ? [{ panel: p.panel, share: isNumber(p.share) && p.share > 0 ? p.share : 1 }] : []))
+      .flatMap((p) => (isObject(p) && isDevToolPanel(p.panel) ? [{ panel: p.panel, share: positive(p.share) ?? 1 }] : []))
       .slice(-MAX_DEV_TOOL_PANELS),
     size: { top: isNumber(size.top) ? size.top : DEFAULT_DEV_TOOLS.size.top, side: isNumber(size.side) ? size.side : DEFAULT_DEV_TOOLS.size.side },
   };

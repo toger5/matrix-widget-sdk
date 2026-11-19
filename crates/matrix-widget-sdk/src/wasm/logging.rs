@@ -1,8 +1,6 @@
-//! Logging for the JavaScript bindings.
-//!
-//! The client emits through the [`log`] facade. This module installs the logger that writes to
-//! the JavaScript console (`matrix-widget-logging`), at level `warn` as soon as the wasm module is
-//! loaded, so that a dropped message, a throwing callback or a panic is visible without any setup.
+//! Logging for the JavaScript bindings: the console logger of `matrix-widget-logging`, installed at
+//! level `warn` when the module loads, so a dropped message, a throwing callback or a panic shows
+//! without any setup.
 
 use log::LevelFilter;
 use wasm_bindgen::prelude::*;
@@ -13,17 +11,9 @@ fn start() {
     matrix_widget_logging::ensure_default();
 }
 
-/// Set what the SDK writes to the console. Can be called again at any time.
-///
-/// `level` is one of `off`, `error`, `warn` (the default), `info`, `debug`, `trace`. `filter`
-/// holds `RUST_LOG`-style overrides per target, e.g. `"matrix_widget_sdk::client=trace"`; targets
-/// are Rust module paths.
-///
-/// ```js
-/// import init, { initLogging } from "matrix-widget-sdk";
-/// await init();
-/// initLogging("debug");
-/// ```
+/// Set what the SDK writes to the console, at any time. `level`: `off`, `error`, `warn` (the
+/// default), `info`, `debug` or `trace`; `filter`: `RUST_LOG`-style overrides per Rust module
+/// path, e.g. `"matrix_widget_sdk::client=trace"`.
 #[wasm_bindgen(js_name = initLogging)]
 pub fn init_logging(level: &str, filter: Option<String>) -> Result<(), JsError> {
     let config = matrix_widget_logging::LogConfig {

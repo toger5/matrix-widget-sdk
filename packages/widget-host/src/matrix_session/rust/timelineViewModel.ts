@@ -1,8 +1,8 @@
 /**
  * The Timeline tab on the matrix-rust-sdk timeline (`room.timeline()`): edits, reactions and
  * redactions folded into their event, local echoes with their send state, display names and
- * avatars, images, why an event could not be decrypted. The
- * diffs are applied as in Aurora's `TimelineViewModel` (element-hq/aurora).
+ * avatars, images, why an event could not be decrypted. The diffs are applied as in Aurora's
+ * `TimelineViewModel` (element-hq/aurora).
  */
 import type { EventSendState, TimelineItem } from "@element-hq/web-shared-components";
 import {
@@ -163,10 +163,10 @@ export const KEEP_TIMELINE_MS = 60_000;
 
 /**
  * One SDK timeline per room, shared by the room's Timeline tabs (each adds its own listener, which
- * starts with the current items). Opening one is the expensive part (finding `rust-timeline-open-cost`).
- * It is freed `keepMs` after the last tab gave it back: while it lives it holds the room's event cache in memory.
+ * starts with the current items). Freed `keepMs` after the last tab gave it back: it holds the
+ * room's event cache in memory.
  */
-// TODO-FINDING rust-timeline-open-cost - opening a timeline costs an IndexedDB read per event the room's event cache holds in memory (thread info, in matrix-sdk-ui); the raw event feed keeps the cache full.
+// TODO-FINDING rust-timeline-open-cost - opening a timeline costs an IndexedDB read per event in the event cache (matrix-sdk-ui thread info).
 export class SharedTimelines {
   private readonly rooms = new Map<string, { timeline: Promise<TimelineLike>; users: number; dropTimer?: ReturnType<typeof setTimeout> }>();
 

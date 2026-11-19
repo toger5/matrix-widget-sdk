@@ -12,7 +12,7 @@ export const SETTINGS: SettingsViewModel = { devTools: false, devBackend: false,
 export const DEV_SETTINGS: SettingsViewModel = { devTools: true, devBackend: true, theme: "system" };
 
 /** The running widgets of `main`: their WidgetView (without dev tools), which shows the fake widget of `StoryEnv`. */
-export const fakeWidget =
+const fakeWidget =
   (main: MainViewModel): RenderWidget =>
   (id, options) => main.widgets[id] && <WidgetView widget={main.widgets[id]} compact={options?.compact} />;
 

@@ -3,13 +3,10 @@
 - **Target:** [MSC4412](https://github.com/matrix-org/matrix-spec-proposals/pull/4412), `proposals/4412-widget-base-postmessage-api.md`
 - **Base:** `1794f40325a449eed21dcbfce53efc80e89f56f6`
 - **Status:** draft
-- **Implemented here:** the origin check of incoming messages
-  (`packages/widget-host/src/app/runtime/widgetRuntime.ts`, `onMessage`: `ev.origin` must be the
-  driver's `WidgetIframe.origin`); remembered capabilities bound to the iframe URL
-  (`packages/widget-host/src/lib/capabilityStore.ts`, entries `{ url, capabilities }`, the URL is the
-  driver's `WidgetIframe.url`; the e2e test `webview.spec.ts` › "what was remembered for another URL
-  is not granted…"); the compat wrapper chosen by the host only (`src/lib/widgetEvents.ts`
-  `wrapperUrl`: `?wrapper=` only on the host's own origin).
+- **Implemented here:** the widget host accepts messages only from the driver's
+  `WidgetIframe.origin` (`packages/widget-host/src/app/runtime/widgetRuntime.ts`), binds remembered
+  capabilities to the iframe URL (`src/lib/capabilityStore.ts`), and accepts a compat wrapper URL
+  (`?wrapper=`) only on its own origin (`src/lib/widgetEvents.ts` `wrapperUrl`).
 
 ## Why
 

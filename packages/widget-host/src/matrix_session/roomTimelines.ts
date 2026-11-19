@@ -1,7 +1,8 @@
 /**
- * What the rust and js sessions know about the RoomTimeline of a room beyond its events: whether a
- * pagination reached the start of the room, whether one runs, and who listens. SDK free: the
- * session hands in how to follow a room's events and how to paginate.
+ * What the rust and js sessions know about a room's timeline beyond its events: whether a
+ * pagination reached the start, whether one runs, and who listens. One per session, shared with
+ * its backends, so the RoomTimeline's "Load older events" and a widget's `paginate_timeline` are
+ * one pagination. SDK free: the session hands in how to follow a room's events.
  */
 import type { RawEvent, RoomTimeline } from "../session";
 
@@ -81,8 +82,7 @@ export class RoomTimelines {
   /**
    * `LiveSession.loadOlderEvents`: runs `paginate` (it resolves whether the start of the room is
    * reached), unless a pagination of the room runs already; then it waits for that one. The
-   * listeners hear when it starts and when it ends (with the error, if it failed). Used by the
-   * RoomTimeline and by the widgets' `paginate_timeline`, so each sees the other's pagination.
+   * listeners hear when it starts and when it ends (with the error, if it failed).
    */
   loadOlder(roomId: string, paginate: () => Promise<boolean>): Promise<void> {
     const entry = this.entry(roomId);

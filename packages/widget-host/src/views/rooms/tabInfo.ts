@@ -6,7 +6,7 @@ import { localWidgetsOf, roomWidgets } from "../helpers";
 import type { IconName } from "../ui/icons";
 
 /** An id that is safe in `id` / `aria-controls` (those are space separated lists). */
-export const domId = (...parts: string[]) => parts.join("-").replace(/[^\w-]/g, "_");
+const domId = (...parts: string[]) => parts.join("-").replace(/[^\w-]/g, "_");
 export const tabDomId = (panelId: PanelId, tabId: TabId) => domId("tab", panelId, tabId);
 /** The room name, the first tab of a room panel. */
 export const roomTabDomId = (panelId: PanelId) => domId("roomtab", panelId);

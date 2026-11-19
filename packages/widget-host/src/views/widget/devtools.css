@@ -1,4 +1,4 @@
-/* Widget dev tools, app-only (layer views, after the design files): docking limits, real inputs, scrolling lists, empty states. The design rules are src/styles/devtools.css. */
+/* Widget dev tools, app-only (layer views): docking limits, real inputs, scrolling lists, empty states. The design rules are src/styles/devtools.css. */
 
 /* the panel area never pushes the widget out of the view */
 .wv.dock-top .dt, .wv.dock-bottom .dt { max-height: calc(100% - 48px); }

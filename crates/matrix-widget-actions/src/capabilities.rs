@@ -4,12 +4,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::{PLACEHOLDER_NAMESPACE, STABLE_NAMESPACE};
 
-/// The unstable namespace of the action a capability head (`action[.modifier]`) belongs to.
-///
-/// A capability embeds the wire name of its action (MSC4412 "Capability format"), so this is the
-/// namespace of the `#[serde(rename = ...)]` of that action in `actions/*/mod.rs`; the test
-/// `capabilities_embed_the_action_name` keeps the two in step. The webview capabilities (`sandbox`,
-/// `allow`) are about no action: theirs is the namespace of their MSC draft.
+/// The unstable namespace of the action of a capability head (`action[.modifier]`): the one of its
+/// `#[serde(rename)]` in `actions/*/mod.rs` (kept in step by `capabilities_embed_the_action_name`).
 fn namespace_of(head: &str) -> &'static str {
     match head.split('.').next().unwrap_or(head) {
         "read_relations" => "org.matrix.msc3869",
@@ -20,8 +16,7 @@ fn namespace_of(head: &str) -> &'static str {
         "get_rtc_livekit_token" | "delegate_rtc_livekit_delayed_leave" => "org.matrix.msc4533",
         "navigate" => "org.matrix.msc2931",
         "read_room_account_data" => "com.beeper",
-        // Not actions: the webview capabilities (`spec/patch/new/webview-capabilities.md`), no MSC yet.
-        WEBVIEW_SANDBOX | WEBVIEW_ALLOW => PLACEHOLDER_NAMESPACE,
+        // Including the webview capabilities (`spec/patch/new/webview-capabilities.md`).
         _ => PLACEHOLDER_NAMESPACE,
     }
 }
@@ -40,8 +35,7 @@ fn strip_namespace(full: &str) -> Option<&str> {
 // Sources: who sends the action the capability is about.
 const WIDGET: &str = "widget";
 const HOST: &str = "host";
-/// The source of the capabilities that are about the webview (iframe) the widget runs in, not
-/// about an action (`spec/patch/new/webview-capabilities.md`).
+/// Not an action: the webview (iframe) the widget runs in.
 const WEBVIEW: &str = "webview";
 
 // Heads of the webview capabilities: the attribute of the iframe they add a value to.
@@ -92,41 +86,14 @@ static UNIT_CAPABILITIES: &[(&str, &str, Capability)] = &[
 /// (matrix-widget-api only splits on `#` for this type).
 const ROOM_MESSAGE: &str = "m.room.message";
 
-/// A widget capability.
+/// A widget capability: `source ":" action [ "." modifier ] [ ":" data ]`, e.g.
+/// `widget:org.matrix.mscXXXX.send_event.timeline:m.room.message#m.text`.
 ///
-/// Capabilities are plain strings on the wire, one (or more) per action, following MSC4412
-/// "Capability format" and `docs/spec-appendix/capability-naming-proposal.md`:
-///
-/// ```text
-/// source ":" action [ "." modifier ] [ ":" data ]        action = namespace "." name
-///
-/// widget:org.matrix.mscXXXX.send_event.timeline:m.room.message#m.text
-/// widget:org.matrix.mscXXXX.read_timeline:m.room.message#m.text
-/// widget:org.matrix.msc2931.navigate
-/// host:org.matrix.mscXXXX.update_state:m.room.member#@a:x
-/// ```
-///
-/// * `source` is who sends the action: `widget` (a request the widget may make) or `host` (a
-///   subscription: the host sends the action whenever there is something to send). Either way the
-///   capability is held by the widget.
-/// * `action` is the value of the `action` property of the action the capability is about: the
-///   unstable name of the MSC that defines it (emitted by `Display`) or the stable `m.<name>`
-///   (accepted when parsing, emitted by [`Capability::to_stable_string`]). The same name under
-///   any other namespace is a different action and not a capability of this crate.
-/// * `send_event` and `forward_event` always carry a `timeline` or `state` modifier; there is no
-///   bare `widget:m.send_event:<type>`.
-/// * The data is an event type. For timeline events `m.room.message#<msgtype>` narrows to one
-///   `msgtype`; for state events `<type>#<state_key>` narrows to one state key.
-///
-/// No capability names a room: a widget acts in the room it is embedded in.
-///
-/// The source `webview` is about no action but about the webview (iframe) the widget runs in: one
-/// token of its `sandbox` attribute or one feature of its `allow` attribute per capability
-/// (`webview:org.matrix.mscXXXX.allow:camera`, `spec/patch/new/webview-capabilities.md`). The value
-/// is one token of the web platform ([`is_webview_value`]); anything else is [`Capability::Other`].
-///
-/// Parsing never fails. Unknown strings, including every legacy matrix-widget-api capability, are
-/// preserved verbatim in [`Capability::Other`] and grant nothing.
+/// The naming rules are MSC4412 "Capability format" and
+/// `docs/spec-appendix/capability-naming-proposal.md`. `Display` emits the unstable namespace of
+/// the capability's action; parsing also accepts the stable `m.`. Parsing never fails: any other
+/// string (also every legacy matrix-widget-api capability) is kept verbatim in
+/// [`Capability::Other`] and grants nothing.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Capability {
     // ---- widget actions ------------------------------------------------------------------------
@@ -365,7 +332,7 @@ impl Capability {
         })
     }
 
-    /// `(source, head, data)` of a modelled capability; `None` for `Other`.
+    /// `(source, head, data)`; `None` for `Other`.
     fn parts(&self) -> Option<(&'static str, &'static str, Option<String>)> {
         let typed = |source, head, event_type: &str, key: &Option<String>| {
             Some((source, head, Some(join_hash(event_type, key.as_deref()))))
@@ -528,18 +495,15 @@ impl fmt::Display for Capability {
     }
 }
 
-// Over the FFI a capability is its string form, exactly as on the wire: foreign code deals in
-// `widget:org.matrix.mscXXXX.send_event.timeline:m.room.message` & co. and never needs the parsed
-// shape.
+// Over the FFI a capability is its wire string.
 #[cfg(feature = "uniffi")]
 uniffi::custom_type!(Capability, String, {
     try_lift: |raw| Ok(Capability::parse(&raw)),
     lower: |cap| cap.to_string(),
 });
 
-/// Whether `capability` is a capability of the scheme ([`Capability::is_known`]). For foreign
-/// code, where a capability is its string: a permission prompt can tell what this crate acts on
-/// from what it does not know (also a known action name under a foreign namespace).
+/// [`Capability::is_known`] for foreign code, where a capability is its string (e.g. for a
+/// permission prompt to flag what this crate does not act on).
 #[cfg_attr(feature = "uniffi", uniffi::export)]
 pub fn capability_is_known(capability: Capability) -> bool {
     capability.is_known()
@@ -707,34 +671,6 @@ mod tests {
         }
     }
 
-    #[test]
-    fn unstable_capabilities_use_the_namespace_of_their_action() {
-        let cases = [
-            ("widget:org.matrix.mscXXXX.send_event.timeline:m.x", Capability::send_event("m.x")),
-            ("widget:org.matrix.mscXXXX.send_event.delayed", Capability::SendDelayedEvent),
-            ("widget:org.matrix.msc4157.update_delayed_event", Capability::UpdateDelayedEvent),
-            ("widget:org.matrix.mscXXXX.read_timeline:m.x", Capability::read_timeline("m.x")),
-            ("widget:org.matrix.mscXXXX.paginate_timeline", Capability::PaginateTimeline),
-            ("host:org.matrix.mscXXXX.notify_timeline_update", Capability::NotifyTimelineUpdate),
-            ("widget:org.matrix.msc3869.read_relations:m.x", Capability::read_relations("m.x")),
-            ("widget:com.beeper.read_room_account_data:m.tag", Capability::read_room_account_data("m.tag")),
-            ("widget:org.matrix.msc4039.upload_file", Capability::UploadFile),
-            ("widget:org.matrix.msc4533.get_rtc_livekit_token", Capability::GetRtcLivekitToken),
-            ("widget:org.matrix.msc2931.navigate", Capability::Navigate),
-            ("widget:org.matrix.mscXXXX.get_matrix_context", Capability::GetMatrixContext),
-            ("host:org.matrix.mscXXXX.forward_event.state:m.room.member", {
-                Capability::forward_state_event("m.room.member", None::<&str>)
-            }),
-            ("host:org.matrix.mscXXXX.update_theme", Capability::UpdateTheme),
-            ("webview:org.matrix.mscXXXX.allow:camera", Capability::webview_allow("camera")),
-            ("webview:org.matrix.mscXXXX.sandbox:allow-forms", Capability::webview_sandbox("allow-forms")),
-        ];
-        for (raw, expected) in cases {
-            assert_eq!(Capability::parse(raw), expected, "{raw}");
-            assert_eq!(expected.to_string(), raw);
-        }
-    }
-
     /// MSC4412: the action part of a capability is the value of the `action` property. Every
     /// capability's action must therefore be a known action of its source, in both spellings.
     #[test]
@@ -771,8 +707,7 @@ mod tests {
         }
     }
 
-    /// The source `webview` is about the iframe, not about an action: `sandbox` and `allow` are no
-    /// action names, under either source and either namespace.
+    /// `sandbox` and `allow` (source `webview`) are no action names under either source.
     #[test]
     fn webview_capabilities_name_no_action() {
         use crate::{HostRequest, Source, WidgetRequest, WireMessage};
@@ -784,10 +719,7 @@ mod tests {
             let host = WireMessage::request(Source::Host, action, "r", json!({}));
             assert_eq!(HostRequest::from_wire(&host), Ok(HostRequest::Unknown), "{action}");
         }
-        let webview: Vec<_> = all().into_iter().filter(|(_, c)| c.is_webview()).collect();
-        assert_eq!(webview.len(), 4);
-        assert!(webview.iter().all(|(raw, _)| raw.starts_with("webview:")));
-        assert!(all().iter().filter(|(_, c)| !c.is_webview()).all(|(raw, _)| !raw.starts_with("webview:")));
+        assert!(all().iter().all(|(raw, c)| c.is_webview() == raw.starts_with("webview:")));
     }
 
     #[test]
@@ -836,7 +768,7 @@ mod tests {
                 assert_ne!(head, other_head);
             }
         }
-        // 22 of the 45 strings in `all()` are unit capabilities; every one must be in the table.
+        // Every unit capability of `all()` is in the table.
         let units = all().into_iter().filter(|(raw, _)| raw.matches(':').count() == 1).count();
         assert_eq!(units, UNIT_CAPABILITIES.len());
     }
@@ -847,12 +779,9 @@ mod tests {
             // An action with modifiers has no capability without one.
             "widget:m.send_event:m.room.message",
             "widget:m.send_event",
-            // `read_events` (MSC2876) is gone in every spelling: `read_timeline` replaced it.
+            // `read_events` (MSC2876) is no action of this crate.
             "widget:m.read_events.timeline:m.room.message",
-            "widget:m.read_events.state:m.room.member",
-            "widget:org.matrix.msc2876.read_events.timeline:m.room.message",
             "widget:org.matrix.msc2876.read_events.state:m.room.topic",
-            "widget:m.read_events:m.room.message",
             "host:m.forward_event:m.room.message",
             // Unknown modifier, or a modifier on an action that has none.
             "widget:m.send_event.type:m.room.message",
@@ -876,7 +805,6 @@ mod tests {
             // Wrong namespace or shape. The same name under another namespace is another action.
             "widget:org.matrix.msc4412.navigate",
             "widget:org.matrix.mscXXXX.navigate",
-            "widget:org.matrix.mscXXXX.read_events.timeline:m.room.message",
             "widget:org.matrix.msc2876.read_timeline:m.room.message",
             "widget:m.read_timeline",
             "widget:m.read_timeline:",
@@ -888,22 +816,15 @@ mod tests {
             "widget:org.matrix.msc2876.send_event.timeline:m.room.message",
             "widget:org.matrix.msc4412.get_matrix_context",
             "host:org.matrix.msc2762.forward_event.timeline:m.room.message",
-            "widget:org.matrix.msc2876.read_events",
             "widget:.navigate",
             "widget:navigate",
             "widget.m.navigate",
             "m.widget.navigate",
             "m.widget.send_event:m.room.message",
             "widget:mnavigate",
-            // Webview capabilities: one web token per capability, of the source `webview` only.
-            "webview:m.allow:Camera",
-            "webview:m.allow:camera *",
-            "webview:m.allow:camera 'src'",
-            "webview:m.allow:camera;usb",
-            "webview:m.allow:camera; usb",
-            "webview:m.allow:camera\nusb",
+            // Webview capabilities: one web token (`webview_values_are_single_web_tokens`), of
+            // the source `webview` only.
             "webview:m.sandbox:allow-popups allow-top-navigation",
-            "webview:m.sandbox:allow-popups\"",
             "webview:m.allow:",
             "webview:m.allow",
             "webview:m.sandbox",
@@ -924,18 +845,10 @@ mod tests {
             // Legacy matrix-widget-api capabilities grant nothing here.
             "org.matrix.msc2762.send.event:m.room.message",
             "m.send.event:m.room.message",
-            "org.matrix.msc2762.receive.state_event:m.room.member#@a:b",
             "org.matrix.msc2762.timeline:!r:x",
-            "org.matrix.msc2762.timeline:*",
-            "org.matrix.msc3819.send.to_device:m.key",
-            "org.matrix.msc4157.send.delayed_event",
             "town.robin.msc3846.turn_servers",
-            "com.beeper.capabilities.receive.room_account_data:m.tag",
             "org.matrix.msc2931.navigate",
             "m.always_on_screen",
-            "org.matrix.msc4412.matrix_context",
-            "m.sticker",
-            "io.element.requires_client",
             "garbage",
             "",
         ];

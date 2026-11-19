@@ -1,12 +1,12 @@
 /**
- * Where the logins are stored (`src/matrix_session/js/accountStore`) and what the two SDK
+ * Where the logins are stored (`src/matrix_session/accountStore`) and what the two SDK
  * providers do with it: several logins side by side, the login of the old single-key layout
  * taken over, and one account cleared without touching the others. `localStorage`, `indexedDB`
  * and `fetch` are faked; no SDK client is started.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { AccountStore } from "../src/matrix_session/js/accountStore";
+import { AccountStore } from "../src/matrix_session/accountStore";
 import * as js from "../src/matrix_session/js/session";
 import * as rust from "../src/matrix_session/rust/session";
 

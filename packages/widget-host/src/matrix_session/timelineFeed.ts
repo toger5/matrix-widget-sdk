@@ -1,9 +1,8 @@
 /**
  * The timeline cache of one room as a `MatrixBackend` hands it to widgets (`timelineRead`,
- * `timelinePaginateBackwards`, `subscribeTimeline`; MSCXXXX, `spec/patch/new/timeline-reading.md`).
- * SDK free: the rust and js backends hand in their cached events, how to paginate and how to learn
- * about events decrypted late. The pagination itself is the session's `RoomTimelines`, so a
- * widget's pagination and the RoomTimeline's are one, and every widget of the room hears of it.
+ * `timelinePaginateBackwards`, `subscribeTimeline`; `spec/patch/new/timeline-reading.md`). SDK free:
+ * the rust and js backends hand in their cached events, how to paginate and how to learn about late
+ * decryptions. Paginations run through the session's `RoomTimelines`.
  */
 import { BackendError, PaginationStatus, type MatrixEvent, type Subscription, type TimelineFilter, type TimelineSink } from "@matrix-widget-sdk/host";
 

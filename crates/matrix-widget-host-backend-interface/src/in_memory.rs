@@ -9,18 +9,13 @@ use crate::{
     TurnServer, TurnServerSink, UserDirectorySearchResult, UserDirectoryUser,
 };
 
-/// A [`MatrixBackend`] backed by plain vectors. Intended for tests and prototypes.
+/// A [`MatrixBackend`] over plain vectors, for tests and prototypes.
 ///
-/// Events "sent" through it are appended to an in-memory timeline (and state map) and can be
-/// inspected with [`InMemoryBackend::timeline`] / [`InMemoryBackend::state`]. Use
-/// [`InMemoryBackend::inject`] to simulate events arriving from sync. Both paths notify live
-/// subscriptions like a real client would, so the widget sees its own sends echoed too.
-///
-/// The timeline is also the *timeline cache* of `timeline_read`. A back-pagination
-/// (`timeline_paginate_backwards`) never finishes by itself: it stays pending until the test or
-/// the test host resolves it with [`resolve_pagination`](InMemoryBackend::resolve_pagination)
-/// (older events) or [`fail_pagination`](InMemoryBackend::fail_pagination).
-#[derive(Debug)]
+/// Sent events ([`timeline`](Self::timeline), [`state`](Self::state)) and
+/// [`inject`](Self::inject)ed ones (as if from sync) both notify live subscriptions, so the widget
+/// sees its own sends echoed. The timeline is also the cache of `timeline_read`. A back-pagination
+/// stays pending until [`resolve_pagination`](Self::resolve_pagination) or
+/// [`fail_pagination`](Self::fail_pagination).
 #[cfg_attr(feature = "uniffi", derive(uniffi::Object))]
 pub struct InMemoryBackend {
     room_id: String,
@@ -37,12 +32,19 @@ pub struct InMemoryBackend {
     timeline_subscribers: Subscribers<Arc<dyn TimelineSink>>,
 }
 
+impl std::fmt::Debug for InMemoryBackend {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("InMemoryBackend")
+            .field("room_id", &self.room_id)
+            .field("user_id", &self.user_id)
+            .finish_non_exhaustive()
+    }
+}
+
 /// The subscriptions of one kind, each with what its subscriber asked for (`T`).
-#[derive(Debug)]
 struct Subscribers<T>(Mutex<Vec<Arc<Subscriber<T>>>>);
 
-/// One subscription. It is also the handle the subscriber gets back to cancel it.
-#[derive(Debug)]
+/// One subscription, also the handle to cancel it.
 struct Subscriber<T> {
     target: T,
     active: AtomicBool,
@@ -61,10 +63,8 @@ impl<T> Subscribers<T> {
         subscriber
     }
 
-    /// The subscriptions that are not cancelled, oldest first. Cancelled ones are removed here.
-    ///
-    /// Returns a copy, so the caller can call sinks without holding the lock: a sink is the
-    /// driver, which may call straight back into the backend.
+    /// The live subscriptions, oldest first (dropping cancelled ones). A copy, so that sinks are
+    /// called without the lock held: a sink is the driver, which may call straight back in.
     fn live(&self) -> Vec<Arc<Subscriber<T>>> {
         let mut list = self.0.lock().unwrap_or_else(|p| p.into_inner());
         list.retain(|s| s.active.load(Ordering::SeqCst));
@@ -78,43 +78,14 @@ impl<T: Send + Sync> Subscription for Subscriber<T> {
     }
 }
 
-/// What a `subscribe_room` caller asked for.
-#[derive(Debug)]
 struct RoomSubscriber {
     subjects: RoomSubjects,
     sink: Arc<dyn RoomSink>,
 }
 
-/// What a `subscribe_to_device` caller asked for.
-#[derive(Debug)]
 struct ToDeviceSubscriber {
     event_types: Vec<String>,
     sink: Arc<dyn ToDeviceSink>,
-}
-
-// The sinks are foreign objects without a useful `Debug`; these let the types above derive it.
-impl std::fmt::Debug for dyn RoomSink {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str("RoomSink")
-    }
-}
-
-impl std::fmt::Debug for dyn ToDeviceSink {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str("ToDeviceSink")
-    }
-}
-
-impl std::fmt::Debug for dyn TimelineSink {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str("TimelineSink")
-    }
-}
-
-impl std::fmt::Debug for dyn TurnServerSink {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str("TurnServerSink")
-    }
 }
 
 /// A delayed leave handed to a (pretend) LiveKit service (MSC4533), for inspection.
@@ -180,7 +151,7 @@ struct Inner {
     delegated_leaves: Vec<DelegatedDelayedLeave>,
     /// Uploaded media by `mxc://` URI.
     media: BTreeMap<String, MediaFile>,
-    /// When set, every send fails with this error. Handy for tests.
+    /// When set, every send fails with this error.
     fail_sends: Option<BackendError>,
 }
 
@@ -323,11 +294,7 @@ impl InMemoryBackend {
     /// Fire a scheduled event as if its delay had elapsed. The host side of
     /// `send_delayed_event_now`; for test hosts that want a "time passes" button.
     pub fn fire_delayed_event(&self, delay_id: String) -> Result<MatrixEvent, BackendError> {
-        let delayed = self
-            .inner()
-            .delayed
-            .remove(&delay_id)
-            .ok_or_else(|| BackendError::not_found(format!("no delayed event {delay_id}")))?;
+        let delayed = self.inner().delayed.remove(&delay_id).ok_or_else(|| no_delayed_event(&delay_id))?;
         let event = self.next_event(delayed.event.event_type, delayed.event.state_key, delayed.event.content);
         self.send(event.clone())?;
         Ok(event)
@@ -447,8 +414,6 @@ impl InMemoryBackend {
         self.inner.lock().unwrap_or_else(|p| p.into_inner())
     }
 
-    /// Every method takes a `room_id` for symmetry with multi-room backends; this one serves
-    /// exactly one room.
     fn check_room(&self, room_id: &str) -> Result<(), BackendError> {
         if room_id != self.room_id {
             return Err(BackendError::not_found(format!("this backend serves {}, not {room_id}", self.room_id)));
@@ -460,8 +425,7 @@ impl InMemoryBackend {
         self.inner().state.iter().filter(|((t, _), _)| t == event_type).map(|(_, e)| e.clone()).collect()
     }
 
-    /// Tell every room subscription about a stored event. Must be called with no lock held: the
-    /// sink is the driver, which may call straight back into this backend.
+    /// Tell every room subscription about a stored event. Call with no lock held (see `live`).
     fn notify(&self, event: &MatrixEvent) {
         for sub in self.room_subscribers.live() {
             let RoomSubscriber { subjects, sink } = &sub.target;
@@ -474,7 +438,6 @@ impl InMemoryBackend {
         }
     }
 
-    /// Tell every timeline subscription about `update`, with no lock held.
     fn notify_timeline(&self, update: TimelineUpdate) {
         for sub in self.timeline_subscribers.live() {
             sub.target.on_timeline_update(update.clone());
@@ -504,9 +467,7 @@ impl InMemoryBackend {
         sticky_duration_ms: Option<u64>,
     ) -> Result<String, BackendError> {
         let mut inner = self.inner();
-        if let Some(err) = &inner.fail_sends {
-            return Err(err.clone());
-        }
+        inner.check_sends()?;
         let n = self.counter.fetch_add(1, Ordering::Relaxed);
         let delay_id = format!("delay{n}");
         let event = MatrixEvent {
@@ -530,9 +491,7 @@ impl InMemoryBackend {
     fn send(&self, event: MatrixEvent) -> Result<String, BackendError> {
         {
             let mut inner = self.inner();
-            if let Some(err) = &inner.fail_sends {
-                return Err(err.clone());
-            }
+            inner.check_sends()?;
             inner.store(event.clone());
         }
         self.notify(&event);
@@ -540,7 +499,15 @@ impl InMemoryBackend {
     }
 }
 
+fn no_delayed_event(delay_id: &str) -> BackendError {
+    BackendError::not_found(format!("no delayed event {delay_id}"))
+}
+
 impl Inner {
+    fn check_sends(&self) -> Result<(), BackendError> {
+        self.fail_sends.clone().map_or(Ok(()), Err)
+    }
+
     fn store(&mut self, event: MatrixEvent) {
         if let Some(state_key) = &event.state_key {
             self.state.insert((event.event_type.clone(), state_key.clone()), event.clone());
@@ -665,21 +632,13 @@ impl MatrixBackend for InMemoryBackend {
     async fn restart_delayed_event(&self, room_id: String, delay_id: String) -> Result<(), BackendError> {
         self.check_room(&room_id)?;
         let mut inner = self.inner();
-        let delayed = inner
-            .delayed
-            .get_mut(&delay_id)
-            .ok_or_else(|| BackendError::not_found(format!("no delayed event {delay_id}")))?;
-        delayed.restarts += 1;
+        inner.delayed.get_mut(&delay_id).ok_or_else(|| no_delayed_event(&delay_id))?.restarts += 1;
         Ok(())
     }
 
     async fn cancel_delayed_event(&self, room_id: String, delay_id: String) -> Result<(), BackendError> {
         self.check_room(&room_id)?;
-        self.inner()
-            .delayed
-            .remove(&delay_id)
-            .map(|_| ())
-            .ok_or_else(|| BackendError::not_found(format!("no delayed event {delay_id}")))
+        self.inner().delayed.remove(&delay_id).map(|_| ()).ok_or_else(|| no_delayed_event(&delay_id))
     }
 
     async fn send_delayed_event_now(&self, room_id: String, delay_id: String) -> Result<(), BackendError> {
@@ -836,9 +795,7 @@ impl MatrixBackend for InMemoryBackend {
     async fn upload_media(&self, file: MediaFile) -> Result<String, BackendError> {
         let n = self.counter.fetch_add(1, Ordering::Relaxed);
         let mut inner = self.inner();
-        if let Some(err) = &inner.fail_sends {
-            return Err(err.clone());
-        }
+        inner.check_sends()?;
         let content_uri = format!("mxc://{}/media-{n}", self.server_name());
         inner.media.insert(content_uri.clone(), file);
         Ok(content_uri)
@@ -890,7 +847,7 @@ impl MatrixBackend for InMemoryBackend {
         self.check_room(&room_id)?;
         let mut inner = self.inner();
         if !inner.delayed.contains_key(&delay_id) {
-            return Err(BackendError::not_found(format!("no delayed event {delay_id}")));
+            return Err(no_delayed_event(&delay_id));
         }
         inner.delegated_leaves.push(DelegatedDelayedLeave { url, room_id, slot_id, member_id, delay_id });
         Ok(())
@@ -903,9 +860,7 @@ impl MatrixBackend for InMemoryBackend {
         messages: Vec<ToDeviceMessage>,
     ) -> Result<Vec<ToDeviceDelivery>, BackendError> {
         let mut inner = self.inner();
-        if let Some(err) = &inner.fail_sends {
-            return Err(err.clone());
-        }
+        inner.check_sends()?;
         let mut deliveries = Vec::with_capacity(messages.len());
         for m in messages {
             inner.to_device_sent.push(SentToDeviceMessage {
@@ -1055,7 +1010,10 @@ mod tests {
             let other = "!other:x".to_string();
             assert!(b.send_room_event(other.clone(), "m.x".into(), json!({}).into()).await.is_err());
             assert!(b.timeline_read(other.clone(), None, 1, vec![]).await.is_err());
-            assert!(b.timeline_paginate_backwards(other, None).await.is_err());
+            assert!(b.timeline_paginate_backwards(other.clone(), None).await.is_err());
+            let sink = Arc::new(RecordingSink::default());
+            let err = b.subscribe_room(other, RoomSubjects::default(), sink).err().unwrap();
+            assert_eq!(err.errcode(), Some("M_NOT_FOUND"));
         });
     }
 
@@ -1076,43 +1034,17 @@ mod tests {
             b.inject(react("👎", "r2"));
             b.inject(event("m.reaction", None, "unrelated"));
 
-            let all = b.relations(room(), "$root".into(), None, None, None, None, None, None).await.unwrap();
-            assert_eq!(all.chunk.iter().map(|e| e.event_id.as_str()).collect::<Vec<_>>(), ["$r2", "$t1", "$r1"]);
-            assert!(all.next_batch.is_none());
-            let forward = b
-                .relations(room(), "$root".into(), None, None, None, None, Some(2), Some(RelationDirection::Forward))
-                .await
-                .unwrap();
-            assert_eq!(forward.chunk.iter().map(|e| e.event_id.as_str()).collect::<Vec<_>>(), ["$r1", "$t1"]);
-            let annotations = b
-                .relations(
-                    room(),
-                    "$root".into(),
-                    Some("m.annotation".into()),
-                    Some("m.reaction".into()),
-                    None,
-                    None,
-                    None,
-                    None,
-                )
-                .await
-                .unwrap();
-            assert_eq!(annotations.chunk.len(), 2);
-            assert!(b
-                .relations(
-                    room(),
-                    "$root".into(),
-                    Some("m.thread".into()),
-                    Some("m.reaction".into()),
-                    None,
-                    None,
-                    None,
-                    None
-                )
-                .await
-                .unwrap()
-                .chunk
-                .is_empty());
+            let read = |rel_type: Option<&str>, event_type: Option<&str>, limit, direction| {
+                let (rel_type, event_type) = (rel_type.map(Into::into), event_type.map(Into::into));
+                b.relations(room(), "$root".into(), rel_type, event_type, None, None, limit, direction)
+            };
+            let ids = |chunk: RelationsChunk| chunk.chunk.into_iter().map(|e| e.event_id).collect::<Vec<_>>();
+            assert_eq!(ids(read(None, None, None, None).await.unwrap()), ["$r2", "$t1", "$r1"]);
+            let forward = read(None, None, Some(2), Some(RelationDirection::Forward)).await.unwrap();
+            assert_eq!(ids(forward), ["$r1", "$t1"]);
+            let annotations = read(Some("m.annotation"), Some("m.reaction"), None, None).await.unwrap();
+            assert_eq!(ids(annotations), ["$r2", "$r1"]);
+            assert!(read(Some("m.thread"), Some("m.reaction"), None, None).await.unwrap().chunk.is_empty());
         });
     }
 
@@ -1363,14 +1295,6 @@ mod tests {
         assert_eq!(sink.drain(), vec![("state", "m.room.topic".into(), vec![])]);
         assert!(b.timeline().is_empty());
         assert!(b.state().is_empty());
-    }
-
-    #[test]
-    fn other_room_is_not_found() {
-        let b = InMemoryBackend::new(room(), "@me:x".into());
-        let sink = Arc::new(RecordingSink::default());
-        let err = b.subscribe_room("!other:x".into(), RoomSubjects::default(), sink).err().unwrap();
-        assert_eq!(err.errcode(), Some("M_NOT_FOUND"));
     }
 
     /// Records every timeline update.

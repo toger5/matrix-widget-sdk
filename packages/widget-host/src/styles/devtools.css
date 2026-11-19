@@ -1,4 +1,4 @@
-/* Widget dev tools (layer views): WidgetDevToolBar and its panels. The design rules: with the stories, the specification (listed in src/styles/app.css). */
+/* Widget dev tools (layer views): WidgetDevToolBar and its panels. */
 
 /* --- WidgetDevToolBar: technical look, smallest radius, condensed font --------------------- */
 .dt { flex: none; display: flex; flex-direction: column; min-width: 0; min-height: 0; font: 12px/1.35 var(--font-tech); background: var(--dt-bg); color: var(--text); }
@@ -171,8 +171,6 @@
 .dt .field-l { font-size: 11px; font-weight: 400; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .dt .form .inline-row { gap: 6px; min-height: 26px; }
 .dt .check { width: 16px; height: 16px; border-radius: var(--r-1); }
-/* a read-only value (the account as sender, a test widget's URL): plain text, not a field */
-.dt-val { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 11px var(--font-mono); color: var(--text-muted); }
 /* a disclosure inside a `.dt-sub` heading (the send form of a panel, a section of a tool box) */
 .dt-disc { height: 24px; display: inline-flex; align-items: center; gap: 5px; font: inherit; letter-spacing: inherit; text-transform: inherit; color: inherit; }
 .dt-disc[aria-expanded="true"] { color: var(--text); }

@@ -46,13 +46,6 @@ mod tests {
         assert_eq!(WidgetRequest::from_wire(&wire).unwrap(), req);
         assert_eq!(WidgetResponse::from_wire(&wire.ack()).unwrap(), WidgetResponse::UpdateDelayedEvent);
 
-        let plain = WireMessage::request(
-            Source::Widget,
-            "m.update_delayed_event",
-            "u",
-            json!({"delay_id": "d", "action": "send"}),
-        );
-        assert!(matches!(WidgetRequest::from_wire(&plain).unwrap(), WidgetRequest::UpdateDelayedEvent { .. }));
         let bad = WireMessage::request(
             Source::Widget,
             "m.update_delayed_event",

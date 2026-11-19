@@ -129,7 +129,7 @@ export function ToolSection({ title, open, count, onToggle }: { title: string; o
   );
 }
 
-export interface DelayDraft {
+interface DelayDraft {
   on: boolean;
   ms: string;
 }

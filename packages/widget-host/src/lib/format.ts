@@ -10,8 +10,6 @@ export const stringify = (data: unknown, indent?: number) =>
     indent,
   );
 
-export const pretty = (data: unknown) => (typeof data === "string" ? data : stringify(data));
-
 export interface Envelope {
   action: string;
   direction: "request" | "response";
@@ -19,7 +17,7 @@ export interface Envelope {
   body: unknown;
 }
 
-/** The parts of a widget API envelope the log highlights, if `data` is one. */
+/** The parts of a widget API envelope, if `data` is one. */
 export function envelope(data: unknown): Envelope | undefined {
   if (typeof data !== "object" || data === null) return undefined;
   const msg = data as Record<string, unknown>;

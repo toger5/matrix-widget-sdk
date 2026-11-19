@@ -4,12 +4,11 @@
  * the content and screen of `e2e/seeds/lab.json` in a few milliseconds: no reload, no clicking
  * through the DevBackendView.
  */
-import { readFileSync } from "node:fs";
-import { mkdirSync } from "node:fs";
+import { mkdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { expect, test as base, type FrameLocator, type Locator, type Page } from "@playwright/test";
+import { type Browser, expect, test as base, type FrameLocator, type Locator, type Page } from "@playwright/test";
 
 import type { HostSeed } from "../src/app/controller";
 import { CAPABILITY_APPROVE_DELAY_MS, type AppIntent, type AppViewModel, type MainViewModel } from "../src/appViewModel";
@@ -18,10 +17,25 @@ const here = dirname(fileURLToPath(import.meta.url));
 const STORIES_DIR = join(here, "../story-screenshots");
 
 export const LAB = "!lab:dev.local";
+export const STANDUP = "!standup:dev.local";
 /** `widgetKey`s of the two test widgets (`packages/test-widgets`). */
 export const NEW_WIDGET = "m.widget/widget-1";
 export const LEGACY_WIDGET = "im.vector.modular.widgets/widget-1";
 export const widgetId = (roomId: string, widgetKey: string) => `${roomId}|${widgetKey}`;
+/** The two test widgets in the lab room. */
+export const NEW = widgetId(LAB, NEW_WIDGET);
+export const LEGACY = widgetId(LAB, LEGACY_WIDGET);
+/** The new test widget with `?autostart=0`: it says nothing until its buttons are pressed. */
+export const QUIET = "http://localhost:5175/new/?autostart=0";
+
+/** A room with one widget at `url` (the new test widget's ID), open in a tab. */
+export const oneWidget = (url: string, extra: Partial<HostSeed> = {}): HostSeed => ({
+  userId: "@alice:dev.local",
+  rooms: [{ id: LAB, name: "Widget lab", widgets: [{ type: "m.widget", state_key: "widget-1", content: { name: "New test widget", url, uses_widget_api: true } }] }],
+  sidePanel: null,
+  open: [{ room: LAB, widgets: [NEW_WIDGET] }],
+  ...extra,
+});
 
 export class Host {
   constructor(readonly page: Page) {}
@@ -64,6 +78,45 @@ export class Host {
     return this.page.evaluate((r) => window.widgetHost!.store(r) as never, roomId);
   }
 
+  /** The capabilities the widget's driver granted. */
+  approved(id: string): Promise<string[]> {
+    return this.page.evaluate((i) => window.widgetHost!.driverSnapshot(i)?.approved ?? [], id);
+  }
+
+  /** How often the widget was started (`widget/reload`, Retry and webview restarts count up). */
+  async generation(id: string): Promise<number | undefined> {
+    return (await this.main()).widgets[id]?.generation;
+  }
+
+  /** Point the lab room's new test widget (its state event) at `url`; a running widget keeps its page until it is reloaded. */
+  async repointNewWidget(url: string): Promise<void> {
+    await this.dispatch({ type: "roomTools/sendState", roomId: LAB, event: { type: "m.widget", stateKey: "widget-1", content: { name: "New test widget", url, uses_widget_api: true } } });
+    await expect
+      .poll(async () => {
+        const rooms = (await this.main()).data.rooms;
+        return rooms.status === "ready" ? rooms.value.find((r) => r.id === LAB)?.widgetEvents?.find((e) => e.type === "m.widget")?.content.url : undefined;
+      })
+      .toBe(url);
+  }
+
+  /** A button of the test widget, pressed with a DOM click: the widget may be loading, covered by a prompt, or in a tab that is not shown. */
+  press(id: string, label: string): Promise<void> {
+    return this.frame(id).locator("button", { hasText: label }).first().dispatchEvent("click");
+  }
+
+  /** What the test widget requests the next time its `request_capabilities` is pressed. */
+  async requestNext(id: string, capabilities: string[]): Promise<void> {
+    await this.frame(id)
+      .locator("#caps")
+      .evaluate((input: HTMLInputElement, value) => (input.value = value), capabilities.join(","));
+  }
+
+  /** Press `set_always_on_screen true` in the test widget and wait until the host took it. */
+  async alwaysOnScreen(id: string): Promise<void> {
+    await this.frame(id).getByRole("button", { name: "set_always_on_screen true" }).click();
+    await expect.poll(async () => (await this.main()).widgets[id]?.alwaysOnScreen, { message: `${id} is always on screen` }).toBe(true);
+  }
+
   /** The iframe of a running widget. */
   frame(id: string): FrameLocator {
     return this.page.frameLocator(`iframe[data-widget-id="${id}"]`);
@@ -97,6 +150,12 @@ export class Host {
    */
   async passApproveDelay(): Promise<void> {
     await this.page.clock.fastForward(CAPABILITY_APPROVE_DELAY_MS);
+  }
+
+  /** Pass the delay and press "Approve <selected> selected" of the capability prompt (any number when left out). */
+  async approve(selected?: number): Promise<void> {
+    await this.passApproveDelay();
+    await this.prompt.getByRole("button", { name: selected === undefined ? /^Approve \d+ selected$/ : `Approve ${selected} selected` }).click();
   }
 
   /**
@@ -170,6 +229,16 @@ export class Host {
   get toast(): Locator {
     return this.page.getByTestId("toast");
   }
+  get prompt(): Locator {
+    return this.page.getByTestId("capability-prompt");
+  }
+  get overview(): Locator {
+    return this.page.getByTestId("room-overview");
+  }
+  /** The DevBackendView in the SidePanel (the Dev tools while the DevBackend is active). */
+  get devBackendView(): Locator {
+    return this.page.getByTestId("devbackend-view");
+  }
   tab(name: string | RegExp): Locator {
     return this.page.getByRole("tab", { name });
   }
@@ -200,7 +269,17 @@ export const test = base.extend<{ host: Host }, { hostPage: Page }>({
   },
 });
 
+/** A host in a browser context of its own (empty storage, no installed clock), for what happens at start. Close it with `host.page.context().close()`. */
+export async function freshHost(browser: Browser): Promise<Host> {
+  const context = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+  return new Host(await context.newPage());
+}
+
 /** The checkboxes of the capabilities in a capability prompt, without those of the sections ("All in …"). */
 export const capabilityBoxes = (prompt: Locator, checked?: boolean): Locator => prompt.getByRole("checkbox", { name: /^(?!All in )/, checked });
+
+/** The toggle of a panel in the bar of the room dev tools inside `scope` (its accessible name is "State, 5"). */
+export const roomToolsToggle = (scope: Locator, panel: "State" | "Timeline"): Locator =>
+  scope.getByRole("toolbar", { name: "Room dev tools" }).getByRole("button", { name: new RegExp(`^${panel}(,|$)`) });
 
 export { expect };

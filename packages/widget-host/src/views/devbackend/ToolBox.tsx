@@ -10,7 +10,7 @@ import { useDispatch } from "../env";
 import { Icon, IconButton } from "../ui/atoms";
 import type { IconName } from "../ui/icons";
 
-export const TOOL_SHARE = { min: 0.15, max: 0.8, initial: 0.5, step: 0.05 };
+const TOOL_SHARE = { min: 0.15, max: 0.8, initial: 0.5, step: 0.05 };
 const clamp = (share: number) => Math.round(Math.min(TOOL_SHARE.max, Math.max(TOOL_SHARE.min, share)) * 1000) / 1000;
 
 const TOOLS: Record<DevBackendTool, { icon: IconName; label: string; title: string; minimise: string; resize: string; testId: string }> = {

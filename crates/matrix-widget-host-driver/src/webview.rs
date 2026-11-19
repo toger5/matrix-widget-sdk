@@ -1,14 +1,9 @@
-//! The webview (iframe) a widget runs in: which webview capabilities a host grants without asking,
-//! which never, and what the `sandbox` and `allow` attributes of the iframe are made of
-//! (`spec/patch/new/webview-capabilities.md`; the strict default of
-//! `spec/patch/msc4411/strict-webview-defaults.md`).
+//! The webview (iframe) a widget runs in (`spec/patch/new/webview-capabilities.md`, the strict
+//! default of `spec/patch/msc4411/strict-webview-defaults.md`).
 //!
-//! A webview capability (`webview:…sandbox:<token>`, `webview:…allow:<feature>`) is requested and
-//! granted like any other, but no action needs it: the client applies the granted ones to the
-//! widget's iframe, which takes a reload. The driver grants and refuses them by [`WebviewPolicy`];
-//! the driver builds the attributes ([`webview_attributes`]) and hands them to the platform with
-//! the widget's URL ([`WidgetIframe`], [`WidgetHostPlatform::load_iframe`](crate::WidgetHostPlatform::load_iframe)),
-//! again whenever a grant or a revocation changes them.
+//! A webview capability (`webview:…sandbox:<token>`, `webview:…allow:<feature>`) is requested like
+//! any other but allows no action: the driver grants it by [`WebviewPolicy`] and builds the
+//! iframe's attributes from the granted ones ([`webview_attributes`], [`WidgetIframe`]).
 
 use matrix_widget_actions::{is_webview_value, Capability};
 

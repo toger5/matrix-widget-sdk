@@ -1,25 +1,6 @@
-//! JavaScript bindings. Exposed as the `WidgetApi` class when built with `wasm-pack`.
-//!
-//! MSC4412 fixes the transport: a widget always talks to its host through
-//! `window.parent.postMessage`. [`WidgetApi::connect_to_parent`] therefore does the whole wiring
-//! in Rust: it posts outgoing messages to the parent window and listens for `message` events
-//! coming from it. Nothing needs to be glued together on the JavaScript side:
-//!
-//! ```js
-//! import init, { WidgetApi } from "matrix-widget-sdk";
-//! await init();
-//! const api = WidgetApi.connectToParent();
-//! api.onEvent((ev) => console.log("event", ev));
-//! await api.requestCapabilities(["widget:org.matrix.mscXXXX.send_event.timeline:m.room.message"]);
-//! await api.notifyReady();
-//! await api.sendEvent("m.room.message", { msgtype: "m.text", body: "hi" });
-//! ```
-//!
-//! The constructor [`WidgetApi::new`] is kept as a test anchor: it takes a `sendToHost` callback
-//! instead of a window, so the protocol can be driven from a JavaScript test without an iframe.
-//!
-//! Warnings, errors and Rust panics are written to the console once the module is loaded;
-//! `initLogging("debug")` shows more (see the `logging` module).
+//! JavaScript bindings: the `WidgetApi` class (`wasm-pack`), a [`WidgetClient`] whose transport is
+//! `window.parent.postMessage` ([`WidgetApi::connect_to_parent`]), so nothing needs to be glued
+//! together in JavaScript. Usage: the crate README.
 
 mod logging;
 
@@ -58,7 +39,7 @@ struct Callbacks {
 enum Transport {
     /// The production path (MSC4412): `target.postMessage(message, origin)`.
     PostMessage { target: web_sys::Window, origin: String },
-    /// Test anchor: hand the JSON string to a JavaScript callback.
+    /// Hand the JSON string to a JavaScript callback ([`WidgetApi::new`]).
     Callback(Function),
 }
 
@@ -97,11 +78,8 @@ fn describe(value: &JsValue) -> String {
 }
 
 impl WidgetDelegate for JsDelegate {
-    /// Deliver one widget API message to the host.
-    ///
-    /// On the `postMessage` transport the JSON is parsed first so the host receives a structured
-    /// object in `event.data`, as MSC4412 requires. Delivery errors (detached parent, closed
-    /// window) are logged: there is nobody left to report them to.
+    /// On `postMessage` the JSON is parsed first: MSC4412 wants an object in `event.data`. Delivery
+    /// errors are logged; there is nobody to report them to.
     fn send_to_host(&self, json: String) {
         match &self.transport {
             Transport::PostMessage { target, origin } => {
@@ -218,25 +196,19 @@ impl WidgetApi {
 
 #[wasm_bindgen]
 impl WidgetApi {
-    /// Test anchor: create an API whose outgoing messages are handed to `sendToHost` as JSON
-    /// strings instead of being posted to a window. Incoming messages must be passed to
-    /// [`handleMessageFromHost`](Self::handle_message_from_host) by the caller.
-    ///
-    /// This lets a JavaScript test (or a host that embeds the widget without an iframe) act as
-    /// the host. Real widgets use [`connectToParent`](Self::connect_to_parent).
+    /// An API whose outgoing messages are handed to `sendToHost` as JSON strings instead of being
+    /// posted to a window; the caller passes incoming ones to
+    /// [`handleMessageFromHost`](Self::handle_message_from_host). For tests, or a host without an
+    /// iframe; real widgets use [`connectToParent`](Self::connect_to_parent).
     #[wasm_bindgen(constructor)]
     pub fn new(send_to_host: Function) -> WidgetApi {
         WidgetApi::with_transport(Transport::Callback(send_to_host))
     }
 
-    /// Create an API wired to `window.parent` as MSC4412 prescribes: outgoing messages are
-    /// delivered with `parent.postMessage(message, targetOrigin)` and incoming `message` events
-    /// are accepted only if their `source` is the parent window. No further setup is needed.
-    ///
-    /// `targetOrigin` restricts which origin may receive the widget's messages. It defaults to
-    /// `"*"`; pass the host's origin when you know it.
-    ///
-    /// Fails when there is no window or the page is not embedded (no parent).
+    /// An API wired to `window.parent` (MSC4412): outgoing messages go out with
+    /// `parent.postMessage(message, targetOrigin)` (default `"*"`; pass the host's origin when you
+    /// know it), and only `message` events from the parent window are accepted. Fails without a
+    /// window or a parent.
     #[wasm_bindgen(js_name = connectToParent)]
     pub fn connect_to_parent(target_origin: Option<String>) -> Result<WidgetApi, JsValue> {
         let window = web_sys::window().ok_or_else(|| js_error("no window"))?;

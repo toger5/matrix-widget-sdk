@@ -20,10 +20,8 @@ pub const ACTION_TIMEOUT_MS: u64 = 10_000;
 /// recommendation).
 pub const NOTIFY_READY_TIMEOUT_MS: u64 = 15_000;
 
-/// Who *initiated* the exchange that a message belongs to.
-///
-/// A request and its response share the same `source`. `widget` corresponds to the legacy
-/// `fromWidget` api, `host` to the legacy `toWidget` api.
+/// Who *initiated* the exchange a message belongs to; a request and its response share it.
+/// `widget` is the legacy `fromWidget` api, `host` the legacy `toWidget` api.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
@@ -47,8 +45,7 @@ impl std::fmt::Display for Source {
     }
 }
 
-/// The four kinds of message: who started the exchange (`source`) and whether this is the request
-/// or the response. Returned by [`WireMessage::kind`].
+/// Who started the exchange (`source`) and whether this is the request or the response.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
 pub enum MessageKind {
@@ -73,9 +70,8 @@ pub enum MessageKind {
 /// }
 /// ```
 ///
-/// A message is a response if and only if `response` is present. There is no version property:
-/// legacy (matrix-widget-api) messages have `api` instead of `source` and do not parse as a
-/// `WireMessage` at all.
+/// A message is a response if and only if `response` is present. Legacy (matrix-widget-api)
+/// messages have `api` instead of `source` and do not parse.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct WireMessage {
@@ -126,10 +122,6 @@ impl WireMessage {
         self.response.is_none()
     }
 
-    pub fn is_response(&self) -> bool {
-        self.response.is_some()
-    }
-
     pub fn kind(&self) -> MessageKind {
         match (self.source, self.is_request()) {
             (Source::Widget, true) => MessageKind::WidgetRequest,
@@ -171,10 +163,8 @@ impl WireMessage {
         serde_json::to_value(self).expect("WireMessage is always serializable")
     }
 
-    /// The message as JSON for (trace) logs.
-    ///
-    /// The body of the actions that carry credentials (OpenID tokens, LiveKit tokens, TURN
-    /// passwords) is replaced by `"<redacted>"`, so that a log never contains a secret.
+    /// The message as JSON for logs, with the body of the actions that carry credentials (OpenID
+    /// and LiveKit tokens, TURN passwords) replaced by `"<redacted>"`.
     pub fn to_log_json(&self) -> String {
         const SECRET_ACTIONS: [&str; 3] = ["get_openid", "get_rtc_livekit_token", "update_turn_servers"];
         let name = self.action.rsplit('.').next().unwrap_or_default();

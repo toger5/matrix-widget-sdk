@@ -1,12 +1,9 @@
 //! `get_openid` (MSC1960; as a capability: `spec/patch/new/openid-capability.md`), widget -> host:
-//! ask for an OpenID token that proves the user's identity to a third party.
+//! an OpenID token that proves the user's identity to a third party.
 //!
-//! Empty request body. Requires `widget:…get_openid`, which the user grants in the capability
-//! prompt like any other capability. A host usually grants it for one use only: after the reply it
-//! sends `update_capabilities` without it, and the widget requests it again for the next token.
-//! While the widget holds it, the host answers at once with the token: the body of
-//! `POST /_matrix/client/v3/user/{userId}/openid/request_token` ([`OpenIdToken`]). Without it the
-//! answer is a `missing_capability` error.
+//! Empty request body, answered at once with an [`OpenIdToken`](crate::OpenIdToken). Requires
+//! `widget:…get_openid`, which a host usually grants for one use: after the reply it sends
+//! `update_capabilities` without it.
 
 #[cfg(test)]
 mod tests {

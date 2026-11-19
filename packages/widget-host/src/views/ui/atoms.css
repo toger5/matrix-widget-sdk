@@ -1,4 +1,4 @@
-/* Atoms, app-only (layer atoms, after the design files): real controls where the design draws spans. The design rules are src/styles/atoms.css. */
+/* Atoms, app-only (layer atoms): real controls where the design draws spans. The design rules are src/styles/atoms.css. */
 
 /* A segmented control made of buttons (the design draws spans): the theme of the Settings, "Add to" of the "Add widget" form. */
 .seg button { padding: 4px 12px; border-radius: 7px; color: var(--text-muted); font-size: 12px; }
