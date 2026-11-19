@@ -23,6 +23,7 @@
     ".storybook",
     "e2e",
     "playwright.config.ts",
+    "playwright.widget-shots.config.ts",
     "dock-playground",
     "vite.dock.config.ts"
   ]

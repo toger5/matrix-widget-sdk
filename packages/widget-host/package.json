@@ -16,7 +16,8 @@
     "storybook": "storybook dev -p 6006 --no-open",
     "build-storybook": "storybook build -o storybook-static",
     "e2e": "playwright test",
-    "stories": "node e2e/tools/stories.mjs"
+    "stories": "node e2e/tools/stories.mjs",
+    "widget-shots": "playwright test -c playwright.widget-shots.config.ts"
   },
   "dependencies": {
     "@element-hq/web-shared-components": "^0.2.3",

@@ -3,10 +3,10 @@
 Two tiny widgets that show the current state and every message that arrives, with a button for
 each basic action. They only work when embedded by a widget host, for example `../widget-host`.
 
-| path | built on | protocol |
-|---|---|---|
-| `/legacy/` | [matrix-widget-api] | legacy (`api: fromWidget / toWidget`) |
-| `/new/` | `matrix-widget-sdk` (wasm, this repository) | MSC4412 (`source: widget / host`) |
+| info | screenshot
+|---|---|
+| **path:** `/legacy/`<br>**build on:** [matrix-widget-api]<br>legacy (`api: fromWidget / toWidget`) | ![](screenshots/legacy.png) |
+| **path:** `/new/`<br>**build on:** [widget-sdk] (wasm, this repository)<br>MSC4412 (`source: widget / host`) | ![](screenshots/new.png) |
 
 Both pages have the same layout: an **actions** column (capability list, message body, one
 button per action, see `legacy/main.ts` / `new/main.ts`), a **state** panel, and a **log** of
@@ -48,7 +48,11 @@ npm run dev:new          # same server, opens the new page
 npm run build            # static multi-page build in dist/
 ```
 
+`npm run widget-shots -w @matrix-widget-tools/widget-host` opens both widgets in the widget host
+and writes `screenshots/new.png` and `screenshots/legacy.png` (only the widget, not the host).
+
 The pages use relative paths, so the build can be served under a sub-path (`npx vite build --base /some/path/`). The [dev site](../../README.md#dev-site-github-pages) serves
 both pages at `widgets/new/` and `widgets/legacy/`, next to a widget host that uses them.
 
 [matrix-widget-api]: https://github.com/matrix-org/matrix-widget-api
+[widget-sdk]: https://github.com/toger5/matrix-widget-sdk/tree/main/crates/matrix-widget-sdk

@@ -1,25 +1,58 @@
 # Widget host
 
-An MSC4412 widget host in the browser, on `matrix-widget-host-driver` through the UniFFI/wasm
-bindings in `../widget-host-bindings`. One React app (`src/`) with two modes that share every view
-(room panels with tabs, widget view, dev tools):
+A Matrix client in the browser that opens widgets and shows what they do. It runs the
+MSC4412 widget API through `matrix-widget-host-driver` (the UniFFI/wasm bindings in
+`../widget-host-bindings`).
 
-| mode | backend | for |
-|---|---|---|
-| logged in | a room of a matrix-rust-sdk client (`src/matrix_session/rust/`); the `js` build uses matrix-js-sdk (`src/matrix_session/js/`) | opening and debugging the widgets of your rooms |
-| DevBackend | the crate's `InMemoryBackend`, one per mocked room (`src/matrix_session/memory/`); nothing leaves the page | widget development without a homeserver, end-to-end tests of widgets and of the compat wrapper |
+## Use cases
+- **End-to-end tests:** Playwright drives the host and asserts on the messages, the driver state
+  and the room content.
+- **Reference implementation of the host side of the sdk:** the driver and the compat wrapper for
+  legacy widgets run here as they would in a client.
+- **Developing a widget:** run it against mocked rooms, without a homeserver or a full client.
+  ![DevTools](./screenshots/devtools.png)
+- **Debugging a widget in a real room:** log in, open the room's widgets and watch their messages.
+  ![DevTools](./screenshots/TheBoard-and-devtools.png)
+- **As a matrix client:** The host can be seen as a matrix client with a unusual layout. Room panels first
+  `cmd`/`ctrl`+`K` to open a new panel. Tabs as differnt views of the matrix room. Layout how you want them
+  to
+  ![Two accounts, the room picker, a room timeline and a call widget floating on top](./screenshots/matrix-client.png)
+- **As a widget host:** If you just want to share or have users access one specific widget the fullscreen
+  experience can be seen as a standalone widget "player".
+  ![A whiteboard widget in the fullscreen view (left bar hidden)](./screenshots/whiteboard-full-width.png)
+## Features
 
-The login page offers **Skip login and use the DevBackend**; logged in, the DevBackend is an
-account of its own while **Enable the DevBackend** is on in the settings. **Enable dev tools**
-(the room Dev tools, the widget dev tools, **Add widget**) works for any account.
+- **Two modes, one UI.** Logged in, widgets run on a real room (matrix-rust-sdk, or matrix-js-sdk
+  in the `js` build). In the **DevBackend**, they run on mocked rooms in memory and nothing leaves
+  the page, so tests are fast and repeatable.
+- **Copy a room to the DevBackend.** Takes recent events and the state of a real room, so you can
+  experiment with real content offline.
+- **Room dev tools.** Browse a room's state and timeline and send events or state through forms
+  (messages, widgets, call members, delayed events). Useful to trigger exactly what a widget
+  reacts to.
+- **Widget dev tools.** Per widget: the message log, traffic stats, the approved capabilities
+  (revoke or add one) and the widget's console. Shows why a request was refused.
+- **Add widget.** Add any URL to a room, locally or as a state event, or one of the bundled test
+  widgets.
+- **Legacy widgets.** `im.vector.modular.widgets` widgets load through the compat wrapper, so old
+  and new widgets can be tested side by side.
+- **Room panels and tabs.** Several rooms and widgets at once, arranged by drag and drop; widgets
+  keep running while they move. The layout component has its own
+  [dock playground](dock-playground/README.md).
+- **Always on screen.** Widgets that ask for it move to a floating picture-in-picture panel.
+- **Multiple accounts**, and a test hook (`window.widgetHost`) for scripted runs.
 
-Architecture, layers and where to change what: [`.claude/skills/widget-host/SKILL.md`](../../.claude/skills/widget-host/SKILL.md).
-The design is [`appDesign.md`](appDesign.md) and the stories (`npm run storybook`); rules for views
-are in [`src/views/README.md`](src/views/README.md); open decisions in
-[`implementation_findings.md`](implementation_findings.md). The logged-in mode has been checked up to
-the login options of matrix.org; after the login it is only tested against faked clients.
+The login page offers **Skip login and use the DevBackend**. Logged in, the DevBackend is an
+extra account while **Enable the DevBackend** is on in the settings. **Enable dev tools** turns on
+the dev tools and **Add widget** for any account. The logged-in mode has been checked up to the
+login options of matrix.org; after the login it is only tested against faked clients.
 
 ![Test host, test widgets and the in-memory store](../../docs/diagrams/07-test-setup.svg)
+
+Architecture and where to change what: [`.claude/skills/widget-host/SKILL.md`](../../.claude/skills/widget-host/SKILL.md).
+The design is [`appDesign.md`](appDesign.md) and the stories (`npm run storybook`); rules for views
+are in [`src/views/README.md`](src/views/README.md); open decisions in
+[`implementation_findings.md`](implementation_findings.md).
 
 ## Running
 
@@ -32,7 +65,9 @@ npm run dev              # from the root: host on http://localhost:5173/, test w
 ```
 
 From this package: `npm test` (unit tests), `npm run e2e` (Playwright, [`e2e/README.md`](e2e/README.md)),
-`npm run storybook` (port 6006), `npm run stories` (stories vs. `e2e/stories.md` and the tests).
+`npm run storybook` (port 6006), `npm run stories` (stories vs. `e2e/stories.md` and the tests),
+`npm run dock` (the [dock playground](dock-playground/README.md), port 5174), `npm run widget-shots`
+(screenshots of the test widgets into `../test-widgets/screenshots/`).
 `npx tsc --noEmit` is the linter. Ports are fixed (`strictPort`): host 5173 (with the compat
 wrapper), widgets 5175.
 
