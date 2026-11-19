@@ -25,10 +25,10 @@ export function AppFrame({ children, fence = false, fullscreen = false }: { chil
   );
 }
 
-/** One room panel on its own, filling the story. `renderWidget`: the running widgets (default: `fakeWidget`). */
-export function SoloPanel({ main, panel, settings = SETTINGS, renderWidget }: { main: MainViewModel; panel: RoomPanelViewModel; settings?: SettingsViewModel; renderWidget?: RenderWidget }) {
+/** One room panel on its own, filling the story. `renderWidget`: the running widgets (default: `fakeWidget`). `fence`: the DevBackend's background. */
+export function SoloPanel({ main, panel, settings = SETTINGS, renderWidget, fence = false }: { main: MainViewModel; panel: RoomPanelViewModel; settings?: SettingsViewModel; renderWidget?: RenderWidget; fence?: boolean }) {
   return (
-    <AppFrame>
+    <AppFrame fence={fence}>
       <main className="roomsarea">
         <RoomPanel main={main} settings={settings} panel={panel} focused renderWidget={renderWidget ?? fakeWidget(main)} />
       </main>

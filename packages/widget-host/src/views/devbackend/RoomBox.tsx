@@ -1,20 +1,17 @@
 /**
- * The room box of the Dev tools: the room
- * dropdown in the header and the State and Timeline sections of the shown room. Shared by the
- * DevBackendView (`mode` "devBackend": mocked rooms, any sender, "Add room", "Room actions") and the
- * Dev tools of a Matrix account (`mode` "account": the rooms of the room panels, sent as the
- * account). The state and the timeline are read the same way in both modes:
- * `useViewEnv().useRoomTimeline` and `useRoomState`.
+ * The room box of the Dev tools in the SidePanel: a slim header (the room dropdown, the room actions
+ * in the DevBackend, the SidePanel's ×) and the room dev tools of the shown room (`RoomDevTools`, the
+ * layout `RoomToolsViewModel.layout`: the bar on the left by default). Shared by the DevBackendView
+ * (`mode` "devBackend": mocked rooms, any sender, "Add room", "Room actions") and the Dev tools of a
+ * Matrix account (`mode` "account": the rooms of the room panels, sent as the account).
  */
 import type { CSSProperties } from "react";
 
-import { roomStateVersion, type MockedPagination, type MockedRoomData, type MockedStateEvent, type RoomId, type RoomToolsSection, type RoomToolsViewModel, type ScheduledEvent } from "../../appViewModel";
-import type { RawEvent } from "../../session";
-import { useDispatch, useViewEnv } from "../env";
+import type { MockedPagination, MockedRoomData, RoomId, RoomToolsViewModel, ScheduledEvent } from "../../appViewModel";
+import { useDispatch } from "../env";
 import { Avatar, Button, Icon, IconButton } from "../ui/atoms";
-import { Acc, usePopup } from "./parts";
-import { StateSection } from "./StateSection";
-import { TimelineSection } from "./TimelineSection";
+import { usePopup } from "./parts";
+import { RoomDevTools } from "./RoomDevTools";
 
 export type RoomBoxMode = "devBackend" | "account";
 
@@ -36,24 +33,20 @@ export interface RoomBoxProps {
   pagination?: MockedPagination;
 }
 
-const plural = (n: number, what: string) => `${n} ${what}${n === 1 ? "" : "s"}`;
-
-/** A state event of the room as the forms of the State section take it. */
-const asStateEvent = (event: RawEvent): MockedStateEvent => ({ type: event.type, stateKey: String(event.state_key), content: event.content });
+const SIDE_PANEL = { in: "sidePanel" } as const;
 
 export function RoomBox({ mode, rooms, roomId, roomTools, userId, scheduled, pagination }: RoomBoxProps) {
   const dispatch = useDispatch();
   const room = rooms.find((r) => r.id === roomId);
   return (
-    <section className="sidebox devb" data-testid={mode === "devBackend" ? "devbackend-view" : "room-tools-view"} data-room-id={room?.id}>
+    <section className="sidebox devb rdt-box" data-testid={mode === "devBackend" ? "devbackend-view" : "room-tools-view"} data-room-id={room?.id}>
       <header className="side-head">
         <RoomHeader mode={mode} rooms={rooms} room={room} />
-        {/* TODO-FINDING devbackend-header-buttons - the designed header is only the room dropdown. "Close panel" (as in the other SidePanel views) and, in the DevBackend, the "Room actions" menu (clear room, remove room) were added next to it; neither is drawn. */}
         <IconButton icon="x" title="Close panel" onClick={() => dispatch({ type: "sidePanel/close" })} />
       </header>
       <div className="side-body">
         {room ? (
-          <RoomSections key={room.id} mode={mode} roomId={room.id} roomTools={roomTools} userId={userId} scheduled={scheduled} pagination={pagination} />
+          <RoomDevTools mode={mode} roomId={room.id} layout={roomTools.layout} target={SIDE_PANEL} forms={roomTools} userId={userId} scheduled={scheduled} pagination={pagination} />
         ) : mode === "account" ? (
           <div className="empty">
             <Icon name="grid" size={28} />
@@ -81,104 +74,6 @@ export function RoomBox({ mode, rooms, roomId, roomTools, userId, scheduled, pag
         )}
       </div>
     </section>
-  );
-}
-
-/**
- * The State and Timeline sections of one room, read through the hooks of the `ViewEnv`. Stories
- * `sidepanel-devbackendview--state`, `sidepanel-devbackendview-state--*`,
- * `sidepanel-devbackendview--timeline*`, `sidepanel-roomtoolsview--state`, `--timeline`,
- * `--loading-failed`.
- */
-function RoomSections({
-  mode,
-  roomId,
-  roomTools,
-  userId,
-  scheduled,
-  pagination,
-}: {
-  mode: RoomBoxMode;
-  roomId: RoomId;
-  roomTools: RoomToolsViewModel;
-  userId?: string;
-  scheduled: ScheduledEvent[];
-  pagination?: MockedPagination;
-}) {
-  const dispatch = useDispatch();
-  const env = useViewEnv();
-  const { timeline, retry: retryTimeline } = env.useRoomTimeline(roomId);
-  const { state, retry: retryState } = env.useRoomState(roomId, roomStateVersion(timeline));
-  const isOpen = (section: RoomToolsSection) => roomTools.openSections.includes(section);
-  const toggle = (section: RoomToolsSection) => () => dispatch({ type: "roomTools/toggleSection", section });
-
-  const stateEvents = state.status === "ready" ? state.value.filter((e) => typeof e.state_key === "string").map(asStateEvent) : [];
-  const members = stateEvents.filter((e) => e.type === "m.room.member").map((e) => e.stateKey);
-  const stateTypes = new Set(stateEvents.map((e) => e.type)).size;
-  const events = timeline.status === "ready" ? timeline.value.events : [];
-
-  return (
-    <>
-      {mode === "account" && (
-        <p className="rt-hint">
-          <Icon name="info" size={13} />
-          <span>
-            Sent to the room as <b className="mono">{userId}</b>. Everyone in it sees it.
-          </span>
-        </p>
-      )}
-      <Acc id="state" title="State" open={isOpen("state")} count={state.status === "ready" ? plural(stateTypes, "type") : undefined} onToggle={toggle("state")}>
-        {state.status === "ready" ? (
-          <StateSection mode={mode} roomId={roomId} state={stateEvents} stateForm={roomTools.stateForm} userId={userId} />
-        ) : state.status === "loading" ? (
-          <Loading text="Reading the room state…" />
-        ) : (
-          <Failed title="The room state could not be read" error={state.error} retry={retryState} />
-        )}
-      </Acc>
-      <Acc id="timeline" title="Timeline" open={isOpen("timeline")} count={timeline.status === "ready" ? plural(events.length, "event") : undefined} onToggle={toggle("timeline")}>
-        {timeline.status === "ready" ? (
-          <TimelineSection
-            mode={mode}
-            roomId={roomId}
-            sendForm={roomTools.sendForm}
-            events={events}
-            atStart={timeline.value.atStart}
-            loadingOlder={timeline.value.loadingOlder}
-            scheduled={scheduled}
-            pagination={pagination}
-            userId={userId}
-            members={members}
-          />
-        ) : timeline.status === "loading" ? (
-          <Loading text="Loading the timeline…" />
-        ) : (
-          <Failed title="The timeline could not be loaded" error={timeline.error} retry={retryTimeline} />
-        )}
-      </Acc>
-    </>
-  );
-}
-
-function Loading({ text }: { text: string }) {
-  return (
-    <div className="empty" role="status">
-      <span className="spinner" aria-hidden="true" />
-      <b>{text}</b>
-    </div>
-  );
-}
-
-function Failed({ title, error, retry }: { title: string; error: string; retry: () => void }) {
-  return (
-    <div className="empty" role="alert">
-      <Icon name="alert" size={28} className="danger" />
-      <b>{title}</b>
-      <p>{error}</p>
-      <Button kind="primary" icon="refresh" onClick={retry}>
-        Try again
-      </Button>
-    </div>
   );
 }
 

@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 
-import { ACCOUNTS, appVm, byId, devMainVm, devToolsLayout, panelDock, panelsVm, roomPanel, roomToolsVm, widgetTab, widgetVm, workspace } from "../fixtures";
+import { ACCOUNTS, appVm, byId, devMainVm, devToolsLayout, panelDock, panelsVm, roomDevTools, roomPanel, roomToolsVm, widgetTab, widgetVm, workspace } from "../fixtures";
 import { AppShell } from "./AppShell";
 import { Screen } from "./storyScreen";
 
@@ -63,7 +63,7 @@ export const DevBackend: Story = {
   args: {
     vm: appVm(
       devMainVm({
-        roomTools: roomToolsVm({ openSections: ["timeline"], tools: { open: "media", heightShare: 0.5 } }),
+        roomTools: roomToolsVm({ layout: roomDevTools("left", ["timeline"]), tools: { open: "media", heightShare: 0.5 } }),
         workspaces: {
           ada: workspace([]),
           [ACCOUNTS.dev.id]: workspace([roomPanel("lab", [widgetTab("lab", "call"), widgetTab("lab", "notes")])], {

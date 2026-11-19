@@ -12,6 +12,8 @@ import {
   type ModalViewModel,
   type RecentRoom,
   type RecentWidget,
+  type RoomDevToolPanel,
+  type RoomDevToolsLayout,
   type RoomPanelViewModel,
   type RoomToolsViewModel,
   type TabId,
@@ -119,6 +121,10 @@ export function widgetVm(room: RoomKey, widget: WidgetName, o: Partial<WidgetIns
 export const widgetTab = (room: RoomKey, widget: WidgetName): TabViewModel => ({ kind: "widget", id: `tab-${room}-${widget}`, widgetId: widgetInstanceId(ROOMS[room].id, wk(widget)) });
 /** The Timeline tab of a fixture room's panel. */
 export const timelineTab = (room: RoomKey): TabViewModel => ({ kind: "timeline", id: `tab-${room}-timeline` });
+/** The room dev tools with `panels` open (default both), the bar at `dock`: a room tab's start "top", the SidePanel's "left". */
+export const roomDevTools = (dock: RoomDevToolsLayout["dock"], panels: RoomDevToolPanel[] = ["state", "timeline"]): RoomDevToolsLayout => ({ dock, panels: panels.map((panel) => ({ panel, share: 1 })) });
+/** The room dev tools tab of a fixture room's panel (bar on top, both panels by default). */
+export const roomToolsTab = (room: RoomKey, layout: RoomDevToolsLayout = roomDevTools("top")): TabViewModel => ({ kind: "roomTools", id: `tab-${room}-tools`, layout });
 /** A room panel showing the tab `activeTabId` (default: the first tab); `null`: the room name is selected, the body is the RoomOverview. */
 export function roomPanel(room: RoomKey, tabs: TabViewModel[], activeTabId: TabId | null = tabs[0]?.id ?? null, id = `panel-${room}`): RoomPanelViewModel {
   return { id, content: { kind: "room", roomId: ROOMS[room].id, tabs, activeTabId: activeTabId ?? undefined } };
@@ -195,10 +201,11 @@ export function mainVm(o: Partial<MainViewModel> = {}): MainViewModel {
   };
 }
 
-/** The UI state of the Dev tools: "Widget lab" picked in the DevBackend, "Design crit" by Ada; the State section open. */
+/** The UI state of the Dev tools: "Widget lab" picked in the DevBackend, "Design crit" by Ada; the room dev tools of the SidePanel with the bar on the left, both panels. */
 export const roomToolsVm = (o: Partial<RoomToolsViewModel> = {}): RoomToolsViewModel => ({
   selectedRoomIds: { [ACCOUNTS.dev.id]: ROOMS.lab.id, [ACCOUNTS.ada.id]: ROOMS.design.id },
-  openSections: ["state"],
+  layout: roomDevTools("left"),
+  openSections: [],
   sendForm: "message",
   stateForm: "testWidget",
   tools: { open: null, heightShare: 0.5 },

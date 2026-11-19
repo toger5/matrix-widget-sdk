@@ -28,7 +28,7 @@ While the [DevBackend](#devbackend) is active, the app background (on which all 
 - An in-memory session that mocks a full session: multiple rooms and all events in them ([DevBackend](#devbackend))
 - Copy an existing room into the DevBackend (last X timeline events + state) to experiment with it entirely offline
 - Custom widgets: add a widget to a room, only in this host or as a state event of the room ([RoomOverview](#roomoverview))
-- Dev tools for the open rooms: explore their state and timeline, send custom events and state ([Dev tools](#dev-tools))
+- Dev tools for the open rooms, in the SidePanel or a room tab: explore their state and timeline, send custom events and state ([Dev tools](#dev-tools))
 - Tabbed widget panels ([RoomView](#roomview))
 - Multiple room panels ([RoomsArea](#roomsarea))
 - User device management, via a button that links to the OIDC auth service (MAS)
@@ -72,7 +72,7 @@ In DevBackend mode the account icon is the DevBackend icon, and the view shows t
 ### Settings
 
 - Two independent switches. What one enables is hidden while it is off and listed under it while it is on:
-  - Dev tools: the [Dev tools](#dev-tools) button in the LeftBar, the overflow button of widget tabs with the [WidgetDevToolBar](#widgetdevtoolbar), and "Add widget" in the [RoomOverview](#roomoverview).
+  - Dev tools: the [Dev tools](#dev-tools) button in the LeftBar, the overflow button of widget tabs with the [WidgetDevToolBar](#widgetdevtoolbar), and "Add widget" and "Open room dev tools" in the [RoomOverview](#roomoverview).
   - DevBackend: the DevBackend in the account list and at the bottom of the Dev tools, and "Copy to DevBackend" in the RoomOverview. It cannot be turned off while the DevBackend is active.
 
 ### Room list
@@ -101,10 +101,10 @@ No title. From top to bottom, a group without entries is left out:
 
 ## RoomView
 
-A room view is a tabbed container, shown inside a room panel. Its first tab is the room name, which shows the [RoomOverview](#roomoverview); the other tabs hold open widgets and the [RoomTimeline](#roomtimeline) (see [Tabs](#tabs)).
+A room view is a tabbed container, shown inside a room panel. Its first tab is the room name, which shows the [RoomOverview](#roomoverview); the other tabs hold open widgets, the [RoomTimeline](#roomtimeline) and the [room dev tools](#dev-tools) (see [Tabs](#tabs)).
 
 - A room opens on its RoomOverview and returns to it when its last tab is closed. Closing another tab shows its neighbour.
-- A widget or the timeline opened from the RoomOverview becomes a new tab at the end.
+- A widget, the timeline or the room dev tools opened from the RoomOverview become a new tab at the end.
 - The + button of the tab bar selects the room name.
 - A widget runs only once per account, also when two room views show the same room.
 
@@ -113,10 +113,11 @@ A room view is a tabbed container, shown inside a room panel. Its first tab is t
 - **Room name**: avatar, room name and the number of widgets and users (visible text with tooltips). It cannot be closed. Unselected it is plain header text; selected it looks like an active tab.
 - **WidgetTab**: contains the full widget. The tab name is the widget name, with the widget icon/avatar if available. It has a close button and, with dev tools enabled, an overflow button (three dots) that opens the [WidgetDevToolBar](#widgetdevtoolbar). An always-on-screen widget gets a pin icon (see [PictureInPicturePanel](#pictureinpicturepanel)).
 - **Timeline**: the [RoomTimeline](#roomtimeline), at most one per room view. A message icon, "Timeline" and a close button; no overflow button, no pin.
+- **Room dev tools**: the [room dev tools](#dev-tools) of the room, at most one per room view. The Dev tools icon, "Room dev tools" and a close button, like the Timeline tab.
 
 ## RoomOverview
 
-- Avatar, name, ID and description, and "Open timeline" ("Show timeline" when this room view has it).
+- Avatar, name, ID and description, "Open timeline" ("Show timeline" when this room view has it) and, with dev tools, "Open room dev tools" ("Show room dev tools").
 - Widget list, first and full width. Pressing a widget opens it. A widget that is already open is grayed out, says where it is open and offers:
   - "jump to tab"
   - "move widget here", if it is open in another room view: it closes the tab there and opens the widget in this room view.
@@ -159,7 +160,7 @@ A page of this app's own origin (except the test widgets the app ships) is not i
 A toolbar for a single widget, with information like the driver state (approved capabilities) and a log of the messages.
 
 - It looks technical, like Photoshop, Godot and the browser devtools: less rounded corners and a technical font (not monospace).
-- It is docked at the top of the widget by default and can be moved to the bottom, left or right, with the bar at the outer edge. A vertical bar too short for its labels shows icons only.
+- It is docked at the top of the widget by default and can be moved to the bottom, left or right, with the bar at the outer edge. The toggles show their labels whenever all of them fit the bar next to the status dot and the dock switch, else only icons and badges.
 - A reload button restarts the widget like "Retry" (new iframe and driver); its panels start empty.
 - The other buttons open and close panels: the first opens at full width, the second next to it, the third next to those. Opening a fourth closes the oldest one.
 - Panels are resized by dragging between them.
@@ -224,41 +225,49 @@ The DevBackend is a custom in-memory backend. It is implemented as a separate ac
 
 ## Dev tools
 
-One of the [SidePanel](#sidepanel) views: the tools of one room at a time. The rooms are not tabs but a dropdown next to the room name and ID (where "Core product" is in the `reference_image`).
+The tools of one room, the room dev tools, in one of two places:
 
-- With a Matrix account, the dropdown lists the rooms open in a room panel, left to right. It starts on the room of the focused room panel and keeps a picked room while it is open. With no room open: "No room open" and "New room panel".
-- While the [DevBackend](#devbackend) is active, it is the DevBackendView: one page per mocked room, and the last entry of the dropdown adds a room.
+- In the [SidePanel](#sidepanel): any room, picked in a dropdown next to the room name and ID (where "Core product" is in the `reference_image`), in a slim header with the close button. The bar starts on the left.
+  - With a Matrix account, the dropdown lists the rooms open in a room panel, left to right. It starts on the room of the focused room panel and keeps a picked room while it is open. With no room open: "No room open" and "New room panel", no bar.
+  - While the [DevBackend](#devbackend) is active, it is the DevBackendView: one page per mocked room, the last entry of the dropdown adds a room, and the header has "Room actions" (clear room, remove room).
+- In a [room dev tools tab](#tabs): the room of its room panel, no dropdown, never the DevBackend's tools. The bar starts on top.
 
-Each room has these sections:
+They look like the [WidgetDevToolBar](#widgetdevtoolbar) and use its bar, named "Room dev tools":
+
+- A status dot for the room data: green when the state and the timeline are read, amber while one loads, red when one failed. Then the toggles "State" and "Timeline" (with their number of events; the alert badge when it failed) and the dock switch. No reload, no close.
+- Docked left or right the bar is a vertical strip and the panels stack; docked top or bottom they sit side by side. The open panels fill the place; dragging between them resizes them.
+- A panel has the header of a widget dev tool panel (title, counts, close), a filter with the number of shown rows, and one-line rows like the widget's messages. Long types and state keys are cut at their start.
+- The send form is a collapsible heading with the menu of its forms. Open above the list it takes at most 45% of the panel and scrolls; in a panel of 520px or more it is a column left of the list. Labels are left of their fields; read-only values are plain text.
+
+The panels:
 
 - State
-  - shortcuts: edit name, edit description, add member (DevBackend)
-  - send state (also delayed), with a menu of predefined forms like "send event". The default is the test widget form; the last option is raw JSON (type, state key, content).
+  - send state (also delayed), with a menu of predefined forms. The default is the test widget form; then the shortcuts edit name, edit description, add member (DevBackend); the last option is raw JSON (type, state key, content).
     - test widget: one of the three test widgets this app ships, one per event type (`m.widget` and `org.matrix.msc4411.widget`: the new test widget; `im.vector.modular.widgets`: the legacy test widget, with its templated URL), and the widget ID. The URL is shown read-only with a copy button: a test widget cannot be lost by editing its URL
     - widget: any custom widget. Event type (`m.widget`, `org.matrix.msc4411.widget` or legacy `im.vector.modular.widgets`), widget ID, name, URL and, unless legacy, "uses the widget API". Starts empty
     - while the event type and widget ID of a widget form (test widget, widget, Element Call) name a widget the room already has, the send button reads "Update widget" in a warning look: sending replaces that widget
     - Element Call: a legacy `m.call` widget as Element Web describes its call widget, from the Element Call URL (default call.element.io), the call intent and the widget ID
-  - current state (explore by type and key), with an edit button per state event
+  - current state (explore by type and key), with an edit button per state event; a single state event with an empty state key shows its content in its row
 - Timeline
   - send event (also delayed), with a menu of predefined forms so that users don't need to know the raw JSON: message, sticker, RTC member, image/audio. The default is a predefined form; the last option is raw JSON with a text editor.
   - "Scheduled": the delayed events sent from here (with the DevBackend also those of widgets): send now, restart, cancel
-  - the list of events, newest first; with a Matrix account the ones the session holds, then "Load older events"
-  - DevBackend: a widget's request for older events (`paginate_timeline`) waits until it is resolved here: "Pagination requested: N events", how many random messages to generate (N, else 20), "Start reached", "Resolve pagination". The widgets are told.
+  - the list of events, newest first: type, what it says, sender, time; in a narrow list only the type and the sender's localpart. With a Matrix account the ones the session holds, then "Load older events"
+  - DevBackend: a widget's request for older events (`paginate_timeline`) waits at the top of the list until it is resolved there: the number requested, how many random messages to generate (that number, else 20), "Start reached", "Resolve". The widgets are told.
 
 **Sending to a real room**
 
-- Everything is sent as you, which a line above the sections says (the DevBackend sends as any user). A refusal (no permission, no delayed events on the homeserver) is a toast; the form keeps its draft.
+- Everything is sent as you, which a status line below the panels says ("Sending as â€¦") (the DevBackend sends as any user). A refusal (no permission, no delayed events on the homeserver) is a toast; the form keeps its draft.
 - Changing the room's configuration asks first: power levels, join rules, encryption, history visibility, guest access, server ACL, tombstone, create event, canonical alias, another user's membership, replacing a widget.
 
 **Tools** (DevBackend)
 
-What is not per room is in tool boxes below the room box: the "Client Backend Tool" and the "Media Backend Tool".
+What is not per room is in tool boxes below the room box of the SidePanel, in the look of the room dev tools: the "Client Backend Tool" and the "Media Backend Tool".
 
-- Below the room box each tool is a button. Pressing it turns it into the tool's box (resized by dragging between it and the room box); its minimise button turns it back. One tool box is open at a time.
-- Client Backend Tool, with collapsible sections like the room box:
-  - Widget host behavior, for all mocked rooms: auto-approve capabilities (OpenID tokens too), remember capabilities, fail sends (every send of a widget is answered with an error)
+- Below the room box each tool is a row like a panel header. Pressing it turns it into the tool's box, as tall as its content up to its share (resized by dragging between it and the room box, which keeps a usable height); its minimise button turns it back. One tool box is open at a time.
+- Client Backend Tool, with collapsible sections:
+  - Widget host behavior, for all mocked rooms, a checkbox row each: auto-approve capabilities (OpenID tokens too), remember capabilities, fail sends (every send of a widget is answered with an error)
   - To-device messages: sending and reading
-- Media Backend Tool: upload media, a list of all media (including media uploaded by widgets), and buttons to copy the MXC URI of each item. Its button shows the number of files.
+- Media Backend Tool: upload media, a list of all media (including media uploaded by widgets), and buttons to copy the MXC URI of each item. Its row shows the number of files.
 
 **Switch and leave**
 
@@ -304,14 +313,14 @@ Every state of the UI. Each is one story in Storybook, a sketch story (`Sketch/â
   - Room list: the room picker / next to the room panels (LeftBar button pressed)
   - Dev tools of a Matrix account
     - No room open / room dropdown open (the rooms of the room panels) / reading the room: loading, failed
-    - State: "sent as you", no "add member" / Timeline: fixed sender, a scheduled event, "Load older events"
+    - Bar on the left, State and Timeline stacked, "sending as" / State's form open beside Timeline / only State: its form open; the form menu open, no "add member" / only Timeline: fixed sender, a scheduled event, "Load older events"
     - Next to the room panels (LeftBar button pressed), "Switch to the DevBackend" at the bottom / confirming a change of the room's configuration
   - Dev tools while the DevBackend is active (DevBackendView)
     - No rooms yet
     - Room dropdown open (rooms + add room)
     - State: shortcuts, send state with the test widget form / the widget form / the Element Call form / as raw JSON, "Update widget" for an existing widget, state explorer, edit state
     - Timeline: send event with a predefined form, send event as raw JSON, send delayed event, event list, a widget's pagination request
-    - Tools: collapsed (the "Client Backend Tool" and "Media Backend Tool" buttons) / Client Backend Tool open below the room box (resize handle, minimise button): WidgetHostBehavior, To-device messages / Media Backend Tool open (media list)
+    - Tools: collapsed (the "Client Backend Tool" and "Media Backend Tool" buttons below the room dev tools) / Client Backend Tool open below the room box (resize handle, minimise button): WidgetHostBehavior, To-device messages / Media Backend Tool open (media list)
     - "Leave DevBackend" text button at the bottom (part of every DevBackendView state)
 - PictureInPicturePanel
   - Idle: borderless boxes, 1 widget / 4 widgets
@@ -336,15 +345,18 @@ Every state of the UI. Each is one story in Storybook, a sketch story (`Sketch/â
       - WidgetTab active / room name selected
       - Tab marked as always on screen (pin icon)
       - Timeline tab active
+      - Room dev tools tab active
       - More tabs than fit
     - RoomOverview
       - No widget open, dev tools disabled
-      - A widget open in this panel ("jump to tab"), a local widget, dev tools and DevBackend enabled ("Add widget", copy to DevBackend)
+      - A widget open in this panel ("jump to tab"), a local widget, dev tools and DevBackend enabled ("Add widget", "Open room dev tools", copy to DevBackend)
+      - The panel has a room dev tools tab: "Show room dev tools"
       - Add widget: the test widget form, the widget form, only in this host / a pasted state event / to the room, refused (the reason)
     - RoomTimeline
       - Events of every kind, one showing its JSON, "Load older events"
       - Start of the room reached
       - Loading / failed to load
+    - Room dev tools tab: bar on top, side by side, forms open as columns / bar on the left, stacked / a narrow panel / one panel closed (DevBackend: a widget's pagination request) / reading the room / no row matches the filters / an empty room
     - WidgetTab
       - WidgetView
         - Loading / failed to load
@@ -404,7 +416,7 @@ Notes for the implementation. They add to the design above, they do not change i
 **Panels and resizing**
 
 - Every resizable panel has a minimum size. Drag handles have a hit area of at least 8px, are keyboard operable and reset on double click.
-- Persist the arrangement and sizes of the panels, open tabs and the dev tool dock position per account.
+- Persist the arrangement and sizes of the panels, open tabs (with the layout of a room dev tools tab) and the dev tool dock position per account.
 - Widget tabs that do not fit scroll horizontally behind the room name, with an overflow menu listing them.
 - In narrow windows (below ~900px) the SidePanel overlays the RoomsArea instead of shifting it, and only one room panel is visible at a time.
 

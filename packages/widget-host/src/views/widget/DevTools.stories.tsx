@@ -57,7 +57,7 @@ export const BarTop: Story = { args: { devTools: layout("top", []) }, parameters
 /** Bar only, docked bottom. */
 export const BarBottom: Story = { args: { devTools: layout("bottom", []) }, parameters: { size: [900, 560] } };
 
-/** Bar only, docked left. The vertical bar needs about 600px for its labels; a shorter one shows icons only (see `SidePanels`). */
+/** Bar only, docked left. The toggles show their labels while all of them fit the bar; a bar too short for them shows icons and badges only. */
 export const BarLeft: Story = { args: { devTools: layout("left", []) }, parameters: { size: [900, 680] } };
 
 /** Bar only, docked right. */
@@ -75,7 +75,7 @@ export const ThreePanels: Story = { args: { devTools: layout("top", ["messages",
 /** Fourth panel opened: the oldest one closes. Messages, Stats and Driver were open; pressing Console closed Messages, the oldest. Three panels are the maximum. */
 export const FourthPanel: Story = { args: { devTools: layout("top", ["stats", "driver", "console"], 290) }, parameters: { size: [1280, 680] } };
 
-/** Docked right with two panels: they stack. At this height the vertical bar shows icons only. */
+/** Docked right with two panels: they stack. The vertical bar is long enough for the labelled toggles. */
 export const SidePanels: Story = { args: { devTools: layout("right", ["messages", "driver"], 400) } };
 
 /** Docked bottom with one panel: the bar stays at the edge, the panels sit between the widget and the bar, the separator above them (as when docked right). */

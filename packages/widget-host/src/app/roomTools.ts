@@ -6,14 +6,17 @@
 import { ROOM_CONFIGURATION_TYPES, type AccountId, type MockedStateEvent, type RoomId, type RoomToolsViewModel, type ScheduledEvent, type WidgetHostBehavior } from "../appViewModel";
 import { describesWidget } from "../lib/widgetEvents";
 import { WIDGET_EVENT_TYPES, type StateEvent } from "../widgetStateEvent";
+import { roomDevToolsLayout } from "./layout";
 
 /** How the host answers widgets in the DevBackend until the Client Backend Tool changes it. */
 export const DEFAULT_DEV_BEHAVIOR: WidgetHostBehavior = { autoApproveCapabilities: false, rememberCapabilities: false };
 
 export const defaultRoomToolsVm = (): RoomToolsViewModel => ({
   selectedRoomIds: {},
-  // "widgetHostBehavior" is a section of the Client Backend Tool: open once the tool is opened.
-  openSections: ["state", "timeline", "widgetHostBehavior"],
+  // The SidePanel's room dev tools: the bar on the left, State and Timeline stacked.
+  layout: roomDevToolsLayout("left"),
+  // A section of the Client Backend Tool: open once the tool is opened.
+  openSections: ["widgetHostBehavior"],
   sendForm: "message",
   stateForm: "testWidget",
   tools: { open: null, heightShare: 0.5 },

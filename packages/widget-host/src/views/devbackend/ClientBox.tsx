@@ -1,14 +1,15 @@
 /**
- * The Client Backend Tool: what the mocked rooms share, in collapsible sections. Stories
- * `sidepanel-devbackendview-tools--behavior`, `sidepanel-devbackendview-tools--to-device`.
+ * The Client Backend Tool: what the mocked rooms share, in collapsible sections (disclosure
+ * headings), in the look of the room dev tools. Stories `sidepanel-devbackendview-tools--behavior`,
+ * `sidepanel-devbackendview-tools--to-device`.
  */
 import { useState, type FormEvent } from "react";
 
 import type { MockedRoomData, RoomToolsSection, ToDeviceMessage, WidgetHostBehavior } from "../../appViewModel";
 import { useDispatch } from "../env";
-import { Button, Field, Json, Toggle } from "../ui/atoms";
+import { Button, Check, Field, Icon, Json } from "../ui/atoms";
 import { FormError, JsonArea, parseJsonObject } from "../ui/forms";
-import { Acc, Sub, timeOf } from "./parts";
+import { ToolSection, timeOf } from "./parts";
 import { ToolBox } from "./ToolBox";
 
 export function ClientBox({ openSections, heightShare, behavior, data }: { openSections: RoomToolsSection[]; heightShare: number; behavior: WidgetHostBehavior; data: MockedRoomData }) {
@@ -17,38 +18,34 @@ export function ClientBox({ openSections, heightShare, behavior, data }: { openS
   const toggle = (section: RoomToolsSection) => () => dispatch({ type: "roomTools/toggleSection", section });
   return (
     <ToolBox tool="client" heightShare={heightShare} className="devb">
-      <Acc id="widgetHostBehavior" title="Widget host behavior" open={isOpen("widgetHostBehavior")} onToggle={toggle("widgetHostBehavior")}>
-        <BehaviorSection behavior={behavior} failSends={data.failSends} />
-      </Acc>
-      <Acc id="toDevice" title="To-device messages" open={isOpen("toDevice")} count={String(data.toDevice.length)} onToggle={toggle("toDevice")}>
-        <ToDeviceSection toDevice={data.toDevice} userId={data.userId} />
-      </Acc>
+      <ToolSection title="Widget host behavior" open={isOpen("widgetHostBehavior")} onToggle={toggle("widgetHostBehavior")} />
+      {isOpen("widgetHostBehavior") && <BehaviorSection behavior={behavior} failSends={data.failSends} />}
+      <ToolSection title="To-device messages" open={isOpen("toDevice")} count={data.toDevice.length} onToggle={toggle("toDevice")} />
+      {isOpen("toDevice") && <ToDeviceSection toDevice={data.toDevice} userId={data.userId} />}
     </ToolBox>
   );
 }
 
 const BEHAVIORS: { key: keyof WidgetHostBehavior; label: string; hint: string }[] = [
-  { key: "autoApproveCapabilities", label: "Auto-approve capabilities", hint: "Grant everything a widget asks for, without the prompt." },
-  { key: "rememberCapabilities", label: "Remember capabilities", hint: "Off: a widget asks again every time it starts." },
+  { key: "autoApproveCapabilities", label: "Auto-approve capabilities", hint: "grant everything without the prompt" },
+  { key: "rememberCapabilities", label: "Remember capabilities", hint: "off: asks again at every start" },
 ];
 
-/** How the host answers widgets (`WidgetHostBehavior`), and "fail sends", which the DevBackend does. */
+/** How the host answers widgets (`WidgetHostBehavior`), and "fail sends", which the DevBackend does: a checkbox row each. */
 export function BehaviorSection({ behavior, failSends }: { behavior: WidgetHostBehavior; failSends: boolean }) {
   const dispatch = useDispatch();
   const row = (label: string, hint: string, on: boolean, onChange: (on: boolean) => void) => (
-    <div key={label} className="set-row">
-      <div>
-        <b>{label}</b>
-        <small>{hint}</small>
-      </div>
-      <Toggle on={on} label={label} onChange={onChange} />
+    <div key={label} className="rdt-opt" title={hint}>
+      <Check on={on} label={label} onChange={onChange} />
+      <b>{label}</b>
+      <small>{hint}</small>
     </div>
   );
   return (
-    <>
+    <div role="group" aria-label="Widget host behavior">
       {BEHAVIORS.map(({ key, label, hint }) => row(label, hint, behavior[key], (on) => dispatch({ type: "mock/setBehavior", behavior: { [key]: on } })))}
-      {row("Fail sends", "Every send from a widget is answered with an error.", failSends, (on) => dispatch({ type: "mock/setFailSends", on }))}
-    </>
+      {row("Fail sends", "every send of a widget gets an error", failSends, (on) => dispatch({ type: "mock/setFailSends", on }))}
+    </div>
   );
 }
 
@@ -69,7 +66,6 @@ export function ToDeviceSection({ toDevice, userId = "" }: { toDevice: ToDeviceM
 
   return (
     <>
-      <Sub title="Send to the widget's device" />
       <form className="form" aria-label="Send to-device message" onSubmit={submit}>
         <Field label="Type">
           <input className="input mono" value={draft.type} onChange={(e) => setDraft({ ...draft, type: e.target.value })} />
@@ -84,45 +80,50 @@ export function ToDeviceSection({ toDevice, userId = "" }: { toDevice: ToDeviceM
         <JsonArea label="To-device content (JSON)" value={draft.content} onChange={(content) => setDraft({ ...draft, content })} />
         <FormError error={error} />
         <div className="inline-row">
-          <Toggle on={draft.encrypted} label="Mark as encrypted" onChange={(encrypted) => setDraft({ ...draft, encrypted })} />
-          <span>Mark as encrypted</span>
+          <Check on={draft.encrypted} label="Mark as encrypted" onChange={(encrypted) => setDraft({ ...draft, encrypted })} />
+          <span>Encrypted</span>
           <span className="sp" />
           <Button kind="primary" sm icon="send" type="submit">
             Send
           </Button>
         </div>
       </form>
-
-      <Sub title="Messages">
-        <em className="count">{toDevice.length}</em>
-      </Sub>
-      <div className="ev-list" role="list" aria-label="To-device messages">
+      <div role="list" aria-label="To-device messages">
         {toDevice.map((message, index) => {
           const open = expanded === index;
           const fromWidget = message.direction === "fromWidget";
+          const who = `${message.userId} · ${message.deviceId}`;
           return (
-            <div key={index} className="ev-item" role="listitem">
-              <button type="button" className="ev" aria-expanded={open} onClick={() => setExpanded(open ? undefined : index)}>
-                <span className="mono ev-t">{message.type}</span>
-                <span className="ev-time">{timeOf(message.timestamp)}</span>
-                <span className="ev-p">
-                  {fromWidget ? "to" : "from"} {message.userId} · {message.deviceId}
+            <div key={index} className={`msg ${open ? "open" : ""}`} role="listitem">
+              <button type="button" className="msg-h" aria-expanded={open} onClick={() => setExpanded(open ? undefined : index)}>
+                <Icon name={open ? "chevDown" : "chevRight"} size={11} />
+                <span className={`msg-dir ${fromWidget ? "from" : "to"}`} role="img" aria-label={fromWidget ? "from the widget" : "to the widget"} title={fromWidget ? "Sent by the widget" : "Sent to the widget"}>
+                  {fromWidget ? "W→H" : "H→W"}
                 </span>
-                <span className="ev-s">
-                  <span className="pill">{fromWidget ? "from widget" : "to widget"}</span>
-                  {message.encrypted && <span className="pill">encrypted</span>}
+                <span className="rdt-t">{message.type}</span>
+                <span className="rdt-s" title={`${fromWidget ? "to" : "from"} ${who}`}>
+                  {message.userId.split(":")[0]}
                 </span>
+                {message.encrypted && (
+                  <span title="encrypted">
+                    <Icon name="lock" size={11} />
+                    <span className="vh">, encrypted</span>
+                  </span>
+                )}
+                <span className="msg-time">{timeOf(message.timestamp)}</span>
               </button>
               {open && (
-                <pre className="code">
-                  <Json value={message.content} />
-                </pre>
+                <div className="msg-b">
+                  <pre className="code">
+                    <Json value={message.content} />
+                  </pre>
+                </div>
               )}
             </div>
           );
         })}
-        {toDevice.length === 0 && <p className="hint">No to-device messages yet.</p>}
       </div>
+      {toDevice.length === 0 && <p className="dt-empty">No to-device messages yet.</p>}
     </>
   );
 }

@@ -14,6 +14,7 @@ import {
   panelDock,
   panelsVm,
   pickerPanel,
+  roomDevTools,
   roomPanel,
   roomToolsVm,
   widgetTab,
@@ -59,7 +60,7 @@ export const DevBackendActive: Story = {
   args: {
     vm: appVm(
       devMainVm({
-        roomTools: roomToolsVm({ openSections: ["timeline"] }),
+        roomTools: roomToolsVm({ layout: roomDevTools("left", ["timeline"]) }),
         workspaces: {
           ada: workspace([]),
           [ACCOUNTS.dev.id]: workspace([roomPanel("lab", [widgetTab("lab", "call"), widgetTab("lab", "notes")])], { devTools: { [widgetVm("lab", "call").id]: devToolsLayout({ panels: [] }) } }),
@@ -187,7 +188,7 @@ export const RoomTools: Story = { args: { vm: appVm(twoRooms({ sidePanel: { view
  * canonical alias, another user's membership and replacing a widget. Other events are sent at once.
  */
 export const RoomToolsConfirm: Story = {
-  args: { vm: appVm(twoRooms({ sidePanel: { view: "roomTools", width: 324 }, roomTools: roomToolsVm({ openSections: ["state"] }), modal: CHANGE_POWER_LEVELS }), true, false) },
+  args: { vm: appVm(twoRooms({ sidePanel: { view: "roomTools", width: 324 }, roomTools: roomToolsVm({ layout: roomDevTools("left", ["state"]) }), modal: CHANGE_POWER_LEVELS }), true, false) },
 };
 
 /** One room panel: "Design crit" with the whiteboard open. */

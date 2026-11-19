@@ -47,7 +47,7 @@ describeBackendContract("InMemoryBackend (a room of the DevBackend)", async () =
 });
 
 describe("DevBackend: a widget's pagination", () => {
-  it("is shown while it waits; “Resolve pagination” adds random messages before the oldest event and tells the widget", async () => {
+  it("is shown while it waits; “Resolve” adds random messages before the oldest event and tells the widget", async () => {
     const dev = new DevBackend();
     const roomId = dev.addRoom({ name: "Lab" });
     const changed = vi.fn();

@@ -32,6 +32,8 @@ import {
   type RoomPanelViewModel,
   type RecentRoom,
   type RecentWidget,
+  type RoomDevToolsLayout,
+  type RoomDevToolsTarget,
   type RoomId,
   type RoomToolsViewModel,
   type ScheduledEvent,
@@ -62,18 +64,22 @@ import {
   moveTab,
   moveTabToPanel,
   newId,
+  openRoomToolsTab,
   openTimelineTab,
   panelOf,
   putTab,
   removePanel,
   removeTab,
   resizeDevTools,
+  resizeRoomDevTools,
   roomOfPanel,
   roomTarget,
   splitTab,
   toggleDevToolPanel,
+  toggleRoomDevToolPanel,
   updateDevTools,
   updatePanel,
+  updateRoomToolsTab,
   workspaceWidgetIds,
 } from "./layout";
 import { loadPersisted, savePersisted, type PersistedUi } from "./persistence";
@@ -1435,6 +1441,8 @@ export class AppController {
       }
       case "tab/openTimeline":
         return this.setWorkspace((ws) => openTimelineTab(ws, intent.panelId));
+      case "tab/openRoomTools":
+        return this.setWorkspace((ws) => openRoomToolsTab(ws, intent.panelId));
       case "tab/activate":
         return this.setWorkspace((ws) => activateTab(ws, intent.panelId, intent.tabId));
       case "tab/move":
@@ -1550,6 +1558,12 @@ export class AppController {
         return this.setRoomTools((t) => ({ ...t, selectedRoomIds: { ...t.selectedRoomIds, [this.main!.activeAccountId]: intent.roomId } }));
       case "roomTools/toggleSection":
         return this.setRoomTools((t) => ({ ...t, openSections: t.openSections.includes(intent.section) ? t.openSections.filter((s) => s !== intent.section) : [...t.openSections, intent.section] }));
+      case "roomDevTools/togglePanel":
+        return this.changeRoomDevTools(intent.target, (l) => toggleRoomDevToolPanel(l, intent.panel));
+      case "roomDevTools/dock":
+        return this.changeRoomDevTools(intent.target, (l) => ({ ...l, dock: intent.dock }));
+      case "roomDevTools/resize":
+        return this.changeRoomDevTools(intent.target, (l) => resizeRoomDevTools(l, intent.shares));
       case "roomTools/setSendForm":
         return this.setRoomTools((t) => ({ ...t, sendForm: intent.form }));
       case "roomTools/setStateForm":
@@ -1611,6 +1625,12 @@ export class AppController {
 
   private setRoomTools(change: (roomTools: RoomToolsViewModel) => RoomToolsViewModel): void {
     this.setMain((m) => ({ ...m, roomTools: change(m.roomTools ?? defaultRoomToolsVm()) }));
+  }
+
+  /** The room dev tools of the SidePanel (`RoomToolsViewModel.layout`) or of a room tab (its `layout`, persisted with the workspace). */
+  private changeRoomDevTools(target: RoomDevToolsTarget, change: (layout: RoomDevToolsLayout) => RoomDevToolsLayout): void {
+    if (target.in === "sidePanel") return this.setRoomTools((t) => ({ ...t, layout: change(t.layout) }));
+    this.setWorkspace((ws) => updateRoomToolsTab(ws, target.panelId, target.tabId, change));
   }
 
   /**

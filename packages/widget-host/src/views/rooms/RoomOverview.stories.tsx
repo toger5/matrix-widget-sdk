@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 
 import type { MainViewModel, SettingsViewModel } from "../../appViewModel";
-import { LOCAL_WIDGET, ROOMS, mainVm, roomPanel, timelineTab, widgetTab, widgetVm, workspace } from "../fixtures";
+import { LOCAL_WIDGET, ROOMS, mainVm, roomPanel, roomToolsTab, timelineTab, widgetTab, widgetVm, workspace } from "../fixtures";
 import { IconButton } from "../ui/atoms";
 import { pretty } from "../ui/forms";
 import type { AddWidgetDraft } from "./AddWidgetForm";
@@ -63,8 +63,10 @@ const withLocal = (o: Partial<MainViewModel>) => {
 };
 /**
  * A widget open in this panel ("jump to tab"), a local widget, dev tools and DevBackend enabled
- * ("Add widget", "Copy to DevBackend"). Element Call has a tab in this panel: it is grayed out and
- * only offers "jump to tab". The panel has its timeline tab, so the header offers "Show timeline".
+ * ("Add widget", "Open room dev tools", "Copy to DevBackend"). Element Call has a tab in this panel:
+ * it is grayed out and only offers "jump to tab". The panel has its timeline tab, so the header
+ * offers "Show timeline", and next to it "Open room dev tools" (the Dev tools icon; not there
+ * without dev tools).
  * The local widget comes after the room's widgets and counts in the room name tab; without dev
  * tools it has no edit button. A DevBackend room has no DevBackend card: it is already in the
  * DevBackend.
@@ -72,6 +74,13 @@ const withLocal = (o: Partial<MainViewModel>) => {
 export const DevTools: Story = {
   parameters: { size: [900, 1000] },
   render: () => <SoloPanel main={withLocal({ workspaces: { ada: workspace([withCall]) }, widgets: { [call.id]: call } })} panel={withCall} settings={DEV_SETTINGS} />,
+};
+
+const withTools = roomPanel("design", [roomToolsTab("design")], null);
+/** The panel has a room dev tools tab: "Show room dev tools" (the go-to-tab icon) jumps to it; no timeline tab, so "Open timeline". */
+export const RoomDevToolsOpen: Story = {
+  parameters: { size: [900, 240] },
+  render: () => <SoloPanel main={mainVm({ workspaces: { ada: workspace([withTools]) }, widgets: {} })} panel={withTools} settings={DEV_TOOLS_ONLY} />,
 };
 
 const noWidgets = mainVm({ workspaces: { ada: workspace([empty]) }, widgets: {} });

@@ -1,7 +1,9 @@
 import type { ReactNode } from "react";
 
-import type { MainViewModel, PanelId, RoomViewModel, SettingsViewModel } from "../../appViewModel";
+import { activeAccount, type MainViewModel, type PanelId, type RoomDevToolsLayout, type RoomId, type RoomViewModel, type SettingsViewModel, type TabId } from "../../appViewModel";
 import type { RenderWidget } from "../app/AppShell";
+import { RoomDevTools } from "../devbackend/RoomDevTools";
+import { useViewEnv } from "../env";
 import { roomOf } from "../helpers";
 import { RoomOverview } from "./RoomOverview";
 import { useRoomsDrag } from "./roomsDrag";
@@ -22,10 +24,10 @@ export interface RoomViewProps {
 }
 
 /**
- * A tabbed room: the header (the room name tab, the tabs of widgets and the timeline) and the body
- * of the selected tab: the shown widget, the RoomTimeline, or the RoomOverview while the room name
- * is selected. It renders the two children of a `.roompanel`, so it is used inside a `RoomPanel`.
- * stories `rooms-roomview--*`, `rooms-tabbar--*`, `rooms-roomoverview--*`, `rooms-roomtimeline--*`, `app-appshell--different-rooms`, `app-appshell--same-room-twice`
+ * A tabbed room: the header (the room name tab, the tabs of widgets, the timeline and the room dev
+ * tools) and the body of the selected tab: the shown widget, the RoomTimeline, the room dev tools,
+ * or the RoomOverview while the room name is selected. It renders the two children of a `.roompanel`, so it is used inside a `RoomPanel`.
+ * stories `rooms-roomview--*`, `rooms-tabbar--*`, `rooms-roomoverview--*`, `rooms-roomtimeline--*`, `rooms-roomdevtools--*`, `app-appshell--different-rooms`, `app-appshell--same-room-twice`
  */
 export function RoomView({ main, settings, panelId, content, fullscreen = false, renderWidget, headerEnd }: RoomViewProps) {
   const { roomId, tabs, activeTabId } = content;
@@ -50,10 +52,45 @@ export function RoomView({ main, settings, panelId, content, fullscreen = false,
           renderWidget(active.widgetId)
         ) : active?.kind === "timeline" ? (
           <RoomTimeline roomId={roomId} />
+        ) : active?.kind === "roomTools" ? (
+          // TODO-FINDING room-dev-tools-tab-without-dev-tools - a room dev tools tab stays (and works) when dev tools are turned off, until it is closed; only "Open room dev tools" needs them.
+          <RoomToolsTab main={main} panelId={panelId} roomId={roomId} tabId={active.id} layout={active.layout} />
         ) : (
-          <RoomOverview main={main} panelId={panelId} roomId={roomId} devTools={settings.devTools} devBackend={settings.devBackend} timelineOpen={tabs.some((t) => t.kind === "timeline")} />
+          <RoomOverview
+            main={main}
+            panelId={panelId}
+            roomId={roomId}
+            devTools={settings.devTools}
+            devBackend={settings.devBackend}
+            timelineOpen={tabs.some((t) => t.kind === "timeline")}
+            roomToolsOpen={tabs.some((t) => t.kind === "roomTools")}
+          />
         )}
       </div>
     </>
+  );
+}
+
+/**
+ * The room dev tools of a room dev tools tab: the panel's room, no dropdown, never the DevBackend's
+ * tools. While the DevBackend is active, a mocked room (any sender, its scheduled events and a
+ * widget's pagination request); else the room as the account. stories `rooms-roomdevtools--*`
+ */
+function RoomToolsTab({ main, panelId, roomId, tabId, layout }: { main: MainViewModel; panelId: PanelId; roomId: RoomId; tabId: TabId; layout: RoomDevToolsLayout }) {
+  const mocked = useViewEnv().useMockedRoomData(roomId);
+  const account = activeAccount(main);
+  const dev = account?.kind === "devBackend";
+  const forms = main.roomTools ?? { sendForm: "message", stateForm: "testWidget" };
+  return (
+    <RoomDevTools
+      mode={dev ? "devBackend" : "account"}
+      roomId={roomId}
+      layout={layout}
+      target={{ in: "tab", panelId, tabId }}
+      forms={forms}
+      userId={dev ? mocked.userId : account?.userId}
+      scheduled={dev ? mocked.scheduled : (main.roomTools?.scheduled[main.activeAccountId]?.[roomId] ?? [])}
+      pagination={dev ? mocked.pagination : undefined}
+    />
   );
 }

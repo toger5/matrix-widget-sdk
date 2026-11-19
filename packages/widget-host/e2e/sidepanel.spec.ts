@@ -85,7 +85,7 @@ test.describe("SidePanel", () => {
     await expect(devBackend).toBeChecked();
     await expect(devBackend).toBeDisabled();
     await expect(settings.getByText("The DevBackend cannot be turned off while it is active")).toBeVisible();
-    const lists = { devTools: [/^Dev tools.*button in the left bar/, /^Widget dev tools/, /^Add widget/], devBackend: [/^DevBackend.*in the account list/, /^Copy to DevBackend/] };
+    const lists = { devTools: [/^Dev tools.*button in the left bar/, /^Widget dev tools/, /^Add widget/, /^Room dev tools/], devBackend: [/^DevBackend.*in the account list/, /^Copy to DevBackend/] };
     await expect(settings.getByRole("listitem")).toHaveText([...lists.devTools, ...lists.devBackend]);
     await host.story("sidepanel-settingsview--both-on");
 
@@ -160,6 +160,37 @@ test.describe("SidePanel", () => {
     await expect(account).toBeVisible();
     await expect(host.app).toHaveClass(/fence/);
   });
+});
+
+test("Dev tools: the room dev tools below the slim header, the bar on the left with the panels stacked, no close or reload; the dock switch moves it", async ({ host }) => {
+  await host.populate("lab", { open: [{ room: LAB }] });
+  const view = host.page.getByTestId("devbackend-view");
+  const tools = view.getByTestId("room-dev-tools");
+  const bar = tools.getByRole("toolbar", { name: "Room dev tools" });
+  const [state, timeline] = [tools.getByRole("region", { name: "State", exact: true }), tools.getByRole("region", { name: "Timeline", exact: true })];
+  await expect(tools).toHaveClass(/dt-left/);
+  await expect(bar).toHaveAttribute("aria-orientation", "vertical");
+  await expect(bar.getByRole("radio", { name: "Dock to the left" })).toHaveAttribute("aria-checked", "true");
+  await expect(bar.getByRole("button", { name: /^State, \d+$/ })).toHaveAttribute("aria-pressed", "true");
+  await expect(bar.getByRole("button", { name: /^Timeline, \d+$/ })).toHaveAttribute("aria-pressed", "true");
+  await expect(bar.getByRole("img", { name: "Room data is ready" })).toBeVisible();
+  // The bar has no close and no reload: the slim header above it has the SidePanel's ×.
+  await expect(bar.getByRole("button", { name: /Close|Reload/ })).toHaveCount(0);
+  await expect(view.getByRole("button", { name: "Close panel" })).toHaveCount(1);
+  // Stacked: as wide as each other, Timeline below State. The DevBackend sends as anyone: no "sending as" line.
+  const [s1, t1] = [(await state.boundingBox())!, (await timeline.boundingBox())!];
+  expect(t1.x).toBe(s1.x);
+  expect(t1.y).toBeGreaterThan(s1.y + s1.height - 1);
+  await expect(tools.getByText(/^Sending as/)).toHaveCount(0);
+
+  // Docked on top: the panels side by side. The SidePanel's layout, not a tab's.
+  await bar.getByRole("radio", { name: "Dock to the top" }).click();
+  await expect(tools).toHaveClass(/dt-top/);
+  await expect(bar).toHaveAttribute("aria-orientation", "horizontal");
+  const [s2, t2] = [(await state.boundingBox())!, (await timeline.boundingBox())!];
+  expect(t2.y).toBe(s2.y);
+  expect(t2.x).toBeGreaterThan(s2.x + s2.width - 1);
+  expect((await host.main()).roomTools?.layout.dock).toBe("top");
 });
 
 test("Room list: a pick opens in the panel showing the room, else in the focused picker, else in a new panel; an open widget is jumped to; a narrow window closes the list", async ({ host }) => {
@@ -244,6 +275,8 @@ test.describe("complete views", () => {
     await host.ready(NEW);
     await host.button(/Media Backend Tool/).click();
     await expect(host.page.getByTestId("devbackend-media")).toBeVisible();
+    // Only the Timeline panel of the room dev tools, as the story draws it.
+    await host.page.getByTestId("devbackend-view").getByRole("toolbar", { name: "Room dev tools" }).getByRole("button", { name: /^State/ }).click();
 
     await host.button("Dev tools of New test widget").click();
     const tools = host.page.getByRole("toolbar", { name: "Widget dev tools" });

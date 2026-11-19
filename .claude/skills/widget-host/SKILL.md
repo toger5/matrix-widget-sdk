@@ -161,7 +161,9 @@ their tests) is the `matrix-session` skill (`.claude/skills/matrix-session/SKILL
   content lives in memory only, so its workspace (and its local widgets) are not persisted. It is
   listed while `settings.devBackend` is on (`syncDevAccount`), which is independent of
   `settings.devTools` (the Dev tools, the widget dev tools and "Add widget", for any account).
-- The Dev tools (`sidePanel.view` "roomTools", `RoomToolsViewModel`, `src/views/devbackend/`) are
+- The Dev tools (`sidePanel.view` "roomTools", `RoomToolsViewModel`, `src/views/devbackend/`) show
+  the room dev tools (`RoomDevTools`: the shared bar over the State and Timeline panels), which are
+  also a room tab (`TabViewModel` "roomTools", its layout persisted with the workspace). They are
   one panel in two modes: while the DevBackend is active the DevBackendView (`roomTools/*` intents
   go to the DevBackend, any sender), else the rooms of the account's room panels (`roomTools/*` go
   to the room's backend as the account, `withRoomBackend` in the controller; what asks first is
@@ -216,7 +218,8 @@ their tests) is the `matrix-session` skill (`.claude/skills/matrix-session/SKILL
   `WidgetRuntime`, with empty values in `emptyData()` (`widgetRuntime.ts`) and
   `EMPTY_DEV_TOOLS_DATA` (`env.tsx`) and a fixture in `DEV_TOOLS_DATA` → the view
   `src/views/widget/<Name>Panel.tsx` → a case in `DevTools.tsx` and an entry in `DEV_TOOL_PANELS`
-  (`DevToolBar.tsx`; the dock positions are `DOCKS` there and `WidgetDevToolsLayout["dock"]`) →
+  (`DevToolBar.tsx`; the bar itself, with the dock positions `DOCKS`, is the shared
+  `src/views/ui/DevToolsBar.tsx`, which the room dev tools use too; `WidgetDevToolsLayout["dock"]`) →
   `e2e/devtools.spec.ts`.
 - **A keyboard shortcut**: the `keydown` handler in `src/views/app/AppShell.tsx` dispatches an
   intent; show the shortcut in the button's `title`. It does not fire while a widget has focus.

@@ -55,6 +55,8 @@
 /* "Open timeline" sits at the end of the header, and below it in a narrow panel. */
 .ov-hero > div { flex: 1 1 220px; min-width: 0; }
 .ov-hero > .btn { flex: none; align-self: flex-start; }
+/* the header's buttons: "Open timeline" and, with dev tools, "Open room dev tools" */
+.ov-hero > .ov-acts { flex: none; align-self: flex-start; display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
 .ov-hero h1 { font-size: 22px; font-weight: 600; }
 .ov-hero p { margin-top: 6px; color: var(--text-muted); max-width: 520px; line-height: 1.5; }
 .ov-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }

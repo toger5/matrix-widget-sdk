@@ -12,12 +12,14 @@ export interface RoomOverviewProps {
   main: MainViewModel;
   panelId: PanelId;
   roomId: RoomId;
-  /** `settings.devTools`: "Add widget", and editing local widgets. */
+  /** `settings.devTools`: "Add widget", editing local widgets, and "Open room dev tools". */
   devTools: boolean;
   /** `settings.devBackend`: the DevBackend card ("Copy to DevBackend"). */
   devBackend: boolean;
   /** The panel has a Timeline tab: the header offers "Show timeline" instead of "Open timeline". */
   timelineOpen?: boolean;
+  /** The panel has a room dev tools tab: "Show room dev tools" instead of "Open room dev tools" (with `devTools`). */
+  roomToolsOpen?: boolean;
   /** Stories: the "Add widget" form is open, with this draft. */
   initialAddWidget?: Partial<AddWidgetDraft>;
 }
@@ -26,7 +28,8 @@ const DEFAULT_LAST_EVENTS = 50;
 
 /**
  * What the room name tab shows, and where a room opens. Stories `rooms-roomoverview--*`,
- * `app-appshell--same-room-twice`. The header opens the RoomTimeline (or shows its tab). The
+ * `app-appshell--same-room-twice`. The header opens the RoomTimeline and, with dev tools, the room
+ * dev tools (or shows their tab). The
  * widget list comes first: the room's widgets, then the local ones. A widget opens as a new tab;
  * one that is already open (a widget runs once per account) is grayed out and offers "jump to
  * tab", and "move widget here" when its tab is in another panel. With dev tools enabled "Add
@@ -34,7 +37,7 @@ const DEFAULT_LAST_EVENTS = 50;
  * and, with the DevBackend enabled, the DevBackend card. Topic, members and encryption come from
  * `useViewEnv().useRoomDetails(roomId)`.
  */
-export function RoomOverview({ main, panelId, roomId, devTools, devBackend, timelineOpen = false, initialAddWidget }: RoomOverviewProps) {
+export function RoomOverview({ main, panelId, roomId, devTools, devBackend, timelineOpen = false, roomToolsOpen = false, initialAddWidget }: RoomOverviewProps) {
   const dispatch = useDispatch();
   const { useRoomDetails, widgetEvents } = useViewEnv();
   const details = useRoomDetails(roomId);
@@ -98,15 +101,27 @@ export function RoomOverview({ main, panelId, roomId, devTools, devBackend, time
             {details.status === "loading" && loading("the description")}
             {failed("description")}
           </div>
-          {timelineOpen ? (
-            <Button icon="goToTab" title="Show the timeline tab" onClick={() => dispatch({ type: "tab/openTimeline", panelId })}>
-              Show timeline
-            </Button>
-          ) : (
-            <Button icon="message" title="Open the timeline of this room in a new tab" onClick={() => dispatch({ type: "tab/openTimeline", panelId })}>
-              Open timeline
-            </Button>
-          )}
+          <div className="ov-acts">
+            {timelineOpen ? (
+              <Button icon="goToTab" title="Show the timeline tab" onClick={() => dispatch({ type: "tab/openTimeline", panelId })}>
+                Show timeline
+              </Button>
+            ) : (
+              <Button icon="message" title="Open the timeline of this room in a new tab" onClick={() => dispatch({ type: "tab/openTimeline", panelId })}>
+                Open timeline
+              </Button>
+            )}
+            {devTools &&
+              (roomToolsOpen ? (
+                <Button icon="goToTab" title="Show the room dev tools tab" onClick={() => dispatch({ type: "tab/openRoomTools", panelId })}>
+                  Show room dev tools
+                </Button>
+              ) : (
+                <Button icon="cone" title="Open the dev tools of this room in a new tab" onClick={() => dispatch({ type: "tab/openRoomTools", panelId })}>
+                  Open room dev tools
+                </Button>
+              ))}
+          </div>
         </header>
         <div className="ov-grid">
           <section className="card span">

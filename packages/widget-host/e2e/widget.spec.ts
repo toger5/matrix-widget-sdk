@@ -639,17 +639,17 @@ test("legacy widget: read_events through the wrapper reads the timeline cache, a
     return JSON.parse(text.slice(text.indexOf("→") + 1)) as LegacyEvent[];
   };
   const view = host.page.getByTestId("devbackend-view");
-  const timelineSection = view.getByRole("button", { name: /^Timeline \d/ });
-  if ((await timelineSection.getAttribute("aria-expanded")) === "false") await timelineSection.click();
+  const timelineToggle = view.getByRole("toolbar", { name: "Room dev tools" }).getByRole("button", { name: /^Timeline/ });
+  if ((await timelineToggle.getAttribute("aria-pressed")) === "false") await timelineToggle.click();
   const request = view.getByRole("form", { name: "Pagination request" });
 
   // The room has three messages: the wrapper reads them, asks the host for 7 more and waits.
   const entries = log.locator("pre", { hasText: READ });
   await legacy.getByRole("button", { name: READ, exact: true }).click();
-  await expect(request).toContainText("Pagination requested: 7 events");
+  await expect(request).toContainText("7 requested");
   // The legacy widget is still waiting for its answer.
   await expect(entries).toHaveCount(0);
-  await request.getByRole("button", { name: "Resolve pagination" }).click();
+  await request.getByRole("button", { name: "Resolve" }).click();
   await expect(entries).toHaveCount(1);
   const text = (await entries.first().textContent())!;
   const read = JSON.parse(text.slice(text.indexOf("→") + 1)) as LegacyEvent[];

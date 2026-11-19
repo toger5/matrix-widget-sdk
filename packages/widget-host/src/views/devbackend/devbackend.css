@@ -1,4 +1,4 @@
-/* Dev tools of the side panel, app-only (layer views, after the design files): real form controls, scrolling sections, disclosure rows. The design rules are src/styles/devbackend.css. */
+/* Dev tools of the side panel and the room dev tools, app-only (layer views, after the design files): real form controls, scrolling lists, disclosure rows. The design rules are src/styles/devbackend.css and src/styles/devtools.css. */
 
 /* header: the room dropdown shares the row with the room actions and the close button */
 .sidebox.devb .room-pick { flex: 1; width: auto; min-width: 0; }
@@ -8,37 +8,38 @@
 .sidebox.devb .dd-row > .ico:first-child { color: var(--text-muted); }
 .sidebox.devb .dd-row.danger > .ico:first-child { color: var(--danger); }
 .sidebox.devb .dd-row .end { color: var(--text-muted); }
-/* the room box keeps its header and two section headers; a large tool box gives way (it may shrink).
-   A squeezed open section clips its body instead of drawing it over the next header. */
+/* the room box keeps its header and the bar; a large tool box gives way (it may shrink) */
 .sidebox.devb:not(.toolbox) { min-height: 122px; }
-.sidebox.devb .acc-sec { overflow: hidden; }
-/* sections scroll for real */
-.sidebox.devb .acc-sec-b { overflow-y: auto; }
-.sidebox.devb .acc-sec-b > * { flex: none; }
-.sidebox.mediabox .side-body { overflow-y: auto; }
-.sidebox.mediabox .side-body > * { flex: none; }
-/* form controls: the design draws them as spans */
-.sidebox.devb input.input, .sidebox.devb select.input { width: 100%; font: inherit; color: inherit; }
-.sidebox.devb input.input.mono, .sidebox.devb select.input.mono { font-family: var(--font-mono); font-size: 11.5px; }
-.sidebox.devb input.input.narrow { width: 56px; }
-/* the account's sender (the Dev tools of a Matrix account): read-only, muted as designed */
-.sidebox.devb input.input[aria-readonly="true"] { color: var(--text-muted); }
-.sidebox.devb .input.search > input { flex: 1; min-width: 0; padding: 0; border: 0; outline: 0; background: none; font: inherit; color: inherit; }
-.sidebox.devb .input.search:focus-within, .sidebox.devb textarea:focus-visible, .sidebox.devb select:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
-.sidebox.devb ::placeholder { color: var(--text-faint); opacity: 1; }
-.sidebox.devb textarea.code { display: block; width: 100%; min-height: 62px; max-height: 320px; field-sizing: content; margin: 0; resize: vertical; font-family: var(--font-mono); font-size: 11.5px; }
-.sidebox.devb .devb-err { color: var(--danger); font-size: 12px; }
+/* the lists and the open send form scroll for real */
+.rdt-list { overflow-y: auto; }
+.rdt-tool-b > form.form, .rdt-tool-b > [role="list"] { flex: none; }
+.mediabox .rdt-tool-b > * { flex: none; }
+.mediabox .rdt-tool-b { gap: 6px; padding: 6px 8px 8px; }
+/* form controls inside the dev tools: the design draws them as `.input.sm` spans */
+:is(.sidebox.devb, .rdt) :is(input.input, select.input) { width: 100%; min-height: 24px; padding: 2px 7px; font: inherit; font-size: 12px; color: inherit; }
+:is(.sidebox.devb, .rdt) :is(input.input, select.input).mono { font-family: var(--font-mono); font-size: 11px; }
+:is(.sidebox.devb, .rdt) input.input.narrow { width: 56px; }
+/* a read-only value (the account as sender, a test widget's URL): plain text, as `.dt-val` */
+:is(.sidebox.devb, .rdt) input.input[aria-readonly="true"] { min-height: 0; padding: 0; border: 0; background: none; color: var(--text-muted); text-overflow: ellipsis; }
+:is(.sidebox.devb, .rdt) input.input[aria-readonly="true"]:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+.rdt .ibtn.xs, .sidebox.devb .dt .ibtn.xs { flex: none; }
+:is(.sidebox.devb, .rdt) textarea:focus-visible, :is(.sidebox.devb, .rdt) select:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+:is(.sidebox.devb, .rdt) ::placeholder { color: var(--text-faint); opacity: 1; }
+:is(.sidebox.devb, .rdt) textarea.code { display: block; width: 100%; min-height: 62px; max-height: 320px; field-sizing: content; margin: 0; resize: vertical; font-family: var(--font-mono); font-size: 11px; }
+.devb-err { color: var(--danger); font-size: 12px; }
+.msg > .devb-err { padding: 2px 8px 4px; }
+/* the pagination request: the number field */
+.rdt .rdt-pag input.input.narrow { width: 48px; flex: none; }
 /* state explorer: rows are disclosure buttons */
-.sidebox.devb .tree-group { display: grid; gap: 1px; min-width: 0; }
-.sidebox.devb button.tree-row { width: 100%; }
-.sidebox.devb .tree-key { flex: 1; min-width: 0; height: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.sidebox.devb .tree-group > .code, .sidebox.devb .tree-group > .editor { margin: 2px 0 4px 26px; }
-/* event rows expand to their JSON */
-.sidebox.devb .ev-item { display: grid; gap: 2px; min-width: 0; }
-.sidebox.devb button.ev { width: 100%; }
-.sidebox.devb .ev-s { display: inline-flex; gap: 4px; align-items: center; }
+.dt .tree-row .ibtn { flex: none; }
+.dt .tree-group > .editor { display: grid; gap: 6px; }
 /* media box */
 .sidebox.mediabox button.drop { width: 100%; }
 .sidebox.mediabox .drop.over { border-color: var(--focus); color: var(--text); }
 .sidebox.mediabox .thumb { overflow: hidden; }
 .sidebox.mediabox .thumb img { width: 100%; height: 100%; object-fit: cover; }
+/* an icon button inside a form of the dev tools (copy the URL) has the size of `.ibtn.xs` */
+.dt .form .ibtn { width: 24px; height: 24px; }
+.dt .form .ibtn .ico { width: 13px; height: 13px; }
+/* the heading of a send form stays on one line in a narrow panel */
+.rdt-compose .dt-disc { white-space: nowrap; }

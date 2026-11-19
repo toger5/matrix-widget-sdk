@@ -17,7 +17,7 @@ export interface TabBarProps {
   room: RoomSummary | undefined;
   /** The room name tab, and the name of the tab list ("Tabs of Design crit"). */
   roomName: string;
-  /** The tabs after the room name: widgets and the timeline. */
+  /** The tabs after the room name: widgets, the timeline and the room dev tools. */
   tabs: TabViewModel[];
   /** `undefined` (or a tab that does not exist): the room name is selected. */
   activeTabId?: TabId;
@@ -30,7 +30,7 @@ const FADE = 36;
 
 /**
  * The tab bar of a room panel, rendered into its header: the room name (the first tab, it shows the
- * RoomOverview), the tabs of widgets and the timeline, the + button and, when the tabs do not fit,
+ * RoomOverview), the tabs of widgets, the timeline and the room dev tools, the + button and, when the tabs do not fit,
  * the "all tabs" button with its menu. stories `rooms-roomview--overview`, `rooms-tabbar--*`. ARIA tabs pattern: the tab is
  * a button, its ⋯ (dev tools, widget tabs only) and × buttons are siblings; the tablist wrapper is
  * `display: contents`, so only the tabs after the room name (`.tabs`) scroll.
@@ -355,8 +355,8 @@ export function TabBar({ main, settings, panelId, roomId, room, roomName, tabs, 
   );
 }
 
-/** The widget's avatar, or the message icon of the timeline tab (a host tab). */
+/** The widget's avatar, or the icon of a host tab (the timeline, the room dev tools). */
 function TabIcon({ info, size, iconSize }: { info: TabInfo; size: number; iconSize: number }) {
-  if (info.widgetKey === undefined) return <Icon name="message" size={iconSize} className="tab-ico" />;
+  if (info.widgetKey === undefined) return <Icon name={info.icon ?? "message"} size={iconSize} className="tab-ico" />;
   return <Avatar name={info.name} id={info.widgetKey} size={size} square label={initials(info.name)} />;
 }

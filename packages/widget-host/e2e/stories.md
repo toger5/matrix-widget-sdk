@@ -89,7 +89,7 @@ The Dev tools of a Matrix account (`sidepanel-roomtoolsview--*`) are **not reach
 | `sidepanel-devbackendview--timeline` | `devbackendTimeline.spec.ts` › message form: the event is added to the timeline and forwarded to the widget |
 | `sidepanel-devbackendview--timeline-raw-json` | `devbackendTimeline.spec.ts` › raw JSON form: invalid JSON shows an error and sends nothing, a valid event is sent |
 | `sidepanel-devbackendview--timeline-delayed` | `devbackendTimeline.spec.ts` › delayed event: it is listed under “Scheduled”; “Cancel” drops it and “Send now” sends it |
-| `sidepanel-devbackendview--timeline-pagination-requested` | `devbackendTimeline.spec.ts` › a widget's pagination waits for “Resolve pagination”: the generated messages reach the widget, then the start of the room |
+| `sidepanel-devbackendview--timeline-pagination-requested` | `devbackendTimeline.spec.ts` › a widget's pagination waits at the top of the events for “Resolve”: the generated messages reach the widget, then the start of the room |
 | `sidepanel-devbackendview--tools-collapsed` | `devbackend.spec.ts` › media tool: open (closing the client tool), upload a file, copy its MXC URI, minimise |
 | `sidepanel-devbackendview-state--widget` | `devbackendState.spec.ts` › the widget form sends any custom widget: it starts empty, only http(s) URLs; a legacy one gets the legacy fields |
 | `sidepanel-devbackendview-state--update-widget` | `devbackendState.spec.ts` › the test widget form sends the three test widgets, its URL read-only; “Update widget” for a widget the room has |
@@ -101,7 +101,10 @@ The Dev tools of a Matrix account (`sidepanel-roomtoolsview--*`) are **not reach
 | `sidepanel-devbackendview-tools--media` | `devbackend.spec.ts` › media tool: open (closing the client tool), upload a file, copy its MXC URI, minimise |
 | `sidepanel-roomtoolsview--no-room-open` | **not reachable**: the Dev tools of a Matrix account |
 | `sidepanel-roomtoolsview--room-dropdown` | **not reachable**: the Dev tools of a Matrix account |
+| `sidepanel-roomtoolsview--state-and-timeline` | **not reachable**: the Dev tools of a Matrix account (the DevBackendView's bar on the left: `sidepanel.spec.ts` › Dev tools: the room dev tools below the slim header, the bar on the left with the panels stacked, no close or reload; the dock switch moves it) |
+| `sidepanel-roomtoolsview--state-form-open` | **not reachable**: the Dev tools of a Matrix account |
 | `sidepanel-roomtoolsview--state` | **not reachable**: the Dev tools of a Matrix account |
+| `sidepanel-roomtoolsview--state-form-menu` | **not reachable**: the Dev tools of a Matrix account (the menu of the DevBackendView: `devbackendState.spec.ts` › the Element Call form writes the call widget as Element Web describes it, and the compat wrapper fills in its URL) |
 | `sidepanel-roomtoolsview--timeline` | **not reachable**: the Dev tools of a Matrix account |
 | `sidepanel-roomtoolsview--loading-failed` | **not reachable**: the Dev tools of a Matrix account |
 
@@ -121,9 +124,18 @@ The Dev tools of a Matrix account (`sidepanel-roomtoolsview--*`) are **not reach
 | `rooms-tabbar--overview-active` | `tabs.spec.ts` › the room name is the first tab: it shows the overview, where running widgets offer “Jump to tab”; the + selects it too |
 | `rooms-tabbar--pinned` | `widgetMove.spec.ts` › always on screen: the tab gets a pin, moving away shows the widget in the PiP panel, without a reload |
 | `rooms-tabbar--timeline-active` | `timeline.spec.ts` › “Open timeline” adds the Timeline tab at the end; its lines are the room's events, oldest first; pressing one shows its JSON |
+| `rooms-tabbar--room-dev-tools-active` | `roomDevTools.spec.ts` › “Open room dev tools” adds the tab at the end: bar on top, State and Timeline side by side; “Show room dev tools” shows it again |
 | `rooms-tabbar--overflow` | `tabs.spec.ts` › more tabs than fit: the widget tabs scroll behind the room name and the “All tabs” menu lists and activates them |
 | `rooms-roomoverview--plain` | `overview.spec.ts` › a room opens on its overview: the room name is selected; topic, members and widgets |
-| `rooms-roomoverview--dev-tools` | `overview.spec.ts` › with dev tools enabled: “Add widget” and the local widgets after the room's; a DevBackend room has no “Copy to DevBackend” card (partly: the DevBackend card needs a Matrix room) |
+| `rooms-roomoverview--dev-tools` | `overview.spec.ts` › with dev tools enabled: “Add widget” and the local widgets after the room's; a DevBackend room has no “Copy to DevBackend” card (partly: the DevBackend card needs a Matrix room; "Open room dev tools": `roomDevTools.spec.ts`) |
+| `rooms-roomoverview--room-dev-tools-open` | `roomDevTools.spec.ts` › “Open room dev tools” adds the tab at the end: bar on top, State and Timeline side by side; “Show room dev tools” shows it again |
+| `rooms-roomdevtools--docked-top` | `roomDevTools.spec.ts` › “Open room dev tools” adds the tab at the end: bar on top, State and Timeline side by side; “Show room dev tools” shows it again (partly: in the DevBackend, so without "sending as", the forms closed and nothing scheduled) |
+| `rooms-roomdevtools--docked-left` | `roomDevTools.spec.ts` › the toggles and the × of a panel open and close the panels; the filters; docked left the panels stack; the separator resizes them (partly: the lab seed's state and events) |
+| `rooms-roomdevtools--narrow` | `roomDevTools.spec.ts` › “Open room dev tools” adds the tab at the end: bar on top, State and Timeline side by side; “Show room dev tools” shows it again (partly: in the DevBackend, without "sending as") |
+| `rooms-roomdevtools--one-panel` | `roomDevTools.spec.ts` › the toggles and the × of a panel open and close the panels; the filters; docked left the panels stack; the separator resizes them (partly: without a widget's pagination request, which `devbackendTimeline.spec.ts` › a widget's pagination waits at the top of the events for “Resolve”: the generated messages reach the widget, then the start of the room covers) |
+| `rooms-roomdevtools--loading` | **not reachable**: the DevBackend reads a room at once |
+| `rooms-roomdevtools--no-match` | `roomDevTools.spec.ts` › the toggles and the × of a panel open and close the panels; the filters; docked left the panels stack; the separator resizes them |
+| `rooms-roomdevtools--empty` | **not reachable**: a mocked room always has its create event, its name and the user's membership |
 | `rooms-roomoverview--add-widget` | `overview.spec.ts` › Add widget, only in this host: listed as “Local”, nothing is sent; it asks for its capabilities, remembered apart from the room widget's |
 | `rooms-roomoverview--add-widget-custom` | `overview.spec.ts` › Add widget, only in this host: listed as “Local”, nothing is sent; it asks for its capabilities, remembered apart from the room widget's |
 | `rooms-roomoverview--add-widget-json` | `overview.spec.ts` › Add widget, Paste JSON: a whole state event, other fields ignored; not a widget type or not an http(s) URL is refused in the form (a pasted state event as Element's room state explorer shows it) |
@@ -179,4 +191,4 @@ The Dev tools of a Matrix account (`sidepanel-roomtoolsview--*`) are **not reach
 | `sketch-rooms-roomoverview--plain` | **sketch**, redraw of `rooms-roomoverview--plain`: the "Show all 12 members" link (finding `overview-show-all-members`) |
 | `sketch-sidepanel-devbackendview--timeline` | **sketch**, redraw of `sidepanel-devbackendview--timeline`: the Sender of the send forms as a select with avatars (`implementation_findings.md`, Trivial) |
 | `sketch-sidepanel-devbackendview--timeline-delayed` | **sketch**, redraw of `sidepanel-devbackendview--timeline-delayed`: what a scheduled row sends, event rows in words (`implementation_findings.md`, Trivial) |
-| `sketch-sidepanel-devbackendview-tools--to-device` | **sketch**, redraw of `sidepanel-devbackendview-tools--to-device`: one Sender select (finding `devbackend-todevice-sender`) |
+| `sketch-sidepanel-devbackendview-tools--to-device` | **sketch**, redraw of `sidepanel-devbackendview-tools--to-device`: one Sender select instead of the user and device fields (finding `devbackend-todevice-sender`) |

@@ -82,6 +82,7 @@ export function SettingsView({ settings, devBackendActive }: SettingsViewProps) 
             ["cone", "Dev tools", "button in the left bar: state and timeline of the open rooms"],
             ["dots", "Widget dev tools", "via the ⋯ button of a widget tab"],
             ["plus", "Add widget", "in the room overview"],
+            ["goToTab", "Room dev tools", "a tab, opened from the room overview"],
           ]}
         />
       )}

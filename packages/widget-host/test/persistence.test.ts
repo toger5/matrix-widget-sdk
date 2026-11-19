@@ -15,6 +15,15 @@ afterEach(() => {
 });
 
 describe("loadPersisted", () => {
+  it("keeps a room dev tools tab with its layout (where its bar is, which panels are open)", () => {
+    const tabs = [
+      { kind: "widget", id: "t1", widgetId: "!a:example.org|m.widget/call" },
+      { kind: "roomTools", id: "t2", layout: { dock: "left", panels: [{ panel: "timeline", share: 1 }] } },
+    ];
+    storeUi({ workspaces: { ada: { roomsArea: { panels: [{ id: "p1", content: { kind: "room", roomId: "!a:example.org", tabs, activeTabId: "t2" } }] } } } });
+    expect(loadPersisted()?.workspaces.ada.roomsArea.panels[0].content).toEqual({ kind: "room", roomId: "!a:example.org", tabs, activeTabId: "t2" });
+  });
+
   it("drops the removed tab kinds: a room whose stored active tab was the room overview tab shows its RoomOverview", () => {
     storeUi({
       settings: { devTools: true, theme: "dark" },

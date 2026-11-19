@@ -9,6 +9,8 @@
 .dt-title { white-space: nowrap; display: inline-flex; align-items: center; gap: 6px; margin-right: 8px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; font-size: 11px; color: var(--text-muted); }
 .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--text-faint); }
 .dot.ok { background: var(--highlight); }
+.dot.wait { background: var(--warning); }
+.dot.err { background: var(--danger); }
 .dt-btn { height: 24px; display: inline-flex; align-items: center; gap: 5px; padding: 0 8px; border-radius: var(--r-1); border: 1px solid transparent; color: var(--text-muted); font-weight: 500; letter-spacing: 0.05em; text-transform: uppercase; font-size: 11px; }
 .dt-btn.on { background: var(--dt-bg); border-color: var(--border-strong); color: var(--text); box-shadow: inset 0 -2px 0 var(--info); }
 .dt-btn em { display: inline-flex; align-items: center; gap: 2px; font-style: normal; font-size: 11px; padding: 0 4px; border-radius: 2px; background: var(--surface-3); color: var(--text-muted); letter-spacing: 0; }
@@ -18,6 +20,7 @@
 .dt-ib { width: 24px; height: 24px; border: 1px solid transparent; display: grid; place-items: center; border-radius: 2px; color: var(--text-muted); }
 .dt-ib.on { background: var(--surface-3); color: var(--text); border-color: var(--text-muted); }
 .dt-reload { margin-right: 2px; }
+.dt-dock:last-child { margin-right: 0; }
 .dt-panels { position: relative; flex: none; display: flex; min-height: 0; min-width: 0; }
 .dt-split { flex: none; width: 8px; background: linear-gradient(90deg, transparent 3px, var(--text-muted) 3px 5px, transparent 5px) var(--dt-bar); cursor: col-resize; }
 .dt-resize { flex: none; height: 8px; display: grid; place-items: center; background: var(--dt-bar); border-block: 1px solid var(--dt-border); cursor: row-resize; }
@@ -30,28 +33,34 @@
 .dt-tools .input { width: 150px; flex: 0 1 150px; }
 .dt-sub { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; font-size: 10.5px; color: var(--text-muted); }
 .dt-sub em { font-style: normal; font-weight: 400; }
+/* an empty list, a list whose filter matches nothing, a panel whose data loads or failed */
+.dt-empty { margin: 0; padding: 14px 12px; color: var(--text-muted); text-align: center; font: 12px/1.4 var(--font-tech); white-space: normal; }
+.dt-empty b { color: var(--text); font-weight: 600; }
 
-/* dock left / right: the bar becomes a vertical strip, panels stack */
-.wv.dock-left .dt, .wv.dock-right .dt { flex-direction: row; }
-.wv.dock-right .dt { order: 2; flex-direction: row-reverse; }
-.wv.dock-left .dt-bar, .wv.dock-right .dt-bar { width: 30px; height: auto; flex-direction: column; padding: 8px 0; gap: 4px; border-bottom: 0; }
-.wv.dock-left .dt-bar { border-right: 1px solid var(--dt-border); }
-.wv.dock-right .dt-bar { border-left: 1px solid var(--dt-border); }
-.wv.dock-left .dt-title, .wv.dock-right .dt-title { margin: 0 0 6px; }
-.wv.dock-left .dt-title span, .wv.dock-right .dt-title span { display: none; }
-.wv.dock-left .dt-btn, .wv.dock-right .dt-btn { writing-mode: vertical-rl; height: auto; width: 24px; padding: 8px 0; }
-.wv.dock-left .dt-btn em, .wv.dock-right .dt-btn em { writing-mode: horizontal-tb; padding: 0 2px; min-width: 16px; text-align: center; }
-.wv.dock-left .dt-dock, .wv.dock-right .dt-dock { flex-direction: column; margin: 0 0 4px; }
-.wv.dock-left .dt-panels, .wv.dock-right .dt-panels { flex-direction: column; }
-.wv.dock-left .dt-split, .wv.dock-right .dt-split { width: auto; height: 8px; background: linear-gradient(transparent 3px, var(--text-muted) 3px 5px, transparent 5px) var(--dt-bar); cursor: row-resize; }
+/* dock left / right: the bar becomes a vertical strip at the outer edge, the panels stack; dock bottom: the bar at the bottom edge,
+   the panels above it. Widget and room dev tools alike (`.dt.dt-<dock>`). */
+.dt.dt-left, .dt.dt-right { flex-direction: row; }
+.dt.dt-right { flex-direction: row-reverse; }
+.dt.dt-bottom { flex-direction: column-reverse; }
+.dt.dt-left .dt-bar, .dt.dt-right .dt-bar { width: 30px; height: auto; flex-direction: column; padding: 8px 0; gap: 4px; border-bottom: 0; }
+.dt.dt-left .dt-bar { border-right: 1px solid var(--dt-border); }
+.dt.dt-right .dt-bar { border-left: 1px solid var(--dt-border); }
+.dt.dt-left .dt-title, .dt.dt-right .dt-title { margin: 0 0 6px; }
+.dt.dt-left .dt-title span, .dt.dt-right .dt-title span { display: none; }
+.dt.dt-left .dt-btn, .dt.dt-right .dt-btn { writing-mode: vertical-rl; height: auto; width: 24px; padding: 8px 0; }
+.dt.dt-left .dt-btn em, .dt.dt-right .dt-btn em { writing-mode: horizontal-tb; padding: 0 2px; min-width: 16px; text-align: center; }
+.dt.dt-left .dt-dock, .dt.dt-right .dt-dock { flex-direction: column; margin: 0 0 4px; }
+.dt.dt-left .dt-panels, .dt.dt-right .dt-panels { flex-direction: column; }
+.dt.dt-left .dt-split, .dt.dt-right .dt-split { width: auto; height: 8px; background: linear-gradient(transparent 3px, var(--text-muted) 3px 5px, transparent 5px) var(--dt-bar); cursor: row-resize; }
+.dt.dt-left .dt-reload, .dt.dt-right .dt-reload { margin: 0 0 2px; }
+.dt.dt-bottom .dt-bar { border-bottom: 0; border-top: 1px solid var(--dt-border); }
+/* the bar's length does not follow its content: it measures whether the labelled toggles fit (`dt-compact`, below) */
+.dt.dt-left .dt-bar, .dt.dt-right .dt-bar { container-type: size; }
+.dt.dt-top, .dt.dt-bottom { container-type: inline-size; }
+/* widget only: the dev tools after the widget when docked right or bottom, and the handle towards the widget */
+.wv.dock-right .dt, .wv.dock-bottom .dt { order: 2; }
 .wv.dock-left .dt-resize, .wv.dock-right .dt-resize { width: 8px; height: auto; border-block: 0; border-inline: 1px solid var(--dt-border); cursor: col-resize; }
 .wv.dock-left .dt-resize i, .wv.dock-right .dt-resize i { width: 2px; height: 28px; }
-.wv.dock-left .dt-reload, .wv.dock-right .dt-reload { margin: 0 0 2px; }
-/* the vertical bar is a size container: a short one shows icons only (see below) */
-.wv.dock-left .dt-bar, .wv.dock-right .dt-bar { container: dtbar / size; }
-/* dock bottom: the bar at the bottom edge, the panels and their separator above it (mirrors dock right) */
-.wv.dock-bottom .dt { order: 2; flex-direction: column-reverse; }
-.wv.dock-bottom .dt-bar { border-bottom: 0; border-top: 1px solid var(--dt-border); }
 
 .msgs { flex: 1; overflow: hidden; }
 .msg { border-bottom: 1px solid var(--dt-border); }
@@ -139,13 +148,8 @@
 .cl.error .cl-l { color: var(--danger); }
 .cl.info .cl-l { color: var(--info); }
 
-/* --- narrow dev tools: icons only in a narrow or short bar, no action prefix, stat tiles in one row */
-@container wv (max-width: 600px) {
-  .dt-top .dt-btn > span, .dt-top .dt-title > span, .dt-bottom .dt-btn > span, .dt-bottom .dt-title > span { display: none; }
-}
-@container dtbar (max-height: 600px) {
-  .dt-btn > span { display: none; }
-}
+/* --- narrow dev tools: icons and badges only in a bar too short for the labelled toggles (measured by the bar), no action prefix, stat tiles in one row */
+.dt-compact .dt-btn > span, .dt-compact .dt-title > span { display: none; }
 @container dtp (max-width: 420px) {
   .dt-tools .muted, .dt-tools .chip { display: none; }
   .msg-a i { display: none; }
@@ -160,3 +164,76 @@
   .chart-h > span:first-child i { display: none; }
 }
 @container dtp (max-width: 360px) { .stat-grid { grid-template-columns: 1fr 1fr; } }
+
+/* --- forms and trees inside dev tools panels (the room dev tools, the DevBackend's tool boxes): labels left of their fields, dense rows */
+.dt .form { display: grid; grid-template-columns: minmax(0, 1fr); gap: 4px; padding: 0; border-radius: 0; background: none; }
+.dt .field { grid-template-columns: 76px minmax(0, 1fr); align-items: center; gap: 8px; }
+.dt .field-l { font-size: 11px; font-weight: 400; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dt .form .inline-row { gap: 6px; min-height: 26px; }
+.dt .check { width: 16px; height: 16px; border-radius: var(--r-1); }
+/* a read-only value (the account as sender, a test widget's URL): plain text, not a field */
+.dt-val { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 11px var(--font-mono); color: var(--text-muted); }
+/* a disclosure inside a `.dt-sub` heading (the send form of a panel, a section of a tool box) */
+.dt-disc { height: 24px; display: inline-flex; align-items: center; gap: 5px; font: inherit; letter-spacing: inherit; text-transform: inherit; color: inherit; }
+.dt-disc[aria-expanded="true"] { color: var(--text); }
+/* text that keeps its distinguishing end: truncated at the start ("…msc3401.call.member") */
+.dt-trunc-start { direction: rtl; text-align: left; }
+.dt-trunc-start > bdi { direction: ltr; unicode-bidi: isolate; }
+.dt .tree, .dt .tree-group { display: grid; grid-template-columns: minmax(0, 1fr); min-width: 0; }
+.dt .tree-row { width: 100%; height: 24px; gap: 6px; padding: 0 8px 0 4px; border-radius: 0; border-bottom: 1px solid var(--dt-border); text-align: left; white-space: nowrap; }
+.dt .tree-row.lvl1 { padding-left: 22px; }
+.dt .tree-row.sel { background: var(--surface-2); box-shadow: none; color: var(--text); }
+.dt .tree-key { flex: 1; min-width: 0; height: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; }
+.dt .tree-row .rdt-p { color: var(--text-faint); }
+.dt .tree-group > .msg-b { border-bottom: 1px solid var(--dt-border); background: var(--surface); }
+.dt-empty .spinner { display: block; width: 18px; height: 18px; margin: 0 auto 8px; border-width: 2px; }
+.dt-empty > .ico { display: block; margin: 0 auto 6px; color: var(--danger); }
+.dt-empty .btn { margin-top: 8px; }
+
+/* --- Room dev tools: the bar of the dev tools over a room's State and Timeline panels, filling the SidePanel or a room tab */
+.rdt { flex: 1 1 auto; }
+.rdt-main { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; }
+.rdt .dt-panels { flex: 1; }
+/* a Matrix account: what is sent goes to the real room, as the account */
+.rdt-status { flex: none; height: 22px; display: flex; align-items: center; gap: 6px; padding: 0 8px; border-top: 1px solid var(--dt-border); background: var(--dt-bar); color: var(--text-muted); font-size: 11px; white-space: nowrap; overflow: hidden; }
+.rdt-status > span { overflow: hidden; text-overflow: ellipsis; }
+.rdt-status .ico { flex: none; color: var(--warning); }
+.rdt-status b { color: var(--text); font: 500 11px var(--font-mono); }
+/* a panel: the toolbar (filter), then the send form and the list. Above the list an open form takes at most 45% and scrolls;
+   in a panel of 520px or more it is a column left of the list. */
+.rdt-body { flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
+.rdt-compose { flex: none; display: flex; flex-direction: column; min-height: 0; border-bottom: 1px solid var(--dt-border); }
+.rdt-compose.open { max-height: 45%; }
+.rdt-compose > .dt-sub { flex: none; padding: 0 4px; }
+.rdt-compose-b { flex: 0 1 auto; min-height: 0; overflow-y: auto; display: grid; grid-template-columns: minmax(0, 1fr); align-content: start; gap: 4px; padding: 0 8px 8px; }
+.rdt-list { flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: hidden; container: dtl / inline-size; }
+.rdt-list > * { flex: none; }
+.rdt-list > .dt-sub { padding: 8px 8px 4px; border-bottom: 1px solid var(--dt-border); }
+@container dtp (min-width: 520px) {
+  .rdt-body:has(> .rdt-compose.open) { flex-direction: row; }
+  .rdt-compose.open { width: clamp(240px, 38%, 340px); max-height: none; border-bottom: 0; border-right: 1px solid var(--dt-border); }
+}
+/* the form menu in the heading of the send form */
+.rdt-menu { position: relative; display: inline-flex; text-transform: none; letter-spacing: 0; font-weight: 400; }
+.rdt-menu > .dropdown { right: 0; top: 26px; min-width: 190px; }
+.rdt-menu .dd-row { width: 100%; padding: 4px 8px; text-align: left; }
+.rdt-menu .dd-sep { margin: 3px 0; }
+/* rows: events, scheduled events and the pagination request are `.msg` rows of the widget's Messages panel */
+.rdt-t { flex: 0 1 auto; min-width: 40px; max-width: 45%; overflow: hidden; text-overflow: ellipsis; font: 11px var(--font-mono); color: var(--text); }
+.rdt-p { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; color: var(--text-muted); }
+.rdt-p.mono { font: 11px var(--font-mono); }
+.rdt-s { flex: none; max-width: 30%; overflow: hidden; text-overflow: ellipsis; font: 11px var(--font-mono); color: var(--text-faint); }
+.rdt-s i { font-style: normal; }
+.rdt-sched { background: color-mix(in srgb, var(--warning) 6%, transparent); }
+.rdt-due { flex: none; display: inline-flex; align-items: center; gap: 3px; color: var(--warning); font-size: 11px; font-variant-numeric: tabular-nums; }
+.rdt-acts { flex: none; display: inline-flex; gap: 1px; margin-left: auto; }
+.rdt-acts .dt-ib { width: 22px; height: 22px; }
+.rdt-pag { height: auto; min-height: 24px; flex-wrap: wrap; row-gap: 2px; padding-block: 2px; background: color-mix(in srgb, var(--warning) 10%, transparent); box-shadow: inset 2px 0 0 var(--warning); }
+.rdt-pag > .ico { color: var(--warning); }
+.rdt-pag .input.narrow { width: 48px; }
+.rdt-pag label { display: inline-flex; align-items: center; gap: 5px; color: var(--text-muted); }
+.rdt-more { justify-content: center; color: var(--text-muted); }
+@container dtl (max-width: 420px) {
+  .msg-h > .rdt-p, .rdt-s > i { display: none; }
+  .rdt-t { flex: 1 1 auto; max-width: 65%; }
+}

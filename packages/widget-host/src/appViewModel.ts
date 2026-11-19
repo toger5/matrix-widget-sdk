@@ -24,11 +24,13 @@
  *       ├─ leftBar                     LeftBar
  *       ├─ sidePanel                   SidePanel: AccountView | Settings | Room list (RoomPicker) | Dev tools
  *       │                              (of the open rooms; the DevBackendView while the DevBackend is active)
- *       ├─ roomTools?                  UI state of the Dev tools: picked room per account, sections, forms,
- *       │                              what an account scheduled; the DevBackend's tool boxes and behavior
+ *       ├─ roomTools?                  UI state of the Dev tools: picked room per account, the layout of the
+ *       │                              SidePanel's room dev tools, forms, what an account scheduled; the
+ *       │                              DevBackend's tool boxes (sections) and behavior
  *       ├─ workspaces[accountId]       WorkspaceLayout: persisted, one per account
  *       │  ├─ roomsArea                RoomsArea (a DockArea: rows and side columns of panels) → RoomPanel
- *       │  │                           → RoomPicker | RoomView → room name (RoomOverview) + Tabs (widgets, the RoomTimeline)
+ *       │  │                           → RoomPicker | RoomView → room name (RoomOverview) + Tabs (widgets, the RoomTimeline,
+ *       │  │                             the room dev tools with their layout)
  *       │  ├─ pip                      PictureInPicturePanel: stacking, position, box size
  *       │  └─ devTools[widgetId]       dock and panels of each widget's WidgetDevToolBar
  *       ├─ data                        what the active account knows: rooms, local widgets, recent widgets and rooms
@@ -287,12 +289,23 @@ export interface RoomToolsViewModel {
    * while the room is open in a room panel: `roomToolsRoomId`.
    */
   selectedRoomIds: Record<AccountId, RoomId>;
-  /** Of the room box, and of the Client Backend Tool (DevBackend). */
+  /**
+   * The room dev tools of the SidePanel (a room tab has its own, `TabViewModel` "roomTools"): bar on
+   * the left and both panels by default. stories `sidepanel-roomtoolsview--state-and-timeline`,
+   * `sidepanel-roomtoolsview--state`, `sidepanel-roomtoolsview--timeline`
+   */
+  layout: RoomDevToolsLayout;
+  /** The open sections of the Client Backend Tool (DevBackend). */
   openSections: RoomToolsSection[];
   /** Which predefined form "send event" shows. "raw" is the JSON editor. */
   sendForm: "message" | "sticker" | "rtcMember" | "media" | "raw";
-  /** Which predefined form "send state" shows. "raw" is type, state key and a JSON editor. stories `sidepanel-devbackendview--state`, `sidepanel-devbackendview-state--widget`, `sidepanel-devbackendview-state--update-widget`, `sidepanel-devbackendview-state--element-call`, `sidepanel-devbackendview-state--raw-json` */
-  stateForm: "testWidget" | "widget" | "elementCall" | "raw";
+  /**
+   * Which predefined form "send state" shows: the widget forms, the shortcuts ("name", "topic";
+   * "member" only in the DevBackend), "raw" (type, state key and a JSON editor). stories
+   * `sidepanel-devbackendview--state`, `sidepanel-devbackendview-state--widget`, `sidepanel-devbackendview-state--update-widget`,
+   * `sidepanel-devbackendview-state--element-call`, `sidepanel-devbackendview-state--raw-json`, `sidepanel-roomtoolsview--state-form-menu`
+   */
+  stateForm: "testWidget" | "widget" | "elementCall" | "name" | "topic" | "member" | "raw";
   /** DevBackend: the tool boxes below the room box. stories `sidepanel-devbackendview--tools-collapsed`, `sidepanel-devbackendview-tools--*` */
   tools: {
     /** The one open tool box; the other tools are buttons. `null`: only the buttons. */
@@ -310,8 +323,29 @@ export interface RoomToolsViewModel {
   scheduled: Record<AccountId, Record<RoomId, ScheduledEvent[]>>;
 }
 
-/** The sections of the room box ("state", "timeline") and of the Client Backend Tool. */
-export type RoomToolsSection = "state" | "timeline" | "widgetHostBehavior" | "toDevice";
+/** The collapsible sections of the Client Backend Tool. story `sidepanel-devbackendview-tools--behavior` */
+export type RoomToolsSection = "widgetHostBehavior" | "toDevice";
+
+/** The panels of the room dev tools, in bar order. */
+export type RoomDevToolPanel = "state" | "timeline";
+
+/**
+ * The room dev tools: the bar of the WidgetDevToolBar (status dot, a toggle per panel, the dock
+ * switch; no reload, no close) and the open panels. They fill the place they are in (the SidePanel,
+ * a room tab), so there is no size. As in the widget dev tools, docked left or right the panels
+ * stack, docked top or bottom they sit side by side. stories `sidepanel-roomtoolsview--state-and-timeline`,
+ * `rooms-roomdevtools--docked-top`, `rooms-roomdevtools--docked-left`, `rooms-roomdevtools--narrow`,
+ * `rooms-roomdevtools--one-panel`
+ */
+export interface RoomDevToolsLayout {
+  /** Where the bar is: the SidePanel's starts "left", a room tab's "top". */
+  dock: WidgetDevToolsLayout["dock"];
+  /** The open panels, in bar order; `share` divides the space between them. Empty: only the bar. */
+  panels: { panel: RoomDevToolPanel; share: number }[];
+}
+
+/** Which room dev tools an intent changes: the SidePanel's (`RoomToolsViewModel.layout`) or those of a room tab. */
+export type RoomDevToolsTarget = { in: "sidePanel" } | { in: "tab"; panelId: PanelId; tabId: TabId };
 
 /** A delayed event that is scheduled but not sent yet. */
 export interface ScheduledEvent {
@@ -419,10 +453,14 @@ export interface RoomViewModel {
  * - `widget` shows a widget. Label, icon, load state and pin marker come from the widget (`widgets`).
  * - `timeline` shows the RoomTimeline of the panel's room, at most one per room panel. Its events
  *   are not in the view model: `useViewEnv().useTimelineViewModel(roomId)`. stories `rooms-tabbar--timeline-active`, `rooms-roomtimeline--*`
+ * - `roomTools` shows the room dev tools of the panel's room (dev tools enabled), at most one per
+ *   room panel, bar on top by default. The DevBackend's tools are not in it. stories
+ *   `rooms-tabbar--room-dev-tools-active`, `rooms-roomdevtools--docked-top`, `rooms-roomdevtools--loading`,
+ *   `rooms-roomoverview--room-dev-tools-open`
  *
  * Stored layouts can hold the removed kinds "native" (the overview) and "new": they are dropped on load.
  */
-export type TabViewModel = { kind: "widget"; id: TabId; widgetId: WidgetInstanceId } | { kind: "timeline"; id: TabId };
+export type TabViewModel = { kind: "widget"; id: TabId; widgetId: WidgetInstanceId } | { kind: "timeline"; id: TabId } | { kind: "roomTools"; id: TabId; layout: RoomDevToolsLayout };
 
 /**
  * The floating container of the always-on-screen widgets whose tab is not shown. Which widgets
@@ -825,6 +863,7 @@ export type AppIntent =
   | { type: "tab/openWidget"; panelId: PanelId; widgetKey: WidgetKey } // a widget of the RoomOverview: a new tab at the end; already running: jumps to its tab
   | { type: "tab/moveWidgetHere"; panelId: PanelId; widgetId: WidgetInstanceId } // "move widget here" of the RoomOverview: closes its tab in the other room panel and opens it in this one; the widget keeps running
   | { type: "tab/openTimeline"; panelId: PanelId } // "Open timeline" / "Show timeline" of the RoomOverview: activates the panel's timeline tab, a new one at the end if it has none; the tab left behind may enter the PiP panel
+  | { type: "tab/openRoomTools"; panelId: PanelId } // "Open room dev tools" / "Show room dev tools" of the RoomOverview (dev tools enabled): activates the panel's room dev tools tab, a new one at the end if it has none (bar on top, both panels); the tab left behind may enter the PiP panel
   | { type: "tab/activate"; panelId: PanelId; tabId: TabId } // the tab of an always-on-screen widget: takes it out of the PiP panel; the tab left behind may enter it
   | { type: "tab/move"; panelId: PanelId; tabId: TabId; toIndex: number }
   | { type: "tab/toPanel"; panelId: PanelId; tabId: TabId; intoPanelId: PanelId } // a tab dragged onto another panel of its room: it becomes that panel's shown tab (a timeline tab where that panel has one shows that one); the widget keeps running
@@ -859,7 +898,10 @@ export type AppIntent =
   | { type: "room/loadOlderEvents"; roomId: RoomId } // "Load older events" of the RoomTimeline, once it shows every loaded event: the session loads up to OLDER_EVENTS_PER_LOAD older ones (from its store or the homeserver); a failure is a toast
   // Dev tools: the DevBackend while it is active, else the room as the active Matrix account (through the room's backend)
   | { type: "roomTools/selectRoom"; roomId: RoomId } // the dropdown, for the active account
-  | { type: "roomTools/toggleSection"; section: RoomToolsSection }
+  | { type: "roomTools/toggleSection"; section: RoomToolsSection } // a section of the Client Backend Tool (DevBackend)
+  | { type: "roomDevTools/togglePanel"; target: RoomDevToolsTarget; panel: RoomDevToolPanel } // a toggle of the bar, and the × of a panel: opens the panel (in bar order, the shares evened out) or closes it
+  | { type: "roomDevTools/dock"; target: RoomDevToolsTarget; dock: RoomDevToolsLayout["dock"] } // the dock switch of the bar
+  | { type: "roomDevTools/resize"; target: RoomDevToolsTarget; shares: number[] } // the separator between the panels
   | { type: "roomTools/setSendForm"; form: RoomToolsViewModel["sendForm"] }
   | { type: "roomTools/setStateForm"; form: RoomToolsViewModel["stateForm"] } // which form "send state" shows
   | { type: "roomTools/sendState"; roomId: RoomId; event: MockedStateEvent; delayMs?: number; confirmed?: boolean } // also "edit state" and the shortcuts. A real room: confirmed if it changes the room's configuration (`ROOM_CONFIGURATION_TYPES`, another user's membership, replacing a widget); a refusal is a toast
@@ -872,7 +914,7 @@ export type AppIntent =
   | { type: "mock/setBehavior"; behavior: Partial<WidgetHostBehavior> } // for all mocked rooms
   | { type: "mock/setFailSends"; on: boolean } // every send of a widget in every mocked room fails (or succeeds again)
   | { type: "mock/clearRoom"; roomId: RoomId } // drops all events of the mocked room
-  | { type: "mock/resolvePagination"; roomId: RoomId; count: number; startReached: boolean } // "Resolve pagination": `count` random messages older than the oldest event end the pagination a widget asked for; the widgets are told (`notify_timeline_update`)
+  | { type: "mock/resolvePagination"; roomId: RoomId; count: number; startReached: boolean } // "Resolve" (the pagination request of the room dev tools): `count` random messages older than the oldest event end the pagination a widget asked for; the widgets are told (`notify_timeline_update`)
   | { type: "mock/toggleTool"; tool: DevBackendTool } // opens the tool box (closing the open one) or minimises it
   | { type: "mock/resizeTool"; heightShare: number } // the share of the open tool box
   | { type: "media/upload"; files: File[] }

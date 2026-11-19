@@ -1,7 +1,7 @@
 /** The `ViewEnv` of the stories: intents are logged, the data hooks answer from fixtures, widgets are fakes. */
 import type { Decorator, Parameters } from "@storybook/react-vite";
 import type { CSSProperties, ReactNode } from "react";
-import { waitFor } from "storybook/test";
+import { waitFor, within } from "storybook/test";
 
 import { WIDGET_EVENT_TYPES, type WidgetEventParser } from "../widgetStateEvent";
 import { rawTimelineItems } from "../appViewModel";
@@ -230,3 +230,7 @@ export const findElement = <T extends HTMLElement = HTMLElement>(root: HTMLEleme
     if (!found) throw new Error(`no ${selector}${text ? ` containing "${text}"` : ""}`);
     return found;
   });
+
+/** For play functions: open the send form of the room dev tools' panel `panel` ("Send state", "Send event"). */
+export const openSendForm = async (root: HTMLElement, panel: "State" | "Timeline") =>
+  within(await within(root).findByRole("region", { name: panel })).getByRole("button", { name: panel === "State" ? "Send state" : "Send event" }).click();

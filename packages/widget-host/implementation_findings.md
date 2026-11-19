@@ -48,7 +48,7 @@ Not decisions, but statements in the documents that turned out wrong or outdated
 
 | Name | Where | Question | Options | Now |
 | --- | --- | --- | --- | --- |
-| `devbackend-header-buttons` | `src/views/devbackend/RoomBox.tsx` | Where "close panel", "clear room" and "remove room" go; the designed header only has the dropdown | (a) header buttons (b) inside the dropdown | A ⋯ menu ("Room actions", DevBackend only) and × next to the dropdown; the Dev tools of a Matrix account have the × too |
+| `room-dev-tools-tab-without-dev-tools` | `src/views/rooms/RoomView.tsx` | Dev tools turned off while a room dev tools tab is open | (a) the tab stays and works until it is closed (b) the tabs close (c) the tab shows a hint instead | (a): only "Open room dev tools" needs dev tools |
 | `devbackend-destructive-confirm` | `RoomBox.tsx` | Clear room / remove room lose state | confirm or not | Not confirmed |
 | `devbackend-rtc-member-shape` | `src/views/devbackend/TimelineSection.tsx` | Which event the "RTC member" form sends | (a) `org.matrix.msc4143.rtc.member` timeline event (b) `org.matrix.msc3401.call.member` state event | (a), with a guessed content (empty = left) |
 | `devbackend-raw-form-shape` | `TimelineSection.tsx` | Raw JSON: one editor for `{type, sender, content}` (as designed) or type + content fields | either | One editor |
@@ -169,10 +169,12 @@ Login, sync, suspend/resume, device verification and the storage migration of bo
 - The timeline list of the Dev tools and its count include state events (the lab seed shows "12 events" for 3 messages), as the RoomTimeline does. Its rows show the generic content preview (`previewOf`), not the descriptions of the RoomTimeline (`describeEvent`: "joined", "👍") of the design (sketch `sketch-sidepanel-devbackendview--timeline-delayed`).
 - `populate` does not reset view-local drafts (send forms, filters, the delayed toggle).
 - Scheduled rows show "timeline" where the design shows a body preview (sketch `sketch-sidepanel-devbackendview--timeline-delayed`): `ScheduledEvent` has no content.
-- The to-device list is headed "Messages" (design: "Sent by widgets"); rows sent by widgets show device `*`.
+- Rows of the to-device list sent by widgets show device `*` in their tooltip.
+- "Joined" of the RTC member form and "Uses the widget API" of the widget forms (shared with "Add widget") stay switches; the other options of the room dev tools and the Client Backend Tool are checkboxes.
+- The send forms of the room dev tools start collapsed wherever the room dev tools are shown (view state), and the Settings view lists "Room dev tools" among what dev tools enable (not drawn).
 - The sender of the send forms (DevBackend) is a text input with suggestions; the design has a select with an avatar (sketch `sketch-sidepanel-devbackendview--timeline`).
 - The selects of the forms (event type of the widget forms, msgtype, the Element Call intent) are native `<select class="input mono">` with the browser's arrow; the design draws a select as a field with a chevron icon (`.input.select` in `src/styles/atoms.css`, as the sender sketches show).
-- The Dev tools of a Matrix account: the shortcut forms and the state editor close on Save, so a refusal (a toast) or a cancelled confirmation loses their text; the send forms keep their drafts. The dropdown's room starts on the focused room panel's when the Dev tools open, unless the room picked before is still open.
+- The Dev tools of a Matrix account: the state editor closes on Save, so a refusal (a toast) or a cancelled confirmation loses its text; the send forms (the shortcuts too) keep their drafts. The dropdown's room starts on the focused room panel's when the Dev tools open, unless the room picked before is still open.
 - A widget may send `notify_ready` before its capabilities are answered, so it counts as ready while the permission prompt is shown.
 - In a narrow window the panel pager is partly hidden under the overlaying SidePanel.
 - The toast's 4 s auto-dismiss has no test (the tests do not sleep).

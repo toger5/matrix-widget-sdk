@@ -117,8 +117,12 @@ hands it to the driver of each widget of that room like any other `MatrixBackend
   start with another URL (the state event changed) finds nothing and asks again. Entries without a
   URL (version 1, and older version 2 ones) are not used.
 - **Dev tools** (the side panel, opened with the cone button of the left bar; shown while dev tools
-  are enabled or the DevBackend is active; it never switches accounts): the State and Timeline of
-  one room at a time, with a dropdown to switch rooms.
+  are enabled or the DevBackend is active; it never switches accounts): the room dev tools of one
+  room at a time, with a dropdown to switch rooms. The room dev tools use the bar of the widget dev
+  tools (status dot, the **State** and **Timeline** toggles, the dock switch): docked left (the
+  default here) or right the panels stack, docked top or bottom they sit side by side. **Open room
+  dev tools** in the room overview (dev tools enabled) opens them for the panel's room as a tab,
+  bar on top; the tab and its layout are kept with the workspace.
   - With a **Matrix account** the dropdown lists the rooms open in the room panels (it starts on the
     focused panel's room). Everything is sent to the real room **as you**, through the room's
     backend: another sender is refused, power levels, join rules, encryption, history visibility,
@@ -130,8 +134,9 @@ hands it to the driver of each widget of that room like any other `MatrixBackend
   - While the **DevBackend** is active it is the **DevBackendView**: one page per mocked room, the
     dropdown also adds rooms, events are sent as any user, and two tool boxes and **Leave
     DevBackend** are below the room box (leaving keeps the Dev tools open while dev tools are enabled).
-  - **State**: shortcuts (name, description, add member in the DevBackend), send a state event (also delayed) from
-    a form or as raw JSON, and the current state by type and key with an edit button. Sending a
+  - **State**: send a state event (also delayed) from a form of the **Send state** menu (also the
+    shortcuts: name, description, add member in the DevBackend) or as raw JSON, and the current
+    state by type and key with an edit button. Sending a
     widget state event adds a widget to the room; one without `url` removes it. The **Widget** form
     starts with a test widget (new or legacy); the **Element Call** form adds Element Call
     (default `https://call.element.io/room`, loaded from the internet) as Element Web describes its
@@ -142,9 +147,9 @@ hands it to the driver of each widget of that room like any other `MatrixBackend
     `host:…forward_event.*` / `host:…update_state` capability was approved. Events the widget
     sends are echoed back the same way. **Scheduled** lists the delayed events (MSC4157) with
     send now / restart / cancel; nothing fires by itself. The room's events are also the timeline
-    cache widgets read with `read_timeline`. A widget's `paginate_timeline` waits there:
-    **Pagination requested: N events** with how many random messages to generate (N, else 20) and
-    **Start reached**; **Resolve pagination** puts them before the oldest event and the widgets get
+    cache widgets read with `read_timeline`. A widget's `paginate_timeline` waits at the top of the
+    events: how many it asked for, how many random messages to generate (that many, else 20) and
+    **Start reached**; **Resolve** puts them before the oldest event and the widgets get
     `notify_timeline_update`.
   - **Client Backend Tool** (below the room box, shared by all mocked rooms; one tool box is open
     at a time): **Widget host behavior** (auto-approve capabilities, OpenID tokens included,

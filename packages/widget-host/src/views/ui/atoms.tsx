@@ -142,6 +142,15 @@ export function Toggle({ on, label, onChange, disabled }: { on: boolean; label: 
   );
 }
 
+/** A checkbox (`.check`): the dev tools' options ("Delayed", "Start reached", the DevBackend's behavior). */
+export function Check({ on, label, onChange, disabled }: { on: boolean; label: string; onChange: (on: boolean) => void; disabled?: boolean }) {
+  return (
+    <button type="button" className={`check ${on ? "on" : ""}`} role="checkbox" aria-checked={on} aria-label={label} disabled={disabled} onClick={() => onChange(!on)}>
+      {on && <Icon name="check" size={11} />}
+    </button>
+  );
+}
+
 /** A labelled control: `<label class="field"><span class="field-l">…</span>{children}</label>`. Give the child `className="input"`. */
 export function Field({ label, className = "", children }: { label: ReactNode; className?: string; children: ReactNode }) {
   return (

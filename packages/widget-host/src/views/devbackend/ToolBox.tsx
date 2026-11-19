@@ -1,6 +1,6 @@
 /**
- * The tool boxes below the room box: each tool is a button; at most one is open as a box, in the
- * place of its button. Stories `sidepanel-devbackendview--tools-collapsed`,
+ * The tool boxes below the room box, in the look of the room dev tools: each closed tool is a row
+ * like a panel header; at most one is open as a box, in the place of its row. Stories `sidepanel-devbackendview--tools-collapsed`,
  * `sidepanel-devbackendview-tools--*`.
  */
 import { useRef, type KeyboardEvent, type PointerEvent, type ReactNode } from "react";
@@ -27,10 +27,10 @@ let handOver: { tool: DevBackendTool; to: "box" | "button" } | undefined;
 const takeFocus = (tool: DevBackendTool, to: "box" | "button") => (el: HTMLElement | null) => {
   if (!el || handOver?.tool !== tool || handOver.to !== to) return;
   handOver = undefined;
-  (to === "box" ? el.querySelector<HTMLElement>(".side-head .ibtn") : el)?.focus();
+  (to === "box" ? el.querySelector<HTMLElement>(".dt-ph .ibtn") : el)?.focus();
 };
 
-/** A closed tool. Pressing it opens its box (and closes the open one). */
+/** A closed tool: a panel header. Pressing it opens its box (and closes the open one). */
 export function ToolButton({ tool, count }: { tool: DevBackendTool; count?: string }) {
   const dispatch = useDispatch();
   const t = TOOLS[tool];
@@ -39,11 +39,12 @@ export function ToolButton({ tool, count }: { tool: DevBackendTool; count?: stri
     dispatch({ type: "mock/toggleTool", tool });
   };
   return (
-    <button ref={takeFocus(tool, "button")} type="button" className="tool-btn" aria-expanded={false} onClick={open}>
-      <Icon name={t.icon} size={16} />
+    <button ref={takeFocus(tool, "button")} type="button" className="dt-ph rdt-toolrow" aria-expanded={false} onClick={open}>
+      <Icon name={t.icon} size={12} />
       <span>{t.label}</span>
       {count && <em>{count}</em>}
-      <Icon name="chevRight" size={14} className="end" />
+      <span className="sp" />
+      <Icon name="chevRight" size={12} className="end" />
     </button>
   );
 }
@@ -94,10 +95,11 @@ export function ToolSeparator({ tool, heightShare }: { tool: DevBackendTool; hei
 }
 
 /**
- * The open tool box: header with the minimise button, then the tool's content. It shrinks below its
- * share where the column is too short for the room box's minimum height (devbackend.css).
+ * The open tool box: a panel header (icon, title, "all mocked rooms", the minimise button), then the
+ * tool's content. As tall as its content, up to its share; less where the column is too short for
+ * the room box's minimum height (devbackend.css).
  */
-export function ToolBox({ tool, heightShare, className, children }: { tool: DevBackendTool; heightShare: number; className: string; children: ReactNode }) {
+export function ToolBox({ tool, heightShare, className = "", children }: { tool: DevBackendTool; heightShare: number; className?: string; children: ReactNode }) {
   const dispatch = useDispatch();
   const t = TOOLS[tool];
   const minimise = () => {
@@ -105,17 +107,17 @@ export function ToolBox({ tool, heightShare, className, children }: { tool: DevB
     dispatch({ type: "mock/toggleTool", tool });
   };
   return (
-    <section ref={takeFocus(tool, "box")} className={`sidebox toolbox ${className}`} style={{ flex: `0 1 ${clamp(heightShare) * 100}%` }} aria-label={t.title} data-testid={t.testId}>
-      <header className="side-head">
-        <Icon name={t.icon} size={16} />
-        <div className="side-title">
-          <b>{t.title}</b>
-          <small>shared by all mocked rooms</small>
-        </div>
-        <span className="sp" />
-        <IconButton icon="minus" title={t.minimise} onClick={minimise} />
-      </header>
-      <div className="side-body">{children}</div>
+    <section ref={takeFocus(tool, "box")} className={`sidebox toolbox rdt-toolbox ${className}`} style={{ maxHeight: `${clamp(heightShare) * 100}%` }} aria-label={t.title} data-testid={t.testId}>
+      <div className="dt">
+        <header className="dt-ph">
+          <Icon name={t.icon} size={12} />
+          <span>{t.title}</span>
+          <em>all mocked rooms</em>
+          <span className="sp" />
+          <IconButton icon="minus" title={t.minimise} className="xs" onClick={minimise} />
+        </header>
+        <div className="rdt-tool-b">{children}</div>
+      </div>
     </section>
   );
 }

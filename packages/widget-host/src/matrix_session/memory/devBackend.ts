@@ -124,7 +124,7 @@ const EMPTY_CONTENT: RoomContent = {
   raw: { state: [], timeline: [] },
 };
 const NO_SCHEDULED: ScheduledEvent[] = [];
-/** The most messages "Resolve pagination" generates at once. */
+/** The most messages "Resolve" (the pagination request of the room dev tools) generates at once. */
 export const MAX_GENERATED_EVENTS = 1000;
 const GREETINGS = ["Hi all,", "Quick note:", "Reminder:", "FYI", "Hm,", "Agreed.", "Back from lunch;", "Ok so"] as const;
 const TOPICS = ["the build is green again", "who has the slides?", "standup moved to 10:30", "the widget loads now", "let's call later", "see the thread above", "nice work!", "the room key arrived"] as const;
@@ -498,7 +498,7 @@ export class DevBackend implements LiveSession {
   }
 
   /**
-   * "Resolve pagination": end the back-pagination a widget asked for (`paginate_timeline`) with
+   * "Resolve" (the pagination request of the room dev tools): end the back-pagination a widget asked for (`paginate_timeline`) with
    * `count` random messages (`m.room.message` / `m.text`, random senders and bodies) older than the
    * oldest event of the room, and with "start reached" if `startReached`. The backend tells the
    * widgets (`notify_timeline_update`). Works without a request too: it adds older history.

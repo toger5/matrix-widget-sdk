@@ -13,16 +13,21 @@ import {
   focusPanel,
   mergePanel,
   moveTabToPanel,
+  openRoomToolsTab,
   openTimelineTab,
   putTab,
   removePanel,
   removeTab,
   resizeDevTools,
+  resizeRoomDevTools,
+  roomDevToolsLayout,
   roomOfPanel,
   roomTarget,
   splitTab,
   toggleDevToolPanel,
+  toggleRoomDevToolPanel,
   updatePanel,
+  updateRoomToolsTab,
   upgradeWorkspace,
   workspaceWidgetIds,
 } from "../src/app/layout";
@@ -204,6 +209,58 @@ describe("layout", () => {
     expect(roomOfPanel(removeTab(ws, a.panelId, tabs[1].id), a.panelId)?.activeTabId).toBe("t1");
   });
 
+  it("opens the room dev tools tab at the end of a panel, at most one per panel, bar on top with both panels; a second open shows it", () => {
+    const a = add(emptyWorkspace(), room("!a"));
+    let ws = openTimelineTab(putTab(a.ws, a.panelId, { kind: "widget", id: "t1", widgetId: "!a|w" }), a.panelId);
+    ws = openRoomToolsTab(ws, a.panelId);
+    const tabs = roomOfPanel(ws, a.panelId)!.tabs;
+    expect(tabs.map((t) => t.kind)).toEqual(["widget", "timeline", "roomTools"]);
+    expect(tabs[2]).toMatchObject({ layout: { dock: "top", panels: [{ panel: "state", share: 1 }, { panel: "timeline", share: 1 }] } });
+    expect(roomOfPanel(ws, a.panelId)?.activeTabId).toBe(tabs[2].id);
+    expect(workspaceWidgetIds(ws)).toEqual(["!a|w"]);
+    ws = openRoomToolsTab(activateTab(ws, a.panelId, "t1"), a.panelId);
+    expect(roomOfPanel(ws, a.panelId)?.tabs).toEqual(tabs);
+    expect(roomOfPanel(ws, a.panelId)?.activeTabId).toBe(tabs[2].id);
+    const p = add(ws, picker);
+    expect(openRoomToolsTab(p.ws, p.panelId)).toBe(p.ws);
+  });
+
+  it("changes the layout of a room dev tools tab: toggle (bar order, shares evened out), dock, resize; another tab changes nothing", () => {
+    const a = add(emptyWorkspace(), room("!a"));
+    const ws = openRoomToolsTab(openTimelineTab(a.ws, a.panelId), a.panelId);
+    const [timeline, tools] = roomOfPanel(ws, a.panelId)!.tabs;
+    const layoutOf = (w: WorkspaceLayout) => roomOfPanel(w, a.panelId)!.tabs.find((t) => t.id === tools.id);
+    const docked = updateRoomToolsTab(ws, a.panelId, tools.id, (l) => ({ ...l, dock: "left" }));
+    expect(layoutOf(docked)).toMatchObject({ layout: { dock: "left" } });
+    expect(updateRoomToolsTab(ws, a.panelId, timeline.id, (l) => ({ ...l, dock: "left" }))).toBe(ws);
+
+    let layout = resizeRoomDevTools(roomDevToolsLayout("top"), [1.5, 0.5]);
+    expect(layout.panels).toEqual([{ panel: "state", share: 1.5 }, { panel: "timeline", share: 0.5 }]);
+    expect(resizeRoomDevTools(layout, [Number.NaN, -1]).panels).toEqual(layout.panels);
+    layout = toggleRoomDevToolPanel(layout, "state");
+    expect(layout.panels).toEqual([{ panel: "timeline", share: 0.5 }]);
+    layout = toggleRoomDevToolPanel(layout, "state");
+    expect(layout).toEqual(roomDevToolsLayout("top"));
+    expect(toggleRoomDevToolPanel(toggleRoomDevToolPanel(layout, "timeline"), "state").panels).toEqual([]);
+  });
+
+  it("keeps one room dev tools tab per panel when a tab or a panel joins one that has it", () => {
+    const a = add(emptyWorkspace(), room("!a"));
+    let ws = openRoomToolsTab(putTab(a.ws, a.panelId, { kind: "widget", id: "t1", widgetId: "!a|w1" }), a.panelId);
+    const b = add(ws, room("!a"));
+    ws = openRoomToolsTab(b.ws, b.panelId);
+    const toolsA = roomOfPanel(ws, a.panelId)!.tabs[1].id;
+    const toolsB = roomOfPanel(ws, b.panelId)!.tabs[0].id;
+    const moved = moveTabToPanel(ws, a.panelId, toolsA, b.panelId);
+    expect(roomOfPanel(moved, a.panelId)?.tabs.map((t) => t.id)).toEqual(["t1"]);
+    expect(roomOfPanel(moved, b.panelId)?.tabs.map((t) => t.id)).toEqual([toolsB]);
+    expect(roomOfPanel(moved, b.panelId)?.activeTabId).toBe(toolsB);
+    const merged = mergePanel(ws, a.panelId, b.panelId);
+    expect(roomOfPanel(merged, b.panelId)?.tabs.map((t) => t.id)).toEqual([toolsB, "t1"]);
+    // the shown room dev tools of the merged panel: that panel's are shown
+    expect(roomOfPanel(merged, b.panelId)?.activeTabId).toBe(toolsB);
+  });
+
   it("upgrades a stored layout: only widget tabs are kept, a dropped active tab leaves the room name selected", () => {
     const stored = {
       roomsArea: {
@@ -263,6 +320,35 @@ describe("layout", () => {
       { kind: "room", roomId: "!a", tabs: [{ kind: "timeline", id: "t1" }, { kind: "widget", id: "t2", widgetId: "!a|w" }], activeTabId: undefined },
       // "t1" is taken by the first panel: its second Timeline tab is the one that is kept.
       { kind: "room", roomId: "!a", tabs: [{ kind: "timeline", id: "t4" }], activeTabId: "t4" },
+    ]);
+    expect(upgradeWorkspace(JSON.parse(JSON.stringify(ws)))).toEqual(ws);
+  });
+
+  it("upgrades a stored layout with room dev tools tabs: one per panel, with its layout (defaults for what is missing or malformed)", () => {
+    const ws = upgradeWorkspace({
+      roomsArea: {
+        panels: [
+          {
+            id: "p1",
+            widthShare: 1,
+            content: {
+              kind: "room",
+              roomId: "!a",
+              tabs: [
+                { kind: "roomTools", id: "t1", layout: { dock: "left", panels: [{ panel: "timeline", share: 2 }, { panel: "nope", share: 1 }] } },
+                { kind: "timeline", id: "t2" },
+                { kind: "roomTools", id: "t3" },
+              ],
+              activeTabId: "t1",
+            },
+          },
+          { id: "p2", widthShare: 1, content: { kind: "room", roomId: "!a", tabs: [{ kind: "roomTools", id: "t4", layout: { dock: "sideways", panels: "x" } }] } },
+        ],
+      },
+    });
+    expect(ws.roomsArea.panels.map((p) => p.content)).toEqual([
+      { kind: "room", roomId: "!a", tabs: [{ kind: "roomTools", id: "t1", layout: { dock: "left", panels: [{ panel: "timeline", share: 2 }] } }, { kind: "timeline", id: "t2" }], activeTabId: "t1" },
+      { kind: "room", roomId: "!a", tabs: [{ kind: "roomTools", id: "t4", layout: roomDevToolsLayout("top") }], activeTabId: undefined },
     ]);
     expect(upgradeWorkspace(JSON.parse(JSON.stringify(ws)))).toEqual(ws);
   });

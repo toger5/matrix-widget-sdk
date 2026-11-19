@@ -1,40 +1,47 @@
-/** DevBackendView › State: the shortcuts, "send state" (test widget, widget, Element Call and raw JSON forms; "Update widget"), the state explorer and "edit state"; widget state events add and remove widgets of the room overview. */
+/** DevBackendView › the State panel of the room dev tools: "send state" (test widget, widget, Element Call, the shortcuts and raw JSON forms; "Update widget"), the state explorer and "edit state"; widget state events add and remove widgets of the room overview. */
 import { expect, type Host, LAB, NEW_WIDGET, test, widgetId } from "./host";
 
 type StateEvent = { eventType: string; stateKey: string; content: Record<string, unknown> };
 const stateOf = async (host: Host, type: string, stateKey = "") => ((await host.store(LAB)).state as StateEvent[]).find((e) => e.eventType === type && e.stateKey === stateKey)?.content;
-const stateForm = (host: Host, name: "Test widget" | "Widget" | "Element Call" | "Raw JSON") => host.page.getByRole("tablist", { name: "State form" }).getByRole("tab", { name, exact: true }).click();
+/** Chooses a form in the menu of "Send state". */
+const stateForm = async (host: Host, name: "Test widget" | "Widget" | "Element Call" | "Edit name" | "Edit description" | "Add member" | "Raw JSON") => {
+  await host.page.getByTestId("devbackend-view").getByRole("button", { name: /^Send state form, / }).click();
+  await host.page.getByRole("menu", { name: "Send state form" }).getByRole("menuitemradio", { name, exact: true }).click();
+};
+/** The toggle of a panel in the bar of the room dev tools ("State, 5"). */
+const toggle = (host: Host, panel: "State" | "Timeline") => host.page.getByTestId("devbackend-view").getByRole("toolbar", { name: "Room dev tools" }).getByRole("button", { name: new RegExp(`^${panel}(,|$)`) });
 
 test.beforeEach(async ({ host }) => {
   await host.populate("lab", { open: [{ room: LAB }] });
-  // The drafts and the filter are state of the section, which outlives `populate`: reopening the section resets them.
-  const section = host.page.getByTestId("devbackend-view").getByRole("button", { name: /^State \d/ });
-  await section.click();
-  await section.click();
+  // The drafts and the filter are state of the panel, which outlives `populate`: closing and opening the panel resets them.
+  await toggle(host, "State").click();
+  await toggle(host, "State").click();
+  await host.page.getByTestId("devbackend-view").getByRole("button", { name: "Send state", exact: true }).click();
 });
 
 test("shortcuts: edit name, edit description and add member change the room", async ({ host }) => {
   const view = host.page.getByTestId("devbackend-view");
+  const form = view.getByRole("form", { name: "Send state" });
 
-  await view.getByRole("button", { name: "Edit name" }).click();
+  await stateForm(host, "Edit name");
   await expect(view.getByLabel("Room name")).toHaveValue("Widget lab");
   await view.getByLabel("Room name").fill("Renamed lab");
-  await view.getByRole("form", { name: "Edit name" }).getByRole("button", { name: "Save" }).click();
+  await form.getByRole("button", { name: "Save" }).click();
   await expect(view.getByRole("button", { name: /^Renamed lab !lab/ })).toBeVisible();
   await expect(host.panels.locator(".room-name")).toHaveText("Renamed lab");
   expect(await stateOf(host, "m.room.name")).toEqual({ name: "Renamed lab" });
 
-  await view.getByRole("button", { name: "Edit description" }).click();
+  await stateForm(host, "Edit description");
   await view.getByRole("textbox", { name: "Description" }).fill("A new description");
   await view.getByRole("textbox", { name: "Description" }).press("Enter");
   await expect.poll(() => stateOf(host, "m.room.topic")).toEqual({ topic: "A new description" });
 
-  await view.getByRole("button", { name: "Add member" }).click();
+  await stateForm(host, "Add member");
   await view.getByLabel("User ID").fill("dave");
-  await view.getByRole("form", { name: "Add member" }).getByRole("button", { name: "Add" }).click();
+  await form.getByRole("button", { name: "Add" }).click();
   await expect(view.getByRole("alert")).toContainText("@user:server");
   await view.getByLabel("User ID").fill("@dave:dev.local");
-  await view.getByRole("form", { name: "Add member" }).getByRole("button", { name: "Add" }).click();
+  await form.getByRole("button", { name: "Add" }).click();
   await expect(host.panels.getByTitle("4 members")).toBeVisible();
   expect(await stateOf(host, "m.room.member", "@dave:dev.local")).toEqual({ membership: "join" });
 });
@@ -42,7 +49,7 @@ test("shortcuts: edit name, edit description and add member change the room", as
 test("send state and the state explorer: the sent event is listed by type and key", async ({ host }) => {
   const view = host.page.getByTestId("devbackend-view");
   const form = view.getByRole("form", { name: "Send state" });
-  await view.getByRole("button", { name: /^Timeline \d/ }).click();
+  await toggle(host, "Timeline").click();
 
   await view.getByRole("button", { name: "m.room.member 3" }).click();
   await view.getByRole("button", { name: "State key @bob:dev.local of m.room.member" }).click();
@@ -76,8 +83,8 @@ test("send state and the state explorer: the sent event is listed by type and ke
 
 test("edit state: saving the editor sends a new state event", async ({ host }) => {
   const view = host.page.getByTestId("devbackend-view");
-  await view.getByRole("button", { name: /^Timeline \d/ }).click();
-  await view.getByRole("button", { name: "m.room.topic 1" }).click();
+  await toggle(host, "Timeline").click();
+  await view.getByRole("button", { name: /^m\.room\.topic/ }).click();
   await view.getByRole("button", { name: "Edit state event m.room.topic (empty state key)" }).click();
   const editor = view.getByLabel("Content of m.room.topic (empty state key) (JSON)");
   await expect(editor).toHaveValue(/Both test widgets/);
@@ -103,7 +110,7 @@ test("the test widget form sends the three test widgets, its URL read-only; “U
   await expect(host.panels.getByTestId("room-overview").locator(".ov-widgets").getByRole("button")).toHaveCount(2);
 
   // The default form: the new test widget as m.widget under the first free widget ID. The URL cannot be edited, only copied.
-  await expect(host.page.getByRole("tablist", { name: "State form" }).getByRole("tab", { name: "Test widget" })).toHaveAttribute("aria-selected", "true");
+  await expect(view.getByRole("button", { name: /^Send state form, / })).toHaveAccessibleName("Send state form, Test widget");
   await expect(form.getByLabel("Test widget")).toHaveValue("m.widget");
   await expect(form.getByLabel("Widget ID")).toHaveValue("widget-2");
   await expect(url).toHaveValue("http://localhost:5175/new/");
@@ -113,8 +120,8 @@ test("the test widget form sends the three test widgets, its URL read-only; “U
   expect(await host.page.evaluate(() => navigator.clipboard.readText())).toBe("http://localhost:5175/new/");
 
   // The ID of the room's new test widget: "Update widget" instead of "Send".
-  // Only the State section open and Bob's membership shown, as the stories draw it.
-  await view.getByRole("button", { name: /^Timeline \d/ }).click();
+  // Only the State panel open and Bob's membership shown, as the stories draw it.
+  await toggle(host, "Timeline").click();
   await view.getByRole("button", { name: "m.room.member 3" }).click();
   await view.getByRole("button", { name: "State key @bob:dev.local of m.room.member" }).click();
   await form.getByLabel("Widget ID").fill("widget-1");
@@ -164,8 +171,8 @@ test("the widget form sends any custom widget: it starts empty, only http(s) URL
   await expect(form.getByLabel("Widget ID")).toHaveValue("widget-2");
   await expect(form.getByLabel("Name")).toHaveValue("");
   await expect(form.getByLabel("URL")).toHaveValue("");
-  // Only the State section open and Bob's membership shown, as the stories draw it.
-  await view.getByRole("button", { name: /^Timeline \d/ }).click();
+  // Only the State panel open and Bob's membership shown, as the stories draw it.
+  await toggle(host, "Timeline").click();
   await view.getByRole("button", { name: "m.room.member 3" }).click();
   await view.getByRole("button", { name: "State key @bob:dev.local of m.room.member" }).click();
   await host.story("sidepanel-devbackendview-state--widget");
@@ -207,8 +214,8 @@ test("the widget form sends any custom widget: it starts empty, only http(s) URL
 test("the Element Call form writes the call widget as Element Web describes it, and the compat wrapper fills in its URL", async ({ host }) => {
   const view = host.page.getByTestId("devbackend-view");
   const form = view.getByRole("form", { name: "Send state" });
-  // Only the State section open, as the story draws it.
-  await view.getByRole("button", { name: /^Timeline \d/ }).click();
+  // Only the State panel open, as the story draws it.
+  await toggle(host, "Timeline").click();
   await stateForm(host, "Element Call");
   await expect(form.getByLabel("Element Call URL")).toHaveValue("https://call.element.io/room");
   await host.story("sidepanel-devbackendview-state--element-call");
@@ -253,17 +260,25 @@ test("the Element Call form writes the call widget as Element Web describes it, 
     theme: expect.stringMatching(/^(light|dark)$/),
   });
 
-  // The form chips are a tablist: the arrow keys, Home and End select a form.
-  const chips = host.page.getByRole("tablist", { name: "State form" });
-  await chips.getByRole("tab", { name: "Element Call" }).focus();
-  await host.page.keyboard.press("ArrowRight");
-  await expect(chips.getByRole("tab", { name: "Raw JSON" })).toBeFocused();
-  await expect(chips.getByRole("tab", { name: "Raw JSON" })).toHaveAttribute("aria-selected", "true");
+  // The form menu: it opens on the shown form, the arrow keys, Home and End move between the forms, Enter chooses one, Escape closes it.
+  const menuButton = view.getByRole("button", { name: /^Send state form, / });
+  const menu = host.page.getByRole("menu", { name: "Send state form" });
+  await menuButton.click();
+  await expect(menu.getByRole("menuitemradio", { name: "Element Call" })).toBeFocused();
+  await expect(menu.getByRole("menuitemradio", { name: "Element Call" })).toHaveAttribute("aria-checked", "true");
+  await host.page.keyboard.press("ArrowDown");
+  await expect(menu.getByRole("menuitemradio", { name: "Edit name" })).toBeFocused();
+  await host.page.keyboard.press("End");
+  await expect(menu.getByRole("menuitemradio", { name: "Raw JSON" })).toBeFocused();
+  await host.page.keyboard.press("Enter");
+  await expect(menu).toHaveCount(0);
+  await expect(menuButton).toHaveAccessibleName("Send state form, Raw JSON");
+  await expect(menuButton).toBeFocused();
   await expect(form.getByLabel("State content (JSON)")).toBeVisible();
-  await host.page.keyboard.press("Home");
-  await expect(chips.getByRole("tab", { name: "Test widget" })).toHaveAttribute("aria-selected", "true");
-  await host.page.keyboard.press("ArrowLeft");
-  await expect(chips.getByRole("tab", { name: "Raw JSON" })).toBeFocused();
+  await menuButton.click();
+  await host.page.keyboard.press("Escape");
+  await expect(menu).toHaveCount(0);
+  await expect(menuButton).toBeFocused();
 });
 
 test("delayed state: the event is scheduled and “Send now” applies it", async ({ host }) => {
@@ -271,7 +286,7 @@ test("delayed state: the event is scheduled and “Send now” applies it", asyn
   const form = view.getByRole("form", { name: "Send state" });
   await stateForm(host, "Raw JSON");
   await form.getByLabel("State content (JSON)").fill('{ "topic": "Later" }');
-  await form.getByRole("switch", { name: "Send delayed" }).check();
+  await form.getByRole("checkbox", { name: "Send delayed" }).check();
   await form.getByLabel("Delay in milliseconds").fill("60000");
   await form.getByRole("button", { name: "Schedule" }).click();
 
@@ -291,9 +306,9 @@ test("the state is read like a real room's: a widget's state event reaches the s
   await host.populate("lab", { behavior: { autoApproveCapabilities: true }, open: [{ room: LAB, widgets: [NEW_WIDGET] }] });
   await host.ready(NEW);
   const view = host.page.getByTestId("devbackend-view");
-  const timeline = view.getByRole("button", { name: /^Timeline \d+ events/ });
-  const before = Number((await timeline.textContent())?.match(/(\d+) events/)?.[1]);
-  await view.getByRole("button", { name: "m.room.topic 1", exact: true }).click();
+  const timeline = toggle(host, "Timeline");
+  const before = Number((await timeline.getAttribute("aria-label"))?.match(/(\d+)/)?.[1]);
+  await view.getByRole("region", { name: "State", exact: true }).getByRole("button", { name: /^m\.room\.topic/ }).click();
   await view.getByRole("button", { name: "State key (empty) of m.room.topic" }).click();
   const topic = view.locator(".tree pre.code");
   await expect(topic).not.toContainText("hello from the new widget");
@@ -301,6 +316,6 @@ test("the state is read like a real room's: a widget's state event reaches the s
   // The widget writes to the room's backend directly: only the refresh after its message sees it.
   await host.frame(NEW).getByRole("button", { name: "send state m.room.topic" }).click();
   await expect(topic).toContainText('"topic": "hello from the new widget"');
-  await expect(timeline).toHaveAccessibleName(`Timeline ${before + 1} events`);
+  await expect(timeline).toHaveAccessibleName(`Timeline, ${before + 1}`);
   expect(await stateOf(host, "m.room.topic")).toEqual({ topic: "hello from the new widget" });
 });

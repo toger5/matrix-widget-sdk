@@ -24,8 +24,11 @@ export interface ViewEnv {
   narrow: boolean;
   /** Hook: the dev tools data of one widget (messages, stats, capabilities, console). */
   useDevToolsData: (widgetId: WidgetInstanceId) => WidgetDevToolsData;
-  /** Hook: the content of the DevBackend, with the `scheduled` events of its room picked in the Dev tools. */
-  useMockedRoomData: () => MockedRoomData;
+  /**
+   * Hook: the content of the DevBackend, with the `scheduled` events and the `pagination` of the
+   * mocked room `roomId` (a room dev tools tab), else of the room picked in the Dev tools.
+   */
+  useMockedRoomData: (roomId?: RoomId) => MockedRoomData;
   /** Hook: what the RoomOverview shows beyond the `RoomSummary` (topic, members, encryption). */
   useRoomDetails: (roomId: RoomId) => Loadable<RoomDetails>;
   /** Hook: the RoomTimeline of a room (`LiveSession.timeline`), kept up to date; `retry` loads it again after an error. */

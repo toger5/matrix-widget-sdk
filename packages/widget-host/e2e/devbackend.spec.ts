@@ -1,4 +1,4 @@
-/** DevBackendView: the mocked rooms (dropdown, add, clear, remove) and the tools: the Client Backend Tool (widget host behavior, to-device messages) and the Media Backend Tool. */
+/** DevBackendView: the mocked rooms (dropdown, add, clear, remove), the room dev tools below the slim header, and the tools: the Client Backend Tool (widget host behavior, to-device messages) and the Media Backend Tool. */
 import { expect, LAB, NEW_WIDGET, test, widgetId } from "./host";
 
 const NEW = widgetId(LAB, NEW_WIDGET);
@@ -21,7 +21,7 @@ test("no rooms yet: the RoomsArea is empty, a new room panel has no room to offe
 
   await view.getByRole("button", { name: "Create a room" }).click();
   await expect(view).toHaveAttribute("data-room-id", /^!room1:/);
-  await expect(view.getByRole("button", { name: /^State \d/ })).toBeVisible();
+  await expect(view.getByRole("toolbar", { name: "Room dev tools" }).getByRole("button", { name: /^State/ })).toBeVisible();
   const rooms = (await host.main()).data.rooms;
   expect(rooms.status === "ready" && rooms.value.map((r) => r.id)).toEqual([await view.getAttribute("data-room-id")]);
   // the picker lists it
@@ -89,12 +89,11 @@ test("widget host behavior: the same for every room; without auto-approve the wi
   await host.populate("two-rooms", { behavior: { autoApproveCapabilities: true }, open: [{ room: LAB }] });
   const view = host.page.getByTestId("devbackend-view");
   const side = host.page.getByTestId("sidepanel");
-  await view.getByRole("button", { name: /^State \d/ }).click();
-  await view.getByRole("button", { name: /^Timeline \d/ }).click();
   await side.getByRole("button", { name: "Client Backend Tool" }).click();
-  // "Widget host behavior" is open when the tool opens.
+  // "Widget host behavior" is open when the tool opens; the room box keeps its room dev tools.
   const client = host.page.getByTestId("devbackend-client");
-  const autoApprove = client.getByRole("switch", { name: "Auto-approve capabilities" });
+  const autoApprove = client.getByRole("checkbox", { name: "Auto-approve capabilities" });
+  await expect(view.getByRole("region", { name: "Timeline", exact: true })).toBeVisible();
   await expect(autoApprove).toBeChecked();
   await expect(side.getByRole("separator", { name: "Resize the client backend box" })).toBeVisible();
   await host.story("sidepanel-devbackendview-tools--behavior");
@@ -127,15 +126,15 @@ test("widget host behavior: “fail sends” answers the widget's send with an e
   await host.ready(NEW);
   await host.page.getByTestId("sidepanel").getByRole("button", { name: "Client Backend Tool" }).click();
   const view = host.page.getByTestId("devbackend-client");
-  await view.getByRole("switch", { name: "Fail sends" }).click();
-  await expect(view.getByRole("switch", { name: "Fail sends" })).toBeChecked();
+  await view.getByRole("checkbox", { name: "Fail sends" }).click();
+  await expect(view.getByRole("checkbox", { name: "Fail sends" })).toBeChecked();
 
   const before = (await host.store(LAB)).timeline.length;
   await host.frame(NEW).getByRole("button", { name: "send m.room.message" }).click();
   await expect(host.frame(NEW).locator("#log pre.error").first()).toContainText("send m.room.message failed");
   expect((await host.store(LAB)).timeline).toHaveLength(before);
 
-  await view.getByRole("switch", { name: "Fail sends" }).click();
+  await view.getByRole("checkbox", { name: "Fail sends" }).click();
   await host.frame(NEW).getByRole("button", { name: "send m.room.message" }).click();
   await expect.poll(async () => (await host.store(LAB)).timeline.length).toBe(before + 1);
 });
@@ -143,9 +142,6 @@ test("widget host behavior: “fail sends” answers the widget's send with an e
 test("to-device: a message sent from the view reaches the widget, one sent by the widget is listed", async ({ host }) => {
   await host.populate("lab", { behavior: { autoApproveCapabilities: true }, open: [{ room: LAB, widgets: [NEW_WIDGET] }] });
   await host.ready(NEW);
-  const room = host.page.getByTestId("devbackend-view");
-  await room.getByRole("button", { name: /^State \d/ }).click();
-  await room.getByRole("button", { name: /^Timeline \d/ }).click();
   await host.page.getByTestId("sidepanel").getByRole("button", { name: "Client Backend Tool" }).click();
   const view = host.page.getByTestId("devbackend-client");
   await view.getByRole("button", { name: "Widget host behavior" }).click();
@@ -165,13 +161,14 @@ test("to-device: a message sent from the view reaches the widget, one sent by th
   await form.getByLabel("To-device content (JSON)").fill('{ "hello": "from the host" }');
   await form.getByRole("button", { name: "Send" }).click();
   await expect(messages).toHaveCount(1);
-  await expect(messages.first()).toContainText("to widget");
+  await expect(messages.first().getByRole("img", { name: "to the widget" })).toBeVisible();
+  await expect(messages.first()).toContainText("org.example.ping");
   await expect.poll(() => host.actions(NEW, "toWidget")).toContainEqual(expect.stringMatching(/forward_to_device$/));
   await expect(host.frame(NEW).locator("#log")).toContainText("from the host");
 
   await host.frame(NEW).getByRole("button", { name: "send to-device org.example.ping" }).click();
   await expect(messages).toHaveCount(2);
-  await expect(messages.filter({ hasText: "from widget" })).toContainText("@bob:example.org");
+  await expect(messages.filter({ has: host.page.getByRole("img", { name: "from the widget" }) }).getByTitle(/@bob:example\.org/)).toBeVisible();
   expect((await host.store(LAB)).toDeviceSent).toHaveLength(1);
   await host.story("sidepanel-devbackendview-tools--to-device");
 
@@ -184,9 +181,6 @@ test("to-device: a message sent from the view reaches the widget, one sent by th
 test("media tool: open (closing the client tool), upload a file, copy its MXC URI, minimise", async ({ host }) => {
   await host.populate("lab");
   const side = host.page.getByTestId("sidepanel");
-  const view = host.page.getByTestId("devbackend-view");
-  await view.getByRole("button", { name: /^State \d/ }).click();
-  await view.getByRole("button", { name: /^Timeline \d/ }).click();
   await expect(side.getByRole("button", { name: "Client Backend Tool" })).toBeVisible();
   await expect(side.getByRole("button", { name: /Media Backend Tool/ })).toContainText("3 files");
   await host.story("sidepanel-devbackendview--tools-collapsed");

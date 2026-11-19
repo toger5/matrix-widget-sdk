@@ -3,7 +3,7 @@ import { within } from "storybook/test";
 
 import type { MainViewModel, RoomPanelViewModel, WidgetInstanceViewModel } from "../../appViewModel";
 import { Screen } from "../app/storyScreen";
-import { appVm, devToolsLayout, mainVm, roomPanel, timelineTab, widgetTab, widgetVm, workspace } from "../fixtures";
+import { appVm, devToolsLayout, mainVm, roomPanel, roomToolsTab, timelineTab, widgetTab, widgetVm, workspace } from "../fixtures";
 import { DEV_SETTINGS, HeadOnly } from "./storyFrame";
 import { TabBar } from "./TabBar";
 
@@ -58,6 +58,18 @@ const timeline = roomPanel("design", [widgetTab("design", "call"), widgetTab("de
 export const TimelineActive: Story = {
   parameters: { size: [860, 72] },
   render: () => <HeadOnly main={vm(timeline, [widgetVm("design", "call"), widgetVm("design", "board")])} panel={timeline} settings={DEV_SETTINGS} />,
+};
+
+const tools = roomPanel("design", [widgetTab("design", "call"), timelineTab("design"), roomToolsTab("design")], roomToolsTab("design").id);
+/**
+ * Room dev tools tab active (dev tools enabled: ⋯ on the widget tab only). The room dev tools are a
+ * host tab like the timeline: the Dev tools icon (as on the LeftBar's Dev tools button), "Room dev
+ * tools" and × ("Close the room dev tools"), no ⋯ and no pin; its title is "Room dev tools of Design
+ * crit". A room view has at most one; it goes at the end when it is opened. Alt+W closes it.
+ */
+export const RoomDevToolsActive: Story = {
+  parameters: { size: [860, 72] },
+  render: () => <HeadOnly main={vm(tools, [widgetVm("design", "call")])} panel={tools} settings={DEV_SETTINGS} />,
 };
 
 const MANY = ["call", "board", "poll", "notes", "timer", "retro", "stream"] as const;

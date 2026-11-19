@@ -70,7 +70,9 @@ test("new events appear live: sent by a widget, and from the send form of the De
   await expect(rows(host).last()).toContainText(/@alice:dev\.local.*hello from the new widget.*m\.room\.message/);
   await expect(rows(host).last()).toHaveAttribute("data-event-id", (await storeIds(host)).at(-1)!);
 
-  const form = host.page.getByTestId("devbackend-view").getByRole("form", { name: "Send event" });
+  const view = host.page.getByTestId("devbackend-view");
+  await view.getByRole("button", { name: "Send event", exact: true }).click();
+  const form = view.getByRole("form", { name: "Send event" });
   await form.getByLabel("Sender").fill("@bob:dev.local");
   await form.getByLabel("Body").fill("Hello from the DevBackendView");
   await form.getByRole("button", { name: "Send" }).click();

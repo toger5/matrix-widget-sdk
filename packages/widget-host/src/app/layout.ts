@@ -24,6 +24,8 @@ import {
   sideDock,
   type DevToolPanel,
   type PanelId,
+  type RoomDevToolPanel,
+  type RoomDevToolsLayout,
   type RoomId,
   type RoomPanelViewModel,
   type RoomViewModel,
@@ -45,6 +47,14 @@ export const emptyWorkspace = (): WorkspaceLayout => ({
 });
 
 export const DEFAULT_DEV_TOOLS: WidgetDevToolsLayout = { open: false, dock: "top", panels: [], size: { top: 240, side: 360 } };
+
+/** The panels of the room dev tools, in bar order. */
+export const ROOM_DEV_TOOL_PANELS: readonly RoomDevToolPanel[] = ["state", "timeline"];
+/** The room dev tools with both panels, the bar at `dock`: a room tab's start "top", the SidePanel's "left". */
+export const roomDevToolsLayout = (dock: RoomDevToolsLayout["dock"]): RoomDevToolsLayout => ({ dock, panels: ROOM_DEV_TOOL_PANELS.map((panel) => ({ panel, share: 1 })) });
+
+/** A host tab (the timeline, the room dev tools): at most one of each kind per room panel. */
+const isHostTab = (tab: TabViewModel): boolean => tab.kind !== "widget";
 
 const groupOf = (panel: RoomPanelViewModel): string | undefined => (panel.content.kind === "room" ? panel.content.roomId : undefined);
 
@@ -143,21 +153,21 @@ export function arrangeDock(ws: WorkspaceLayout, dock: DockLayout): WorkspaceLay
   return withPanels(ws, ws.roomsArea.panels, ws.roomsArea.focusedPanelId, dock);
 }
 
-/** The tabs of `tabs` that a room with `into` can take: a timeline tab only if it has none. */
+/** The tabs of `tabs` that a room with `into` can take: a host tab only if it has none of its kind. */
 const joinable = (into: TabViewModel[], tabs: TabViewModel[]): TabViewModel[] => {
-  let timeline = into.some((t) => t.kind === "timeline");
+  const kinds = new Set(into.filter(isHostTab).map((t) => t.kind));
   return tabs.filter((t) => {
-    if (t.kind !== "timeline") return true;
-    if (timeline) return false;
-    timeline = true;
+    if (!isHostTab(t)) return true;
+    if (kinds.has(t.kind)) return false;
+    kinds.add(t.kind);
     return true;
   });
 };
 
 /**
  * A panel dropped onto a panel of the same room: its tabs join that panel's at the end (a second
- * timeline tab is dropped: that panel's stays), its shown tab is shown there, and it goes. The
- * widgets keep running. Another room, or itself, changes nothing.
+ * timeline or room dev tools tab is dropped: that panel's stays), its shown tab is shown there, and
+ * it goes. The widgets keep running. Another room, or itself, changes nothing.
  */
 export function mergePanel(ws: WorkspaceLayout, panelId: PanelId, intoPanelId: PanelId): WorkspaceLayout {
   const from = roomOfPanel(ws, panelId);
@@ -165,14 +175,15 @@ export function mergePanel(ws: WorkspaceLayout, panelId: PanelId, intoPanelId: P
   if (!from || !into || panelId === intoPanelId || from.roomId !== into.roomId) return ws;
   const moved = joinable(into.tabs, from.tabs);
   const shown = from.tabs.find((t) => t.id === from.activeTabId);
-  const activeTabId = shown === undefined ? into.activeTabId : moved.includes(shown) ? shown.id : into.tabs.find((t) => t.kind === "timeline")?.id;
+  const activeTabId = shown === undefined ? into.activeTabId : moved.includes(shown) ? shown.id : into.tabs.find((t) => t.kind === shown.kind)?.id;
   const merged = updateRoom(ws, intoPanelId, (r) => ({ ...r, tabs: [...r.tabs, ...moved], activeTabId }));
   return focusPanel(withPanels(merged, merged.roomsArea.panels.filter((p) => p.id !== panelId)), intoPanelId);
 }
 
 /**
  * A tab dropped onto another panel of its room: it becomes that panel's shown tab, at the end. A
- * timeline tab where that panel has one already shows that one, and the dragged one is closed.
+ * host tab (timeline, room dev tools) where that panel has one of its kind already shows that one,
+ * and the dragged one is closed.
  */
 export function moveTabToPanel(ws: WorkspaceLayout, panelId: PanelId, tabId: TabId, intoPanelId: PanelId): WorkspaceLayout {
   const from = roomOfPanel(ws, panelId);
@@ -180,7 +191,7 @@ export function moveTabToPanel(ws: WorkspaceLayout, panelId: PanelId, tabId: Tab
   const tab = from?.tabs.find((t) => t.id === tabId);
   if (!from || !into || !tab || panelId === intoPanelId || from.roomId !== into.roomId) return ws;
   const without = removeTab(ws, panelId, tabId);
-  const existing = tab.kind === "timeline" ? into.tabs.find((t) => t.kind === "timeline") : undefined;
+  const existing = isHostTab(tab) ? into.tabs.find((t) => t.kind === tab.kind) : undefined;
   return existing ? activateTab(without, intoPanelId, existing.id) : focusPanel(putTab(without, intoPanelId, tab), intoPanelId);
 }
 
@@ -209,11 +220,27 @@ export function putTab(ws: WorkspaceLayout, panelId: PanelId, tab: TabViewModel)
  * "Open timeline" / "Show timeline" of the RoomOverview: show the panel's Timeline tab, a new one at
  * the end if it has none (at most one per panel), and focus the panel.
  */
-export function openTimelineTab(ws: WorkspaceLayout, panelId: PanelId): WorkspaceLayout {
+export const openTimelineTab = (ws: WorkspaceLayout, panelId: PanelId): WorkspaceLayout => openHostTab(ws, panelId, { kind: "timeline", id: newId("tab") });
+
+/**
+ * "Open room dev tools" / "Show room dev tools" of the RoomOverview: show the panel's room dev tools
+ * tab, a new one at the end if it has none (at most one per panel; bar on top, both panels), and
+ * focus the panel.
+ */
+export const openRoomToolsTab = (ws: WorkspaceLayout, panelId: PanelId): WorkspaceLayout => openHostTab(ws, panelId, { kind: "roomTools", id: newId("tab"), layout: roomDevToolsLayout("top") });
+
+/** Show the panel's tab of the kind of `tab` (a host tab), else add `tab` at the end; focus the panel. */
+function openHostTab(ws: WorkspaceLayout, panelId: PanelId, tab: TabViewModel): WorkspaceLayout {
   const room = roomOfPanel(ws, panelId);
   if (!room) return ws;
-  const existing = room.tabs.find((t) => t.kind === "timeline");
-  return existing ? activateTab(ws, panelId, existing.id) : focusPanel(putTab(ws, panelId, { kind: "timeline", id: newId("tab") }), panelId);
+  const existing = room.tabs.find((t) => t.kind === tab.kind);
+  return existing ? activateTab(ws, panelId, existing.id) : focusPanel(putTab(ws, panelId, tab), panelId);
+}
+
+/** Change the layout of a room dev tools tab. Another tab, or none, changes nothing. */
+export function updateRoomToolsTab(ws: WorkspaceLayout, panelId: PanelId, tabId: TabId, change: (layout: RoomDevToolsLayout) => RoomDevToolsLayout): WorkspaceLayout {
+  if (!roomOfPanel(ws, panelId)?.tabs.some((t) => t.id === tabId && t.kind === "roomTools")) return ws;
+  return updateRoom(ws, panelId, (room) => ({ ...room, tabs: room.tabs.map((t) => (t.id === tabId && t.kind === "roomTools" ? { ...t, layout: change(t.layout) } : t)) }));
 }
 
 /**
@@ -299,6 +326,22 @@ export function toggleDevToolPanel(layout: WidgetDevToolsLayout, panel: DevToolP
   return { ...layout, panels: panels.slice(Math.max(0, panels.length - MAX_DEV_TOOL_PANELS)) };
 }
 
+/**
+ * A toggle of the room dev tools' bar (or the × of a panel): close the panel, or open it in bar
+ * order with the shares of all open panels evened out.
+ */
+export function toggleRoomDevToolPanel(layout: RoomDevToolsLayout, panel: RoomDevToolPanel): RoomDevToolsLayout {
+  if (layout.panels.some((p) => p.panel === panel)) return { ...layout, panels: layout.panels.filter((p) => p.panel !== panel) };
+  const open = new Set([...layout.panels.map((p) => p.panel), panel]);
+  return { ...layout, panels: ROOM_DEV_TOOL_PANELS.filter((p) => open.has(p)).map((p) => ({ panel: p, share: 1 })) };
+}
+
+/** The separator between the room dev tools' panels: their new shares, in panel order (a missing or invalid one keeps its share). */
+export const resizeRoomDevTools = (layout: RoomDevToolsLayout, shares: number[]): RoomDevToolsLayout => ({
+  ...layout,
+  panels: layout.panels.map((p, i) => ({ ...p, share: isNumber(shares[i]) && shares[i] > 0 ? shares[i] : p.share })),
+});
+
 // ---------------------------------------------------------------------------------------------
 // Stored layouts
 
@@ -310,6 +353,17 @@ const DEV_TOOL_PANELS: Record<DevToolPanel, true> = { messages: true, stats: tru
 const isDock = (value: unknown): value is WidgetDevToolsLayout["dock"] => typeof value === "string" && Object.hasOwn(DOCKS, value);
 const isDevToolPanel = (value: unknown): value is DevToolPanel => typeof value === "string" && Object.hasOwn(DEV_TOOL_PANELS, value);
 
+/** A stored room dev tools layout; what is missing or malformed gets the default of `dock` (both panels). */
+export function upgradeRoomDevToolsLayout(value: unknown, dock: RoomDevToolsLayout["dock"]): RoomDevToolsLayout {
+  if (!isObject(value)) return roomDevToolsLayout(dock);
+  const stored = Array.isArray(value.panels) ? value.panels : roomDevToolsLayout(dock).panels;
+  const panels = ROOM_DEV_TOOL_PANELS.flatMap((panel) => {
+    const p: unknown = stored.find((x) => isObject(x) && x.panel === panel);
+    return isObject(p) ? [{ panel, share: positive(p.share) ?? 1 }] : [];
+  });
+  return { dock: isDock(value.dock) ? value.dock : dock, panels };
+}
+
 /** The ids a layout uses once: panels, tabs, and widgets (a widget runs once per account and has at most one tab). */
 interface SeenIds {
   panels: Set<string>;
@@ -317,13 +371,13 @@ interface SeenIds {
   widgets: Set<string>;
 }
 
-/** `timeline`: the panel has a Timeline tab already (at most one per panel). */
-function upgradeTab(value: unknown, roomId: string, seen: SeenIds, timeline: boolean): TabViewModel | undefined {
+/** `hostKinds`: the kinds of host tabs the panel has already (at most one of each per panel). */
+function upgradeTab(value: unknown, roomId: string, seen: SeenIds, hostKinds: ReadonlySet<string>): TabViewModel | undefined {
   if (!isObject(value) || typeof value.id !== "string" || seen.tabs.has(value.id)) return undefined;
-  if (value.kind === "timeline") {
-    if (timeline) return undefined;
+  if (value.kind === "timeline" || value.kind === "roomTools") {
+    if (hostKinds.has(value.kind)) return undefined;
     seen.tabs.add(value.id);
-    return { kind: "timeline", id: value.id };
+    return value.kind === "timeline" ? { kind: "timeline", id: value.id } : { kind: "roomTools", id: value.id, layout: upgradeRoomDevToolsLayout(value.layout, "top") };
   }
   // Older layouts also stored "native" (the room overview, now the room name) and "new" tabs.
   if (value.kind !== "widget" || typeof value.widgetId !== "string") return undefined;
@@ -347,7 +401,7 @@ function upgradePanel(value: unknown, seen: SeenIds): RoomPanelViewModel | undef
   const roomId = content.roomId;
   const tabs: TabViewModel[] = [];
   for (const t of Array.isArray(content.tabs) ? content.tabs : []) {
-    const tab = upgradeTab(t, roomId, seen, tabs.some((other) => other.kind === "timeline"));
+    const tab = upgradeTab(t, roomId, seen, new Set(tabs.filter(isHostTab).map((other) => other.kind)));
     if (tab) tabs.push(tab);
   }
   // A room without a shown tab shows its RoomOverview: so does one whose active tab was dropped.
@@ -400,7 +454,7 @@ function upgradeDevTools(value: Record<string, unknown>): WidgetDevToolsLayout {
 
 /**
  * A stored layout (`localStorage`, any version) as the current `WorkspaceLayout`: tabs of removed
- * kinds and a second Timeline tab of a panel are dropped (a room whose active tab was dropped
+ * kinds and a second Timeline or room dev tools tab of a panel are dropped (a room whose active tab was dropped
  * shows its RoomOverview), and what is malformed (also a repeated id, a widget tab in the wrong
  * room) is left out or replaced by its default, so a broken entry never breaks the app. It
  * rebuilds the layout field by field: a new field of `WorkspaceLayout` (or of what it contains) has

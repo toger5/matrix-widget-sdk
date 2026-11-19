@@ -39,10 +39,10 @@ function viewEnv(controller: AppController, narrow: boolean): ViewEnv {
       const store = controller.runtime(widgetId)?.devTools;
       return useSyncExternalStore(store?.subscribe ?? noSubscription, store?.get ?? (() => EMPTY_DEV_TOOLS_DATA));
     },
-    useMockedRoomData: (): MockedRoomData => {
+    useMockedRoomData: (roomId): MockedRoomData => {
       const dev = controller.getDevBackend();
-      // The mocked room picked in the Dev tools: its scheduled events.
-      const selected = () => (controller.vm.screen.kind === "main" ? controller.vm.screen.main.roomTools?.selectedRoomIds[DEV_ACCOUNT_ID] : undefined);
+      // The given room, else the mocked room picked in the Dev tools: its scheduled events and pagination.
+      const selected = () => roomId ?? (controller.vm.screen.kind === "main" ? controller.vm.screen.main.roomTools?.selectedRoomIds[DEV_ACCOUNT_ID] : undefined);
       return useSyncExternalStore(dev ? (onChange) => dev.subscribe(onChange) : noSubscription, () => dev?.snapshot(selected()) ?? EMPTY_MOCKED_ROOM_DATA);
     },
     useRoomDetails: (roomId): Loadable<RoomDetails> => {
