@@ -1,12 +1,18 @@
 # matrix-widget-sdk
+This repository is a toolkit that contains multiple different things helping to develop
+matrix widgtes (Matrix room apps)
 
-A reference implementation of Matrix widgets as proposed in
+![](packages/widget-host/screenshots/devtools.png)
+_Image shows the [`widget-host`](packages/widget-host). How it is used with the memory `DevBackend`
+to build/debug a example widget_
+
+I contains a reference implementation of Matrix widgets as proposed in
 [MSC4411](https://github.com/matrix-org/matrix-spec-proposals/pull/4411) (the `m.widget` state
 event) and [MSC4412](https://github.com/matrix-org/matrix-spec-proposals/pull/4412) (the JSON action
 protocol spoken over `postMessage`), without the quirks of the old widget API. It also proves the
 backwards compatibility approach: legacy widgets run unchanged behind a compat wrapper.
 
-One Rust core is used on both ends of the wire and from several languages:
+One Rust core is used on both ends of the wire:
 
 ![Architecture](docs/diagrams/01-architecture.svg)
 
