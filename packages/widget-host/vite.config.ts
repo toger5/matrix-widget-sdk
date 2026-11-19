@@ -86,9 +86,9 @@ export default defineConfig({
   optimizeDeps: { exclude: ["@matrix-widget-sdk/host", "matrix-sdk-uniffi-js"] },
   build: {
     rollupOptions: {
-      // `index.html` is the app; `oidc-callback.html` the OAuth redirect target, which runs in the login popup;
-      // `widget_compatibility_wrapper/` the compat wrapper (`../widget-compat-wrapper`) for legacy widgets.
-      input: ["index.html", "oidc-callback.html", "widget_compatibility_wrapper/index.html"],
+      // `index.html` is the app; `widget_compatibility_wrapper/` the compat wrapper (`../widget-compat-wrapper`)
+      // for legacy widgets.
+      input: ["index.html", "widget_compatibility_wrapper/index.html"],
     },
   },
 });

@@ -28,7 +28,7 @@ SDK behaviour; open questions are in `implementation_findings.md` ("Matrix sessi
   "Load older events" are one pagination).
 - `src/matrix_session/memory/devBackend.ts`: the same `LiveSession` without a homeserver.
 - `src/app/runtime/deviceVerification.ts`: `AccountVerification`, for the controller.
-- `oidc-callback.html`: the OAuth redirect target, opened in the login popup.
+- `public/oidc-callback.html`: the OAuth redirect target (static, copied as is), opened in the login popup.
 
 Only `src/matrix_session/{js,rust}/` import an SDK. Something added to `LiveSession` is added to
 rust, js and the DevBackend. New session logic goes into free functions of the client (like
